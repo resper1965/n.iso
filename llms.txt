@@ -1,0 +1,19 @@
+# nISO — Agentic GRC System
+> Agentic GRC platform for ISO 27001/27701 certification delivery on Cloudflare.
+
+## Core Files
+- [src/index.ts](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/index.ts): Main Hono API entry point (Auth, RBAC, CRUD).
+- [src/services/pricing.ts](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/services/pricing.ts): ISO certification pricing engine and scoring logic.
+- [src/agents/](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/agents/): AI Agents for policy generation and evidence evaluation.
+- [schema.sql](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/schema.sql): D1 database schema (23 tables).
+- [frontend/dist/index.html](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/frontend/dist/index.html): Vanilla JS SPA frontend.
+
+## Key Concepts
+- **Person-Days (PD)**: Effort metric used for pricing and project timeline.
+- **Evidence Vault**: R2-backed repository with SHA-256 integrity checks.
+- **SoA Engine**: Logic to map 2013 controls to 2022 and generate compliance status.
+- **Multi-tenancy**: Isolated projects via `client_project_id` and RBAC.
+
+## Tech Stack
+- **Backend**: Hono (Workers), D1 (DB), R2 (Storage), Vectorize (RAG), Workers AI.
+- **Frontend**: Vanilla JS, Glassmorphism CSS, Inter/Montserrat typography.

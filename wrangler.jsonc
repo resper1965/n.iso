@@ -1,0 +1,64 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "niso",
+	"main": "src/index.ts",
+	"compatibility_date": "2024-03-20",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": "frontend/dist",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+
+	/**
+	 * Bindings
+	 */
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "niso-db",
+			"database_id": "6fb9b45e-d1a1-48c5-a1e9-24a93017c52c",
+			"migrations_dir": "migrations"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SESSIONS",
+			"id": "f9cb3bf811374cfe9f9ad5780e1740c7"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "STORAGE",
+			"bucket_name": "niso-evidence"
+		}
+	],
+	"vectorize": [
+		{
+			"binding": "VECTOR_INDEX",
+			"index_name": "niso-knowledge"
+		}
+	],
+	"ai": {
+		"binding": "AI",
+		"gateway": {
+			"id": "n-iso"
+		}
+	},
+
+	"vars": {
+		"ENVIRONMENT": "development",
+		"SETUP_KEY": "setup-123",
+		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/0a6c490dd5fe9051422c15c9e133138e/n-iso"
+	}
+}

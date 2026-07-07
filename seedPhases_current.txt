@@ -1,0 +1,24 @@
+﻿
+> async function seedPhases(db: D1Database, projectId: string) {
+    const stmt = db.prepare(
+      `INSERT INTO project_phases (id, project_id, phase_number, title, status, notes, created_at)
+       VALUES (?, ?, ?, ?, 'pending', '', datetime('now'))`
+    );
+  
+    const batch = PHASE_TITLES.map((title, i) =>
+      stmt.bind(genId(), projectId, i, title)
+    );
+  
+    await db.batch(batch);
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════════
+  //  ROTAS
+  // ═══════════════════════════════════════════════════════════════════════════════
+  
+  // ─── Health ─────────────────────────────────────────────────────────────────
+  
+  app.get('/health', (c) => c.json({ status: 'ok' }));
+  
+
+

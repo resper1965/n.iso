@@ -1,0 +1,32 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "niso-test",
+	"main": "src/index.ts",
+	"compatibility_date": "2024-12-30",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "niso-db-test",
+			"database_id": "6fb9b45e-d1a1-48c5-a1e9-24a93017c52c"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SESSIONS",
+			"id": "f9cb3bf811374cfe9f9ad5780e1740c7"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "STORAGE",
+			"bucket_name": "niso-evidence-test"
+		}
+	],
+    "vars": {
+		"ENVIRONMENT": "test",
+		"SETUP_KEY": "test-123"
+	}
+}
