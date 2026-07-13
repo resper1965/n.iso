@@ -143,6 +143,17 @@ CREATE TABLE IF NOT EXISTS project_phases (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS project_scope_changes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    previous_scope TEXT,
+    new_scope TEXT NOT NULL,
+    change_reason TEXT NOT NULL,
+    security_impact TEXT NOT NULL,
+    approved_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS project_interviews (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id),
@@ -177,6 +188,10 @@ CREATE TABLE IF NOT EXISTS compliance_controls (
     status TEXT DEFAULT 'Missing',
     maturity INTEGER DEFAULT 0,
     owner TEXT,
+    ciso_approved_by TEXT,
+    ciso_approved_at TEXT,
+    ceo_approved_by TEXT,
+    ceo_approved_at TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -237,23 +252,51 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read
 -- SPRINT 4: RISK ASSESSMENT, VENDORS (KYV), TRAINING
 -- ═══════════════════════════════════════════════
 
+CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    category TEXT, -- Informação, Software, Hardware, Pessoas
+    classification TEXT DEFAULT 'Confidential', -- Confidential, Restricted, Internal, Public
+    owner TEXT,
+    location TEXT, -- ex: AWS S3, local, etc.
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS risks (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id),
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
     asset TEXT NOT NULL,
     threat TEXT NOT NULL,
     vulnerability TEXT,
     impact INTEGER NOT NULL DEFAULT 3,
     probability INTEGER NOT NULL DEFAULT 3,
+    risk_score INTEGER GENERATED ALWAYS AS (impact * probability) STORED,
     risk_level TEXT,
     treatment TEXT DEFAULT 'Mitigate',
     treatment_plan TEXT,
-    control_id TEXT,
+    control_id TEXT REFERENCES compliance_controls(id) ON DELETE SET NULL,
     owner TEXT,
     status TEXT DEFAULT 'Open',
+    accepted_by TEXT,
+    accepted_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS risk_history (
+    id TEXT PRIMARY KEY,
+    risk_id TEXT REFERENCES risks(id) ON DELETE CASCADE,
+    project_id TEXT,
+    impact INTEGER NOT NULL,
+    probability INTEGER NOT NULL,
+    risk_level TEXT NOT NULL,
+    assessment_date DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 
 CREATE TABLE IF NOT EXISTS vendors (
     id TEXT PRIMARY KEY,
@@ -326,10 +369,10 @@ CREATE TABLE IF NOT EXISTS audit_schedule (
 
 CREATE TABLE IF NOT EXISTS corrective_actions (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id),
-    audit_id TEXT,
-    risk_id TEXT,
-    control_id TEXT,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    audit_id TEXT REFERENCES audit_schedule(id) ON DELETE CASCADE,
+    risk_id TEXT REFERENCES risks(id) ON DELETE CASCADE,
+    control_id TEXT REFERENCES compliance_controls(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
     root_cause TEXT,

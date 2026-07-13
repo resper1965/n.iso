@@ -3132,7 +3132,7 @@ function riskLevel(score: number): string {
 
 app.get('/api/v1/projects/:id/risks', async (c) => {
   const { results } = await c.env.DB.prepare(
-    'SELECT * FROM risks WHERE project_id = ? ORDER BY risk_score DESC'
+    'SELECT * FROM risks WHERE project_id = ? ORDER BY impact * probability DESC'
   ).bind(c.req.param('id')).all();
   return c.json({ ok: true, risks: results });
 });
@@ -3147,9 +3147,47 @@ app.post('/api/v1/projects/:id/risks', async (c) => {
     const level = riskLevel(impact * probability);
 
     await c.env.DB.prepare(
-      `INSERT INTO risks (id, project_id, asset, threat, vulnerability, impact, probability, risk_level, treatment, treatment_plan, control_id, owner)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(id, projectId, body.asset, body.threat, body.vulnerability ?? null, impact, probability, level, body.treatment ?? 'Mitigate', body.treatment_plan ?? null, body.control_id ?? null, body.owner ?? null).run();
+      `INSERT INTO risks (id, project_id, asset_id, asset, threat, vulnerability, impact, probability, risk_level, treatment, treatment_plan, control_id, owner, accepted_by, accepted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      projectId,
+      body.asset_id ?? null,
+      body.asset,
+      body.threat,
+      body.vulnerability ?? null,
+      impact,
+      probability,
+      level,
+      body.treatment ?? 'Mitigate',
+      body.treatment_plan ?? null,
+      body.control_id ?? null,
+      body.owner ?? null,
+      body.accepted_by ?? null,
+      body.accepted_at ?? null
+    ).run();
+
+    // Gravar no histórico de riscos (Cláusula 6.1.2)
+    const histId = genId();
+    await c.env.DB.prepare(
+      `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(histId, id, projectId, impact, probability, level).run();
+
+    // Trigger de Mitigação (PDCA)
+    const treatment = body.treatment ?? 'Mitigate';
+    if (treatment === 'Mitigate') {
+      const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
+      const existingTask = await c.env.DB.prepare(
+        'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
+      ).bind(projectId, taskName).first();
+      if (!existingTask) {
+        await c.env.DB.prepare(
+          `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
+           VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
+        ).bind(genId(), projectId, taskName).run();
+      }
+    }
 
     await logAudit(c.env.DB, 'risk.created', c.get('user')?.email ?? 'system', `Risk ${id} created for project ${projectId}`);
     return c.json({ ok: true, id, risk_level: level }, 201);
@@ -3167,9 +3205,53 @@ app.put('/api/v1/risks/:id', async (c) => {
     const probability = body.probability ?? 3;
     const level = riskLevel(impact * probability);
 
+    // Buscar o project_id para registrar no histórico
+    const currentRisk = await c.env.DB.prepare('SELECT project_id FROM risks WHERE id = ?').bind(id).first() as any;
+    const projectId = currentRisk?.project_id;
+
     await c.env.DB.prepare(
-      `UPDATE risks SET asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-    ).bind(body.asset, body.threat, body.vulnerability ?? null, impact, probability, level, body.treatment ?? 'Mitigate', body.treatment_plan ?? null, body.control_id ?? null, body.owner ?? null, body.status ?? 'Open', id).run();
+      `UPDATE risks SET asset_id=?, asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, accepted_by=?, accepted_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
+    ).bind(
+      body.asset_id ?? null,
+      body.asset,
+      body.threat,
+      body.vulnerability ?? null,
+      impact,
+      probability,
+      level,
+      body.treatment ?? 'Mitigate',
+      body.treatment_plan ?? null,
+      body.control_id ?? null,
+      body.owner ?? null,
+      body.status ?? 'Open',
+      body.accepted_by ?? null,
+      body.accepted_at ?? null,
+      id
+    ).run();
+
+    // Gravar no histórico sempre que houver atualização (Cláusula 6.1.2)
+    if (projectId) {
+      const histId = genId();
+      await c.env.DB.prepare(
+        `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(histId, id, projectId, impact, probability, level).run();
+
+      // Trigger de Mitigação (PDCA)
+      const treatment = body.treatment ?? 'Mitigate';
+      if (treatment === 'Mitigate') {
+        const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
+        const existingTask = await c.env.DB.prepare(
+          'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
+        ).bind(projectId, taskName).first();
+        if (!existingTask) {
+          await c.env.DB.prepare(
+            `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
+             VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
+          ).bind(genId(), projectId, taskName).run();
+        }
+      }
+    }
 
     return c.json({ ok: true, id, risk_level: level });
   } catch (e: any) {
@@ -3182,6 +3264,154 @@ app.delete('/api/v1/risks/:id', async (c) => {
   await requireResourceAccess(c, 'risks', id);
   await c.env.DB.prepare('DELETE FROM risks WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
+});
+
+// --- ATIVOS DE INFORMAÇÃO CRUD (A.5.9) ---
+
+app.get('/api/v1/projects/:id/assets', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM assets WHERE project_id = ? ORDER BY name ASC'
+  ).bind(c.req.param('id')).all();
+  return c.json({ ok: true, assets: results });
+});
+
+app.post('/api/v1/projects/:id/assets', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json<any>();
+    const id = genId();
+
+    await c.env.DB.prepare(
+      `INSERT INTO assets (id, project_id, name, category, classification, owner, location, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      projectId,
+      body.name,
+      body.category ?? null,
+      body.classification ?? 'Confidential',
+      body.owner ?? null,
+      body.location ?? null,
+      body.status ?? 'Active'
+    ).run();
+
+    await logAudit(c.env.DB, 'asset.created', c.get('user')?.email ?? 'system', `Asset ${id} created for project ${projectId}`);
+    return c.json({ ok: true, id }, 201);
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao criar ativo', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/assets/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c, 'assets', id);
+    const body = await c.req.json<any>();
+
+    await c.env.DB.prepare(
+      `UPDATE assets SET name=?, category=?, classification=?, owner=?, location=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
+    ).bind(
+      body.name,
+      body.category ?? null,
+      body.classification ?? 'Confidential',
+      body.owner ?? null,
+      body.location ?? null,
+      body.status ?? 'Active',
+      id
+    ).run();
+
+    return c.json({ ok: true, id });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar ativo', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/assets/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'assets', id);
+  await c.env.DB.prepare('DELETE FROM assets WHERE id = ?').bind(id).run();
+  return c.json({ ok: true });
+});
+
+app.get('/api/v1/projects/:id/risks/history', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT rh.*, r.asset, r.threat FROM risk_history rh JOIN risks r ON rh.risk_id = r.id WHERE rh.project_id = ? ORDER BY rh.assessment_date DESC'
+  ).bind(c.req.param('id')).all();
+  return c.json({ ok: true, history: results });
+});
+
+// --- WORKFLOW DE APROVAÇÃO DE CONTROLE (A.5.1) ---
+app.post('/api/v1/controls/:id/approve', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const ctrl = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE id = ?').bind(id).first<any>();
+    if (!ctrl) return c.json({ error: 'Controle nao encontrado' }, 404);
+    
+    const { role, approved_by } = await c.req.json<{ role: 'ciso' | 'ceo'; approved_by: string }>();
+    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: 'Papel invalido' }, 400);
+
+    const dateStr = new Date().toISOString();
+    if (role === 'ciso') {
+      await c.env.DB.prepare(
+        `UPDATE compliance_controls 
+         SET ciso_approved_by = ?, ciso_approved_at = ?, 
+             status = CASE WHEN ceo_approved_by IS NOT NULL THEN 'Approved' ELSE status END 
+         WHERE id = ?`
+      ).bind(approved_by, dateStr, id).run();
+    } else {
+      await c.env.DB.prepare(
+        `UPDATE compliance_controls 
+         SET ceo_approved_by = ?, ceo_approved_at = ?, 
+             status = CASE WHEN ciso_approved_by IS NOT NULL THEN 'Approved' ELSE status END 
+         WHERE id = ?`
+      ).bind(approved_by, dateStr, id).run();
+    }
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao aprovar controle', detail: e.message }, 500);
+  }
+});
+
+// --- REGISTRO DE MUDANÇAS DE ESCOPO (6.3) ---
+app.get('/api/v1/projects/:id/scope-changes', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM project_scope_changes WHERE project_id = ? ORDER BY created_at DESC'
+  ).bind(projectId).all();
+  return c.json({ ok: true, changes: results });
+});
+
+app.post('/api/v1/projects/:id/scope-changes', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json<any>();
+    const id = genId();
+
+    // Salva a alteração de escopo
+    await c.env.DB.prepare(
+      `INSERT INTO project_scope_changes (id, project_id, previous_scope, new_scope, change_reason, security_impact, approved_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      projectId,
+      body.previous_scope || '',
+      body.new_scope,
+      body.change_reason,
+      body.security_impact,
+      body.approved_by
+    ).run();
+
+    // Atualiza a tabela principal do projeto
+    await c.env.DB.prepare(
+      'UPDATE projects SET scope = ? WHERE id = ?'
+    ).bind(body.new_scope, projectId).run();
+
+    await logAudit(c.env.DB, 'project.scope_changed', c.get('user')?.email ?? 'system', `Project ${projectId} scope updated by ${body.approved_by}`);
+    return c.json({ ok: true, id });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao registrar mudanca de escopo', detail: e.message }, 500);
+  }
 });
 
 app.get('/api/v1/projects/:id/risk-matrix', async (c) => {

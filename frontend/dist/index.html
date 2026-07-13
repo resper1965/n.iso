@@ -406,6 +406,10 @@
 
             <div class="sidebar-label collapsed group-project-only" onclick="toggleGroup('group-ops')" style="display:none">Operacional</div>
             <div class="sidebar-group group-project-only" id="group-ops" style="display:none">
+                <div class="sidebar-nav" id="nav-assets" onclick="navigate('assets')">
+                    <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l-7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <span class="sidebar-nav-text">Ativos</span>
+                </div>
                 <div class="sidebar-nav" id="nav-risks" onclick="navigate('risks')">
                     <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     <span class="sidebar-nav-text">Riscos</span>
@@ -914,6 +918,7 @@
         else if (S.view === 'proposals') renderProposals(c, h, a);
         else if (S.view === 'projects') renderProjects(c, h, a);
         else if (S.view === 'monitor') renderMonitor(c, h, a);
+        else if (S.view === 'assets') renderAssets(c, h, a);
         else if (S.view === 'risks') renderRisks(c, h, a);
         else if (S.view === 'vendors') renderVendors(c, h, a);
         else if (S.view === 'training') renderTraining(c, h, a);
@@ -984,12 +989,19 @@
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
-            const [leads, assessments, projects] = await Promise.all([
+            const [leads, assessments, projects, controls] = await Promise.all([
                 api('GET', '/api/v1/leads').catch(() => []),
                 api('GET', '/api/v1/assessments').catch(() => []),
-                api('GET', '/api/v1/projects').catch(() => [])
+                api('GET', '/api/v1/projects').catch(() => []),
+                api('GET', '/api/v1/controls').catch(() => [])
             ]);
             const activeProjects = Array.isArray(projects) ? projects.filter(p => p.status === 'active') : [];
+            
+            const totalControls = Array.isArray(controls) ? controls.length : 0;
+            const approvedControls = Array.isArray(controls) ? controls.filter(ctrl => ctrl.status === 'Approved' || ctrl.status === 'Implemented').length : 0;
+            const gapsControls = totalControls - approvedControls;
+            const complianceRate = totalControls > 0 ? Math.round((approvedControls / totalControls) * 100) : 0;
+
             c.innerHTML = `
                 <div class="stats-grid fade-in">
                     <div class="card stat-card" onclick="navigate('leads')">
@@ -1003,6 +1015,21 @@
                     <div class="card stat-card" onclick="navigate('projects')">
                         <div class="stat-label">Projetos em Curso</div>
                         <div class="stat-value">${activeProjects.length}</div>
+                    </div>
+                </div>
+
+                <div class="card fade-in" style="margin-top:1.5rem; background:linear-gradient(135deg, rgba(0,173,232,0.05) 0%, rgba(7,11,20,0) 100%)">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
+                        <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.95rem">Burnup de Gaps — Velocidade de Conformidade</div>
+                        <span class="ctx-tag" style="background:var(--accent)20; color:var(--accent); font-weight:600">${complianceRate}% Implementado</span>
+                    </div>
+                    <div class="progress-bar" style="height:8px; margin-bottom:1rem">
+                        <div class="progress-fill" style="width: ${complianceRate}%"></div>
+                    </div>
+                    <div style="display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-dim)">
+                        <div><strong>Controles Aprovados/Implementados:</strong> ${approvedControls}</div>
+                        <div><strong>Gaps Restantes:</strong> ${gapsControls}</div>
+                        <div><strong>Total do ISMS:</strong> ${totalControls}</div>
                     </div>
                 </div>
                 <div class="card fade-in" style="margin-top:1.5rem">
@@ -1505,7 +1532,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem">
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim)">Jornada de Adequação do Projeto</div>
-                        <h2 style="font-family:'Montserrat'; font-weight:500; font-size:1.4rem; margin-top:0.25rem">${escapeHTML(p.project_name || p.client_name)}</h2>
+                        <h2 style="font-family:'Montserrat'; font-weight:500; font-size:1.4rem; margin-top:0.25rem">
+                            ${escapeHTML(p.project_name || p.client_name)}
+                            <button class="btn" style="font-size:0.6rem; padding:0.2rem 0.5rem; margin-left:0.5rem; display:inline-block; vertical-align:middle; background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)" onclick="openScopeChangeModal('${p.id}', ${JSON.stringify(p).replace(/'/g, '\x27')})">Alterar Escopo (6.3)</button>
+                        </h2>
                     </div>
                     <button class="btn" onclick="openGeneratePolicyModal('${p.id}')" style="background:rgba(0,173,232,0.12); color:var(--accent); border-color:rgba(0,173,232,0.25)">
                         Gerar Política com IA
@@ -1530,9 +1560,28 @@
 
     window.changePhaseStatus = async function(projectId, phaseNum, selectEl) {
         const newStatus = selectEl.value;
+        
+        // Critério de Aceite de Entregas (Definition of Done)
+        if (newStatus === 'completed') {
+            const phChecklist = S.checklistsConfig[phaseNum] || [];
+            const pendingItens = phChecklist.filter(item => {
+                const checkKey = `${projectId}_${item.id}`;
+                return S.phaseChecks[checkKey] !== true;
+            });
+            
+            if (pendingItens.length > 0) {
+                const confirmDone = confirm(`Atencao: Existem ${pendingItens.length} itens pendentes de evidencia ou tarefa nesta fase.\n\nDeseja marcar a fase como concluida mesmo assim?`);
+                if (!confirmDone) {
+                    selectEl.value = selectEl.getAttribute('data-prev') || 'in_progress';
+                    return;
+                }
+            }
+        }
+
         selectEl.disabled = true;
         try {
             await api('PUT', `/api/v1/projects/${projectId}/phases/${phaseNum}`, { status: newStatus });
+            selectEl.setAttribute('data-prev', newStatus);
             showToast(`Fase ${phaseNum} atualizada para ${newStatus}`);
             render();
         } catch (e) {
@@ -2440,15 +2489,124 @@
         }
     });
 
-    // ——— GENERATE POLICY (AI) ———————————————————————————
-    async function openGeneratePolicyModal(projectId) {
+    // ——— ASSETS MODULE (A.5.9) ——————————————————————————
+    async function renderAssets(c, h, a) {
+        h.textContent = 'Ativos de Informação';
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        a.innerHTML = `<button class="btn btn-primary" onclick="openNewAssetModal('${proj.id}')">+ Novo Ativo</button>`;
+        let assets = [];
+        try { assets = await api('GET', `/api/v1/projects/${proj.id}/assets`); } catch(e) {}
+        if (!Array.isArray(assets)) assets = [];
+
+        const classColor = cl => cl === 'Confidential' ? 'var(--danger)' : cl === 'Restricted' ? 'var(--warning)' : cl === 'Internal' ? 'var(--info)' : 'var(--accent)';
+        c.innerHTML = `<div class="fade-in">${assets.length ? assets.map(ast => `
+            <div class="list-item" onclick="openEditAssetModal('${ast.id}', '${proj.id}', ${JSON.stringify(ast).replace(/'/g, '\x27')})">
+                <div style="flex:1">
+                    <div class="item-name">${escapeHTML(ast.name)}</div>
+                    <div class="item-meta" style="margin-top:0.25rem">Categoria: ${ast.category || 'Geral'} | Local: ${escapeHTML(ast.location || 'N/A')} | Dono: ${escapeHTML(ast.owner || 'N/A')}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                    <span class="ctx-tag" style="background:${classColor(ast.classification)}20;color:${classColor(ast.classification)}">${ast.classification}</span>
+                    <span class="ctx-tag" style="background:rgba(255,255,255,0.05);color:var(--text-dim)">${ast.status || 'Active'}</span>
+                </div>
+            </div>`).join('') : '<div class="empty-state"><h3>Nenhum ativo</h3><p>Registre ativos para governança de segurança.</p></div>'}</div>`;
+    }
+
+    function openNewAssetModal(projectId) {
+        openModal(`
+            <div class="modal-header"><span class="modal-title">Novo Ativo</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="form-group"><label class="form-label">Nome do Ativo</label><input class="form-input" id="ast-name" placeholder="Ex: Banco de dados RDS Prod, Código-Fonte GitHub"></div>
+            <div class="form-group">
+                <label class="form-label">Categoria</label>
+                <select class="form-input" id="ast-category">
+                    <option value="Informacao">Informacao (Dados, Documentos, Segredos)</option>
+                    <option value="Software">Software (APIs, Sistemas, Apps, Scripts)</option>
+                    <option value="Hardware">Hardware (Servidores, Computadores, Dispositivos)</option>
+                    <option value="Pessoas">Pessoas (Colaboradores, Terceiros, Donos)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Classificacao</label>
+                <select class="form-input" id="ast-classification">
+                    <option value="Confidential">Confidential (Apenas Alta Lideranca)</option>
+                    <option value="Restricted">Restricted (Uso Interno Protegido)</option>
+                    <option value="Internal" selected>Internal (Uso Interno Geral)</option>
+                    <option value="Public">Public (Livre Acesso)</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+                <div class="form-group" style="flex:1"><label class="form-label">Dono (Owner)</label><input class="form-input" id="ast-owner" placeholder="Ex: IT Manager"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Localizacao</label><input class="form-input" id="ast-location" placeholder="Ex: AWS us-east-1"></div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="createAsset('${projectId}')">Registrar Ativo</button>
+        `);
+    }
+
+    async function createAsset(projectId) {
+        const body = { name: document.getElementById('ast-name').value, category: document.getElementById('ast-category').value, classification: document.getElementById('ast-classification').value, owner: document.getElementById('ast-owner').value, location: document.getElementById('ast-location').value };
+        if (!body.name) return;
+        await api('POST', `/api/v1/projects/${projectId}/assets`, body);
+        forceCloseModal(); render();
+    }
+
+    function openEditAssetModal(id, projectId, data) {
+        const ast = data || {};
+        openModal(`
+            <div class="modal-header"><span class="modal-title">Editar Ativo</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="form-group"><label class="form-label">Nome do Ativo</label><input class="form-input" id="ast-e-name" value="${escapeHTML(ast.name||'')}"></div>
+            <div class="form-group">
+                <label class="form-label">Categoria</label>
+                <select class="form-input" id="ast-e-category">
+                    <option value="Informacao" ${ast.category==='Informacao'?'selected':''}>Informacao (Dados, Documentos)</option>
+                    <option value="Software" ${ast.category==='Software'?'selected':''}>Software (APIs, Sistemas)</option>
+                    <option value="Hardware" ${ast.category==='Hardware'?'selected':''}>Hardware (Servidores, Computadores)</option>
+                    <option value="Pessoas" ${ast.category==='Pessoas'?'selected':''}>Pessoas (Colaboradores)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Classificacao</label>
+                <select class="form-input" id="ast-e-classification">
+                    <option value="Confidential" ${ast.classification==='Confidential'?'selected':''}>Confidential</option>
+                    <option value="Restricted" ${ast.classification==='Restricted'?'selected':''}>Restricted</option>
+                    <option value="Internal" ${ast.classification==='Internal'?'selected':''}>Internal</option>
+                    <option value="Public" ${ast.classification==='Public'?'selected':''}>Public</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+                <div class="form-group" style="flex:1"><label class="form-label">Dono</label><input class="form-input" id="ast-e-owner" value="${escapeHTML(ast.owner||'')}"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Localizacao</label><input class="form-input" id="ast-e-location" value="${escapeHTML(ast.location||'')}"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-input" id="ast-e-status">
+                    <option value="Active" ${ast.status==='Active'?'selected':''}>Active</option>
+                    <option value="Inactive" ${ast.status==='Inactive'?'selected':''}>Inactive</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1.5rem">
+                <button class="btn" style="color:var(--danger)" onclick="if(confirm('Deseja excluir este ativo?')){api('DELETE','/api/v1/assets/${id}').then(()=>{forceCloseModal();render()})}">Excluir</button>
+                <button class="btn btn-primary" onclick="updateAsset('${id}')">Salvar</button>
+            </div>
+        `);
+    }
+
+    async function updateAsset(id) {
+        const body = { name: document.getElementById('ast-e-name').value, category: document.getElementById('ast-e-category').value, classification: document.getElementById('ast-e-classification').value, owner: document.getElementById('ast-e-owner').value, location: document.getElementById('ast-e-location').value, status: document.getElementById('ast-e-status').value };
+        await api('PUT', `/api/v1/assets/${id}`, body);
+        forceCloseModal(); render();
+    }
+
+    // ——— GENERATE POLICY (AI) & WORKFLOW DE APROVAÇÃO —————
+    async function openGeneratePolicyModal(projectId, controlIdArg) {
+        const controlId = controlIdArg || 'A.5.1';
         openModal(`
             <div class="modal-header"><span class="modal-title">Gerar Politica ISO</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
             <div class="form-group">
                 <label class="form-label">Controle ISO (ex: A.5.1, A.8.25)</label>
-                <input class="form-input" id="policy-control-id" value="A.5.1" placeholder="A.5.1">
+                <input class="form-input" id="policy-control-id" value="${escapeHTML(controlId)}" placeholder="A.5.1">
             </div>
-            <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">O PolicyAgent ira gerar uma politica completa usando IA, adaptada ao contexto organizacional deste projeto.</p>
+            <p style="font-size:0.75rem;color:var(--muted);margin-bottom:1rem">O PolicyAgent ira gerar uma politica completa usando IA, adaptada ao contexto organizacional deste projeto.</p>
             <button class="btn btn-primary" id="btn-gen-policy" style="width:100%" onclick="doGeneratePolicy('${projectId}')">Gerar com IA</button>
             <div id="policy-result" style="margin-top:1rem"></div>
         `);
@@ -2465,10 +2623,39 @@
         try {
             const res = await api('POST', `/api/v1/projects/${projectId}/generate-policy`, { control_id: controlId });
             if (res.ok) {
+                let ctrl = {};
+                try {
+                    const controls = await api('GET', '/api/v1/controls');
+                    if (Array.isArray(controls)) {
+                        const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        ctrl = controls.find(c => c.id === normId) || {};
+                    }
+                } catch(e) {}
+
                 result.innerHTML = `
                     <div style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);font-weight:500;margin-bottom:0.5rem;font-family:'Montserrat',sans-serif">Política Gerada — ${escapeHTML(controlId)}</div>
-                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;max-height:300px;overflow-y:auto;font-size:0.75rem;line-height:1.6;white-space:pre-wrap">${escapeHTML(res.policy_markdown)}</div>
-                    <div style="margin-top:0.5rem;font-size:0.6rem;color:var(--muted)">Confianca: ${(res.confidence * 100).toFixed(0)}% | Modelo: ${res.metadata?.model || 'AI'}</div>
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;max-height:180px;overflow-y:auto;font-size:0.75rem;line-height:1.6;white-space:pre-wrap" id="policy-content-text">${escapeHTML(res.policy_markdown)}</div>
+                    <div style="margin-top:0.5rem;font-size:0.6rem;color:var(--muted)">Confiança: ${(res.confidence * 100).toFixed(0)}% | Modelo: ${res.metadata?.model || 'AI'}</div>
+                    
+                    <div style="margin-top:1.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:1rem">
+                        <h4 style="font-family:'Montserrat',sans-serif;font-size:0.7rem;color:var(--accent);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
+                        <div style="display:flex;flex-direction:column;gap:0.75rem">
+                            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
+                                <div>
+                                    <strong>CISO:</strong> 
+                                    <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
+                                </div>
+                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como CISO</button>` : ''}
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
+                                <div>
+                                    <strong>CEO (Direção):</strong> 
+                                    <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
+                                </div>
+                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como CEO</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
                 `;
                 btn.textContent = 'Gerar outra';
                 btn.disabled = false;
@@ -2482,6 +2669,101 @@
         }
     }
 
+    window.signPolicy = async function(controlId, role) {
+        if (!controlId) {
+            alert('Não é possível assinar: ID do controle não mapeado.');
+            return;
+        }
+        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
+        if (!name) return;
+        
+        try {
+            await api('POST', `/api/v1/controls/${controlId}/approve`, { role, approved_by: name });
+            showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
+            const statusSpan = document.getElementById(`${role}-sign-status`);
+            if (statusSpan) {
+                statusSpan.textContent = `Aprovado por ${escapeHTML(name)} em ${new Date().toLocaleDateString()}`;
+                statusSpan.style.color = 'var(--accent)';
+            }
+            const btnClicked = event.target;
+            if (btnClicked) btnClicked.style.display = 'none';
+            render();
+        } catch(e) {
+            alert('Erro ao registrar assinatura: ' + e.message);
+        }
+    };
+
+    // ——— GESTÃO DE ESCOPO (CLÁUSULA 6.3) ——————————————————
+    window.openScopeChangeModal = async function(projectId, projData) {
+        let history = [];
+        try {
+            const res = await api('GET', `/api/v1/projects/${projectId}/scope-changes`);
+            if (res.ok && Array.isArray(res.changes)) {
+                history = res.changes;
+            }
+        } catch(e) {}
+
+        openModal(`
+            <div class="modal-header"><span class="modal-title">Alteração de Escopo (Cláusula 6.3)</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="form-group">
+                <label class="form-label">Escopo Atual do Projeto</label>
+                <textarea class="form-input" readonly rows="2" style="background:rgba(255,255,255,0.02);color:var(--text-dim);resize:none">${escapeHTML(projData.scope || 'Nenhum escopo definido')}</textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Novo Escopo Proposto</label>
+                <textarea class="form-input" id="scope-new" rows="2" placeholder="Descreva o novo escopo do SGSI..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Motivo da Mudança</label>
+                <input class="form-input" id="scope-reason" placeholder="Ex: Inclusão de nova API de pagamentos no escopo">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Avaliação de Impacto na Segurança da Informação</label>
+                <textarea class="form-input" id="scope-impact" rows="2" placeholder="Quais novos riscos ou mudanças de ativos essa alteração traz?"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Aprovador ness. / Cliente</label>
+                <input class="form-input" id="scope-approved-by" placeholder="Ex: João (ness.) / CISO Cliente">
+            </div>
+            
+            <button class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="submitScopeChange('${projectId}', '${escapeHTML(projData.scope || '')}')">Registrar Alteração</button>
+
+            <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
+                <h4 style="font-family:'Montserrat',sans-serif;font-size:0.7rem;color:var(--accent);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">Histórico de Alterações de Escopo</h4>
+                <div style="font-size:0.65rem; color:var(--text-dim); max-height:100px; overflow-y:auto; line-height:1.4">
+                    ${history.length ? history.map((c, i) => `
+                        <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
+                            <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.approved_by)}<br>
+                            <em>Motivo:</em> ${escapeHTML(c.change_reason)}<br>
+                            <em>Impacto de Seg.:</em> ${escapeHTML(c.security_impact)}<br>
+                            <em>Novo Escopo:</em> ${escapeHTML(c.new_scope)}
+                        </div>
+                    `).join('') : 'Sem alterações de escopo registradas.'}
+                </div>
+            </div>
+        `);
+    };
+
+    window.submitScopeChange = async function(projectId, prevScope) {
+        const body = {
+            previous_scope: prevScope,
+            new_scope: document.getElementById('scope-new').value,
+            change_reason: document.getElementById('scope-reason').value,
+            security_impact: document.getElementById('scope-impact').value,
+            approved_by: document.getElementById('scope-approved-by').value
+        };
+        if (!body.new_scope || !body.change_reason || !body.approved_by) {
+            alert('Por favor, preencha todos os campos obrigatórios.');
+            return;
+        }
+        await api('POST', `/api/v1/projects/${projectId}/scope-changes`, body);
+        
+        if (S.activeProject && S.activeProject.id === projectId) S.activeProject.scope = body.new_scope;
+        if (S.currentProject && S.currentProject.id === projectId) S.currentProject.scope = body.new_scope;
+
+        forceCloseModal(); render();
+    };
+
     // ——— RISKS MODULE ———————————————————————————————————
     async function renderRisks(c, h, a) {
         h.textContent = 'Riscos';
@@ -2491,30 +2773,82 @@
         let risks = [];
         try { risks = await api('GET', `/api/v1/projects/${proj.id}/risks`); } catch(e) {}
         if (!Array.isArray(risks)) risks = [];
-        const levelColor = l => l === 'Critical' ? 'var(--danger)' : l === 'High' ? 'var(--warning)' : l === 'Medium' ? 'var(--info)' : 'var(--accent)';
+        const levelColor = l => l === 'Critical' ? 'var(--danger)' : l === 'High' ? 'var(--warning)' : l === 'Medium' ? 'var(--info)' : l === 'Medium High' ? 'var(--warning)' : 'var(--accent)';
         c.innerHTML = `<div class="fade-in">${risks.length ? risks.map(r => `
             <div class="list-item" style="cursor:pointer" onclick="openEditRiskModal('${r.id}', '${proj.id}', ${JSON.stringify(r).replace(/'/g, '\x27')})">
-                <div style="flex:1"><div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${r.treatment} | ${escapeHTML(r.owner || 'Sem dono')}</div></div>
+                <div style="flex:1">
+                    <div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
+                    <div class="item-meta" style="margin-top:0.25rem">${r.treatment} | Owner: ${escapeHTML(r.owner || 'Sem dono')} ${r.treatment === 'Accept' && r.accepted_by ? `| Aceito por: ${escapeHTML(r.accepted_by)}` : ''}</div>
+                </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span style="font-weight:600;color:${levelColor(r.risk_level)}">${r.risk_score || (r.impact*r.probability)}</span>
+                    <span style="font-weight:600;color:${levelColor(r.risk_level)}">${r.risk_score || (r.impact * r.probability)}</span>
                     <span class="ctx-tag" style="background:${levelColor(r.risk_level)}20;color:${levelColor(r.risk_level)}">${r.risk_level || 'N/A'}</span>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum risco registrado</h3><p>Adicione riscos ao registro.</p></div>'}</div>`;
     }
 
-    function openNewRiskModal(projectId) {
+    window.onRiskAssetSelectChange = function(select) {
+        const manualGroup = document.getElementById('risk-asset-manual-group');
+        const manualInput = document.getElementById('risk-asset');
+        if (select.value === '__manual__' || select.value === '') {
+            manualGroup.style.display = '';
+            if (select.value === '') manualInput.value = '';
+        } else {
+            manualGroup.style.display = 'none';
+            const opt = select.options[select.selectedIndex];
+            manualInput.value = opt.getAttribute('data-name');
+        }
+    };
+
+    window.onRiskTreatmentChange = function(select) {
+        const acceptGroup = document.getElementById('risk-accept-group');
+        if (select.value === 'Accept') {
+            acceptGroup.style.display = '';
+            const dtInput = document.getElementById('risk-accepted-at');
+            if (!dtInput.value) dtInput.value = new Date().toISOString().split('T')[0];
+        } else {
+            acceptGroup.style.display = 'none';
+        }
+    };
+
+    async function openNewRiskModal(projectId) {
+        let assets = [];
+        try { assets = await api('GET', `/api/v1/projects/${projectId}/assets`); } catch(e) {}
+        if (!Array.isArray(assets)) assets = [];
+
         openModal(`
             <div class="modal-header"><span class="modal-title">Novo Risco</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
-            <div class="form-group"><label class="form-label">Ativo</label><input class="form-input" id="risk-asset" placeholder="Ex: Servidor de producao"></div>
+            <div class="form-group">
+                <label class="form-label">Ativo do Inventario (Opcional)</label>
+                <select class="form-input" id="risk-asset-select" onchange="onRiskAssetSelectChange(this)">
+                    <option value="">-- Escolha um ativo --</option>
+                    ${assets.map(a => `<option value="${a.id}" data-name="${escapeHTML(a.name)}">${escapeHTML(a.name)} (${a.category})</option>`).join('')}
+                    <option value="__manual__">-- Digitar manualmente --</option>
+                </select>
+            </div>
+            <div class="form-group" id="risk-asset-manual-group">
+                <label class="form-label">Nome do Ativo</label>
+                <input class="form-input" id="risk-asset" placeholder="Ex: Servidor de producao">
+            </div>
             <div class="form-group"><label class="form-label">Ameaca</label><input class="form-input" id="risk-threat" placeholder="Ex: Acesso nao autorizado"></div>
             <div class="form-group"><label class="form-label">Vulnerabilidade</label><input class="form-input" id="risk-vuln" placeholder="Ex: Falta de MFA"></div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Impacto (1-5)</label><input class="form-input" id="risk-impact" type="number" min="1" max="5" value="3"></div>
                 <div class="form-group" style="flex:1"><label class="form-label">Probabilidade (1-5)</label><input class="form-input" id="risk-prob" type="number" min="1" max="5" value="3"></div>
             </div>
-            <div class="form-group"><label class="form-label">Tratamento</label>
-                <select class="form-input" id="risk-treatment"><option>Mitigate</option><option>Accept</option><option>Transfer</option><option>Avoid</option></select></div>
+            <div class="form-group">
+                <label class="form-label">Tratamento</label>
+                <select class="form-input" id="risk-treatment" onchange="onRiskTreatmentChange(this)">
+                    <option value="Mitigate">Mitigate</option>
+                    <option value="Accept">Accept (Aceitar)</option>
+                    <option value="Transfer">Transfer</option>
+                    <option value="Avoid">Avoid</option>
+                </select>
+            </div>
+            <div id="risk-accept-group" style="display:none">
+                <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Executivo do Cliente (CEO)"></div>
+                <div class="form-group"><label class="form-label">Data do Aceite</label><input class="form-input" id="risk-accepted-at" type="date"></div>
+            </div>
             <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
             <div class="form-group"><label class="form-label">Plano de Tratamento</label><textarea class="form-input" id="risk-plan" rows="2" placeholder="Descreva as acoes..."></textarea></div>
             <button class="btn btn-primary" style="width:100%" onclick="createRisk('${projectId}')">Registrar Risco</button>
@@ -2522,7 +2856,24 @@
     }
 
     async function createRisk(projectId) {
-        const body = { asset: document.getElementById('risk-asset').value, threat: document.getElementById('risk-threat').value, vulnerability: document.getElementById('risk-vuln').value, impact: +document.getElementById('risk-impact').value, probability: +document.getElementById('risk-prob').value, treatment: document.getElementById('risk-treatment').value, owner: document.getElementById('risk-owner').value, treatment_plan: document.getElementById('risk-plan').value };
+        const select = document.getElementById('risk-asset-select');
+        const assetId = select.value && select.value !== '__manual__' ? select.value : null;
+        const assetName = document.getElementById('risk-asset').value;
+        const treatment = document.getElementById('risk-treatment').value;
+
+        const body = {
+            asset_id: assetId,
+            asset: assetName,
+            threat: document.getElementById('risk-threat').value,
+            vulnerability: document.getElementById('risk-vuln').value,
+            impact: +document.getElementById('risk-impact').value,
+            probability: +document.getElementById('risk-prob').value,
+            treatment: treatment,
+            owner: document.getElementById('risk-owner').value,
+            treatment_plan: document.getElementById('risk-plan').value,
+            accepted_by: treatment === 'Accept' ? document.getElementById('risk-accepted-by').value : null,
+            accepted_at: treatment === 'Accept' ? document.getElementById('risk-accepted-at').value : null
+        };
         if (!body.asset || !body.threat) return;
         await api('POST', `/api/v1/projects/${projectId}/risks`, body);
         forceCloseModal(); render();
