@@ -1391,12 +1391,20 @@
         c.innerHTML = '<div class="loading"></div>';
         
         try {
-            const [phases, config] = await Promise.all([
+            const [phases, config, checklistProgress] = await Promise.all([
                 api('GET', `/api/v1/projects/${p.id}/phases`),
-                S.checklistsConfig ? Promise.resolve(S.checklistsConfig) : api('GET', '/api/v1/phases/config')
+                S.checklistsConfig ? Promise.resolve(S.checklistsConfig) : api('GET', '/api/v1/phases/config'),
+                api('GET', `/api/v1/projects/${p.id}/checklist-progress`).catch(() => [])
             ]);
             
             S.checklistsConfig = config;
+            // ponytail: hydrate phaseChecks from D1 (server wins over stale localStorage)
+            if (Array.isArray(checklistProgress)) {
+                checklistProgress.forEach(row => {
+                    S.phaseChecks[p.id + '_' + row.item_id] = !!row.is_checked;
+                });
+                localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
+            }
             
             const JOURNEYS = [
                 { name: "Jornada 1: Mobilização e Diagnóstico", range: [0, 6], desc: "Planejamento inicial, entrevistas, escopo e diagnóstico GRC" },
@@ -1555,6 +1563,25 @@
             labelEl.classList.remove('checked');
         }
         showToast(checkboxEl.checked ? 'Item concluído' : 'Item reaberto');
+
+        // ponytail: debounced save to D1
+        if (window._checklistSaveTimer) clearTimeout(window._checklistSaveTimer);
+        window._checklistSaveTimer = setTimeout(async () => {
+            const items = [];
+            for (const key in S.phaseChecks) {
+                if (key.startsWith(projectId + '_')) {
+                    const iid = key.replace(projectId + '_', '');
+                    const match = iid.match(/^p(\d+)_/);
+                    if (match) {
+                        items.push({ phase_number: parseInt(match[1]), item_id: iid, is_checked: !!S.phaseChecks[key] });
+                    }
+                }
+            }
+            if (items.length > 0) {
+                try { await api('PUT', '/api/v1/projects/' + projectId + '/checklist-progress', { items }); }
+                catch (e) { console.warn('Checklist sync error:', e); }
+            }
+        }, 500);
     };
 
     async function renderProjects(c, h, a) {
