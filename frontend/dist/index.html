@@ -402,10 +402,22 @@
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     <span class="sidebar-nav-text">Monitor</span>
                 </div>
+                <div class="sidebar-nav" id="nav-soa" onclick="navigate('soa')">
+                    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    <span class="sidebar-nav-text">SoA</span>
+                </div>
             </div>
 
             <div class="sidebar-label collapsed group-project-only" onclick="toggleGroup('group-ops')" style="display:none">Operacional</div>
             <div class="sidebar-group group-project-only" id="group-ops" style="display:none">
+                <div class="sidebar-nav" id="nav-stakeholders" onclick="navigate('stakeholders')">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">Partes Interessadas</span>
+                </div>
+                <div class="sidebar-nav" id="nav-context" onclick="navigate('context')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span class="sidebar-nav-text">Contexto</span>
+                </div>
                 <div class="sidebar-nav" id="nav-assets" onclick="navigate('assets')">
                     <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l-7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                     <span class="sidebar-nav-text">Ativos</span>
@@ -433,6 +445,10 @@
                 <div class="sidebar-nav" id="nav-capa" onclick="navigate('capa')">
                     <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                     <span class="sidebar-nav-text">CAPA</span>
+                </div>
+                <div class="sidebar-nav" id="nav-mgmt" onclick="navigate('management-review')">
+                    <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+                    <span class="sidebar-nav-text">Análise Crítica</span>
                 </div>
                 <div class="sidebar-nav" id="nav-evidence" onclick="navigate('evidence')">
                     <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -765,6 +781,14 @@
         if (r.status === 401) { doLogout(); throw new Error('Unauthorized'); }
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'API Error');
+        // ponytail: auto-unwrap enveloped arrays from backend (e.g. { ok: true, risks: [...] })
+        if (data && data.ok === true) {
+            for (const key in data) {
+                if (key !== 'ok' && Array.isArray(data[key])) {
+                    return data[key];
+                }
+            }
+        }
         return data;
     }
 
@@ -934,6 +958,11 @@
         else if (S.view === 'assessment-detail') renderAssessmentDetail(c, h, a);
         else if (S.view === 'self-service') renderSelfServiceAssessment(S.currentAssessmentId);
         else if (S.view === 'project-detail') renderProjectDetail(c, h, a);
+        else if (S.view === 'soa') renderSoA(c, h, a);
+        else if (S.view === 'stakeholders') renderStakeholders(c, h, a);
+        else if (S.view === 'context') renderContext(c, h, a);
+        else if (S.view === 'audit-execution') renderAuditExecution(c, h, a);
+        else if (S.view === 'management-review') renderManagementReview(c, h, a);
         updateActiveProjectWidget();
         updateHeaderUser();
     }
@@ -1409,12 +1438,13 @@
     if (!S.expandedJourneys) S.expandedJourneys = {};
     if (!S.expandedPhases) S.expandedPhases = {};
     if (!S.phaseChecks) S.phaseChecks = JSON.parse(localStorage.getItem('niso_phaseChecks') || '{}');
+    if (!S.phaseChecksNotes) S.phaseChecksNotes = JSON.parse(localStorage.getItem('niso_phaseChecksNotes') || '{}');
 
     async function renderProjectDetail(c, h, a) {
         const p = S.currentProject || S.activeProject;
         if (!p) { navigate('projects'); return; }
         h.textContent = p.project_name || p.client_name;
-        a.innerHTML = '<button class="btn" onclick="navigate(\'projects\')">&larr; Voltar</button>';
+        a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
         try {
@@ -1425,12 +1455,15 @@
             ]);
             
             S.checklistsConfig = config;
-            // ponytail: hydrate phaseChecks from D1 (server wins over stale localStorage)
+            // ponytail: hydrate phaseChecks and phaseChecksNotes from D1 (server wins over stale localStorage)
+            if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
             if (Array.isArray(checklistProgress)) {
                 checklistProgress.forEach(row => {
                     S.phaseChecks[p.id + '_' + row.item_id] = !!row.is_checked;
+                    S.phaseChecksNotes[p.id + '_' + row.item_id] = row.notes || '';
                 });
                 localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
+                localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
             }
             
             const JOURNEYS = [
@@ -1498,29 +1531,46 @@
                                                 </div>
                                             ` : ''}
                                             
+                                            ${(window.PHASE_PLAYBOOKS && window.PHASE_PLAYBOOKS[ph.phase_number]) ? `
+                                                <div class="playbook-card" style="margin-bottom:1.25rem; padding:12px; background:rgba(0,173,232,0.04); border-left:3px solid var(--accent); border-radius:10px; font-size:0.75rem">
+                                                    <div style="font-weight:600; color:var(--accent); margin-bottom:4px; font-family:'Montserrat',sans-serif; text-transform:uppercase; letter-spacing:0.5px; font-size:0.7rem">Diretriz do Consultor: ${escapeHTML(window.PHASE_PLAYBOOKS[ph.phase_number].obj)}</div>
+                                                    <div style="color:var(--text); line-height:1.4">${escapeHTML(window.PHASE_PLAYBOOKS[ph.phase_number].guideline)}</div>
+                                                </div>
+                                            ` : ''}
+                                            
                                             <div class="checklist-title">Checklist de Conformidade (${phChecklist.length} itens)</div>
                                             ${phChecklist.length > 0 ? `
                                                 <div class="checklist-list">
                                                     ${phChecklist.map(item => {
                                                         const checkKey = `${p.id}_${item.id}`;
                                                         const isChecked = S.phaseChecks[checkKey] === true;
+                                                        const itemNotes = (S.phaseChecksNotes && S.phaseChecksNotes[checkKey]) || '';
                                                         
                                                         return `
-                                                            <div class="checklist-item">
-                                                                <div class="checklist-left">
-                                                                    <input type="checkbox" class="checklist-item-checkbox" 
-                                                                        ${isChecked ? 'checked' : ''} 
-                                                                        onclick="toggleChecklistItem('${p.id}', '${item.id}', this)">
-                                                                    <span class="badge-cat ${item.category}">${item.category}</span>
-                                                                    <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
+                                                            <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem;">
+                                                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+                                                                    <div class="checklist-left" style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+                                                                        <input type="checkbox" class="checklist-item-checkbox" 
+                                                                            ${isChecked ? 'checked' : ''} 
+                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this)">
+                                                                        <span class="badge-cat ${item.category}">${item.category}</span>
+                                                                        <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
+                                                                    </div>
+                                                                    <div class="checklist-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+                                                                        ${(item.category === 'evidence' || item.category === 'document') ? `
+                                                                            <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
+                                                                        ` : ''}
+                                                                        ${ph.phase_number >= 14 && item.category === 'document' ? `
+                                                                            <button class="btn-inline-action primary" onclick="openGeneratePolicyModal('${p.id}')">Gerar com IA</button>
+                                                                        ` : ''}
+                                                                    </div>
                                                                 </div>
-                                                                <div class="checklist-actions">
-                                                                    ${(item.category === 'evidence' || item.category === 'document') ? `
-                                                                        <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
-                                                                    ` : ''}
-                                                                    ${ph.phase_number >= 14 && item.category === 'document' ? `
-                                                                        <button class="btn-inline-action primary" onclick="openGeneratePolicyModal('${p.id}')">Gerar com IA</button>
-                                                                    ` : ''}
+                                                                <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
+                                                                    <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
+                                                                    <textarea class="form-input" 
+                                                                        placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
+                                                                        style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical;"
+                                                                        onblur="saveChecklistItemNotes('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">${escapeHTML(itemNotes)}</textarea>
                                                                 </div>
                                                             </div>
                                                         `;
@@ -1622,7 +1672,12 @@
                     const iid = key.replace(projectId + '_', '');
                     const match = iid.match(/^p(\d+)_/);
                     if (match) {
-                        items.push({ phase_number: parseInt(match[1]), item_id: iid, is_checked: !!S.phaseChecks[key] });
+                        items.push({ 
+                            phase_number: parseInt(match[1]), 
+                            item_id: iid, 
+                            is_checked: !!S.phaseChecks[key],
+                            notes: (S.phaseChecksNotes && S.phaseChecksNotes[key]) || null
+                        });
                     }
                 }
             }
@@ -2516,6 +2571,814 @@
         }
     });
 
+    // ——— SPRINT B: STATEMENT OF APPLICABILITY (SoA) ——————————————————————
+    async function renderSoA(c, h, a) {
+        h.textContent = 'Statement of Applicability (SoA)';
+        a.innerHTML = '';
+        if (!S.activeProject) {
+            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo para visualizar o SoA.</div>';
+            return;
+        }
+        
+        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando controles do SoA...</div>';
+        try {
+            const controls = await api('GET', `/api/v1/projects/${S.activeProject.id}/controls`) || [];
+            
+            // Agrupar por tema/seção
+            const groups = {};
+            let totalApplicable = 0, totalNA = 0, totalJustified = 0;
+            
+            controls.forEach(ctrl => {
+                const group = (ctrl.standard || 'Other').split('.').slice(0, 2).join('.');
+                if (!groups[group]) groups[group] = [];
+                groups[group].push(ctrl);
+                
+                const isNA = ctrl.status === 'Not Applicable';
+                if (isNA) {
+                    totalNA++;
+                    if (ctrl.description && ctrl.description.trim() !== '') {
+                        totalJustified++;
+                    }
+                } else {
+                    totalApplicable++;
+                }
+            });
+            
+            let html = `
+                <div style="display:flex;gap:24px;margin-bottom:2rem">
+                    <div class="stat-card" style="flex:1">
+                        <div class="stat-value" style="font-size:1.8rem">${totalApplicable} / ${controls.length}</div>
+                        <div class="stat-label">Controles Aplicáveis</div>
+                    </div>
+                    <div class="stat-card" style="flex:1">
+                        <div class="stat-value" style="font-size:1.8rem">${totalNA}</div>
+                        <div class="stat-label">Controles Não Aplicáveis</div>
+                    </div>
+                    <div class="stat-card" style="flex:1">
+                        <div class="stat-value" style="font-size:1.8rem">${totalJustified} / ${totalNA}</div>
+                        <div class="stat-label">Justificativas de Exclusão</div>
+                    </div>
+                </div>
+            `;
+            
+            for (const [group, ctrls] of Object.entries(groups).sort()) {
+                html += `
+                    <div style="margin-bottom:2rem">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.2rem;margin-bottom:1rem;color:var(--accent)">
+                            Seção ${group}
+                        </div>
+                        <div class="data-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:100px">ID</th>
+                                        <th style="width:250px">Controle</th>
+                                        <th style="width:140px">Aplicável?</th>
+                                        <th style="width:120px">Status</th>
+                                        <th>Justificativa / Notas</th>
+                                        <th style="width:100px">Maturidade</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+                
+                ctrls.forEach(ctrl => {
+                    const isNA = ctrl.status === 'Not Applicable';
+                    html += `
+                        <tr id="soa-row-${ctrl.id}">
+                            <td style="font-weight:600;color:var(--accent)">${escapeHTML(ctrl.standard)}</td>
+                            <td style="font-weight:500">${escapeHTML(ctrl.title)}</td>
+                            <td>
+                                <select onchange="window.toggleSoAApplicability('${ctrl.id}', this.value)" class="custom-select" style="padding:4px 8px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px">
+                                    <option value="Applicable" ${!isNA ? 'selected' : ''}>Sim</option>
+                                    <option value="Not Applicable" ${isNA ? 'selected' : ''}>Não</option>
+                                </select>
+                            </td>
+                            <td>
+                                <span class="badge ${isNA ? 'badge-not-applicable' : 'badge-' + (ctrl.status || 'missing').toLowerCase().replace(/\s/g,'-')}">
+                                    ${escapeHTML(ctrl.status || 'Missing')}
+                                </span>
+                            </td>
+                            <td>
+                                <input type="text" value="${escapeHTML(ctrl.description || '')}" 
+                                    onblur="window.saveSoAJustification('${ctrl.id}', this.value)" 
+                                    placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
+                                    style="width:100%;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:0.85rem" />
+                            </td>
+                            <td>
+                                <span style="font-weight:600">${ctrl.maturity || 0} / 5</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            c.innerHTML = html;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar SoA: ${escapeHTML(e.message)}</div>`;
+        }
+    }
+
+    window.toggleSoAApplicability = async function(ctrlId, value) {
+        try {
+            const status = value === 'Not Applicable' ? 'Not Applicable' : 'Missing';
+            await api('PUT', `/api/v1/controls/${ctrlId}`, { status });
+            showToast('Aplicabilidade atualizada');
+            render();
+        } catch(e) {
+            showToast('Erro ao atualizar aplicabilidade', 'error');
+        }
+    };
+
+    window.saveSoAJustification = async function(ctrlId, value) {
+        try {
+            await api('PUT', `/api/v1/controls/${ctrlId}`, { description: value });
+            showToast('Justificativa salva');
+        } catch(e) {
+            showToast('Erro ao salvar justificativa', 'error');
+        }
+    };
+
+    // ——— SPRINT A: CONTEXT & STAKEHOLDERS ————————————————————————————————
+    async function renderContext(c, h, a) {
+        h.textContent = 'Análise de Contexto (Cláusula 4.1 / 4.2)';
+        a.innerHTML = '';
+        if (!S.activeProject) {
+            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
+            return;
+        }
+        
+        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando análise de contexto...</div>';
+        try {
+            const ctx = await api('GET', `/api/v1/projects/${S.activeProject.id}/context`) || {};
+            
+            c.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
+                        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</p>
+                        
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div>
+                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Forças Internas (Strengths)</label>
+                                <textarea id="ctx-strengths" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Fraquezas Internas (Weaknesses)</label>
+                                <textarea id="ctx-weaknesses" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Oportunidades Externas (Opportunities)</label>
+                                <textarea id="ctx-opportunities" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Ameaças Externas (Threats)</label>
+                                <textarea id="ctx-threats" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">2. Requisitos Legais / Regulatórios</div>
+                        <textarea id="ctx-legal" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+                    </div>
+                    
+                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">3. Requisitos Contratuais</div>
+                        <textarea id="ctx-contractual" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
+                    </div>
+                    
+                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--text)">Notas Gerais</div>
+                        <textarea id="ctx-notes" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
+                    </div>
+                </div>
+                
+                <div style="text-align:right">
+                    <button onclick="window.saveContext()" class="btn-primary" style="padding:10px 24px">Salvar Contexto</button>
+                </div>
+            `;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar contexto: ${escapeHTML(e.message)}</div>`;
+        }
+    }
+
+    window.saveContext = async function() {
+        try {
+            const body = {
+                internal_strengths: document.getElementById('ctx-strengths').value,
+                internal_weaknesses: document.getElementById('ctx-weaknesses').value,
+                external_opportunities: document.getElementById('ctx-opportunities').value,
+                external_threats: document.getElementById('ctx-threats').value,
+                legal_requirements: document.getElementById('ctx-legal').value,
+                contractual_requirements: document.getElementById('ctx-contractual').value,
+                notes: document.getElementById('ctx-notes').value
+            };
+            await api('PUT', `/api/v1/projects/${S.activeProject.id}/context`, body);
+            showToast('Análise de contexto salva com sucesso');
+        } catch(e) {
+            showToast('Erro ao salvar contexto', 'error');
+        }
+    };
+
+    async function renderStakeholders(c, h, a) {
+        h.textContent = 'Partes Interessadas (Cláusula 4.2)';
+        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn-primary">Novo Stakeholder</button>`;
+        if (!S.activeProject) {
+            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
+            return;
+        }
+        
+        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando partes interessadas...</div>';
+        try {
+            const list = await api('GET', `/api/v1/projects/${S.activeProject.id}/stakeholders`) || [];
+            
+            if (list.length === 0) {
+                c.innerHTML = `
+                    <div style="padding:3rem;text-align:center;color:var(--muted)">
+                        Nenhum stakeholder cadastrado ainda.<br><br>
+                        <button onclick="window.openStakeholderModal()" class="btn-primary">Adicionar Primeira Parte Interessada</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Parte Interessada</th>
+                                <th>Tipo</th>
+                                <th>Categoria</th>
+                                <th>Expectativas / Requisitos de SI</th>
+                                <th>Influência</th>
+                                <th>Método de Comunicação</th>
+                                <th style="width:120px;text-align:center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            list.forEach(s => {
+                html += `
+                    <tr>
+                        <td style="font-weight:600">${escapeHTML(s.name)}</td>
+                        <td><span class="badge ${s.type === 'internal' ? 'badge-implemented' : 'badge-partial'}">${s.type === 'internal' ? 'Interno' : 'Externo'}</span></td>
+                        <td>${escapeHTML(s.category || 'N/A')}</td>
+                        <td style="font-size:0.85rem">${escapeHTML(s.requirements || '')}</td>
+                        <td><span class="badge badge-${(s.influence || 'Medium').toLowerCase()}">${escapeHTML(s.influence || 'Medium')}</span></td>
+                        <td style="font-size:0.85rem">${escapeHTML(s.communication_method || '')}</td>
+                        <td style="text-align:center">
+                            <button onclick="window.openStakeholderModal(${JSON.stringify(s).replace(/"/g, '&quot;')})" class="btn-secondary" style="padding:4px 8px;margin-right:4px">Editar</button>
+                            <button onclick="window.deleteStakeholder('${s.id}')" class="btn-secondary" style="padding:4px 8px;color:red;border-color:rgba(255,0,0,0.2)">Deletar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            c.innerHTML = html;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar stakeholders: ${escapeHTML(e.message)}</div>`;
+        }
+    }
+
+    window.openStakeholderModal = function(s = null) {
+        const isEdit = !!s;
+        const html = `
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                ${isEdit ? 'Editar Parte Interessada' : 'Nova Parte Interessada'}
+            </div>
+            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})">
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nome / Identificação</label>
+                    <input type="text" name="name" value="${s ? escapeHTML(s.name) : ''}" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                    <div class="form-group">
+                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Tipo</label>
+                        <select name="type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                            <option value="external" ${s && s.type === 'external' ? 'selected' : ''}>Externo</option>
+                            <option value="internal" ${s && s.type === 'internal' ? 'selected' : ''}>Interno</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Categoria</label>
+                        <select name="category" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                            <option value="client" ${s && s.category === 'client' ? 'selected' : ''}>Cliente</option>
+                            <option value="regulator" ${s && s.category === 'regulator' ? 'selected' : ''}>Regulador / Auditor</option>
+                            <option value="shareholder" ${s && s.category === 'shareholder' ? 'selected' : ''}>Diretoria / Acionista</option>
+                            <option value="employee" ${s && s.category === 'employee' ? 'selected' : ''}>Colaborador</option>
+                            <option value="supplier" ${s && s.category === 'supplier' ? 'selected' : ''}>Fornecedor / Operador</option>
+                            <option value="partner" ${s && s.category === 'partner' ? 'selected' : ''}>Parceiro</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                    <div class="form-group">
+                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nível de Influência</label>
+                        <select name="influence" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                            <option value="Low" ${s && s.influence === 'Low' ? 'selected' : ''}>Baixo</option>
+                            <option value="Medium" ${s && s.influence === 'Medium' ? 'selected' : ''}>Médio</option>
+                            <option value="High" ${s && s.influence === 'High' ? 'selected' : ''}>Alto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Método de Comunicação</label>
+                        <input type="text" name="communication_method" value="${s ? escapeHTML(s.communication_method || '') : ''}" placeholder="Ex: Email trimestral, Reunião" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:20px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Expectativas e Requisitos de SI</label>
+                    <textarea name="requirements" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${s ? escapeHTML(s.requirements || '') : ''}</textarea>
+                </div>
+                <div style="text-align:right">
+                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
+                    <button type="submit" class="btn-primary">${isEdit ? 'Salvar Alterações' : 'Criar'}</button>
+                </div>
+            </form>
+        `;
+        openModal(html);
+    };
+
+    window.saveStakeholder = async function(e, id) {
+        e.preventDefault();
+        const form = document.getElementById('stakeholder-form');
+        const formData = new FormData(form);
+        const body = {
+            name: formData.get('name'),
+            type: formData.get('type'),
+            category: formData.get('category'),
+            influence: formData.get('influence'),
+            communication_method: formData.get('communication_method'),
+            requirements: formData.get('requirements')
+        };
+        
+        try {
+            if (id) {
+                await api('PUT', `/api/v1/stakeholders/${id}`, body);
+                showToast('Parte interessada atualizada');
+            } else {
+                await api('POST', `/api/v1/projects/${S.activeProject.id}/stakeholders`, body);
+                showToast('Parte interessada cadastrada');
+            }
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao salvar stakeholder', 'error');
+        }
+    };
+
+    window.deleteStakeholder = async function(id) {
+        if (!confirm('Deseja realmente deletar este stakeholder?')) return;
+        try {
+            await api('DELETE', `/api/v1/stakeholders/${id}`);
+            showToast('Parte interessada removida');
+            render();
+        } catch(e) {
+            showToast('Erro ao deletar stakeholder', 'error');
+        }
+    };
+
+    // ——— SPRINT D: AUDIT EXECUTION (Cláusula 9.2) —————————————————————————
+    async function renderAuditExecution(c, h, a) {
+        h.textContent = 'Executar Auditoria Interna';
+        a.innerHTML = `<button onclick="navigate('audits')" class="btn" style="border-color:var(--border)">Voltar ao Calendário</button>`;
+        if (!S.activeAuditId) {
+            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione uma auditoria no calendário.</div>';
+            return;
+        }
+        
+        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando painel de auditoria...</div>';
+        try {
+            const [controls, findings, audit] = await Promise.all([
+                api('GET', `/api/v1/projects/${S.activeProject.id}/controls`),
+                api('GET', `/api/v1/audits/${S.activeAuditId}/findings`),
+                api('GET', `/api/v1/projects/${S.activeProject.id}/audits`)
+            ]);
+            
+            const currentAudit = (audit || []).find(au => au.id === S.activeAuditId) || {};
+            
+            let html = `
+                <div class="stat-card" style="margin-bottom:2rem;border:1px solid var(--border);background:rgba(229,235,255,0.02)">
+                    <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.15rem;color:var(--accent);margin-bottom:6px">${escapeHTML(currentAudit.title || 'Auditoria')}</div>
+                    <div style="font-size:0.85rem;color:var(--muted)">
+                        <strong>Auditor:</strong> ${escapeHTML(currentAudit.auditor_name || 'TBD')} | 
+                        <strong>Escopo:</strong> ${escapeHTML(currentAudit.scope || 'Todo o ISMS')} | 
+                        <strong>Data:</strong> ${currentAudit.scheduled_date}
+                    </div>
+                </div>
+                
+                <div style="display:grid;grid-template-columns:3fr 2fr;gap:24px">
+                    <div>
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:1rem">Controles Aplicáveis no Escopo</div>
+                        <div class="data-table" style="max-height:600px;overflow-y:auto">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Controle</th>
+                                        <th>Status Atual</th>
+                                        <th style="width:180px;text-align:center">Auditar</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+            
+            (controls || []).filter(ctrl => ctrl.status !== 'Not Applicable').forEach(ctrl => {
+                const ctrlFindings = findings.filter(f => f.control_id === ctrl.id);
+                html += `
+                    <tr>
+                        <td style="font-weight:600;color:var(--accent)">${escapeHTML(ctrl.standard)}</td>
+                        <td style="font-size:0.85rem;font-weight:500">${escapeHTML(ctrl.title)}</td>
+                        <td>
+                            <span class="badge badge-${(ctrl.status || 'missing').toLowerCase().replace(/\s/g,'-')}">
+                                ${escapeHTML(ctrl.status || 'Missing')}
+                            </span>
+                        </td>
+                        <td style="text-align:center">
+                            <button onclick="window.openAddFindingModal('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="btn" style="padding:4px 10px;font-size:0.75rem;border-color:var(--accent);color:var(--accent)">
+                                ${ctrlFindings.length > 0 ? 'Registrar Achado (' + ctrlFindings.length + ')' : '+ Novo Achado'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:1rem">Achados Registrados (${findings.length})</div>
+            `;
+            
+            if (findings.length === 0) {
+                html += '<div style="padding:2rem;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px">Nenhum achado ou NC registrado nesta auditoria.</div>';
+            } else {
+                html += `<div style="display:flex;flex-direction:column;gap:12px;max-height:600px;overflow-y:auto">`;
+                findings.forEach(f => {
+                    const badgeClass = f.finding_type === 'major_nc' ? 'badge-critical' : f.finding_type === 'minor_nc' ? 'badge-warning' : f.finding_type === 'observation' ? 'badge-info';
+                    const badgeLabel = f.finding_type === 'major_nc' ? 'NC Maior' : f.finding_type === 'minor_nc' ? 'NC Menor' : f.finding_type === 'observation' ? 'Observação' : 'Oportunidade';
+                    html += `
+                        <div class="stat-card" style="border:1px solid var(--border);padding:12px">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                                <span class="badge ${badgeClass}">${badgeLabel}</span>
+                                <span style="font-weight:600;color:var(--accent)">${escapeHTML(f.control_id || 'Geral')}</span>
+                            </div>
+                            <div style="font-size:0.85rem;margin-bottom:8px">${escapeHTML(f.description)}</div>
+                            ${f.auditor_notes ? `<div style="font-size:0.75rem;color:var(--muted);background:rgba(255,255,255,0.02);padding:6px 10px;border-radius:6px;margin-bottom:8px"><strong>Notas:</strong> ${escapeHTML(f.auditor_notes)}</div>` : ''}
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <span style="font-size:0.7rem;color:var(--muted)">Registrado em: ${f.created_at.split('T')[0]}</span>
+                                <button onclick="window.deleteFinding('${f.id}')" class="btn" style="padding:2px 6px;font-size:0.7rem;color:red;border-color:rgba(255,0,0,0.15)">Deletar</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            c.innerHTML = html;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar execução da auditoria: ${escapeHTML(e.message)}</div>`;
+        }
+    }
+
+    window.openAddFindingModal = function(controlId, controlStandard) {
+        const html = `
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                Registrar Achado — Controle ${controlStandard}
+            </div>
+            <form id="finding-form" onsubmit="window.submitFinding(event, '${controlId}')">
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Tipo de Achado</label>
+                    <select name="finding_type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <option value="observation">Observação</option>
+                        <option value="minor_nc">Não Conformidade Menor (NC Menor)</option>
+                        <option value="major_nc">Não Conformidade Maior (NC Maior)</option>
+                        <option value="opportunity">Oportunidade de Melhoria</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Evidência Analisada (Opcional)</label>
+                    <input type="text" name="evidence_reviewed" placeholder="Ex: Política de Acesso ver. 1.2, logs de MFA" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                </div>
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Descrição da Constatação / Achado</label>
+                    <textarea name="description" required style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit" placeholder="Descreva de forma clara e objetiva o achado da auditoria..."></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:20px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Notas de Auditoria</label>
+                    <textarea name="auditor_notes" style="width:100%;height:60px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit" placeholder="Ex: Recomendações iniciais, referências normativas..."></textarea>
+                </div>
+                <div style="text-align:right">
+                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
+                    <button type="submit" class="btn-primary">Registrar Achado</button>
+                </div>
+            </form>
+        `;
+        openModal(html);
+    };
+
+    window.submitFinding = async function(e, controlId) {
+        e.preventDefault();
+        const form = document.getElementById('finding-form');
+        const formData = new FormData(form);
+        const body = {
+            project_id: S.activeProject.id,
+            control_id: controlId,
+            finding_type: formData.get('finding_type'),
+            description: formData.get('description'),
+            evidence_reviewed: formData.get('evidence_reviewed'),
+            auditor_notes: formData.get('auditor_notes')
+        };
+        
+        try {
+            await api('POST', `/api/v1/audits/${S.activeAuditId}/findings`, body);
+            showToast('Achado de auditoria registrado');
+            if (body.finding_type === 'minor_nc' || body.finding_type === 'major_nc') {
+                showToast('Ação corretiva (CAPA) aberta automaticamente para a NC', 'warning');
+            }
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao salvar achado de auditoria', 'error');
+        }
+    };
+
+    window.deleteFinding = async function(id) {
+        if (!confirm('Deseja realmente deletar este achado?')) return;
+        try {
+            await api('DELETE', `/api/v1/audit-findings/${id}`);
+            showToast('Achado removido');
+            render();
+        } catch(e) {
+            showToast('Erro ao deletar achado', 'error');
+        }
+    };
+
+    // ——— SPRINT D: MANAGEMENT REVIEW (Cláusula 9.3) ——————————————————————
+    async function renderManagementReview(c, h, a) {
+        h.textContent = 'Análise Crítica pela Direção (Cláusula 9.3)';
+        a.innerHTML = `<button onclick="window.openNewMgmtReviewModal()" class="btn-primary">Nova Análise Crítica</button>`;
+        if (!S.activeProject) {
+            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
+            return;
+        }
+        
+        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando reuniões de análise crítica...</div>';
+        try {
+            const list = await api('GET', `/api/v1/projects/${S.activeProject.id}/management-reviews`) || [];
+            
+            if (list.length === 0) {
+                c.innerHTML = `
+                    <div style="padding:3rem;text-align:center;color:var(--muted)">
+                        Nenhuma reunião de análise crítica cadastrada ainda.<br><br>
+                        <button onclick="window.openNewMgmtReviewModal()" class="btn-primary">Registrar Primeira Reunião</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data da Análise</th>
+                                <th>Participantes</th>
+                                <th>Status</th>
+                                <th style="width:150px;text-align:center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            list.forEach(m => {
+                html += `
+                    <tr>
+                        <td style="font-weight:600;color:var(--accent)">${m.review_date}</td>
+                        <td style="font-size:0.85rem">${escapeHTML(m.attendees || 'Não definidos')}</td>
+                        <td><span class="badge ${m.status === 'Completed' ? 'badge-implemented' : 'badge-pending'}">${m.status === 'Completed' ? 'Concluída' : 'Planejada'}</span></td>
+                        <td style="text-align:center">
+                            <button onclick='window.openEditMgmtReviewModal(${JSON.stringify(m).replace(/'/g, '&quot;')})' class="btn-secondary" style="padding:4px 10px">Abrir Pauta / Editar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            c.innerHTML = html;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar análises críticas: ${escapeHTML(e.message)}</div>`;
+        }
+    }
+
+    window.openNewMgmtReviewModal = function() {
+        const html = `
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                Nova Reunião de Análise Crítica (Cláusula 9.3)
+            </div>
+            <form id="new-mgmt-form" onsubmit="window.saveNewMgmtReview(event)">
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Data da Análise</label>
+                    <input type="date" name="review_date" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                </div>
+                <div class="form-group" style="margin-bottom:20px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Participantes (C-Level / Sponsor)</label>
+                    <textarea name="attendees" required style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit" placeholder="Ex: CEO, CISO, DPO, Diretor Jurídico..."></textarea>
+                </div>
+                <div style="text-align:right">
+                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
+                    <button type="submit" class="btn-primary">Criar Reunião</button>
+                </div>
+            </form>
+        `;
+        openModal(html);
+    };
+
+    window.saveNewMgmtReview = async function(e) {
+        e.preventDefault();
+        const form = document.getElementById('new-mgmt-form');
+        const formData = new FormData(form);
+        const body = {
+            review_date: formData.get('review_date'),
+            attendees: formData.get('attendees')
+        };
+        try {
+            await api('POST', `/api/v1/projects/${S.activeProject.id}/management-reviews`, body);
+            showToast('Reunião registrada');
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao criar reunião', 'error');
+        }
+    };
+
+    window.openEditMgmtReviewModal = function(review) {
+        const agenda = JSON.parse(review.agenda_json || '{"items":[]}');
+        
+        let agendaHtml = `<div style="max-height:300px;overflow-y:auto;background:rgba(255,255,255,0.01);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px">`;
+        (agenda.items || []).forEach(item => {
+            let dataStr = typeof item.data === 'string' ? item.data : JSON.stringify(item.data);
+            if (Array.isArray(item.data)) {
+                dataStr = item.data.map(d => `${d.status || 'N/A'}: ${d.cnt}`).join(', ');
+            }
+            agendaHtml += `
+                <div style="margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px">
+                    <div style="font-weight:600;color:var(--accent);font-size:0.85rem">${escapeHTML(item.topic)}</div>
+                    <div style="font-size:0.8rem;color:var(--muted);margin-top:2px"><strong>Dados consolidados:</strong> ${escapeHTML(dataStr)}</div>
+                </div>
+            `;
+        });
+        agendaHtml += `</div>`;
+
+        const html = `
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                Pauta & Registro da Análise Crítica (${review.review_date})
+            </div>
+            <form id="edit-mgmt-form" onsubmit="window.saveMgmtReviewDetails(event, '${review.id}')">
+                <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px">Participantes</div>
+                <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">${escapeHTML(review.attendees || 'Não definidos')}</div>
+                
+                <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px">Pauta da Reunião (Cláusula 9.3.2)</div>
+                ${agendaHtml}
+                
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Decisões Tomadas (Diretrizes, recursos...)</label>
+                    <textarea name="decisions" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${escapeHTML(review.decisions || '')}</textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:12px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Ações Corretivas / Oportunidades Definidas</label>
+                    <textarea name="action_items" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${escapeHTML(review.action_items || '')}</textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:20px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Status da Reunião</label>
+                    <select name="status" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <option value="Planned" ${review.status === 'Planned' ? 'selected' : ''}>Planejada</option>
+                        <option value="Completed" ${review.status === 'Completed' ? 'selected' : ''}>Concluída</option>
+                    </select>
+                </div>
+                <div style="text-align:right">
+                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar Detalhes da Ata</button>
+                </div>
+            </form>
+        `;
+        openModal(html);
+    };
+
+    window.saveMgmtReviewDetails = async function(e, id) {
+        e.preventDefault();
+        const form = document.getElementById('edit-mgmt-form');
+        const formData = new FormData(form);
+        const body = {
+            decisions: formData.get('decisions'),
+            action_items: formData.get('action_items'),
+            status: formData.get('status')
+        };
+        try {
+            await api('PUT', `/api/v1/management-reviews/${id}`, body);
+            showToast('Dados da análise crítica salvos');
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao salvar detalhes', 'error');
+        }
+    };
+
+    // ——— SPRINT E: AUDITOR NOTES CONSOLE (Consultor) —————————————————————
+    window.openAuditorNotesModal = async function(projectId) {
+        openModal(`
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                Notas e Solicitações do Auditor Externo
+            </div>
+            <div id="auditor-notes-modal-content" style="max-height:400px;overflow-y:auto;margin-bottom:1.5rem">
+                Carregando notas...
+            </div>
+            <div style="text-align:right">
+                <button type="button" onclick="closeModal()" class="btn-secondary">Fechar</button>
+            </div>
+        `);
+        
+        try {
+            const res = await api('GET', `/api/v1/projects/${projectId}/auditor-notes`);
+            const notes = res.notes || [];
+            
+            const container = document.getElementById('auditor-notes-modal-content');
+            if (notes.length === 0) {
+                container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:2rem">Nenhuma nota ou solicitação do auditor registrada para este projeto.</div>';
+                return;
+            }
+            
+            let html = '<div style="display:flex;flex-direction:column;gap:12px">';
+            notes.forEach(n => {
+                const typeLabel = n.note_type === 'question' ? 'Pergunta' : n.note_type === 'evidence_request' ? 'Pedido de Evidência' : 'Observação';
+                const badgeColor = n.note_type === 'evidence_request' ? 'badge-warning' : n.note_type === 'observation' ? 'badge-critical' : 'badge-info';
+                
+                html += `
+                    <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                            <span class="badge ${badgeColor}">${typeLabel}</span>
+                            <span style="font-weight:600;color:var(--accent)">${escapeHTML(n.control_standard || 'Geral')}</span>
+                        </div>
+                        <div style="font-size:0.9rem;margin-bottom:8px;color:var(--text)">${escapeHTML(n.content)}</div>
+                        
+                        ${n.response ? `
+                            <div style="background:rgba(52,199,89,0.05);border:1px solid rgba(52,199,89,0.15);border-radius:8px;padding:8px;font-size:0.85rem;color:#34c759;margin-top:8px">
+                                <strong>Sua Resposta:</strong> ${escapeHTML(n.response)}
+                            </div>
+                        ` : `
+                            <div style="margin-top:8px;display:flex;gap:8px">
+                                <input type="text" id="respond-input-${n.id}" placeholder="Escreva a resposta para o auditor..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:0.85rem" />
+                                <button onclick="window.submitAuditorResponse('${n.id}', '${projectId}')" class="btn-primary" style="padding:6px 12px;font-size:0.85rem;border-radius:8px;border:none;background:var(--accent);color:#070b14;font-weight:700">Responder</button>
+                            </div>
+                        `}
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch(e) {
+            document.getElementById('auditor-notes-modal-content').innerHTML = '<div style="color:red">Erro ao carregar notas do auditor.</div>';
+        }
+    };
+
+    window.submitAuditorResponse = async function(noteId, projectId) {
+        const input = document.getElementById(`respond-input-${noteId}`);
+        const response = input.value.trim();
+        if (!response) return;
+        
+        try {
+            await api('PUT', `/api/v1/auditor-notes/${noteId}/respond`, { response });
+            showToast('Resposta enviada com sucesso');
+            window.openAuditorNotesModal(projectId);
+        } catch(e) {
+            showToast('Erro ao enviar resposta', 'error');
+        }
+    };
+
     // ——— ASSETS MODULE (A.5.9) ——————————————————————————
     async function renderAssets(c, h, a) {
         h.textContent = 'Ativos de Informação';
@@ -2805,7 +3668,7 @@
             <div class="list-item" style="cursor:pointer" onclick="openEditRiskModal('${r.id}', '${proj.id}', ${JSON.stringify(r).replace(/'/g, '\x27')})">
                 <div style="flex:1">
                     <div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">${r.treatment} | Owner: ${escapeHTML(r.owner || 'Sem dono')} ${r.treatment === 'Accept' && r.accepted_by ? `| Aceito por: ${escapeHTML(r.accepted_by)}` : ''}</div>
+                    <div class="item-meta" style="margin-top:0.25rem">${r.treatment} | Owner: ${escapeHTML(r.owner || 'Sem dono')} ${r.control_standard ? `| Controle: <span class="badge badge-implemented" style="padding:2px 6px;font-size:0.75rem">${escapeHTML(r.control_standard)}</span>` : ''} ${r.treatment === 'Accept' && r.accepted_by ? `| Aceito por: ${escapeHTML(r.accepted_by)}` : ''}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
                     <span style="font-weight:600;color:${levelColor(r.risk_level)}">${r.risk_score || (r.impact * r.probability)}</span>
@@ -2840,11 +3703,21 @@
 
     async function openNewRiskModal(projectId) {
         let assets = [];
-        try { assets = await api('GET', `/api/v1/projects/${projectId}/assets`); } catch(e) {}
+        let controls = [];
+        try { 
+            assets = await api('GET', `/api/v1/projects/${projectId}/assets`); 
+            controls = await api('GET', `/api/v1/projects/${projectId}/controls`);
+        } catch(e) {}
         if (!Array.isArray(assets)) assets = [];
+        if (!Array.isArray(controls)) controls = [];
+
+        const controlOptions = controls
+            .filter(c => c.status !== 'Not Applicable')
+            .map(c => `<option value="${c.id}">${escapeHTML(c.standard)} - ${escapeHTML(c.title)}</option>`)
+            .join('');
 
         openModal(`
-            <div class="modal-header"><span class="modal-title">Novo Risco</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Novo Risco</span><button class="btn-ghost" onclick="forceCloseModal()">×</button></div>
             <div class="form-group">
                 <label class="form-label">Ativo do Inventario (Opcional)</label>
                 <select class="form-input" id="risk-asset-select" onchange="onRiskAssetSelectChange(this)">
@@ -2872,6 +3745,13 @@
                     <option value="Avoid">Avoid</option>
                 </select>
             </div>
+            <div class="form-group">
+                <label class="form-label">Controle Annex A Vinculado (Opcional)</label>
+                <select class="form-input" id="risk-control">
+                    <option value="">-- Sem controle vinculado --</option>
+                    ${controlOptions}
+                </select>
+            </div>
             <div id="risk-accept-group" style="display:none">
                 <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Executivo do Cliente (CEO)"></div>
                 <div class="form-group"><label class="form-label">Data do Aceite</label><input class="form-input" id="risk-accepted-at" type="date"></div>
@@ -2896,6 +3776,7 @@
             impact: +document.getElementById('risk-impact').value,
             probability: +document.getElementById('risk-prob').value,
             treatment: treatment,
+            control_id: document.getElementById('risk-control').value || null,
             owner: document.getElementById('risk-owner').value,
             treatment_plan: document.getElementById('risk-plan').value,
             accepted_by: treatment === 'Accept' ? document.getElementById('risk-accepted-by').value : null,
@@ -2907,10 +3788,20 @@
     }
 
     async function openEditRiskModal(riskId, projectId, data) {
-        // ponytail: real edit modal with pre-populated fields
         const r = data || {};
+        let controls = [];
+        try { 
+            controls = await api('GET', `/api/v1/projects/${projectId}/controls`);
+        } catch(e) {}
+        if (!Array.isArray(controls)) controls = [];
+
+        const controlOptions = controls
+            .filter(c => c.status !== 'Not Applicable')
+            .map(c => `<option value="${c.id}" ${c.id === r.control_id ? 'selected' : ''}>${escapeHTML(c.standard)} - ${escapeHTML(c.title)}</option>`)
+            .join('');
+
         openModal(`
-            <div class="modal-header"><span class="modal-title">Editar Risco</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Editar Risco</span><button class="btn-ghost" onclick="forceCloseModal()">×</button></div>
             <div class="form-group"><label class="form-label">Ativo</label><input class="form-input" id="risk-e-asset" value="${escapeHTML(r.asset||'')}"></div>
             <div class="form-group"><label class="form-label">Ameaca</label><input class="form-input" id="risk-e-threat" value="${escapeHTML(r.threat||'')}"></div>
             <div class="form-group"><label class="form-label">Vulnerabilidade</label><input class="form-input" id="risk-e-vuln" value="${escapeHTML(r.vulnerability||'')}"></div>
@@ -2920,6 +3811,13 @@
             </div>
             <div class="form-group"><label class="form-label">Tratamento</label>
                 <select class="form-input" id="risk-e-treatment">${['Mitigate','Accept','Transfer','Avoid'].map(o => `<option ${o===r.treatment?'selected':''}>${o}</option>`).join('')}</select></div>
+            <div class="form-group">
+                <label class="form-label">Controle Annex A Vinculado (Opcional)</label>
+                <select class="form-input" id="risk-e-control">
+                    <option value="">-- Sem controle vinculado --</option>
+                    ${controlOptions}
+                </select>
+            </div>
             <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="risk-e-owner" value="${escapeHTML(r.owner||'')}"></div>
             <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1rem">
                 <button class="btn" style="color:var(--danger)" onclick="if(confirm('Excluir este risco?')){api('DELETE','/api/v1/risks/${riskId}').then(()=>{forceCloseModal();render()})}">Excluir</button>
@@ -2927,8 +3825,18 @@
             </div>
         `);
     }
+
     async function updateRisk(id) {
-        const body = { asset: document.getElementById('risk-e-asset').value, threat: document.getElementById('risk-e-threat').value, vulnerability: document.getElementById('risk-e-vuln').value, impact: +document.getElementById('risk-e-impact').value, probability: +document.getElementById('risk-e-prob').value, treatment: document.getElementById('risk-e-treatment').value, owner: document.getElementById('risk-e-owner').value };
+        const body = { 
+            asset: document.getElementById('risk-e-asset').value, 
+            threat: document.getElementById('risk-e-threat').value, 
+            vulnerability: document.getElementById('risk-e-vuln').value, 
+            impact: +document.getElementById('risk-e-impact').value, 
+            probability: +document.getElementById('risk-e-prob').value, 
+            treatment: document.getElementById('risk-e-treatment').value, 
+            control_id: document.getElementById('risk-e-control').value || null,
+            owner: document.getElementById('risk-e-owner').value 
+        };
         await api('PUT', `/api/v1/risks/${id}`, body);
         forceCloseModal(); render();
     }
@@ -3376,7 +4284,8 @@
                 <div style="flex:1"><div class="item-name">${escapeHTML(au.title)}</div>
                 <div class="item-meta" style="margin-top:0.25rem">${au.audit_type} | ${au.auditor_name || 'TBD'} | ${au.scheduled_date}</div></div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${au.findings_count ? `<span style="font-size:0.7rem;color:var(--danger)">${au.findings_count} findings</span>` : ''}
+                    ${au.findings_count ? `<span style="font-size:0.7rem;color:var(--danger);margin-right:0.5rem">${au.findings_count} achados</span>` : ''}
+                    ${au.status !== 'Completed' ? `<button class="btn" style="padding:4px 8px;font-size:0.75rem;margin-right:0.5rem;border-color:var(--accent);color:var(--accent)" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>` : ''}
                     <span class="ctx-tag" style="color:${statusColor(au.status)}">${au.status}</span>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhuma auditoria agendada</h3></div>'}</div>`;
@@ -4071,6 +4980,87 @@
             }
         });
     }).observe(document.body, { childList: true, subtree: true });
+
+    window.PHASE_PLAYBOOKS = {
+        0: { obj: "Mobilização e Mandato (Cláusula 5.1)", guideline: "Definir o patrocinador do projeto (Executive Sponsor), formalizar a equipe de implementação e assinar a Carta de Mandato. O kick-off formaliza o comprometimento da alta direção com o SGSI." },
+        1: { obj: "Entrevista Executiva (Cláusula 5.2 & 6.2)", guideline: "Conduzir reuniões com C-Level para entender o apetite de risco da organização, os objetivos estratégicos de negócio e obter inputs diretos para a elaboração da Política de Segurança da Informação." },
+        2: { obj: "Entrevistas por Trilha (Cláusula 7.2)", guideline: "Realizar o mapeamento das trilhas de TI, RH, Jurídico e Operações. O objetivo é entender a rotina de cada área e coletar evidências iniciais de procedimentos já existentes." },
+        3: { obj: "Definição de Escopo (Cláusula 4.3)", guideline: "Mapear de forma precisa e documentada os limites físicos, organizacionais e tecnológicos do SGSI. Quaisquer exclusões de controles ou áreas devem ser tecnicamente justificadas no documento de escopo." },
+        4: { obj: "Gap Assessment (Cláusula 6.1)", guideline: "Comparar a maturidade atual dos processos internos com os 93 controles da ISO 27001:2022. Identificar 'Quick Wins' (melhorias rápidas e de baixo custo) para iniciar a adequação com impacto." },
+        5: { obj: "Governança e Papéis (Cláusula 5.3)", guideline: "Nomear formalmente os papéis-chave do SGSI, como o DPO (Encarregado) e o CISO (Responsável por Segurança). Criar e publicar a Matriz RACI de responsabilidades de segurança." },
+        6: { obj: "Contexto e Partes Interessadas (Cláusula 4.1 & 4.2)", guideline: "Conduzir a análise de ambiente interno e externo (SWOT) e identificar os requisitos legais (ex: LGPD, resoluções ANPD) e contratuais com clientes e parceiros." },
+        7: { obj: "Inventário de Ativos e Dados (Controle A.5.9)", guideline: "Listar e classificar todos os ativos de informação, softwares, hardwares e dados pessoais (RoPA). Atribuir owners (proprietários) para cada ativo do SGSI/SGPI." },
+        8: { obj: "Mapeamento de Processos", guideline: "Desenhar os principais fluxos de dados e processos de negócio, documentando como a informação entra, é processada e sai da organização, identificando pontos críticos de risco." },
+        9: { obj: "Riscos de Segurança (Cláusula 6.1.2)", guideline: "Identificar ameaças e vulnerabilidades para cada ativo do inventário. Calcular o risco bruto usando a metodologia impacto × probabilidade e mapear os controles mitigadores do Anexo A." },
+        10: { obj: "Riscos de Privacidade (ISO 27701)", guideline: "Avaliar os riscos relacionados à privacidade dos dados de titulares (PII). Conduzir DPIA/RIPD para os fluxos identificados como de alto risco para os direitos dos titulares." },
+        11: { obj: "Tratamento de Riscos (Cláusula 6.1.3)", guideline: "Definir a opção de tratamento (Evitar, Transferir, Aceitar ou Mitigar) para cada risco. Elaborar o Plano de Tratamento de Riscos (RTP) com cronogramas e responsáveis." },
+        12: { obj: "SoA do SGSI (Cláusula 6.1.3d)", guideline: "Elaborar a Declaração de Aplicabilidade (SoA) para os 93 controles da ISO 27001:2022. Todo controle excluído deve possuir uma justificativa robusta aprovada pela direção." },
+        13: { obj: "SoA do SGPI (ISO 27701)", guideline: "Mapear e justificar a aplicabilidade dos controles adicionais de privacidade da ISO 27701 (Anexos A e B), gerando o Statement of Applicability específico para dados pessoais." },
+        14: { obj: "Arquitetura Documental (Cláusula 7.5)", guideline: "Estruturar o padrão de nomenclatura, versionamento e templates oficiais de políticas e procedimentos do SGSI, criando a Lista Mestra de Documentos." },
+        15: { obj: "Controles Organizacionais (Anexo A.5)", guideline: "Redigir e publicar as políticas organizacionais de SI. Implementar processos de gestão de acessos e monitoramento de ativos organizacionais de SI." },
+        16: { obj: "Controles de Pessoas (Anexo A.6)", guideline: "Implementar background check no onboarding de novos funcionários, termos de confidencialidade (NDA) obrigatórios e processos de desligamento seguro (offboarding)." },
+        17: { obj: "Controles Físicos (Anexo A.7)", guideline: "Definir perímetros físicos de segurança, controles de acesso de visitantes (biometria/crachá), monitoramento por CFTV e procedimentos de descarte de mídia física." },
+        18: { obj: "Controles Tecnológicos (Anexo A.8)", guideline: "Implementar criptografia de dados (trânsito/repouso), antivírus/EDR corporativo, gerenciamento de patches e centralização de logs para auditoria de segurança." },
+        19: { obj: "Desenvolvimento Seguro (Controle A.8.25)", guideline: "Criar a Política de Desenvolvimento Seguro (SSDLC). Configurar code reviews obrigatórios e integrar scanners de código estático (SAST) na esteira CI/CD." },
+        20: { obj: "Cloud, DevOps e SRE (Controle A.5.23)", guideline: "Garantir a segurança dos serviços em nuvem AWS. Configurar o princípio de menor privilégio no IAM e ativar alarmes de monitoramento no CloudTrail." },
+        21: { obj: "Programa de Privacidade (ISO 27701)", guideline: "Estruturar o programa corporativo de privacidade de dados pessoais, nomeando formalmente o DPO e atualizando o inventário de processos de tratamento (RoPA)." },
+        22: { obj: "Privacy by Design (ISO 27701)", guideline: "Integrar requisitos de privacidade desde a concepção de novos produtos ou sistemas. Garantir a minimização de dados pessoais coletados." },
+        23: { obj: "Direitos dos Titulares (ISO 27701)", guideline: "Criar e divulgar o canal oficial para titulares exercerem seus direitos (confirmação, acesso, exclusão). Definir o SLA de resposta legal." },
+        24: { obj: "Consentimento e Bases Legais (ISO 27701)", guideline: "Mapear as bases legais de todas as operações de tratamento. Implementar cookie banner e fluxos de consentimento revogáveis e transparentes." },
+        25: { obj: "Retenção e Descarte (Controle A.8.10)", guideline: "Elaborar a Tabela de Temporalidade de dados. Implementar rotinas (manuais ou automatizadas) para descarte seguro e definitivo de informações expiradas." },
+        26: { obj: "Transferências e Compartilhamento", guideline: "Mapear compartilhamentos com terceiros e transferências internacionais de dados, exigindo cláusulas contratuais padrão (SCCs) adequadas." },
+        27: { obj: "Fornecedores e Operadores (Controle A.5.19)", guideline: "Auditar a postura de segurança e privacidade dos fornecedores críticos. Exigir e assinar acordos de tratamento de dados (DPAs) com fornecedores." },
+        28: { obj: "Incidentes (Controles A.5.24 a A.5.28)", guideline: "Formalizar o plano de resposta a incidentes. Definir severidade, canais de comunicação, comitê de crise (CSIRT) e o fluxo de notificação à ANPD (em até 72h)." },
+        29: { obj: "Treinamento (Controle A.6.3)", guideline: "Elaborar material e aplicar treinamento anual obrigatório de segurança da informação e privacidade para 100% dos colaboradores da empresa." },
+        30: { obj: "Monitoramento e Métricas (Cláusula 9.1)", guideline: "Definir indicadores-chave de performance (KPIs) do SGSI, acompanhar a eficácia dos controles e gerar relatórios periódicos para a diretoria." },
+        31: { obj: "Auditoria Interna (Cláusula 9.2)", guideline: "Executar a auditoria interna do SGSI contra todos os requisitos da norma ISO 27001. Deve ser feita por profissional independente qualificado." },
+        32: { obj: "Não Conformidades (Cláusula 10.1)", guideline: "Investigar as causas-raiz de quaisquer desvios encontrados na auditoria e abrir planos de Ação Corretiva (CAPAs) para eliminar recorrências." },
+        33: { obj: "Análise Crítica pela Direção (Cláusula 9.3)", guideline: "Conduzir a reunião de análise crítica anual liderada pelo CEO para avaliar o desempenho do SGSI e aprovar melhorias e orçamentos." },
+        34: { obj: "Readiness Review", guideline: "Revisar todos os entregáveis do SGSI antes da contratação da certificadora. Verificar se todas as políticas e evidências mínimas estão disponíveis." },
+        35: { obj: "Preparação Stage 1", guideline: "Organizar e compilar a documentação do SGSI (Escopo, Política, SoA e BCP) para envio ao auditor externo da certificadora." },
+        36: { obj: "Correções Pós-Stage 1", guideline: "Tratar quaisquer apontamentos ou não conformidades levantadas pelo auditor na auditoria documental de Estágio 1." },
+        37: { obj: "Gestão de Vulnerabilidades", guideline: "Verificar se as varreduras de vulnerabilidades operacionais estão ativas e se os relatórios estão limpos para a auditoria de Estágio 2." },
+        38: { obj: "Continuidade de Negócios (Controle A.5.30)", guideline: "Revisar os planos de continuidade (BCP/DRP) e garantir que testes práticos de backup e restore foram executados e documentados com sucesso." },
+        39: { obj: "Segurança Física", guideline: "Fazer uma varredura nas dependências físicas do escritório para garantir a conformidade prática com a política de Mesa Limpa e Tela Limpa." },
+        40: { obj: "Encerramento do Ciclo", guideline: "Preparar a equipe e os principais owners de controles para as entrevistas presença/remota da auditoria externa de Estágio 2." }
+    };
+
+    window.saveChecklistItemNotes = async function(projectId, phaseNum, itemId, value) {
+        if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
+        S.phaseChecksNotes[projectId + '_' + itemId] = value;
+        localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
+        
+        // ponytail: save note to D1 via PUT debounced
+        const isChecked = S.phaseChecks[projectId + '_' + itemId] === true;
+        
+        if (window._checklistSaveTimer) clearTimeout(window._checklistSaveTimer);
+        window._checklistSaveTimer = setTimeout(async () => {
+            const items = [];
+            for (const key in S.phaseChecks) {
+                if (key.startsWith(projectId + '_')) {
+                    const id = key.replace(projectId + '_', '');
+                    const match = id.match(/^p(\d+)_/);
+                    if (match) {
+                        const phase = parseInt(match[1]);
+                        const checked = !!S.phaseChecks[key];
+                        const note = S.phaseChecksNotes[key] || '';
+                        items.push({ phase_number: phase, item_id: id, is_checked: checked, notes: note });
+                    }
+                }
+            }
+            const curKey = projectId + '_' + itemId;
+            if (!items.some(i => i.item_id === itemId)) {
+                items.push({ phase_number: phaseNum, item_id: itemId, is_checked: isChecked, notes: value });
+            }
+            if (items.length > 0) {
+                try {
+                    await api('PUT', `/api/v1/projects/${projectId}/checklist-progress`, { items });
+                } catch(e) {
+                    console.error('Error saving checklist progress notes:', e);
+                }
+            }
+        }, 800);
+    };
 
     initApp();
     </script>

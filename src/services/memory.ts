@@ -7,7 +7,7 @@ export class MemoryService {
     this.vectorize = vectorize;
   }
 
-  async storeFact(organizationId: string, fact: string, type: 'policy' | 'evidence' | 'standard' = 'policy', metadata: any = {}) {
+  async storeFact(organizationId: string, fact: string, type: 'policy' | 'evidence' | 'standard' | 'client_doc' = 'policy', metadata: any = {}) {
     // 1. Gerar Embedding do fato
     const embeddingResponse = await this.ai.run('@cf/baai/bge-small-en-v1.5', {
       text: [fact],

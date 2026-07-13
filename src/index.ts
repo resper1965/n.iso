@@ -13,7 +13,7 @@ import { BLOCK_QUESTIONS, PHASE_TITLES, POLICY_TEMPLATES } from './constants';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-type Bindings = {
+export type Bindings = {
   DB: D1Database;
   SESSIONS: KVNamespace;
   SETUP_KEY: string;
@@ -1100,7 +1100,7 @@ app.get('/api/v1/auditor/:token/project', async (c) => {
 
     // Controles (todos, status global)
     const { results: controls } = await c.env.DB.prepare(
-      'SELECT id, standard, title, status, owner FROM compliance_controls WHERE project_id = ? ORDER BY id'
+      'SELECT id, standard, title, status, owner, description FROM compliance_controls WHERE project_id = ? ORDER BY standard'
     ).bind(projectId).all();
 
     // Evidências vinculadas ao projeto
@@ -2152,7 +2152,7 @@ app.get('/api/v1/dashboard/stats', async (c) => {
 
     // ponytail: Batch para performance
     // ponytail: SQL fix - ensuring WHERE/AND logic is correct
-    const stats = await c.env.DB.batch([
+    const stats: any = await c.env.DB.batch([
       c.env.DB.prepare('SELECT count(*) as count FROM leads'),
       c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
       c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
@@ -2209,6 +2209,47 @@ app.put('/api/v1/controls/:id/status', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao atualizar status', detail: e.message }, 500);
+  }
+});
+
+// Atualizar controle genérico (status, justificativa, owner, maturity)
+app.put('/api/v1/controls/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { status, description, owner, maturity } = await c.req.json<{ status?: string; description?: string; owner?: string; maturity?: number }>();
+    
+    const updates: string[] = [];
+    const binds: any[] = [];
+    
+    if (status !== undefined) {
+      updates.push('status = ?');
+      binds.push(status);
+    }
+    if (description !== undefined) {
+      updates.push('description = ?');
+      binds.push(description);
+    }
+    if (owner !== undefined) {
+      updates.push('owner = ?');
+      binds.push(owner);
+    }
+    if (maturity !== undefined) {
+      updates.push('maturity = ?');
+      binds.push(maturity);
+    }
+    
+    if (updates.length === 0) {
+      return c.json({ error: 'Nenhum campo para atualizar' }, 400);
+    }
+    
+    binds.push(id);
+    const query = `UPDATE compliance_controls SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+    await c.env.DB.prepare(query).bind(...binds).run();
+    
+    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email || 'system', `Controle ${id} atualizado: ${updates.join(', ')}`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar controle', detail: e.message }, 500);
   }
 });
 
@@ -2527,7 +2568,7 @@ app.get('/api/v1/phases/config', (c) => {
 app.post('/api/v1/projects/:id/generate-policy', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const body = await c.req.json<{ control_id?: string; phase_number?: number }>().catch(() => ({}));
+    const body = await c.req.json<{ control_id?: string; phase_number?: number }>().catch(() => ({} as any));
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
@@ -2785,22 +2826,8 @@ app.post('/api/v1/projects/:id/documents/upload', async (c) => {
 
     // Read + hash
     const arrayBuffer = await file.arrayBuffer();
-  // Endpoint para verificar integridade da evidência
-  app.get('/api/v1/evidence/:id/verify', async (c) => {
-    const id = c.req.param('id');
-    const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first();
-    if (!evidence) return c.json({ error: 'Not found' }, 404);
-    
-    // Simulação de verificação de hash (Deep cliente Logic)
-    const isIntegrityOk = evidence.file_hash && evidence.file_hash.startsWith('sha256-');
-    return c.json({
-      id,
-      fileName: evidence.file_name,
-      integrity: isIntegrityOk ? 'Verified' : 'Failed',
-      timestamp: new Date().toISOString()
-    });
-  });
-const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
     // Upload to R2
     const r2Key = `documents/${projectId}/${documentType}/${fileHash}-${file.name}`;
@@ -2821,7 +2848,7 @@ const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).
     let extractedData = '';
     try {
       // Extract text from file (text-based only)
-      const decoder = new TextDecoder('utf-8', { fatal: false });
+      const decoder = new TextDecoder('utf-8');
       let fileText = decoder.decode(arrayBuffer).substring(0, 6000); // ~6K tokens limit
 
       // If it looks like binary/PDF, try to extract readable text
@@ -2873,6 +2900,26 @@ const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).
     return c.json({ ok: true, document_id: id, document_type: documentType, status: extractedSummary ? 'extracted' : 'uploaded', extracted_summary: extractedSummary || null }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha no upload de documento', detail: e.message }, 500);
+  }
+});
+
+// Endpoint para verificar integridade da evidência
+app.get('/api/v1/evidence/:id/verify', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
+    if (!evidence) return c.json({ error: 'Not found' }, 404);
+    
+    // Simulação de verificação de hash (Deep cliente Logic)
+    const isIntegrityOk = evidence.file_hash && evidence.file_hash.startsWith('sha256-');
+    return c.json({
+      id,
+      fileName: evidence.file_name,
+      integrity: isIntegrityOk ? 'Verified' : 'Failed',
+      timestamp: new Date().toISOString()
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao verificar integridade', detail: e.message }, 500);
   }
 });
 
@@ -3132,7 +3179,11 @@ function riskLevel(score: number): string {
 
 app.get('/api/v1/projects/:id/risks', async (c) => {
   const { results } = await c.env.DB.prepare(
-    'SELECT * FROM risks WHERE project_id = ? ORDER BY impact * probability DESC'
+    `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
+     FROM risks r 
+     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
+     WHERE r.project_id = ? 
+     ORDER BY r.impact * r.probability DESC`
   ).bind(c.req.param('id')).all();
   return c.json({ ok: true, risks: results });
 });
@@ -4316,13 +4367,17 @@ app.get('/api/v1/onboarding-status', async (c) => {
 // ─── Template Marketplace ───────────────────────────────────────────────────
 
 app.get('/api/v1/marketplace/templates', async (c) => {
-  const marketplace = POLICY_TEMPLATES.map(t => ({
-    ...t,
-    category: t.controls[0]?.startsWith('A.5') ? 'Organizational' : t.controls[0]?.startsWith('A.6') ? 'People' : t.controls[0]?.startsWith('A.7') ? 'Physical' : 'Technological',
-    difficulty: t.sections.length > 5 ? 'Advanced' : 'Standard',
-    estimated_time: `${t.sections.length * 15} min`,
-    popularity: Math.floor(Math.random() * 50 + 50)
-  }));
+  const marketplace = POLICY_TEMPLATES.map(t => {
+    const iso = t.iso_ref || '';
+    const category = iso.startsWith('5') ? 'Organizational' : iso.startsWith('6') ? 'People' : iso.startsWith('7') ? 'Physical' : 'Technological';
+    return {
+      ...t,
+      category,
+      difficulty: 'Standard',
+      estimated_time: '45 min',
+      popularity: Math.floor(Math.random() * 50 + 50)
+    };
+  });
   return c.json({ ok: true, total: marketplace.length, templates: marketplace });
 });
 
@@ -4371,6 +4426,340 @@ app.put('/api/v1/projects/:id/checklist-progress', async (c) => {
   const batch = items.map(i => stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, user?.id || null, i.evidence_id || null, i.notes || null));
   await c.env.DB.batch(batch);
   return c.json({ ok: true, count: items.length });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  CONTEXT & STAKEHOLDERS (Sprint A)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/v1/projects/:id/stakeholders', async (c) => {
+  const projectId = c.req.param('id');
+  const rows = await c.env.DB.prepare('SELECT * FROM stakeholders WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  return c.json(rows.results || []);
+});
+
+app.post('/api/v1/projects/:id/stakeholders', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { name, type, category, requirements, influence, communication_method } = await c.req.json();
+    if (!name) return c.json({ error: 'name is required' }, 400);
+    await c.env.DB.prepare(`INSERT INTO stakeholders (id, project_id, name, type, category, requirements, influence, communication_method)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)`).bind(
+        projectId, name, type || 'external', category || null, requirements || null, influence || 'Medium', communication_method || null
+      ).run();
+    await logAudit(c.env.DB, 'stakeholder.created', c.get('user')?.email || 'system', `Stakeholder ${name} criado para projeto ${projectId}`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao criar stakeholder', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/stakeholders/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { name, type, category, requirements, influence, communication_method } = await c.req.json();
+    await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
+      requirements = COALESCE(?, requirements), influence = COALESCE(?, influence), communication_method = COALESCE(?, communication_method),
+      updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(
+        name || null, type || null, category || null, requirements || null, influence || null, communication_method || null, id
+      ).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar stakeholder', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/stakeholders/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao deletar stakeholder', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/projects/:id/context', async (c) => {
+  const projectId = c.req.param('id');
+  const row = await c.env.DB.prepare('SELECT * FROM context_analysis WHERE project_id = ?').bind(projectId).first();
+  return c.json(row || {});
+});
+
+app.put('/api/v1/projects/:id/context', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { internal_strengths, internal_weaknesses, external_opportunities, external_threats, legal_requirements, contractual_requirements, notes } = await c.req.json();
+    
+    await c.env.DB.prepare(`INSERT INTO context_analysis (id, project_id, internal_strengths, internal_weaknesses, external_opportunities, external_threats, legal_requirements, contractual_requirements, notes)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        internal_strengths = excluded.internal_strengths,
+        internal_weaknesses = excluded.internal_weaknesses,
+        external_opportunities = excluded.external_opportunities,
+        external_threats = excluded.external_threats,
+        legal_requirements = excluded.legal_requirements,
+        contractual_requirements = excluded.contractual_requirements,
+        notes = excluded.notes,
+        updated_at = CURRENT_TIMESTAMP`).bind(
+          projectId, internal_strengths || null, internal_weaknesses || null, external_opportunities || null, external_threats || null, legal_requirements || null, contractual_requirements || null, notes || null
+        ).run();
+        
+    await logAudit(c.env.DB, 'context.updated', c.get('user')?.email || 'system', `Contexto atualizado para projeto ${projectId}`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar contexto', detail: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AUDIT FINDINGS & MANAGEMENT REVIEW (Sprint D)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/v1/audits/:auditId/findings', async (c) => {
+  const auditId = c.req.param('auditId');
+  const rows = await c.env.DB.prepare('SELECT * FROM audit_findings WHERE audit_id = ? ORDER BY created_at DESC').bind(auditId).all();
+  return c.json(rows.results || []);
+});
+
+app.post('/api/v1/audits/:auditId/findings', async (c) => {
+  try {
+    const auditId = c.req.param('auditId');
+    const { project_id, control_id, finding_type, description, evidence_reviewed, auditor_notes } = await c.req.json();
+    if (!description) return c.json({ error: 'description is required' }, 400);
+    
+    const findingId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+    let capaId: string | null = null;
+    
+    if (finding_type === 'minor_nc' || finding_type === 'major_nc') {
+      capaId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      await c.env.DB.prepare(`
+        INSERT INTO corrective_actions (id, project_id, audit_id, control_id, title, description, severity, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        capaId, project_id, auditId, control_id || null, 
+        `NC (${finding_type === 'major_nc' ? 'Maior' : 'Menor'}): ${description.substring(0, 50)}`, 
+        description, finding_type === 'major_nc' ? 'High' : 'Medium'
+      ).run();
+      
+      await logAudit(c.env.DB, 'capa.created_from_audit', c.get('user')?.email || 'system', `Ação corretiva ${capaId} criada a partir da NC de auditoria ${auditId}`);
+    }
+    
+    await c.env.DB.prepare(`
+      INSERT INTO audit_findings (id, audit_id, project_id, control_id, finding_type, description, evidence_reviewed, auditor_notes, capa_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open')
+    `).bind(
+      findingId, auditId, project_id, control_id || null, finding_type || 'observation', description, evidence_reviewed || null, auditor_notes || null, capaId
+    ).run();
+    
+    await logAudit(c.env.DB, 'audit_finding.created', c.get('user')?.email || 'system', `Achado ${findingId} criado para auditoria ${auditId}`);
+    return c.json({ ok: true, id: findingId, capa_id: capaId });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao criar achado de auditoria', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/audit-findings/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { description, auditor_notes, status } = await c.req.json();
+    await c.env.DB.prepare(`
+      UPDATE audit_findings 
+      SET description = COALESCE(?, description), 
+          auditor_notes = COALESCE(?, auditor_notes), 
+          status = COALESCE(?, status) 
+      WHERE id = ?
+    `).bind(description || null, auditor_notes || null, status || null, id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar achado de auditoria', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/audit-findings/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao deletar achado de auditoria', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/projects/:id/management-reviews', async (c) => {
+  const projectId = c.req.param('id');
+  const rows = await c.env.DB.prepare('SELECT * FROM management_reviews WHERE project_id = ? ORDER BY review_date DESC').bind(projectId).all();
+  return c.json(rows.results || []);
+});
+
+app.post('/api/v1/projects/:id/management-reviews', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { review_date, attendees } = await c.req.json();
+    if (!review_date) return c.json({ error: 'review_date is required' }, 400);
+    
+    const [controls, capas, risks, training] = await Promise.all([
+      c.env.DB.prepare('SELECT status, COUNT(*) as cnt FROM compliance_controls WHERE project_id = ? GROUP BY status').bind(projectId).all(),
+      c.env.DB.prepare('SELECT status, COUNT(*) as cnt FROM corrective_actions WHERE project_id = ? GROUP BY status').bind(projectId).all(),
+      c.env.DB.prepare('SELECT status, COUNT(*) as cnt FROM risks WHERE project_id = ? GROUP BY status').bind(projectId).all(),
+      c.env.DB.prepare('SELECT status, COUNT(*) as cnt FROM training_records WHERE project_id = ? GROUP BY status').bind(projectId).all()
+    ]);
+    
+    const agenda = {
+      items: [
+        { topic: '1. Status das ações da revisão anterior', data: 'Ações tomadas com base nas atas passadas.' },
+        { topic: '2. Mudanças em questões internas/externas', data: 'Revisar SWOT e requisitos legais de segurança.' },
+        { topic: '3. Desempenho e eficácia do SGSI', data: controls.results || [] },
+        { topic: '4. Resultados de auditorias e achados', data: 'Ver histórico de NCs do módulo de auditoria.' },
+        { topic: '5. Status das ações corretivas (CAPAs)', data: capas.results || [] },
+        { topic: '6. Monitoramento de riscos e eficácia', data: risks.results || [] },
+        { topic: '7. Desempenho de fornecedores', data: 'Ver trust scores e DPAs dos suboperadores.' },
+        { topic: '8. Cobertura de conscientização e treinamento', data: training.results || [] },
+        { topic: '9. Feedback de partes interessadas', data: 'Revisar matriz de stakeholders.' },
+        { topic: '10. Adequação de recursos para o ISMS', data: 'Orçamento, ferramentas e equipe CISO.' },
+        { topic: '11. Oportunidades de melhoria contínua', data: 'Identificar novos projetos de conformidade.' }
+      ]
+    };
+    
+    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+    await c.env.DB.prepare(`
+      INSERT INTO management_reviews (id, project_id, review_date, attendees, agenda_json, status)
+      VALUES (?, ?, ?, ?, ?, 'Planned')
+    `).bind(
+      id, projectId, review_date, attendees || null, JSON.stringify(agenda)
+    ).run();
+    
+    await logAudit(c.env.DB, 'management_review.created', c.get('user')?.email || 'system', `Reunião de análise crítica registrada para o projeto ${projectId}`);
+    return c.json({ ok: true, id });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao criar reunião de análise crítica', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/management-reviews/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { decisions, action_items, status, minutes_url } = await c.req.json();
+    await c.env.DB.prepare(`
+      UPDATE management_reviews 
+      SET decisions = COALESCE(?, decisions), 
+          action_items = COALESCE(?, action_items), 
+          status = COALESCE(?, status),
+          minutes_url = COALESCE(?, minutes_url),
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).bind(decisions || null, action_items || null, status || null, minutes_url || null, id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar reunião de análise crítica', detail: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AUDITOR COLLABORATION HUB (Sprint E)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/v1/auditor/:token/notes', async (c) => {
+  try {
+    const token = c.req.param('token');
+    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
+    
+    const notes = await c.env.DB.prepare(`
+      SELECT n.*, cc.standard as control_standard, cc.title as control_title 
+      FROM auditor_notes n
+      LEFT JOIN compliance_controls cc ON n.control_id = cc.id
+      WHERE n.project_id = ? 
+      ORDER BY n.created_at DESC
+    `).bind(t.project_id).all();
+    return c.json({ ok: true, notes: notes.results || [] });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao buscar notas', detail: e.message }, 500);
+  }
+});
+
+app.post('/api/v1/auditor/:token/notes', async (c) => {
+  try {
+    const token = c.req.param('token');
+    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
+    
+    const { control_id, note_type, content } = await c.req.json();
+    if (!content) return c.json({ error: 'content is required' }, 400);
+    
+    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+    await c.env.DB.prepare(`
+      INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, t.project_id, token, control_id || null, note_type || 'question', content
+    ).run();
+    
+    await logAudit(c.env.DB, 'auditor_note.created', 'auditor', `Nota de auditor ${id} criada para o projeto ${t.project_id}`);
+    return c.json({ ok: true, id });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao criar nota de auditor', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/auditor-notes/:id/respond', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const user = c.get('user');
+    const { response } = await c.req.json();
+    if (!response) return c.json({ error: 'response is required' }, 400);
+    
+    await c.env.DB.prepare(`
+      UPDATE auditor_notes 
+      SET response = ?, responded_by = ?, responded_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).bind(response, user.id, id).run();
+    
+    await logAudit(c.env.DB, 'auditor_note.responded', user.email, `Nota de auditor ${id} respondida`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao responder nota de auditor', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/projects/:id/auditor-notes', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const notes = await c.env.DB.prepare(`
+      SELECT n.*, cc.standard as control_standard, cc.title as control_title 
+      FROM auditor_notes n
+      LEFT JOIN compliance_controls cc ON n.control_id = cc.id
+      WHERE n.project_id = ? 
+      ORDER BY n.created_at DESC
+    `).bind(projectId).all();
+    return c.json({ ok: true, notes: notes.results || [] });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao buscar notas', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/auditor/:token/evidence/:evidenceId/download', async (c) => {
+  try {
+    const token = c.req.param('token');
+    const evidenceId = c.req.param('evidenceId');
+    
+    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
+    
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ? AND project_id = ?').bind(evidenceId, t.project_id).first() as any;
+    if (!ev || !ev.r2_key) return c.json({ error: 'Evidence not found' }, 404);
+    
+    const obj = await c.env.STORAGE.get(ev.r2_key);
+    if (!obj) return c.json({ error: 'File not found in storage' }, 404);
+    
+    return new Response(obj.body, { 
+      headers: { 
+        'Content-Type': ev.file_type || 'application/octet-stream', 
+        'Content-Disposition': `attachment; filename="${ev.file_name || 'evidence'}"` 
+      } 
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha no download', detail: e.message }, 500);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

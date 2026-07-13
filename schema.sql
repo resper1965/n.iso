@@ -502,3 +502,88 @@ CREATE TABLE IF NOT EXISTS checklist_progress (
     UNIQUE(project_id, phase_number, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_checklist_progress_project ON checklist_progress(project_id);
+
+-- -----------------------------------------------
+-- SPRINT A: CONTEXT & STAKEHOLDERS
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS stakeholders (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id),
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'external',
+    category TEXT,
+    requirements TEXT,
+    influence TEXT DEFAULT 'Medium',
+    communication_method TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_stakeholders_project ON stakeholders(project_id);
+
+CREATE TABLE IF NOT EXISTS context_analysis (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id) UNIQUE,
+    internal_strengths TEXT,
+    internal_weaknesses TEXT,
+    external_opportunities TEXT,
+    external_threats TEXT,
+    legal_requirements TEXT,
+    contractual_requirements TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_context_analysis_project ON context_analysis(project_id);
+
+-- -----------------------------------------------
+-- SPRINT D: AUDIT FINDINGS & MANAGEMENT REVIEW
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS audit_findings (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    audit_id TEXT REFERENCES audit_schedule(id),
+    project_id TEXT REFERENCES projects(id),
+    control_id TEXT,
+    finding_type TEXT NOT NULL DEFAULT 'observation',
+    description TEXT NOT NULL,
+    evidence_reviewed TEXT,
+    auditor_notes TEXT,
+    capa_id TEXT REFERENCES corrective_actions(id),
+    status TEXT DEFAULT 'Open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_audit_findings_audit ON audit_findings(audit_id);
+
+CREATE TABLE IF NOT EXISTS management_reviews (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id),
+    review_date DATE NOT NULL,
+    attendees TEXT,
+    agenda_json TEXT,
+    decisions TEXT,
+    action_items TEXT,
+    minutes_url TEXT,
+    status TEXT DEFAULT 'Planned',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_mgmt_reviews_project ON management_reviews(project_id);
+
+-- -----------------------------------------------
+-- SPRINT E: AUDITOR COLLABORATION HUB
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS auditor_notes (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id),
+    auditor_token TEXT NOT NULL,
+    control_id TEXT REFERENCES compliance_controls(id),
+    note_type TEXT DEFAULT 'question', -- question, observation, evidence_request
+    content TEXT NOT NULL,
+    response TEXT,
+    responded_by TEXT REFERENCES users(id),
+    responded_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_auditor_notes_project ON auditor_notes(project_id);

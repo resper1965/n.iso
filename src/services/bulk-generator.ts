@@ -23,7 +23,8 @@ export class BulkArtifactGenerator {
           organizationName: orgName,
           policyOwner: 'CISO',
           approver: 'Management Board',
-          status: 'Draft'
+          status: 'Draft',
+          standardVersion: 'v2022'
         });
 
         await this.artifactService.savePolicy(orgId, templateId, content);

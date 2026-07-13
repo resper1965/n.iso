@@ -621,7 +621,7 @@ export function calculatePricing(answers: Answers, configOverrides?: Partial<Fin
     eco,
     fases,
     gaps,
-    isTech: !!(answers.stack && answers.stack.length > 0),
+    isTech: !!(answers.stack && (answers.stack as any).length > 0),
     geradoEm: new Date().toISOString()
   };
 }

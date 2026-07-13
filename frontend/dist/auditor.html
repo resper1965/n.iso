@@ -195,16 +195,96 @@ footer .ness .dot{color:#00ade8}
       html += '<div class="card"><h2>evidencias</h2>';
       evidence.forEach(function(e){
         html += '<div class="ev-item"><span class="ev-name">'+esc(e.file_name||'')+'</span>';
-        html += '<span class="ev-meta">'+esc(e.file_type||'')+' — '+esc(e.uploaded_by||'')+' — '+fmtDate(e.created_at)+'</span></div>';
+        html += '<div style="display:flex;align-items:center;gap:1rem">';
+        html += '<span class="ev-meta">'+esc(e.file_type||'')+' — '+esc(e.uploaded_by||'')+' — '+fmtDate(e.created_at)+'</span>';
+        html += '<a href="/api/v1/auditor/' + encodeURIComponent(token) + '/evidence/' + e.id + '/download" style="color:#00ade8;font-weight:600;font-size:0.85rem">Download</a>';
+        html += '</div></div>';
       });
       html += '</div>';
     }
 
+    // collaboration
+    html += '<div class="card"><h2>Notas e Pedidos de Evidência</h2>';
+    html += '<div id="notes-container" style="margin-bottom:1rem;display:flex;flex-direction:column;gap:12px">Carregando notas...</div>';
+    html += '<form id="note-form" onsubmit="window.submitNote(event)" style="margin-top:1rem;display:flex;flex-direction:column;gap:8px">';
+    html += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">';
+    html += '<select id="note-type" class="form-input" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;color:#f5f5f7">';
+    html += '<option value="question">Pergunta / Dúvida</option>';
+    html += '<option value="evidence_request">Solicitação de Evidência</option>';
+    html += '<option value="observation">Constatação / Observação</option>';
+    html += '</select>';
+    html += '<select id="note-control" class="form-input" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;color:#f5f5f7">';
+    html += '<option value="">-- Vincular a Controle (Opcional) --</option>';
+    controls.forEach(function(c){
+      html += '<option value="'+c.id+'">'+esc(c.standard || '')+' - '+esc(c.title || '')+'</option>';
+    });
+    html += '</select></div>';
+    html += '<textarea id="note-content" class="form-input" required rows="3" placeholder="Deixe uma pergunta ou peça uma evidência..." style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;color:#f5f5f7;font-family:inherit"></textarea>';
+    html += '<button type="submit" class="btn-primary" style="background:#00ade8;color:#070b14;border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-family:\'Montserrat\',sans-serif;font-weight:700;align-self:flex-end">Enviar Nota</button>';
+    html += '</form></div>';
+
     // footer
-    html += '<footer>Powered by <span class="ness">ness<span class="dot">.</span></span> | Acesso temporario read-only</footer>';
+    html += '<footer>Powered by <span class="ness">ness<span class="dot">.</span></span> | Portal do Auditor Externo</footer>';
 
     app.innerHTML = html;
+    window.loadNotes();
   }
+
+  window.loadNotes = function() {
+    var container = document.getElementById('notes-container');
+    if(!container) return;
+    fetch('/api/v1/auditor/' + encodeURIComponent(token) + '/notes')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var notes = Array.isArray(d) ? d : (d.notes || []);
+        if (notes.length === 0) {
+          container.innerHTML = '<div style="font-size:0.8rem;color:rgba(229,235,255,0.6)">Nenhuma nota registrada nesta auditoria.</div>';
+          return;
+        }
+        container.innerHTML = notes.map(function(n) {
+          var typeLabel = n.note_type === 'question' ? 'Pergunta' : n.note_type === 'evidence_request' ? 'Pedido de Evidência' : 'Observação';
+          var badgeColor = n.note_type === 'evidence_request' ? '#fc0' : n.note_type === 'observation' ? '#ff453a' : '#00ade8';
+          return '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);padding:12px;border-radius:10px;margin-bottom:8px">' +
+            '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.75rem">' +
+              '<span style="font-weight:600;color:'+badgeColor+'">'+typeLabel+'</span>' +
+              '<span style="color:rgba(229,235,255,0.6)">'+esc(n.control_standard || 'Geral')+'</span>' +
+            '</div>' +
+            '<div style="font-size:0.85rem;margin-bottom:8px;color:#f5f5f7">'+esc(n.content)+'</div>' +
+            (n.response ? 
+              '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06);font-size:0.8rem;color:#34c759">' +
+                '<strong>Resposta do Consultor:</strong> '+esc(n.response) +
+              '</div>' : 
+              '<div style="font-size:0.75rem;color:rgba(229,235,255,0.4);font-style:italic">Aguardando resposta...</div>') +
+          '</div>';
+        }).join('');
+      });
+  };
+
+  window.submitNote = function(e) {
+    e.preventDefault();
+    var contentEl = document.getElementById('note-content');
+    var typeEl = document.getElementById('note-type');
+    var controlEl = document.getElementById('note-control');
+    
+    var body = {
+      note_type: typeEl.value,
+      control_id: controlEl.value || null,
+      content: contentEl.value
+    };
+    
+    fetch('/api/v1/auditor/' + encodeURIComponent(token) + '/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok) {
+        contentEl.value = '';
+        window.loadNotes();
+      }
+    });
+  };
 })();
 </script>
 </body>
