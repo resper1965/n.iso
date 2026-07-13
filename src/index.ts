@@ -4351,6 +4351,29 @@ app.get('/api/v1/public/stats', async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  CHECKLIST PERSISTENCE (Sprint F)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/v1/projects/:id/checklist-progress', async (c) => {
+  const projectId = c.req.param('id');
+  const rows = await c.env.DB.prepare('SELECT phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes FROM checklist_progress WHERE project_id = ?').bind(projectId).all();
+  return c.json(rows.results || []);
+});
+
+app.put('/api/v1/projects/:id/checklist-progress', async (c) => {
+  const projectId = c.req.param('id');
+  const user = c.get('user');
+  const { items } = await c.req.json<{ items: Array<{ phase_number: number; item_id: string; is_checked: boolean; evidence_id?: string; notes?: string }> }>();
+  if (!items || !Array.isArray(items)) return c.json({ error: 'items array required' }, 400);
+  const stmt = c.env.DB.prepare(`INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
+    VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+    ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET is_checked = excluded.is_checked, checked_by = excluded.checked_by, checked_at = excluded.checked_at, evidence_id = excluded.evidence_id, notes = excluded.notes`);
+  const batch = items.map(i => stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, user?.id || null, i.evidence_id || null, i.notes || null));
+  await c.env.DB.batch(batch);
+  return c.json({ ok: true, count: items.length });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  STATIC FILES (catch-all — deve ser a última rota)
 // ═══════════════════════════════════════════════════════════════════════════════
 

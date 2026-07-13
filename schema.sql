@@ -484,3 +484,21 @@ CREATE TABLE IF NOT EXISTS project_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projdocs_project ON project_documents(project_id);
+
+-- -----------------------------------------------
+-- SPRINT F: CHECKLIST PERSISTENCE
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS checklist_progress (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id),
+    phase_number INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    is_checked INTEGER DEFAULT 0,
+    checked_by TEXT REFERENCES users(id),
+    checked_at DATETIME,
+    evidence_id TEXT REFERENCES evidence(id),
+    notes TEXT,
+    UNIQUE(project_id, phase_number, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_progress_project ON checklist_progress(project_id);
