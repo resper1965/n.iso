@@ -1637,12 +1637,24 @@
     }
     
     window.toggleJourney = function(jIdx) {
-        S.expandedJourneys[jIdx] = !S.expandedJourneys[jIdx];
+        const targetVal = !S.expandedJourneys[jIdx];
+        if (targetVal) {
+            S.expandedJourneys = {};
+            S.expandedJourneys[jIdx] = true;
+        } else {
+            S.expandedJourneys[jIdx] = false;
+        }
         render();
     };
 
     window.togglePhase = function(phaseNum) {
-        S.expandedPhases[phaseNum] = !S.expandedPhases[phaseNum];
+        const targetVal = !S.expandedPhases[phaseNum];
+        if (targetVal) {
+            S.expandedPhases = {};
+            S.expandedPhases[phaseNum] = true;
+        } else {
+            S.expandedPhases[phaseNum] = false;
+        }
         render();
     };
 
