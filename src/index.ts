@@ -4411,19 +4411,19 @@ app.get('/api/v1/public/stats', async (c) => {
 
 app.get('/api/v1/projects/:id/checklist-progress', async (c) => {
   const projectId = c.req.param('id');
-  const rows = await c.env.DB.prepare('SELECT phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes FROM checklist_progress WHERE project_id = ?').bind(projectId).all();
+  const rows = await c.env.DB.prepare('SELECT phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes, assigned_to, due_date FROM checklist_progress WHERE project_id = ?').bind(projectId).all();
   return c.json(rows.results || []);
 });
 
 app.put('/api/v1/projects/:id/checklist-progress', async (c) => {
   const projectId = c.req.param('id');
   const user = c.get('user');
-  const { items } = await c.req.json<{ items: Array<{ phase_number: number; item_id: string; is_checked: boolean; evidence_id?: string; notes?: string }> }>();
+  const { items } = await c.req.json<{ items: Array<{ phase_number: number; item_id: string; is_checked: boolean; evidence_id?: string; notes?: string; assigned_to?: string; due_date?: string }> }>();
   if (!items || !Array.isArray(items)) return c.json({ error: 'items array required' }, 400);
-  const stmt = c.env.DB.prepare(`INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-    VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-    ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET is_checked = excluded.is_checked, checked_by = excluded.checked_by, checked_at = excluded.checked_at, evidence_id = excluded.evidence_id, notes = excluded.notes`);
-  const batch = items.map(i => stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, user?.id || null, i.evidence_id || null, i.notes || null));
+  const stmt = c.env.DB.prepare(`INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes, assigned_to, due_date)
+    VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+    ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET is_checked = excluded.is_checked, checked_by = excluded.checked_by, checked_at = excluded.checked_at, evidence_id = excluded.evidence_id, notes = excluded.notes, assigned_to = excluded.assigned_to, due_date = excluded.due_date`);
+  const batch = items.map(i => stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, user?.id || null, i.evidence_id || null, i.notes || null, i.assigned_to || null, i.due_date || null));
   await c.env.DB.batch(batch);
   return c.json({ ok: true, count: items.length });
 });

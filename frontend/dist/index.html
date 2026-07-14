@@ -1439,6 +1439,8 @@
     if (!S.expandedPhases) S.expandedPhases = {};
     if (!S.phaseChecks) S.phaseChecks = JSON.parse(localStorage.getItem('niso_phaseChecks') || '{}');
     if (!S.phaseChecksNotes) S.phaseChecksNotes = JSON.parse(localStorage.getItem('niso_phaseChecksNotes') || '{}');
+    if (!S.phaseChecksAssigned) S.phaseChecksAssigned = JSON.parse(localStorage.getItem('niso_phaseChecksAssigned') || '{}');
+    if (!S.phaseChecksDueDate) S.phaseChecksDueDate = JSON.parse(localStorage.getItem('niso_phaseChecksDueDate') || '{}');
 
     async function renderProjectDetail(c, h, a) {
         const p = S.currentProject || S.activeProject;
@@ -1455,15 +1457,21 @@
             ]);
             
             S.checklistsConfig = config;
-            // ponytail: hydrate phaseChecks and phaseChecksNotes from D1 (server wins over stale localStorage)
+            // ponytail: hydrate phaseChecks and metadata from D1 (server wins over stale localStorage)
             if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
+            if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
+            if (!S.phaseChecksDueDate) S.phaseChecksDueDate = {};
             if (Array.isArray(checklistProgress)) {
                 checklistProgress.forEach(row => {
                     S.phaseChecks[p.id + '_' + row.item_id] = !!row.is_checked;
                     S.phaseChecksNotes[p.id + '_' + row.item_id] = row.notes || '';
+                    S.phaseChecksAssigned[p.id + '_' + row.item_id] = row.assigned_to || '';
+                    S.phaseChecksDueDate[p.id + '_' + row.item_id] = row.due_date || '';
                 });
                 localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
                 localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
+                localStorage.setItem('niso_phaseChecksAssigned', JSON.stringify(S.phaseChecksAssigned));
+                localStorage.setItem('niso_phaseChecksDueDate', JSON.stringify(S.phaseChecksDueDate));
             }
             
             const JOURNEYS = [
@@ -1545,6 +1553,8 @@
                                                         const checkKey = `${p.id}_${item.id}`;
                                                         const isChecked = S.phaseChecks[checkKey] === true;
                                                         const itemNotes = (S.phaseChecksNotes && S.phaseChecksNotes[checkKey]) || '';
+                                                        const itemAssigned = (S.phaseChecksAssigned && S.phaseChecksAssigned[checkKey]) || '';
+                                                        const itemDueDate = (S.phaseChecksDueDate && S.phaseChecksDueDate[checkKey]) || '';
                                                         
                                                         return `
                                                             <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem;">
@@ -1569,8 +1579,28 @@
                                                                     <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
                                                                     <textarea class="form-input" 
                                                                         placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
-                                                                        style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical;"
+                                                                        style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical; margin-bottom: 0.5rem;"
                                                                         onblur="saveChecklistItemNotes('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">${escapeHTML(itemNotes)}</textarea>
+                                                                    
+                                                                    <div style="display: flex; gap: 12px; align-items: center;">
+                                                                        <div style="flex: 1;">
+                                                                            <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
+                                                                            <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
+                                                                                onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                                <option value="">Sem responsável</option>
+                                                                                <option value="Pessoa F" ${itemAssigned === 'Pessoa F' ? 'selected' : ''}>Pessoa F (Consultor)</option>
+                                                                                <option value="Executivo do Cliente" ${itemAssigned === 'Executivo do Cliente' ? 'selected' : ''}>Executivo do Cliente (IT Manager)</option>
+                                                                                <option value="Pessoa G" ${itemAssigned === 'Pessoa G' ? 'selected' : ''}>Pessoa G (CISO)</option>
+                                                                                <option value="admin" ${itemAssigned === 'admin' ? 'selected' : ''}>Consultor Sênior ness.</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div style="width: 150px;">
+                                                                            <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
+                                                                            <input type="date" class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; color: var(--text);"
+                                                                                value="${itemDueDate}"
+                                                                                onchange="saveChecklistItemDueDate('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         `;
@@ -1676,7 +1706,9 @@
                             phase_number: parseInt(match[1]), 
                             item_id: iid, 
                             is_checked: !!S.phaseChecks[key],
-                            notes: (S.phaseChecksNotes && S.phaseChecksNotes[key]) || null
+                            notes: (S.phaseChecksNotes && S.phaseChecksNotes[key]) || null,
+                            assigned_to: (S.phaseChecksAssigned && S.phaseChecksAssigned[key]) || null,
+                            due_date: (S.phaseChecksDueDate && S.phaseChecksDueDate[key]) || null
                         });
                     }
                 }
@@ -5025,41 +5057,68 @@
         40: { obj: "Encerramento do Ciclo", guideline: "Preparar a equipe e os principais owners de controles para as entrevistas presença/remota da auditoria externa de Estágio 2." }
     };
 
-    window.saveChecklistItemNotes = async function(projectId, phaseNum, itemId, value) {
-        if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
-        S.phaseChecksNotes[projectId + '_' + itemId] = value;
-        localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
-        
-        // ponytail: save note to D1 via PUT debounced
-        const isChecked = S.phaseChecks[projectId + '_' + itemId] === true;
+    window.saveChecklistItemMetadata = function(projectId, phaseNum, itemId) {
+        const key = projectId + '_' + itemId;
+        const isChecked = S.phaseChecks[key] === true;
         
         if (window._checklistSaveTimer) clearTimeout(window._checklistSaveTimer);
         window._checklistSaveTimer = setTimeout(async () => {
             const items = [];
-            for (const key in S.phaseChecks) {
-                if (key.startsWith(projectId + '_')) {
-                    const id = key.replace(projectId + '_', '');
+            for (const k in S.phaseChecks) {
+                if (k.startsWith(projectId + '_')) {
+                    const id = k.replace(projectId + '_', '');
                     const match = id.match(/^p(\d+)_/);
                     if (match) {
-                        const phase = parseInt(match[1]);
-                        const checked = !!S.phaseChecks[key];
-                        const note = S.phaseChecksNotes[key] || '';
-                        items.push({ phase_number: phase, item_id: id, is_checked: checked, notes: note });
+                        items.push({
+                            phase_number: parseInt(match[1]),
+                            item_id: id,
+                            is_checked: !!S.phaseChecks[k],
+                            notes: S.phaseChecksNotes[k] || null,
+                            assigned_to: S.phaseChecksAssigned[k] || null,
+                            due_date: S.phaseChecksDueDate[k] || null
+                        });
                     }
                 }
             }
-            const curKey = projectId + '_' + itemId;
             if (!items.some(i => i.item_id === itemId)) {
-                items.push({ phase_number: phaseNum, item_id: itemId, is_checked: isChecked, notes: value });
+                items.push({
+                    phase_number: phaseNum,
+                    item_id: itemId,
+                    is_checked: isChecked,
+                    notes: S.phaseChecksNotes[key] || null,
+                    assigned_to: S.phaseChecksAssigned[key] || null,
+                    due_date: S.phaseChecksDueDate[key] || null
+                });
             }
             if (items.length > 0) {
                 try {
                     await api('PUT', `/api/v1/projects/${projectId}/checklist-progress`, { items });
                 } catch(e) {
-                    console.error('Error saving checklist progress notes:', e);
+                    console.error('Error saving checklist progress metadata:', e);
                 }
             }
         }, 800);
+    };
+
+    window.saveChecklistItemNotes = async function(projectId, phaseNum, itemId, value) {
+        if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
+        S.phaseChecksNotes[projectId + '_' + itemId] = value;
+        localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
+        window.saveChecklistItemMetadata(projectId, phaseNum, itemId);
+    };
+
+    window.saveChecklistItemAssigned = async function(projectId, phaseNum, itemId, value) {
+        if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
+        S.phaseChecksAssigned[projectId + '_' + itemId] = value;
+        localStorage.setItem('niso_phaseChecksAssigned', JSON.stringify(S.phaseChecksAssigned));
+        window.saveChecklistItemMetadata(projectId, phaseNum, itemId);
+    };
+
+    window.saveChecklistItemDueDate = async function(projectId, phaseNum, itemId, value) {
+        if (!S.phaseChecksDueDate) S.phaseChecksDueDate = {};
+        S.phaseChecksDueDate[projectId + '_' + itemId] = value;
+        localStorage.setItem('niso_phaseChecksDueDate', JSON.stringify(S.phaseChecksDueDate));
+        window.saveChecklistItemMetadata(projectId, phaseNum, itemId);
     };
 
     initApp();

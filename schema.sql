@@ -499,6 +499,8 @@ CREATE TABLE IF NOT EXISTS checklist_progress (
     checked_at DATETIME,
     evidence_id TEXT REFERENCES evidence(id),
     notes TEXT,
+    assigned_to TEXT,
+    due_date TEXT,
     UNIQUE(project_id, phase_number, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_checklist_progress_project ON checklist_progress(project_id);
