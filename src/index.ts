@@ -2799,6 +2799,59 @@ app.get('/api/v1/projects/:id/evidence', async (c) => {
   }
 });
 
+// Assinar evidência (Workflow de Assinatura das Evidências - Fase 4)
+app.put('/api/v1/evidence/:id/approve', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    const { role, approved_by } = await c.req.json<{ role: 'ciso' | 'ceo'; approved_by: string }>();
+    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: 'Papel inválido' }, 400);
+
+    const dateStr = new Date().toISOString();
+    if (role === 'ciso') {
+      await c.env.DB.prepare(
+        `UPDATE evidence 
+         SET ciso_approved_by = ?, ciso_approved_at = ?, updated_at = datetime('now')
+         WHERE id = ?`
+      ).bind(approved_by, dateStr, id).run();
+    } else {
+      await c.env.DB.prepare(
+        `UPDATE evidence 
+         SET ceo_approved_by = ?, ceo_approved_at = ?, updated_at = datetime('now')
+         WHERE id = ?`
+      ).bind(approved_by, dateStr, id).run();
+    }
+
+    await logAudit(c.env.DB, 'evidence.signed', c.get('user')?.email ?? 'system', `Evidência ${id} assinada como ${role} por ${approved_by}`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao assinar evidência', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/evidence/:id/signature', async (c) => {
+  // Aliasing signature route to approve route logic
+  return app.fetch(new Request(c.req.url.replace('/signature', '/approve'), {
+    method: 'PUT',
+    headers: c.req.raw.headers,
+    body: JSON.stringify(await c.req.json())
+  }), c.env, c.executionCtx);
+});
+
+// Detalhe da evidência
+app.get('/api/v1/evidence/:id/detail', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
+    return c.json(evidence);
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao buscar detalhe da evidência', detail: e.message }, 500);
+  }
+});
+
 // ─── DOCUMENT INTAKE PIPELINE ───────────────────────────────
 
 const DOC_EXTRACTION_PROMPTS: Record<string, string> = {

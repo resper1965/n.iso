@@ -209,6 +209,10 @@ CREATE TABLE IF NOT EXISTS evidence (
     evaluation_status TEXT DEFAULT 'pending',
     evaluation_score REAL,
     evaluation_notes TEXT,
+    ciso_approved_by TEXT,
+    ciso_approved_at TEXT,
+    ceo_approved_by TEXT,
+    ceo_approved_at TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
