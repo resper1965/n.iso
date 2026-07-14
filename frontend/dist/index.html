@@ -2547,15 +2547,54 @@
             c.innerHTML = '<div class="empty-state fade-in"><h3>Nenhuma evidencia</h3><p>Faca upload de evidencias para este projeto.</p></div>';
             return;
         }
-        c.innerHTML = `<div class="fade-in"><div class="card" style="padding:0;overflow:hidden">${evidence.map(e => {
-            const hash = (e.sha256_hash || '').substring(0, 16);
-            const date = e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : '';
-            return `<div class="phase-item">
-                <div class="phase-title">${escapeHTML(e.filename || e.id)}</div>
-                ${hash ? `<div style="font-size:0.55rem;color:var(--success);font-family:monospace">SHA-256: ${hash}...</div>` : ''}
-                <div class="phase-status status-done">${date}</div>
-            </div>`;
-        }).join('')}</div></div>`;
+        c.innerHTML = `<div class="fade-in">
+            <div style="display:flex; flex-direction:column; gap:1rem">
+                ${evidence.map(e => {
+                    const fileName = e.file_name || e.filename || 'Evidência sem nome';
+                    const fileHash = e.file_hash || e.sha256_hash || '';
+                    const hash = fileHash ? fileHash.substring(0, 16) : '';
+                    const date = e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : '';
+                    const sizeKB = e.file_size ? `${(e.file_size / 1024).toFixed(1)} KB` : '';
+                    
+                    const cisoSign = e.ciso_approved_by 
+                      ? `<span style="color:var(--success)">CISO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>` 
+                      : `<span style="color:var(--text-dim)">CISO: Pendente de assinatura</span>`;
+                      
+                    const ceoSign = e.ceo_approved_by 
+                      ? `<span style="color:var(--success)">CEO: Assinado por ${escapeHTML(e.ceo_approved_by)} (${new Date(e.ceo_approved_at).toLocaleDateString('pt-BR')})</span>` 
+                      : `<span style="color:var(--text-dim)">CEO: Pendente de assinatura</span>`;
+
+                    const cisoBtn = !e.ciso_approved_by 
+                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ciso')">Assinar CISO</button>` 
+                      : '';
+                      
+                    const ceoBtn = !e.ceo_approved_by 
+                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ceo')">Assinar CEO</button>` 
+                      : '';
+
+                    return `<div class="card" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:center; gap:1.5rem">
+                        <div style="flex:1">
+                            <div style="font-family:'Montserrat', sans-serif; font-weight:500; font-size:0.9rem; margin-bottom:0.4rem; color:var(--text)">${escapeHTML(fileName)}</div>
+                            <div style="display:flex; gap:1rem; font-size:0.7rem; color:var(--text-dim)">
+                                <span>Tamanho: ${sizeKB}</span>
+                                <span>Data: ${date}</span>
+                                <span>Por: ${escapeHTML(e.uploaded_by || 'system')}</span>
+                            </div>
+                            ${hash ? `<div style="font-size:0.65rem; color:var(--accent); font-family:monospace; margin-top:0.4rem">SHA-256: ${hash}...</div>` : ''}
+                            <div style="display:flex; flex-direction:column; gap:0.25rem; margin-top:0.6rem; font-size:0.75rem">
+                                <div>${cisoSign}</div>
+                                <div>${ceoSign}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:0.5rem">
+                            ${cisoBtn}
+                            ${ceoBtn}
+                            <button class="btn btn-ghost" onclick="viewEvidence('${e.id}')">Ver</button>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
     }
 
     async function viewPricing(id) {
@@ -2951,8 +2990,9 @@
             return;
         }
         dd.innerHTML = items.slice(0, 15).map(n => `
-            <div class="notif-item ${n.read ? '' : 'unread'}" onclick="markNotifRead('${n.id}')">
-                <div style="font-weight:${n.read ? '400' : '600'}">${escapeHTML(n.title)}</div>
+            <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}')">
+                <div style="font-weight:dots${n.read ? '400' : '600'}">dots${escapeHTML(n.title)}</div>
+                <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.2rem">${escapeHTML(n.message || '')}</div>
                 <div class="notif-time">${n.created_at ? n.created_at.split('T')[0] : ''}</div>
             </div>
         `).join('');
@@ -2962,6 +3002,104 @@
         try { await api('PUT', `/api/v1/notifications/${id}/read`); } catch(e) {}
         await loadNotifications();
         renderNotifDropdown();
+    }
+
+    async function handleNotificationClick(id) {
+        const n = (S.notifications || []).find(x => x.id === id);
+        
+        // 1. Mark as read and reload list
+        try { await api('PUT', `/api/v1/notifications/${id}/read`); } catch(e) {}
+        await loadNotifications();
+        renderNotifDropdown();
+        
+        // Close dropdown
+        const dd = document.getElementById('notif-dropdown');
+        if (dd) dd.classList.remove('open');
+
+        if (!n) return;
+
+        // 2. Contextual navigation based on link or metadata
+        const link = n.link || '';
+        const title = n.title || '';
+        const message = n.message || '';
+        
+        if (link) {
+            const parts = link.split('/');
+            if (parts[1] === 'projects') {
+                const projectId = parts[2];
+                const subview = parts[3];
+                
+                let proj = S.projects.find(p => p.id === projectId);
+                if (!proj && S.currentProject && S.currentProject.id === projectId) proj = S.currentProject;
+                if (!proj) proj = { id: projectId };
+                
+                if (subview === 'evidence') {
+                    navigate('evidence', { currentProject: proj });
+                } else if (subview === 'controls') {
+                    navigate('controls', { currentProject: proj });
+                } else if (subview === 'soa') {
+                    navigate('soa', { currentProject: proj });
+                } else {
+                    navigate('project-detail', { currentProject: proj });
+                }
+            } else if (parts[1] === 'proposals') {
+                const proposalId = parts[2];
+                navigate('proposals', { currentProposalId: proposalId });
+            } else if (parts[1] === 'assessments') {
+                const assessmentId = parts[2];
+                navigate('assessments', { currentAssessmentId: assessmentId });
+            } else if (link === '/risks') {
+                navigate('risks');
+            } else if (link === '/vendors') {
+                navigate('vendors');
+            } else if (link === '/training') {
+                navigate('training');
+            } else if (link === '/ropa') {
+                navigate('ropa');
+            } else if (link === '/audits') {
+                navigate('audits');
+            } else if (link === '/capa') {
+                navigate('capa');
+            } else if (link === '/evidence') {
+                navigate('evidence');
+            } else if (link === '/controls') {
+                navigate('controls');
+            } else if (link.startsWith('/')) {
+                navigate(link.substring(1));
+            }
+        } else {
+            // Keyword fallback mapping (Phase 5 requirement)
+            const lowerTitle = title.toLowerCase();
+            const lowerMsg = (message || '').toLowerCase();
+            
+            if (lowerTitle.includes('pergunta') || lowerMsg.includes('pergunta') || lowerTitle.includes('pendência') || lowerMsg.includes('pendência') || lowerTitle.includes('evidência') || lowerMsg.includes('evidência')) {
+                if (S.currentProject) {
+                    navigate('evidence', { currentProject: S.currentProject });
+                } else if (S.projects && S.projects.length > 0) {
+                    navigate('evidence', { currentProject: S.projects[0] });
+                } else {
+                    navigate('evidence');
+                }
+            } else if (lowerTitle.includes('auditoria') || lowerMsg.includes('auditoria')) {
+                navigate('audits');
+            } else if (lowerTitle.includes('risco') || lowerMsg.includes('risco')) {
+                navigate('risks');
+            } else if (lowerTitle.includes('fornecedor') || lowerMsg.includes('fornecedor')) {
+                navigate('vendors');
+            } else if (lowerTitle.includes('treinamento') || lowerMsg.includes('treinamento')) {
+                navigate('training');
+            } else if (lowerTitle.includes('ação corretiva') || lowerMsg.includes('ação corretiva') || lowerTitle.includes('capa') || lowerMsg.includes('capa')) {
+                navigate('capa');
+            } else if (lowerTitle.includes('ropa') || lowerMsg.includes('ropa')) {
+                navigate('ropa');
+            } else if (lowerTitle.includes('proposta') || lowerMsg.includes('proposta')) {
+                navigate('proposals');
+            } else if (lowerTitle.includes('contrato') || lowerMsg.includes('contrato')) {
+                navigate('projects');
+            } else if (lowerTitle.includes('assessment') || lowerMsg.includes('assessment')) {
+                navigate('assessments');
+            }
+        }
     }
 
     // Close dropdown on outside click
@@ -4234,6 +4372,28 @@
             const btnClicked = event.target;
             if (btnClicked) btnClicked.style.display = 'none';
             render();
+        } catch(e) {
+            alert('Erro ao registrar assinatura: ' + e.message);
+        }
+    };
+
+    window.signEvidence = async function(evidenceId, role) {
+        if (!evidenceId) {
+            alert('Não é possível assinar: ID da evidência inválido.');
+            return;
+        }
+        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
+        if (!name) return;
+        
+        try {
+            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name });
+            showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
+            const c = document.getElementById('main-content');
+            const h = document.getElementById('header-title');
+            const a = document.getElementById('header-actions');
+            if (c && h && a && S.view === 'evidence') {
+                await renderEvidence(c, h, a);
+            }
         } catch(e) {
             alert('Erro ao registrar assinatura: ' + e.message);
         }
