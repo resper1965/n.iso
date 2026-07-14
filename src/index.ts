@@ -2936,6 +2936,48 @@ app.get('/api/v1/evidence/:id/verify', async (c) => {
   }
 });
 
+app.get('/api/v1/evidence/:id/detail', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
+    if (!evidence) return c.json({ error: 'Not found' }, 404);
+    
+    return c.json({
+      id: evidence.id,
+      file_name: evidence.file_name,
+      file_hash: evidence.file_hash,
+      created_at: evidence.created_at,
+      control_id: evidence.control_id,
+      project_id: evidence.project_id,
+      file_type: evidence.file_type,
+      file_size: evidence.file_size,
+      uploaded_by: evidence.uploaded_by
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao carregar detalhes da evidência', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/evidence/:id/download', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
+    if (!ev || !ev.r2_key) return c.json({ error: 'Evidence not found' }, 404);
+    
+    const obj = await c.env.STORAGE.get(ev.r2_key);
+    if (!obj) return c.json({ error: 'File not found in storage' }, 404);
+    
+    return new Response(obj.body, { 
+      headers: { 
+        'Content-Type': ev.file_type || 'application/octet-stream', 
+        'Content-Disposition': `attachment; filename="${ev.file_name || 'evidence'}"` 
+      } 
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha no download', detail: e.message }, 500);
+  }
+});
+
 // Listar documentos de um projeto
 app.get('/api/v1/projects/:id/documents', async (c) => {
   try {
