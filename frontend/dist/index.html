@@ -336,7 +336,42 @@
         /* ——— A11Y ————————————————————————————————————————— */
         .skip-link { position: absolute; left: -9999px; background: var(--accent); color: #000; padding: 1rem; z-index: 10000; }
         .skip-link:focus { left: 0; }
+
+        /* ——— DoD DRAWER —————————————————————————————————— */
+        .dod-drawer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(7, 11, 20, 0.7);
+            backdrop-filter: blur(24px);
+            z-index: 1500;
+            display: none;
+            align-items: center;
+            justify-content: flex-end;
+            transition: all 0.3s ease;
+        }
+        .dod-drawer-overlay.open {
+            display: flex;
+        }
+        .dod-drawer {
+            position: relative;
+            background: rgba(12, 16, 28, 0.98);
+            border-left: 1px solid var(--border);
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            overflow-y: auto;
+            padding: 2.5rem 2rem;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            animation: drawerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes drawerIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
     </style>
+
 </head>
 <body>
     <a href="#content" class="skip-link">Pular para o conteudo</a>
@@ -525,6 +560,15 @@
             <div id="modal-content"></div>
         </div>
     </div>
+
+    <!-- DoD Drawer -->
+    <div class="dod-drawer-overlay" id="dod-drawer-overlay" onclick="window.closeDoDDrawerEl(event)" role="dialog" aria-modal="true">
+        <div class="dod-drawer" id="dod-drawer" onclick="event.stopPropagation()">
+            <button class="btn-ghost" style="position: absolute; top: 1.5rem; right: 1.5rem; font-size: 1rem; color: var(--text-dim);" onclick="window.cancelDoDCompletion()">&times;</button>
+            <div id="dod-drawer-content"></div>
+        </div>
+    </div>
+
 
     <script>
     function toggleTheme() {
@@ -832,12 +876,141 @@
         if (e && e.target !== document.getElementById('modal-overlay')) return;
         document.getElementById('modal-overlay').classList.remove('open');
         document.getElementById('modal').classList.remove('modal-large');
+        if (window.refreshDoDDrawer) window.refreshDoDDrawer();
     }
 
     function forceCloseModal() {
         document.getElementById('modal-overlay').classList.remove('open');
         document.getElementById('modal').classList.remove('modal-large');
+        if (window.refreshDoDDrawer) window.refreshDoDDrawer();
     }
+
+    window.openDoDDrawer = function(projectId, phaseNum, selectEl, pendingItens) {
+        S.activeDoD = { projectId, phaseNum, selectEl };
+        document.getElementById('dod-drawer-overlay').classList.add('open');
+        window.refreshDoDDrawer();
+    };
+
+    window.refreshDoDDrawer = function() {
+        if (!S.activeDoD) return;
+        const { projectId, phaseNum, selectEl } = S.activeDoD;
+        
+        // Re-evaluate pending items based on current S.phaseChecks
+        const phChecklist = S.checklistsConfig[phaseNum] || [];
+        const pendingItens = phChecklist.filter(item => {
+            const checkKey = `${projectId}_${item.id}`;
+            return S.phaseChecks[checkKey] !== true;
+        });
+        
+        const drawerContent = document.getElementById('dod-drawer-content');
+        if (!drawerContent) return;
+        
+        if (pendingItens.length === 0) {
+            drawerContent.innerHTML = `
+                <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
+                    <div>
+                        <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Definition of Done (DoD)</h2>
+                        <p style="font-family: 'Inter', sans-serif; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 1.5rem; line-height: 1.5;">
+                            Todos os itens obrigatórios da fase foram concluídos! A fase está pronta para ser finalizada em conformidade com as diretrizes ISO 27001/27701.
+                        </p>
+                        <div style="text-align: center; padding: 2rem 0;">
+                            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; stroke: var(--success); fill: none; stroke-width: 1.5; margin: 0 auto;">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <p style="font-size: 0.85rem; color: var(--success); margin-top: 1rem; font-weight: 500;">Pronto para conformidade</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase</button>
+                        <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Fechar</button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        drawerContent.innerHTML = `
+            <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
+                <div>
+                    <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Definition of Done (DoD)</h2>
+                    <p style="font-family: 'Inter', sans-serif; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 1.5rem; line-height: 1.5;">
+                        Existem itens pendentes no checklist de conformidade desta fase. Para garantir a aderência às normas ISO 27001/27701, resolva as pendências abaixo ou escolha prosseguir mesmo assim.
+                    </p>
+                    
+                    <div style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem;">Pendências (${pendingItens.length})</div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 55vh; overflow-y: auto; padding-right: 0.5rem;">
+                        ${pendingItens.map(item => {
+                            const match = item.text.match(/(A\.\d+\.\d+|Cl\s+\d+\.\d+|A\.\d+|Cl\s+\d+)/i);
+                            const controlId = match ? match[0] : 'A.5.1';
+                            
+                            return `
+                                <div class="list-item" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border);">
+                                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; width: 100%;">
+                                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                            <span class="badge-cat ${item.category}" style="align-self: flex-start; font-size: 0.6rem; font-weight: 500;">${item.category.toUpperCase()}</span>
+                                            <span class="item-name" style="font-size: 0.8rem; color: var(--text); font-weight: 400;">${escapeHTML(item.text)}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem; width: 100%;">
+                                        ${(item.category === 'evidence' || item.category === 'document') ? `
+                                            <button class="btn" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="wsUploadEvidence('${item.id}')">Upload</button>
+                                        ` : ''}
+                                        ${item.category === 'document' ? `
+                                            <button class="btn btn-primary" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="openGeneratePolicyModal('${projectId}', '${controlId}')">Gerar Política</button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
+                    <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase mesmo assim</button>
+                    <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Cancelar</button>
+                </div>
+            </div>
+        `;
+    };
+
+    window.confirmDoDCompletion = async function() {
+        if (!S.activeDoD) return;
+        const { projectId, phaseNum, selectEl } = S.activeDoD;
+        const newStatus = selectEl.value;
+        window.closeDoDDrawer();
+        selectEl.disabled = true;
+        try {
+            await api('PUT', `/api/v1/projects/${projectId}/phases/${phaseNum}`, { status: newStatus });
+            selectEl.setAttribute('data-prev', newStatus);
+            showToast(`Fase ${phaseNum} atualizada para ${newStatus}`);
+            render();
+        } catch (e) {
+            showToast(`Erro ao atualizar fase: ${e.message}`);
+            selectEl.value = selectEl.getAttribute('data-prev') || selectEl.value;
+        } finally {
+            selectEl.disabled = false;
+            S.activeDoD = null;
+        }
+    };
+
+    window.cancelDoDCompletion = function() {
+        if (!S.activeDoD) return;
+        const { selectEl } = S.activeDoD;
+        selectEl.value = selectEl.getAttribute('data-prev') || 'in_progress';
+        window.closeDoDDrawer();
+        S.activeDoD = null;
+    };
+
+    window.closeDoDDrawer = function() {
+        document.getElementById('dod-drawer-overlay').classList.remove('open');
+    };
+
+    window.closeDoDDrawerEl = function(e) {
+        if (e && e.target !== document.getElementById('dod-drawer-overlay')) return;
+        window.cancelDoDCompletion();
+    };
+
 
     function showToast(message, type = 'info') {
         const toast = document.createElement('div');
@@ -1673,6 +1846,7 @@
                 ` : ''}
                 ${journeysHtml}
             `;
+            if (window.refreshDoDDrawer) window.refreshDoDDrawer();
         } catch (e) {
             c.innerHTML = `<div class="error">Erro ao carregar fases do projeto: ${e.message}</div>`;
         }
@@ -1712,11 +1886,8 @@
             });
             
             if (pendingItens.length > 0) {
-                const confirmDone = confirm(`Atencao: Existem ${pendingItens.length} itens pendentes de evidencia ou tarefa nesta fase.\n\nDeseja marcar a fase como concluida mesmo assim?`);
-                if (!confirmDone) {
-                    selectEl.value = selectEl.getAttribute('data-prev') || 'in_progress';
-                    return;
-                }
+                window.openDoDDrawer(projectId, phaseNum, selectEl, pendingItens);
+                return;
             }
         }
 
@@ -1746,6 +1917,7 @@
             labelEl.classList.remove('checked');
         }
         showToast(checkboxEl.checked ? 'Item concluído' : 'Item reaberto');
+        if (window.refreshDoDDrawer) window.refreshDoDDrawer();
 
         // ponytail: debounced save to D1
         if (window._checklistSaveTimer) clearTimeout(window._checklistSaveTimer);
