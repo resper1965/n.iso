@@ -333,6 +333,150 @@
         /* ——— GROUP PROJECT ONLY ———————————————————————————— */
         .group-project-only { /* controlled by JS display toggle */ }
 
+        /* ——— MATRIZ DE RISCO 5X5 TÉRMICA ——————————————————— */
+        .matrix-container {
+            display: flex;
+            gap: 2rem;
+            align-items: stretch;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+        .matrix-layout {
+            display: grid;
+            grid-template-columns: 20px 20px 1fr;
+            grid-template-rows: 1fr 20px 20px;
+            gap: 10px;
+            max-width: 480px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        .matrix-y-title {
+            grid-column: 1;
+            grid-row: 1;
+            writing-mode: vertical-lr;
+            transform: rotate(180deg);
+            text-align: center;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            letter-spacing: 0.1em;
+            font-family: 'Montserrat', sans-serif;
+            align-self: center;
+        }
+        .matrix-y-axis {
+            grid-column: 2;
+            grid-row: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-dim);
+        }
+        .matrix-y-axis div {
+            height: 20%;
+            display: flex;
+            align-items: center;
+        }
+        .matrix-grid-5x5 {
+            grid-column: 3;
+            grid-row: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            gap: 6px;
+            aspect-ratio: 1.15;
+        }
+        .matrix-x-axis {
+            grid-column: 3;
+            grid-row: 2;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 8px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-dim);
+        }
+        .matrix-x-axis div {
+            width: 20%;
+            text-align: center;
+        }
+        .matrix-x-title {
+            grid-column: 3;
+            grid-row: 3;
+            text-align: center;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            letter-spacing: 0.1em;
+            font-family: 'Montserrat', sans-serif;
+            margin-top: 4px;
+        }
+        .matrix-cell {
+            aspect-ratio: 1.15;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        .matrix-cell:hover {
+            transform: scale(1.04);
+            filter: brightness(1.2);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+        .matrix-cell.selected {
+            transform: scale(1.02);
+            border: 2px solid var(--accent) !important;
+            box-shadow: 0 0 14px var(--accent-glow);
+            filter: brightness(1.3);
+            z-index: 10;
+        }
+        .cell-counter {
+            background: #ffffff;
+            color: #070b14;
+            font-size: 0.65rem;
+            font-weight: 700;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Montserrat', sans-serif;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            animation: scaleIn 0.3s ease-out;
+        }
+        .matrix-sidebar {
+            flex: 1;
+            min-width: 260px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .legend-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            margin-top: 0.5rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+
         /* ——— A11Y ————————————————————————————————————————— */
         .skip-link { position: absolute; left: -9999px; background: var(--accent); color: #000; padding: 1rem; z-index: 10000; }
         .skip-link:focus { left: 0; }
@@ -4172,22 +4316,220 @@
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto primeiro.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         a.innerHTML = `<button class="btn btn-primary" onclick="openNewRiskModal('${proj.id}')">+ Novo Risco</button>`;
+        
         let risks = [];
         try { risks = await api('GET', `/api/v1/projects/${proj.id}/risks`); } catch(e) {}
         if (!Array.isArray(risks)) risks = [];
-        const levelColor = l => l === 'Critical' ? 'var(--danger)' : l === 'High' ? 'var(--warning)' : l === 'Medium' ? 'var(--info)' : l === 'Medium High' ? 'var(--warning)' : 'var(--accent)';
-        c.innerHTML = `<div class="fade-in">${risks.length ? risks.map(r => `
-            <div class="list-item" style="cursor:pointer" onclick="openEditRiskModal('${r.id}', '${proj.id}', ${JSON.stringify(r).replace(/'/g, '\x27')})">
-                <div style="flex:1">
-                    <div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">${r.treatment} | Owner: ${escapeHTML(r.owner || 'Sem dono')} ${r.control_standard ? `| Controle: <span class="badge badge-implemented" style="padding:2px 6px;font-size:0.75rem">${escapeHTML(r.control_standard)}</span>` : ''} ${r.treatment === 'Accept' && r.accepted_by ? `| Aceito por: ${escapeHTML(r.accepted_by)}` : ''}</div>
+        
+        // Reset filter if project changed
+        if (S.riskFilterProjectId !== proj.id) {
+            S.riskFilter = null;
+            S.riskFilterProjectId = proj.id;
+        }
+
+        // Calculate stats
+        let criticalCount = 0;
+        let highCount = 0;
+        let mediumCount = 0;
+        let lowCount = 0;
+        let veryLowCount = 0;
+        let totalScore = 0;
+
+        risks.forEach(r => {
+            const score = r.risk_score || (r.impact * r.probability);
+            totalScore += score;
+            if (score >= 25) criticalCount++;
+            else if (score >= 15) highCount++;
+            else if (score >= 6) mediumCount++;
+            else if (score >= 4) lowCount++;
+            else veryLowCount++;
+        });
+
+        const averageScore = risks.length ? (totalScore / risks.length).toFixed(1) : '0.0';
+
+        // Helper to check cell color
+        const getCellLevel = (p, i) => {
+            const score = p * i;
+            if (score >= 25) return 'Critical';
+            if (score >= 15) return 'High';
+            if (score >= 6) return 'Medium';
+            if (score >= 4) return 'Low';
+            return 'Very Low';
+        };
+
+        const getCellColor = (level) => {
+            switch(level) {
+                case 'Critical': return { bg: 'rgba(165, 29, 29, 0.65)', border: 'rgba(239, 68, 68, 0.45)' };
+                case 'High':     return { bg: 'rgba(180, 80, 25, 0.55)', border: 'rgba(249, 115, 22, 0.4)' };
+                case 'Medium':   return { bg: 'rgba(145, 110, 25, 0.45)', border: 'rgba(234, 179, 8, 0.45)' };
+                case 'Low':      return { bg: 'rgba(20, 60, 100, 0.65)', border: 'rgba(0, 173, 232, 0.35)' };
+                case 'Very Low': default: return { bg: 'rgba(10, 25, 55, 0.75)', border: 'rgba(255, 255, 255, 0.08)' };
+            }
+        };
+
+        // Render cells
+        let cellsHTML = '';
+        for (let p = 5; p >= 1; p--) {
+            for (let i = 1; i <= 5; i++) {
+                const cellRisks = risks.filter(r => r.probability === p && r.impact === i);
+                const count = cellRisks.length;
+                const level = getCellLevel(p, i);
+                const colors = getCellColor(level);
+                const isSelected = S.riskFilter && S.riskFilter.probability === p && S.riskFilter.impact === i;
+                
+                cellsHTML += `
+                    <div class="matrix-cell ${isSelected ? 'selected' : ''}" 
+                         style="background: ${colors.bg}; border: 1px solid ${isSelected ? 'var(--accent)' : colors.border};" 
+                         onclick="toggleRiskFilter(${p}, ${i})"
+                         title="Probabilidade: ${p}, Impacto: ${i} (${count} risco${count !== 1 ? 's' : ''})">
+                        ${count > 0 ? `<span class="cell-counter">${count}</span>` : ''}
+                    </div>
+                `;
+            }
+        }
+
+        // Apply filter if active
+        let filteredRisks = risks;
+        let filterIndicatorBar = '';
+        if (S.riskFilter) {
+            filteredRisks = risks.filter(r => r.probability === S.riskFilter.probability && r.impact === S.riskFilter.impact);
+            filterIndicatorBar = `
+                <div class="filter-indicator-bar" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0, 173, 232, 0.1); border: 1px solid rgba(0, 173, 232, 0.2); border-radius:8px; padding:0.5rem 1rem; margin-bottom:1.5rem; font-size:0.8rem; animation: fadeIn 0.2s ease-out;">
+                    <span>Filtrando riscos com <strong>Impacto ${S.riskFilter.impact}</strong> e <strong>Probabilidade ${S.riskFilter.probability}</strong> (${filteredRisks.length} encontrado${filteredRisks.length !== 1 ? 's' : ''})</span>
+                    <button class="btn btn-ghost" onclick="toggleRiskFilter(${S.riskFilter.probability}, ${S.riskFilter.impact})" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:var(--accent);">Limpar Filtro</button>
                 </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span style="font-weight:600;color:${levelColor(r.risk_level)}">${r.risk_score || (r.impact * r.probability)}</span>
-                    <span class="ctx-tag" style="background:${levelColor(r.risk_level)}20;color:${levelColor(r.risk_level)}">${r.risk_level || 'N/A'}</span>
+            `;
+        }
+
+        const levelColor = l => l === 'Critical' ? 'var(--danger)' : l === 'High' ? 'var(--warning)' : l === 'Medium' ? '#f59e0b' : 'var(--accent)';
+
+        c.innerHTML = `
+            <div class="fade-in">
+                <!-- Matrix Container -->
+                <div class="matrix-container">
+                    <!-- Matrix Card -->
+                    <div class="card" style="flex: 1.2; min-width: 320px; padding: 1.5rem; margin-bottom: 0;">
+                        <div class="card-label">Matriz de Riscos (Impacto vs Probabilidade)</div>
+                        <div class="matrix-layout">
+                            <!-- Vertical label -->
+                            <div class="matrix-y-title">PROBABILIDADE</div>
+                            <!-- Y-axis numbers -->
+                            <div class="matrix-y-axis">
+                                <div>5</div>
+                                <div>4</div>
+                                <div>3</div>
+                                <div>2</div>
+                                <div>1</div>
+                            </div>
+                            <!-- 5x5 Grid cells -->
+                            <div class="matrix-grid-5x5">
+                                ${cellsHTML}
+                            </div>
+                            <!-- Spacers -->
+                            <div></div>
+                            <div></div>
+                            <!-- X-axis numbers -->
+                            <div class="matrix-x-axis">
+                                <div>1</div>
+                                <div>2</div>
+                                <div>3</div>
+                                <div>4</div>
+                                <div>5</div>
+                            </div>
+                            <!-- Spacers -->
+                            <div></div>
+                            <div></div>
+                            <!-- Horizontal title -->
+                            <div class="matrix-x-title">IMPACTO</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Sidebar -->
+                    <div class="matrix-sidebar">
+                        <div class="card" style="padding: 1.25rem; margin-bottom: 0;">
+                            <div class="card-label">Distribuição de Riscos</div>
+                            <div class="legend-list">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: rgba(165, 29, 29, 0.65); border: 1px solid rgba(239, 68, 68, 0.45);"></div>
+                                    <div style="flex: 1;">Crítico (Score 25)</div>
+                                    <div style="font-weight: 600; color: var(--danger);">${criticalCount}</div>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: rgba(180, 80, 25, 0.55); border: 1px solid rgba(249, 115, 22, 0.4);"></div>
+                                    <div style="flex: 1;">Alto (Score 15-20)</div>
+                                    <div style="font-weight: 600; color: var(--warning);">${highCount}</div>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: rgba(145, 110, 25, 0.45); border: 1px solid rgba(234, 179, 8, 0.45);"></div>
+                                    <div style="flex: 1;">Médio (Score 6-12)</div>
+                                    <div style="font-weight: 600; color: #f59e0b;">${mediumCount}</div>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: rgba(20, 60, 100, 0.65); border: 1px solid rgba(0, 173, 232, 0.35);"></div>
+                                    <div style="flex: 1;">Baixo (Score 4-5)</div>
+                                    <div style="font-weight: 600; color: var(--accent);">${lowCount}</div>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: rgba(10, 25, 55, 0.75); border: 1px solid rgba(255, 255, 255, 0.08);"></div>
+                                    <div style="flex: 1;">Muito Baixo (Score 1-3)</div>
+                                    <div style="font-weight: 600; color: var(--text-dim);">${veryLowCount}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="padding: 1.25rem; margin-bottom: 0; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div class="card-label" style="margin-bottom: 0.25rem;">Total de Riscos</div>
+                                <div style="font-size: 1.8rem; font-weight: 600; font-family: 'Montserrat', sans-serif;">${risks.length}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="card-label" style="margin-bottom: 0.25rem;">Score Médio</div>
+                                <div style="font-size: 1.8rem; font-weight: 600; color: var(--accent); font-family: 'Montserrat', sans-serif;">${averageScore}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum risco registrado</h3><p>Adicione riscos ao registro.</p></div>'}</div>`;
+                
+                <!-- Filter indicator -->
+                ${filterIndicatorBar}
+                
+                <!-- List Section -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; margin-top: 1rem;">
+                    <div class="card-label" style="margin-bottom: 0;">Lista Detalhada de Riscos</div>
+                    <button class="btn" onclick="exportCSV('risks')" style="font-size:0.7rem; padding:0.4rem 0.8rem">Exportar Riscos</button>
+                </div>
+                
+                <div>
+                    ${filteredRisks.length ? filteredRisks.map(r => `
+                        <div class="list-item" style="cursor:pointer" onclick="openEditRiskModal('${r.id}', '${proj.id}', ${JSON.stringify(r).replace(/'/g, '\x27')})">
+                            <div style="flex:1">
+                                <div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
+                                <div class="item-meta" style="margin-top:0.25rem">
+                                    <strong>Probabilidade:</strong> ${r.probability} | <strong>Impacto:</strong> ${r.impact} | 
+                                    <strong>Tratamento:</strong> ${r.treatment} | <strong>Responsável:</strong> ${escapeHTML(r.owner || 'Sem dono')}
+                                    ${r.control_standard ? ` | <strong>Controle:</strong> <span class="badge badge-implemented" style="padding:2px 6px;font-size:0.75rem">${escapeHTML(r.control_standard)}</span>` : ''}
+                                    ${r.treatment === 'Accept' && r.accepted_by ? ` | <strong>Aceito por:</strong> ${escapeHTML(r.accepted_by)}` : ''}
+                                </div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:0.5rem">
+                                <span style="font-weight:600;color:${levelColor(r.risk_level)}">${r.risk_score || (r.impact * r.probability)}</span>
+                                <span class="ctx-tag" style="background:${levelColor(r.risk_level)}20;color:${levelColor(r.risk_level)}">${r.risk_level || 'N/A'}</span>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="empty-state"><h3>Nenhum risco correspondente</h3><p>Não há riscos cadastrados ou que correspondam ao filtro selecionado.</p></div>'}
+                </div>
+            </div>
+        `;
     }
+
+    window.toggleRiskFilter = function(p, i) {
+        if (S.riskFilter && S.riskFilter.probability === p && S.riskFilter.impact === i) {
+            S.riskFilter = null;
+        } else {
+            S.riskFilter = { probability: p, impact: i };
+        }
+        render();
+    };
 
     window.onRiskAssetSelectChange = function(select) {
         const manualGroup = document.getElementById('risk-asset-manual-group');
