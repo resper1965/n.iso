@@ -206,7 +206,11 @@ CREATE TABLE IF NOT EXISTS evidence (
     file_type TEXT,
     file_size INTEGER,
     uploaded_by TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    evaluation_status TEXT DEFAULT 'pending',
+    evaluation_score REAL,
+    evaluation_notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ═══════════════════════════════════════════════
