@@ -1588,13 +1588,19 @@
                                                                             <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
                                                                                 onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
                                                                                 <option value="">Sem responsável</option>
-                                                                                <option value="Consultor B" ${itemAssigned === 'Consultor B' ? 'selected' : ''}>Consultor B (Consultora Líder)</option>
-                                                                                <option value="Consultor C" ${itemAssigned === 'Consultor C' ? 'selected' : ''}>Consultor C (Consultor ness.)</option>
-                                                                                <option value="Ricardo Esper" ${itemAssigned === 'Ricardo Esper' ? 'selected' : ''}>Ricardo Esper (Diretor / Sponsor)</option>
-                                                                                <option value="Pessoa G" ${itemAssigned === 'Pessoa G' ? 'selected' : ''}>Pessoa G (CISO & DPO)</option>
-                                                                                <option value="Executivo do Cliente" ${itemAssigned === 'Executivo do Cliente' ? 'selected' : ''}>Executivo do Cliente (IT Manager)</option>
-                                                                                <option value="DevOps Lead" ${itemAssigned === 'DevOps Lead' ? 'selected' : ''}>DevOps Lead (Infra AWS)</option>
-                                                                                <option value="DB Admin" ${itemAssigned === 'DB Admin' ? 'selected' : ''}>DB Admin (Bancos de Dados)</option>
+                                                                                <optgroup label="Consultoria (ness.)">
+                                                                                    <option value="Ricardo Esper" ${itemAssigned === 'Ricardo Esper' ? 'selected' : ''}>Ricardo Esper (Consultor ISO & DPO)</option>
+                                                                                    <option value="Consultor B" ${itemAssigned === 'Consultor B' ? 'selected' : ''}>Consultor B (Consultora ness.)</option>
+                                                                                    <option value="Consultor C" ${itemAssigned === 'Consultor C' ? 'selected' : ''}>Consultor C (Consultor ness.)</option>
+                                                                                </optgroup>
+                                                                                <optgroup label="C-Level cliente">
+                                                                                    <option value="Executivo do Cliente" ${itemAssigned === 'Executivo do Cliente' ? 'selected' : ''}>Executivo do Cliente (CEO)</option>
+                                                                                    <option value="Consultor D" ${itemAssigned === 'Consultor D' ? 'selected' : ''}>Consultor D (CFO)</option>
+                                                                                    <option value="Consultor A" ${itemAssigned === 'Consultor A' ? 'selected' : ''}>Consultor A (CTO)</option>
+                                                                                    <option value="Pessoa G" ${itemAssigned === 'Pessoa G' ? 'selected' : ''}>Pessoa G (CPO)</option>
+                                                                                    <option value="Pessoa F" ${itemAssigned === 'Pessoa F' ? 'selected' : ''}>Pessoa F (COO)</option>
+                                                                                    <option value="CISO do Cliente" ${itemAssigned === 'CISO do Cliente' ? 'selected' : ''}>CISO do Cliente (CIO)</option>
+                                                                                </optgroup>
                                                                             </select>
                                                                         </div>
                                                                         <div style="width: 150px;">
@@ -1635,23 +1641,28 @@
                 ${p.id === 'mr9c1qugo16zic2eko' ? `
                     <!-- Painel de Governança/Organograma do Projeto (cliente) -->
                     <div class="stat-card" style="margin-bottom:1.5rem; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px;">
-                        <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px">Governança & Organograma do SGSI</div>
-                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+                        <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px">Governança & Organograma do SGSI (cliente)</div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px;">
                             <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Consultoria (ness.)</div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Consultor B <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- Líder</span></div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Consultor C <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultor</span></div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text); margin-top:2px">Ricardo Esper <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Diretor / Sponsor</span></div>
+                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Consultoria Externa (ness.)</div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Ricardo Esper <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- Consultor ISO & DPO</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor B <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultora</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor C <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultor</span></div>
                             </div>
                             <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Comitê de SI (cliente)</div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Pessoa G <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- CISO & DPO</span></div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Executivo do Cliente <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- IT Manager</span></div>
+                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Liderança Executiva (cliente)</div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Executivo do Cliente <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- CEO</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor D <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- CFO (Finanças)</span></div>
                             </div>
                             <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Time Técnico (cliente)</div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">DevOps Lead <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Infra AWS</span></div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">DB Admin <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- RDS & Databases</span></div>
+                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Tecnologia & Produto (cliente)</div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Consultor A <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- CTO (Tech / Infra)</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Pessoa G <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- CPO (Produto)</span></div>
+                            </div>
+                            <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
+                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Operações, Segurança & ID (cliente)</div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Pessoa F <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- COO (Operações / RH)</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">CISO do Cliente <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- CIO (Identidade & Seg)</span></div>
                             </div>
                         </div>
                     </div>
