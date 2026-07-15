@@ -2279,7 +2279,7 @@ app.get('/api/v1/projects/:id/controls', async (c) => {
   try {
     const id = c.req.param('id');
     const rows = await c.env.DB.prepare(
-      'SELECT id, project_id, standard, title, description, status, maturity, owner, ciso_approved_by, ciso_approved_at, ceo_approved_by, ceo_approved_at, updated_at FROM compliance_controls WHERE project_id = ? ORDER BY standard'
+      'SELECT id, project_id, standard, title, description, status, maturity, owner, updated_at FROM compliance_controls WHERE project_id = ? ORDER BY standard'
     ).bind(id).all();
     return c.json(rows.results || []);
   } catch (e: any) {
