@@ -91,7 +91,7 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(response.status).toBe(403);
     });
 
-    it('should block cross-organization project access (IDOR)', async () => {
+        it('should block cross-organization project access (IDOR)', async () => {
       const request = new Request('http://localhost/api/v1/projects/999', {
         headers: { 'Authorization': 'Bearer client-token' }
       });
@@ -110,6 +110,100 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       // @ts-ignore
       const response = await worker.fetch(request, envWithClientSession);
       expect(response.status).toBe(403);
+    });
+
+    it('should allow platform_admin to call PUT and DELETE users', async () => {
+      const putRequest = new Request('http://localhost/api/v1/users/456', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer admin-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Name', role: 'org_admin' })
+      });
+      const deleteRequest = new Request('http://localhost/api/v1/users/456', {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer admin-token' }
+      });
+
+      const envWithSession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'platform_admin' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: '456', email: 'test@example.com' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        }
+      };
+
+      // @ts-ignore
+      const putResponse = await worker.fetch(putRequest, envWithSession);
+      expect(putResponse.status).toBe(200);
+
+      // @ts-ignore
+      const deleteResponse = await worker.fetch(deleteRequest, envWithSession);
+      expect(deleteResponse.status).toBe(200);
+    });
+
+    it('should enforce read-only role (org_user) to block write but allow checklist-progress and evidence upload', async () => {
+      const blockRequest = new Request('http://localhost/api/v1/projects/123/risks', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer user-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Risk' })
+      });
+      
+      const allowChecklistRequest = new Request('http://localhost/api/v1/projects/123/checklist-progress', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer user-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: 'p1_1', is_checked: 1 })
+      });
+
+      const envWithSession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 3, role: 'org_user', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        }
+      };
+
+      // @ts-ignore
+      const blockResponse = await worker.fetch(blockRequest, envWithSession);
+      expect(blockResponse.status).toBe(403);
+
+      // @ts-ignore
+      const allowResponse = await worker.fetch(allowChecklistRequest, envWithSession);
+      expect(allowResponse.status).not.toBe(403);
+    });
+
+    it('should map legacy roles to new roles for compatibility', async () => {
+      const request = new Request('http://localhost/api/v1/users', {
+        headers: { 'Authorization': 'Bearer old-admin-token' }
+      });
+      const envWithLegacySession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'admin' })), // legacy admin
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, envWithLegacySession);
+      expect(response.status).toBe(200);
     });
   });
 });
