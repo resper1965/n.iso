@@ -140,7 +140,10 @@
         .form-input { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; transition: 0.2s; }
         .form-input:focus { border-color: var(--accent); background: rgba(255,255,255,0.05); }
         .form-select { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; appearance: none; cursor: pointer; }
-        textarea.form-input { resize: vertical; min-height: 80px; }
+        textarea.form-input { resize: vertical; min-height: 80px; }
+        select.form-input, select.form-select, select { color-scheme: dark; }
+        select option, select optgroup { background-color: #070b14 !important; color: #f5f5f7 !important; }
+        select optgroup { color: var(--accent) !important; font-style: normal; font-weight: 600; }
 
         /* ——— DATA TABLES —————————————————————————————————— */
         .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
@@ -1967,10 +1970,10 @@
                                                                             <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
                                                                                 onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
                                                                                 <option value="">Sem responsável</option>
-                                                                                <optgroup label="Consultoria (ness.)">
-                                                                                    <option value="Ricardo Esper" ${itemAssigned === 'Ricardo Esper' ? 'selected' : ''}>Ricardo Esper (Consultor ISO & DPO)</option>
-                                                                                    <option value="Consultor B" ${itemAssigned === 'Consultor B' ? 'selected' : ''}>Consultor B (Consultora ness.)</option>
-                                                                                    <option value="Consultor C" ${itemAssigned === 'Consultor C' ? 'selected' : ''}>Consultor C (Consultor ness.)</option>
+                                                                                <optgroup label="Consultor">
+                                                                                    <option value="Ricardo Esper" ${itemAssigned === 'Ricardo Esper' ? 'selected' : ''}>Ricardo Esper (Consultor)</option>
+                                                                                    <option value="Consultor B" ${itemAssigned === 'Consultor B' ? 'selected' : ''}>Consultor B (Consultor)</option>
+                                                                                    <option value="Consultor C" ${itemAssigned === 'Consultor C' ? 'selected' : ''}>Consultor C (Consultor)</option>
                                                                                 </optgroup>
                                                                                 <optgroup label="C-Level cliente">
                                                                                     <option value="Executivo do Cliente" ${itemAssigned === 'Executivo do Cliente' ? 'selected' : ''}>Executivo do Cliente (CEO)</option>
@@ -2026,9 +2029,9 @@
                         <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px">Governança & Organograma do SGSI (cliente)</div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px;">
                             <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Consultoria (ness.)</div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Ricardo Esper <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- Consultor ISO & DPO</span></div>
-                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor B <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultora</span></div>
+                                <div style="font-size:0.65rem; color:var(--text-dim); margin-bottom:6px">Consultor</div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text)">Ricardo Esper <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- Consultor</span></div>
+                                <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor B <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultor</span></div>
                                 <div style="font-size:0.75rem; font-weight:600; color:var(--text-dim)">Consultor C <span style="font-weight:300; font-size:0.65rem; color:var(--text-dim)">- Consultor</span></div>
                             </div>
                             <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
