@@ -441,23 +441,52 @@ app.use('/api/v1/*', async (c, next) => {
   }
   
   const user = JSON.parse(userJson);
+  
+  // ponytail: compatibility mapping for legacy roles
+  if (user.role === 'admin') {
+    user.role = 'platform_admin';
+  } else if (user.role === 'consultant') {
+    user.role = 'consultor';
+  }
+  
   c.set('user', user);
 
-  // ponytail: RBAC Enforcement — admin has full access
-  const consultantOnly = ['/api/v1/leads', '/api/v1/assessments', '/api/v1/proposals', '/api/v1/contracts', '/api/v1/portfolio'];
-  if (consultantOnly.some(p => path.startsWith(p)) && user.role !== 'consultant' && user.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Consultant access required' }, 403);
+  // platform_admin (acesso total)
+  if (user.role === 'platform_admin') {
+    await next();
+    return;
   }
 
-  if (path.startsWith('/api/v1/admin/') && user.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Admin access required' }, 403);
+  // Block platform-wide endpoints for non-consultor/non-platform_admin
+  const consultantOnly = ['/api/v1/leads', '/api/v1/assessments', '/api/v1/proposals', '/api/v1/contracts', '/api/v1/portfolio', '/api/v1/users'];
+  if (consultantOnly.some(p => path.startsWith(p)) && user.role !== 'consultor') {
+    return c.json({ error: 'Forbidden: Consultant or Platform Admin access required' }, 403);
   }
 
-  // ponytail: IDOR/Project Scoping for clients
-  if (user.role === 'client') {
+  if (path.startsWith('/api/v1/admin/') && user.role !== 'platform_admin') {
+    return c.json({ error: 'Forbidden: Platform Admin access required' }, 403);
+  }
+
+  // IDOR / Project Scoping check for org_admin, org_user, or legacy client
+  if (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client') {
     const projectMatch = path.match(/\/api\/v1\/projects\/([^\/]+)/);
     if (projectMatch && projectMatch[1] !== user.client_project_id && !path.includes('/public/')) {
        return c.json({ error: 'Forbidden: Access denied to this project' }, 403);
+    }
+  }
+
+  // Read-only enforcement for org_user
+  if (user.role === 'org_user') {
+    const isAllowedWrite = 
+      (c.req.method === 'PUT' && path.match(/\/api\/v1\/projects\/[^\/]+\/checklist-progress/)) ||
+      (c.req.method === 'POST' && path.match(/\/api\/v1\/projects\/[^\/]+\/evidence\/upload/)) ||
+      (c.req.method === 'PUT' && path.match(/\/api\/v1\/notifications\/[^\/]+\/read/)) ||
+      (c.req.method === 'POST' && path.startsWith('/api/v1/auth/change-password')) ||
+      (c.req.method === 'POST' && path.startsWith('/api/v1/auth/logout')) ||
+      (c.req.method === 'POST' && path.match(/\/api\/v1\/projects\/[^\/]+\/chat/));
+
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.method !== 'OPTIONS' && !isAllowedWrite) {
+      return c.json({ error: 'Forbidden: Read-only access' }, 403);
     }
   }
 
@@ -491,7 +520,7 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 /** Verifica se o usuário tem acesso ao projeto (Consultant = total, Client = próprio) */
 function requireProjectAccess(c: any, projectId: string) {
   const user = c.get('user');
-  if (user.role === 'consultant') return true;
+  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
   throw new Error('Forbidden: No access to this project');
 }
@@ -499,7 +528,7 @@ function requireProjectAccess(c: any, projectId: string) {
 /** Verifica se o recurso pertence ao projeto do usuário */
 async function requireResourceAccess(c: any, table: string, id: string) {
   const user = c.get('user');
-  if (user.role === 'consultant') return true;
+  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   
   const row = await c.env.DB.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(id).first() as any;
   if (!row || row.project_id !== user.client_project_id) {
@@ -646,6 +675,13 @@ app.post('/api/v1/auth/login', async (c) => {
     // Remove password_hash from response
     delete user.password_hash;
     
+    // ponytail: compatibility mapping for legacy roles on login
+    if (user.role === 'admin') {
+      user.role = 'platform_admin';
+    } else if (user.role === 'consultant') {
+      user.role = 'consultor';
+    }
+    
     const token = genToken();
     await c.env.SESSIONS.put(token, JSON.stringify(user), { expirationTtl: 86400 });
     
@@ -694,11 +730,17 @@ app.post('/api/v1/auth/change-password', async (c) => {
 
 app.get('/api/v1/users', async (c) => {
   const user = c.get('user');
-  if (user.role !== 'consultant') return c.json({ error: 'Unauthorized' }, 403);
+  if (user.role !== 'consultor' && user.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
   
   try {
     const { results } = await c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC').all();
-    return c.json(results);
+    const mapped = (results || []).map((u: any) => {
+      let r = u.role;
+      if (r === 'admin') r = 'platform_admin';
+      if (r === 'consultant') r = 'consultor';
+      return { ...u, role: r };
+    });
+    return c.json(mapped);
   } catch (e: any) {
     return c.json({ error: 'Falha ao listar usuários', detail: e.message }, 500);
   }
@@ -706,7 +748,7 @@ app.get('/api/v1/users', async (c) => {
 
 app.post('/api/v1/users', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultant') return c.json({ error: 'Unauthorized' }, 403);
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
 
   try {
     const { email, password, name, role, client_project_id } = await c.req.json();
@@ -726,6 +768,77 @@ app.post('/api/v1/users', async (c) => {
   } catch (e: any) {
     if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
     return c.json({ error: 'Falha ao criar usuário', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/users/:id', async (c) => {
+  const admin = c.get('user');
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+
+  const id = c.req.param('id');
+  try {
+    const { name, email, role, client_project_id, password } = await c.req.json();
+    
+    const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first() as any;
+    if (!user) {
+      return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push(email);
+    }
+    if (role !== undefined) {
+      updates.push('role = ?');
+      values.push(role);
+    }
+    if (client_project_id !== undefined) {
+      updates.push('client_project_id = ?');
+      values.push(client_project_id || null);
+    }
+    if (password !== undefined && password !== '') {
+      const hash = await hashPassword(password);
+      updates.push('password_hash = ?');
+      values.push(hash);
+    }
+
+    if (updates.length > 0) {
+      values.push(id);
+      await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+      await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${id} atualizado`);
+    }
+
+    return c.json({ ok: true, message: 'Usuário atualizado com sucesso' });
+  } catch (e: any) {
+    if (e.message && e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
+    return c.json({ error: 'Falha ao atualizar usuário', detail: e.message || String(e) }, 500);
+  }
+});
+
+app.delete('/api/v1/users/:id', async (c) => {
+  const admin = c.get('user');
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+
+  const id = c.req.param('id');
+  try {
+    const user = await c.env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first() as any;
+    if (!user) {
+      return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+    await logAudit(c.env.DB, 'user.deleted', admin.email, `Usuário ${user.email} excluído`);
+
+    return c.json({ ok: true, message: 'Usuário excluído com sucesso' });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao excluir usuário', detail: e.message || String(e) }, 500);
   }
 });
 
@@ -2143,7 +2256,7 @@ app.put('/api/v1/projects/:id', async (c) => {
 app.get('/api/v1/dashboard/stats', async (c) => {
   try {
     const user = c.get('user');
-    const isClient = user.role === 'client';
+    const isClient = user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client';
     const projectId = isClient ? user.client_project_id : null;
     
     const whereResource = projectId ? 'WHERE project_id = ?' : '';
