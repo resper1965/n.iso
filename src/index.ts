@@ -694,7 +694,7 @@ app.post('/api/v1/auth/change-password', async (c) => {
 
 app.get('/api/v1/users', async (c) => {
   const user = c.get('user');
-  if (user.role !== 'consultant') return c.json({ error: 'Unauthorized' }, 403);
+  if (user.role !== 'consultant' && user.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
   
   try {
     const { results } = await c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC').all();
@@ -706,7 +706,7 @@ app.get('/api/v1/users', async (c) => {
 
 app.post('/api/v1/users', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultant') return c.json({ error: 'Unauthorized' }, 403);
+  if (admin.role !== 'consultant' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
 
   try {
     const { email, password, name, role, client_project_id } = await c.req.json();
@@ -726,6 +726,54 @@ app.post('/api/v1/users', async (c) => {
   } catch (e: any) {
     if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
     return c.json({ error: 'Falha ao criar usuário', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/users/:id', async (c) => {
+  const admin = c.get('user');
+  if (admin.role !== 'consultant' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+
+  const id = c.req.param('id');
+  try {
+    const { email, password, name, role, client_project_id } = await c.req.json();
+    if (!email || !name || !role) {
+      return c.json({ error: 'Campos obrigatórios: email, name, role' }, 400);
+    }
+
+    if (password) {
+      const hash = await hashPassword(password);
+      await c.env.DB.prepare(
+        `UPDATE users SET email = ?, password_hash = ?, name = ?, role = ?, client_project_id = ? WHERE id = ?`
+      ).bind(email, hash, name, role, client_project_id || null, id).run();
+    } else {
+      await c.env.DB.prepare(
+        `UPDATE users SET email = ?, name = ?, role = ?, client_project_id = ? WHERE id = ?`
+      ).bind(email, name, role, client_project_id || null, id).run();
+    }
+
+    await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${email} atualizado`);
+    return c.json({ id, email, name, role, client_project_id });
+  } catch (e: any) {
+    if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
+    return c.json({ error: 'Falha ao atualizar usuário', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/users/:id', async (c) => {
+  const admin = c.get('user');
+  if (admin.role !== 'consultant' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+
+  const id = c.req.param('id');
+  try {
+    const targetUser = await c.env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(id).first();
+    if (!targetUser) return c.json({ error: 'Usuário não encontrado' }, 404);
+
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+
+    await logAudit(c.env.DB, 'user.deleted', admin.email, `Usuário ${targetUser.email} excluído`);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao excluir usuário', detail: e.message }, 500);
   }
 });
 
