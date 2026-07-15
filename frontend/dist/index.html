@@ -1334,7 +1334,7 @@
         }
         const navUsers = document.getElementById('nav-users');
         if (navUsers) {
-            if (S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultor' || S.user.role === 'consultant')) {
+            if (S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant')) {
                 navUsers.style.display = '';
             } else {
                 navUsers.style.display = 'none';
