@@ -31,6 +31,7 @@ type Variables = {
     name: string;
     role: string;
     client_project_id: string | null;
+    client_lead_id?: string;
   };
 };
 
@@ -449,6 +450,14 @@ app.use('/api/v1/*', async (c, next) => {
     user.role = 'consultor';
   }
   
+  // ponytail: seek lead for client initial assessment
+  if ((user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client') && !user.client_project_id) {
+    const lead = await c.env.DB.prepare('SELECT id FROM leads WHERE contact_email = ?').bind(user.email).first() as any;
+    if (lead) {
+      user.client_lead_id = lead.id;
+    }
+  }
+  
   c.set('user', user);
 
   // platform_admin (acesso total)
@@ -460,7 +469,28 @@ app.use('/api/v1/*', async (c, next) => {
   // Block platform-wide endpoints for non-consultor/non-platform_admin
   const consultantOnly = ['/api/v1/leads', '/api/v1/assessments', '/api/v1/proposals', '/api/v1/contracts', '/api/v1/portfolio', '/api/v1/users'];
   if (consultantOnly.some(p => path.startsWith(p)) && user.role !== 'consultor') {
-    return c.json({ error: 'Forbidden: Consultant or Platform Admin access required' }, 403);
+    // ponytail: allow client access to their own assessment/proposal/contract
+    let isOwnResource = false;
+    if (user.client_lead_id) {
+      const assessmentMatch = path.match(/\/api\/v1\/assessments\/([^\/]+)/);
+      const proposalMatch = path.match(/\/api\/v1\/proposals\/([^\/]+)/);
+      const contractMatch = path.match(/\/api\/v1\/contracts\/([^\/]+)/);
+      
+      if (assessmentMatch) {
+        const row = await c.env.DB.prepare('SELECT lead_id FROM assessments WHERE id = ?').bind(assessmentMatch[1]).first() as any;
+        if (row && row.lead_id === user.client_lead_id) isOwnResource = true;
+      } else if (proposalMatch) {
+        const row = await c.env.DB.prepare('SELECT lead_id FROM proposals WHERE id = ?').bind(proposalMatch[1]).first() as any;
+        if (row && row.lead_id === user.client_lead_id) isOwnResource = true;
+      } else if (contractMatch) {
+        const row = await c.env.DB.prepare('SELECT lead_id FROM contracts WHERE id = ?').bind(contractMatch[1]).first() as any;
+        if (row && row.lead_id === user.client_lead_id) isOwnResource = true;
+      }
+    }
+    
+    if (!isOwnResource) {
+      return c.json({ error: 'Forbidden: Consultant or Platform Admin access required' }, 403);
+    }
   }
 
   if (path.startsWith('/api/v1/admin/') && user.role !== 'platform_admin') {
@@ -4980,6 +5010,40 @@ app.get('/api/v1/auditor/:token/evidence/:evidenceId/download', async (c) => {
     });
   } catch (e: any) {
     return c.json({ error: 'Falha no download', detail: e.message }, 500);
+  }
+});
+
+// Obter assessment do próprio cliente logado
+app.get('/api/v1/client/assessment', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.client_lead_id) {
+      return c.json({ error: 'Nenhum lead comercial associado a esta conta' }, 404);
+    }
+    const assessment = await c.env.DB.prepare('SELECT id FROM assessments WHERE lead_id = ?').bind(user.client_lead_id).first() as any;
+    if (!assessment) {
+      return c.json({ error: 'Assessment não encontrado para este lead' }, 404);
+    }
+    return c.json({ assessment_id: assessment.id });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao buscar assessment do cliente', detail: e.message }, 500);
+  }
+});
+
+// Obter proposta do próprio cliente logado
+app.get('/api/v1/client/proposal', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.client_lead_id) {
+      return c.json({ error: 'Nenhum lead comercial associado a esta conta' }, 404);
+    }
+    const proposal = await c.env.DB.prepare('SELECT id, status FROM proposals WHERE lead_id = ?').bind(user.client_lead_id).first() as any;
+    if (!proposal) {
+      return c.json({ error: 'Proposta não encontrada para este lead' }, 404);
+    }
+    return c.json({ proposal_id: proposal.id, status: proposal.status });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao buscar proposta do cliente', detail: e.message }, 500);
   }
 });
 

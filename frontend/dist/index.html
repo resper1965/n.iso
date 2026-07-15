@@ -1343,9 +1343,58 @@
     }
 
     // ——— RECOVERED VIEWS ————————————————————————————————
-    async function renderDashboard(c, h, a) {
-        h.textContent = 'Dashboard';
-        a.innerHTML = '';
+    async function renderDashboard(c, h, a) {
+        h.textContent = 'Dashboard';
+        a.innerHTML = '';
+        if (S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client') && !S.user.client_project_id) {
+            let assessmentStatus = 'Pending';
+            let proposalStatus = 'Pending';
+            if (S.clientAssessmentId) assessmentStatus = 'In Progress';
+            if (S.clientProposalId) {
+                assessmentStatus = 'Completed';
+                proposalStatus = S.clientProposalStatus || 'Draft';
+            }
+            let html = `
+                <div class="fade-in" style="max-width:800px; margin:0 auto; padding:2rem 0">
+                    <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo à ness. nISO</h2>
+                    <p style="color:var(--text-dim); font-size:0.95rem; margin-bottom:2.5rem">Seu ambiente de governança de segurança da informação (SGSI) está em fase de preparação.</p>
+                    <div style="display:flex; flex-direction:column; gap:1.5rem">
+                        <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
+                            <div>
+                                <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 1</div>
+                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Avaliação de Escopo (Assessment Inicial)</h3>
+                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Questionário para mapear as atividades, equipe e tecnologia do seu negócio para cálculo do pricing e maturidade.</p>
+                            </div>
+                            <div style="text-align:right">
+                                ${assessmentStatus === 'Completed' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Concluído</span>' : S.clientAssessmentId ? '<button class="btn btn-primary" onclick="navigate('self-service', { assessmentId: '' + S.clientAssessmentId + '' })">Responder Questionário</button>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Liberação</span>'}
+                            </div>
+                        </div>
+                        <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
+                            <div>
+                                <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 2</div>
+                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Proposta Comercial e Assinatura</h3>
+                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Aprovação da proposta comercial baseada no escopo mapeado e assinatura digital para início da adequação.</p>
+                            </div>
+                            <div style="text-align:right">
+                                ${proposalStatus === 'Approved' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Assinado</span>' : S.clientProposalId ? '<a class="btn btn-primary" href="/api/v1/assessments/' + S.clientAssessmentId + '/generate-proposal" target="_blank" style="text-decoration:none; display:inline-block">Revisar e Assinar</a>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Assessment</span>'}
+                            </div>
+                        </div>
+                        <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
+                            <div>
+                                <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 3</div>
+                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Início do SGSI & Projetos</h3>
+                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no nISO, checklists de conformidade e ativação dos assistentes de IA.</p>
+                            </div>
+                            <div style="text-align:right">
+                                <span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Bloqueado até assinatura</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            c.innerHTML = html;
+            return;
+        }
         c.innerHTML = '<div class="loading"></div>';
         try {
             const [leads, assessments, projects, controls] = await Promise.all([
@@ -6018,8 +6067,19 @@
     async function loadProjects() { try { S.projects = await api('GET', '/api/v1/projects'); } catch(e) { S.projects = []; } }
     async function loadControls() { try { S.controls = await api('GET', '/api/v1/controls'); } catch(e) { S.controls = []; } }
     async function loadDashboardStats() { try { S.stats = await api('GET', '/api/v1/dashboard/stats'); } catch(e) { S.stats = {}; } }
-    async function loadAll() { 
-        await Promise.allSettled([loadLeads(), loadAssessments(), loadProjects(), loadControls(), loadNotifications(), loadDashboardStats()]); 
+    async function loadAll() {
+        await Promise.allSettled([loadLeads(), loadAssessments(), loadProjects(), loadControls(), loadNotifications(), loadDashboardStats()]);
+        if (S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client') && !S.user.client_project_id) {
+            try {
+                const resA = await api('GET', '/api/v1/client/assessment');
+                S.clientAssessmentId = resA.assessment_id;
+            } catch(e) {}
+            try {
+                const resP = await api('GET', '/api/v1/client/proposal');
+                S.clientProposalId = resP.proposal_id;
+                S.clientProposalStatus = resP.status;
+            } catch(e) {}
+        }
     }
 
     // ——— INIT ———————————————————————————————————————————
