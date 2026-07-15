@@ -5937,8 +5937,8 @@
                     <label class="form-label">Papel (Role)</label>
                     <select id="user-m-role" class="form-input" onchange="toggleUserProjectSelect(this.value)">
                         <option value="">Selecione um papel</option>
-                        <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma (Bekaa)</option>
-                        <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor (Bekaa)</option>
+                        <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma</option>
+                        <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor</option>
                         <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente (CISO/CEO)</option>
                         <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
                     </select>
