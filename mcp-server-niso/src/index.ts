@@ -10,6 +10,18 @@ import { z } from "zod";
 const NISO_BASE_URL = process.env.NISO_BASE_URL || "https://niso.ness.workers.dev";
 const NISO_API_KEY = process.env.NISO_API_KEY;
 
+// Papel do agente: "consultant" | "auditor" | "" (todos). Cada papel só enxerga e
+// executa o seu conjunto de ferramentas — o auditor nunca escreve implementação
+// (política, SoA), o consultor nunca registra achado de auditoria. Independência
+// estrutural (cláusula 9.2) na própria camada MCP.
+const NISO_ROLE = (process.env.NISO_ROLE || "").toLowerCase();
+
+// Trava dura opcional: só leitura, ignora qualquer escrita (observador puro).
+const NISO_READONLY = /^(1|true|yes|on)$/i.test(process.env.NISO_READONLY || "");
+
+// Pin de projeto: fixa a sessão num projeto — tools com projectId recusam outro.
+const NISO_PROJECT_ID = process.env.NISO_PROJECT_ID || "";
+
 if (!NISO_API_KEY) {
   console.error("Warning: NISO_API_KEY environment variable is not set.");
 }
@@ -17,7 +29,7 @@ if (!NISO_API_KEY) {
 const server = new Server(
   {
     name: "niso-server",
-    version: "1.1.0",
+    version: "1.2.0",
   },
   {
     capabilities: {
@@ -28,6 +40,37 @@ const server = new Server(
 
 const WRITE_GUARDRAIL =
   "ESCRITA em projeto de cliente: requer contrato ativo e aprovação humana prévia (ver constituição do Aegis-Consultor).";
+
+// ── Classes de ferramenta por papel ──────────────────────────────────────────
+const READ_TOOLS = new Set([
+  "niso_list_projects",
+  "niso_get_project",
+  "niso_list_controls",
+  "niso_list_risks",
+  "niso_gap_analysis",
+  "niso_traceability",
+  "niso_list_evidence",
+  "niso_audit_pack",
+]);
+// Escrita exclusiva do auditor (achados e notas de auditoria).
+const AUDITOR_WRITE_TOOLS = new Set([
+  "niso_create_audit_finding",
+  "niso_create_auditor_note",
+]);
+// Qualquer escrita que não seja do auditor é do consultor (implementação).
+function isConsultantWrite(name: string): boolean {
+  return !READ_TOOLS.has(name) && !AUDITOR_WRITE_TOOLS.has(name);
+}
+
+// Uma ferramenta é permitida conforme o papel configurado.
+function toolAllowed(name: string): boolean {
+  if (NISO_READONLY) return READ_TOOLS.has(name);
+  if (NISO_ROLE === "auditor")
+    return READ_TOOLS.has(name) || AUDITOR_WRITE_TOOLS.has(name);
+  if (NISO_ROLE === "consultant")
+    return READ_TOOLS.has(name) || isConsultantWrite(name);
+  return true; // sem papel definido → todas as ferramentas
+}
 
 const TOOLS = [
   {
@@ -309,17 +352,32 @@ async function nisoPost(path: string, body?: unknown) {
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: TOOLS,
-  };
+  // Cada papel enxerga só as suas ferramentas.
+  return { tools: TOOLS.filter((t) => toolAllowed(t.name)) };
 });
 
 const projectIdSchema = z.object({ projectId: z.string() });
+
+// Recusa chamada a projeto diferente do fixado por NISO_PROJECT_ID.
+function assertProject(projectId: string) {
+  if (NISO_PROJECT_ID && projectId !== NISO_PROJECT_ID) {
+    throw new Error(
+      `Servidor fixado ao projeto ${NISO_PROJECT_ID} (NISO_PROJECT_ID) — chamada ao projeto ${projectId} recusada.`
+    );
+  }
+}
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    // Defesa em profundidade: o papel não executa ferramenta fora do seu conjunto.
+    if (!toolAllowed(name)) {
+      throw new Error(
+        `Ferramenta ${name} indisponível para o papel configurado (NISO_ROLE=${NISO_ROLE || "—"}${NISO_READONLY ? ", NISO_READONLY" : ""}).`
+      );
+    }
+
     switch (name) {
       case "niso_list_projects": {
         return await nisoGet(`/api/v1/portfolio`);
@@ -327,6 +385,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "niso_get_project": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}`);
       }
 
@@ -340,36 +399,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           probability: z.number(),
         });
         const validated = schema.parse(args);
+        assertProject(validated.projectId);
         return await nisoPost(`/api/v1/projects/${validated.projectId}/risks`, validated);
       }
 
       case "niso_list_controls": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/controls`);
       }
 
       case "niso_list_risks": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/risks`);
       }
 
       case "niso_gap_analysis": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/gap-analysis`);
       }
 
       case "niso_traceability": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/traceability`);
       }
 
       case "niso_list_evidence": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/evidence`);
       }
 
       case "niso_audit_pack": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/audit-pack`);
       }
 
@@ -377,6 +443,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { projectId, controlId } = z
           .object({ projectId: z.string(), controlId: z.string().optional() })
           .parse(args);
+        assertProject(projectId);
         return await nisoPost(`/api/v1/projects/${projectId}/generate-policy`, {
           control_id: controlId,
         });
@@ -384,6 +451,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "niso_generate_soa": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoPost(`/api/v1/projects/${projectId}/generate-soa`);
       }
 
@@ -398,6 +466,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { projectId, controlIds } = z
           .object({ projectId: z.string(), controlIds: z.array(z.string()).optional() })
           .parse(args);
+        assertProject(projectId);
         return await nisoPost(`/api/v1/projects/${projectId}/generate-policies-bulk`, {
           control_ids: controlIds,
         });
@@ -405,6 +474,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "niso_migrate_27701": {
         const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
         return await nisoPost(`/api/v1/projects/${projectId}/migrate-27701`);
       }
 
@@ -422,6 +492,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ),
         });
         const validated = schema.parse(args);
+        assertProject(validated.projectId);
         return await nisoPost(`/api/v1/projects/${validated.projectId}/training/import-external`, {
           records: validated.records,
         });
@@ -437,6 +508,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           location: z.string().optional(),
         });
         const validated = schema.parse(args);
+        assertProject(validated.projectId);
         return await nisoPost(`/api/v1/projects/${validated.projectId}/assets`, validated);
       }
 
@@ -451,6 +523,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           auditorNotes: z.string().optional(),
         });
         const validated = schema.parse(args);
+        assertProject(validated.projectId);
         return await nisoPost(`/api/v1/audits/${validated.auditId}/findings`, {
           project_id: validated.projectId,
           control_id: validated.controlId,
