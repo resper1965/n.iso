@@ -17,7 +17,7 @@ if (!NISO_API_KEY) {
 const server = new Server(
   {
     name: "niso-server",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   {
     capabilities: {
@@ -25,6 +25,9 @@ const server = new Server(
     },
   }
 );
+
+const WRITE_GUARDRAIL =
+  "ESCRITA em projeto de cliente: requer contrato ativo e aprovação humana prévia (ver constituição do Aegis-Consultor).";
 
 const TOOLS = [
   {
@@ -48,7 +51,7 @@ const TOOLS = [
   },
   {
     name: "niso_create_risk",
-    description: "Create a new risk entry in a project's risk matrix",
+    description: `Create a new risk entry in a project's risk matrix. ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -73,7 +76,152 @@ const TOOLS = [
       required: ["projectId"],
     },
   },
+  {
+    name: "niso_list_risks",
+    description: "List all risks in a project's risk register",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_gap_analysis",
+    description:
+      "Run the project's gap analysis: control coverage %, breakdown by status, and the list of open gaps",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_traceability",
+    description:
+      "Get the project's traceability matrix linking risks -> controls -> evidence",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_list_evidence",
+    description: "List all evidence records for a project",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_audit_pack",
+    description:
+      "Download the audit readiness pack (consolidated JSON: project, phases, controls, evidence, audit trail)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_generate_policy",
+    description: `Generate a policy document for a control via the nISO PolicyAgent (AI draft — must be reviewed before approval). ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        controlId: {
+          type: "string",
+          description: "The ISO 27001:2022 Annex A control ID (e.g., A.5.1). Defaults to A.5.1",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_generate_soa",
+    description: `Generate the Statement of Applicability draft (93 controls) from the project's assessment answers, creating compliance controls. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_evaluate_evidence",
+    description: `AI pre-qualification of an evidence record (CONFORME/PARCIAL/NAO CONFORME draft — not an audit verdict). Requires the extracted text of the evidence document. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidenceId: { type: "string", description: "The evidence record ID" },
+        text: { type: "string", description: "Extracted text content of the evidence document" },
+      },
+      required: ["evidenceId", "text"],
+    },
+  },
+  {
+    name: "niso_generate_policies_bulk",
+    description: `Generate multiple policy documents sequentially via AI. NEVER run autonomously — bulk generation ALWAYS requires explicit human approval in the active contract. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        controlIds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Annex A control IDs to generate policies for (e.g., ['A.5.1','A.5.9']). Defaults to the core organizational set",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_migrate_27701",
+    description: `Migrate the project's SoA from ISO 27001:2013 to 2022 mapping and identify ISO 27701 gaps, creating new controls. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
 ];
+
+async function nisoGet(path: string) {
+  const response = await fetch(`${NISO_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${NISO_API_KEY}` },
+  });
+  const data = await response.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+
+async function nisoPost(path: string, body?: unknown) {
+  const response = await fetch(`${NISO_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${NISO_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await response.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -81,26 +229,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+const projectIdSchema = z.object({ projectId: z.string() });
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
     switch (name) {
       case "niso_list_projects": {
-        const response = await fetch(`${NISO_BASE_URL}/api/v1/portfolio`, {
-          headers: { Authorization: `Bearer ${NISO_API_KEY}` },
-        });
-        const data = await response.json();
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return await nisoGet(`/api/v1/portfolio`);
       }
 
       case "niso_get_project": {
-        const { projectId } = z.object({ projectId: z.string() }).parse(args);
-        const response = await fetch(`${NISO_BASE_URL}/api/v1/projects/${projectId}`, {
-          headers: { Authorization: `Bearer ${NISO_API_KEY}` },
-        });
-        const data = await response.json();
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}`);
       }
 
       case "niso_create_risk": {
@@ -113,25 +255,72 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           probability: z.number(),
         });
         const validated = schema.parse(args);
-        const response = await fetch(`${NISO_BASE_URL}/api/v1/projects/${validated.projectId}/risks`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${NISO_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(validated),
-        });
-        const data = await response.json();
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return await nisoPost(`/api/v1/projects/${validated.projectId}/risks`, validated);
       }
 
       case "niso_list_controls": {
-        const { projectId } = z.object({ projectId: z.string() }).parse(args);
-        const response = await fetch(`${NISO_BASE_URL}/api/v1/projects/${projectId}/controls`, {
-          headers: { Authorization: `Bearer ${NISO_API_KEY}` },
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/controls`);
+      }
+
+      case "niso_list_risks": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/risks`);
+      }
+
+      case "niso_gap_analysis": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/gap-analysis`);
+      }
+
+      case "niso_traceability": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/traceability`);
+      }
+
+      case "niso_list_evidence": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/evidence`);
+      }
+
+      case "niso_audit_pack": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoGet(`/api/v1/projects/${projectId}/audit-pack`);
+      }
+
+      case "niso_generate_policy": {
+        const { projectId, controlId } = z
+          .object({ projectId: z.string(), controlId: z.string().optional() })
+          .parse(args);
+        return await nisoPost(`/api/v1/projects/${projectId}/generate-policy`, {
+          control_id: controlId,
         });
-        const data = await response.json();
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+
+      case "niso_generate_soa": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoPost(`/api/v1/projects/${projectId}/generate-soa`);
+      }
+
+      case "niso_evaluate_evidence": {
+        const { evidenceId, text } = z
+          .object({ evidenceId: z.string(), text: z.string() })
+          .parse(args);
+        return await nisoPost(`/api/v1/evidence/${evidenceId}/evaluate`, { text });
+      }
+
+      case "niso_generate_policies_bulk": {
+        const { projectId, controlIds } = z
+          .object({ projectId: z.string(), controlIds: z.array(z.string()).optional() })
+          .parse(args);
+        return await nisoPost(`/api/v1/projects/${projectId}/generate-policies-bulk`, {
+          control_ids: controlIds,
+        });
+      }
+
+      case "niso_migrate_27701": {
+        const { projectId } = projectIdSchema.parse(args);
+        return await nisoPost(`/api/v1/projects/${projectId}/migrate-27701`);
       }
 
       default:
