@@ -200,6 +200,91 @@ const TOOLS = [
       required: ["projectId"],
     },
   },
+  {
+    name: "niso_import_training",
+    description: `Import employee training records in bulk from an external source. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        records: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              employee_name: { type: "string" },
+              training_name: { type: "string" },
+              completion_date: { type: "string", description: "Format: YYYY-MM-DD" },
+              score: { type: "number" },
+              status: { type: "string", description: "Completed or Pending" },
+            },
+            required: ["employee_name", "training_name"],
+          },
+          description: "List of training records to import",
+        },
+      },
+      required: ["projectId", "records"],
+    },
+  },
+  {
+    name: "niso_create_asset",
+    description: `Create a new asset entry in the project's asset inventory. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        name: { type: "string", description: "Name of the asset (e.g. AWS RDS Database)" },
+        type: { type: "string", description: "Type of asset (e.g. software, hardware, data, people)" },
+        criticality: { type: "string", description: "Asset criticality (Low, Medium, High, Critical)" },
+        owner: { type: "string", description: "Asset owner name" },
+        location: { type: "string", description: "Asset location or system URL" },
+      },
+      required: ["projectId", "name", "type", "criticality"],
+    },
+  },
+  {
+    name: "niso_create_audit_finding",
+    description: `Create a new audit finding. If non-conforming, it automatically creates a linked Corrective Action (CAPA). ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        auditId: { type: "string", description: "The audit schedule ID" },
+        projectId: { type: "string", description: "The project ID" },
+        controlId: { type: "string", description: "The control ID (e.g. ctrl-a51)" },
+        findingType: { type: "string", description: "Type: conforming, minor_nc, major_nc, observation" },
+        description: { type: "string", description: "Detailed description of the finding" },
+        evidenceReviewed: { type: "string", description: "Description of evidence reviewed" },
+        auditorNotes: { type: "string", description: "Additional auditor internal notes" },
+      },
+      required: ["auditId", "projectId", "controlId", "findingType", "description"],
+    },
+  },
+  {
+    name: "niso_create_auditor_note",
+    description: `Submit a question or clarification request for a control using an auditor token. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: { type: "string", description: "The auditor token" },
+        controlId: { type: "string", description: "The control ID (e.g. ctrl-a51)" },
+        noteType: { type: "string", description: "Type: question, observation, request" },
+        content: { type: "string", description: "Content of the request or question" },
+      },
+      required: ["token", "controlId", "content"],
+    },
+  },
+  {
+    name: "niso_respond_auditor_note",
+    description: `Provide a response to an auditor note or request. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        noteId: { type: "string", description: "The ID of the auditor note" },
+        response: { type: "string", description: "Response text to address the auditor question" },
+      },
+      required: ["noteId", "response"],
+    },
+  },
 ];
 
 async function nisoGet(path: string) {
@@ -321,6 +406,85 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "niso_migrate_27701": {
         const { projectId } = projectIdSchema.parse(args);
         return await nisoPost(`/api/v1/projects/${projectId}/migrate-27701`);
+      }
+
+      case "niso_import_training": {
+        const schema = z.object({
+          projectId: z.string(),
+          records: z.array(
+            z.object({
+              employee_name: z.string(),
+              training_name: z.string(),
+              completion_date: z.string().optional(),
+              score: z.number().optional(),
+              status: z.string().optional(),
+            })
+          ),
+        });
+        const validated = schema.parse(args);
+        return await nisoPost(`/api/v1/projects/${validated.projectId}/training/import-external`, {
+          records: validated.records,
+        });
+      }
+
+      case "niso_create_asset": {
+        const schema = z.object({
+          projectId: z.string(),
+          name: z.string(),
+          type: z.string(),
+          criticality: z.string(),
+          owner: z.string().optional(),
+          location: z.string().optional(),
+        });
+        const validated = schema.parse(args);
+        return await nisoPost(`/api/v1/projects/${validated.projectId}/assets`, validated);
+      }
+
+      case "niso_create_audit_finding": {
+        const schema = z.object({
+          auditId: z.string(),
+          projectId: z.string(),
+          controlId: z.string(),
+          findingType: z.string(),
+          description: z.string(),
+          evidenceReviewed: z.string().optional(),
+          auditorNotes: z.string().optional(),
+        });
+        const validated = schema.parse(args);
+        return await nisoPost(`/api/v1/audits/${validated.auditId}/findings`, {
+          project_id: validated.projectId,
+          control_id: validated.controlId,
+          finding_type: validated.findingType,
+          description: validated.description,
+          evidence_reviewed: validated.evidenceReviewed,
+          auditor_notes: validated.auditorNotes,
+        });
+      }
+
+      case "niso_create_auditor_note": {
+        const schema = z.object({
+          token: z.string(),
+          controlId: z.string(),
+          noteType: z.string().optional(),
+          content: z.string(),
+        });
+        const validated = schema.parse(args);
+        return await nisoPost(`/api/v1/auditor/${validated.token}/notes`, {
+          control_id: validated.controlId,
+          note_type: validated.noteType || "question",
+          content: validated.content,
+        });
+      }
+
+      case "niso_respond_auditor_note": {
+        const schema = z.object({
+          noteId: z.string(),
+          response: z.string(),
+        });
+        const validated = schema.parse(args);
+        return await nisoPost(`/api/v1/auditor-notes/${validated.noteId}/respond`, {
+          response: validated.response,
+        });
       }
 
       default:
