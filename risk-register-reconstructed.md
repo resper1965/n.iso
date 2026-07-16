@@ -141,7 +141,7 @@
 * **Calculated**: L=3, I=3 | **Score**: **9** 🟡 **MÉDIO**
 * **Treatment**: MITIGATE
 * **Annex A Controls**: A.5.3 (Segregation of duties), A.5.4 (Management responsibilities)
-* **Actions**: Document entire EKS deployment steps, share deployment keys securely, train Consultor E as backup.
+* **Actions**: Document entire EKS deployment steps, share deployment keys securely, train DevOps Cloud (Augusto Ferronato) as backup.
 
 ### [RISK-013] Vulnerable Dependencies in CI/CD pipeline
 * **Asset**: Face ID validation API codebase
