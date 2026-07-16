@@ -8,6 +8,8 @@ import { EvidenceAgent } from './agents/evidence';
 import { MemoryService } from './services/memory';
 import { SoALogicEngine } from './services/soa-logic';
 import { MigrationService } from './services/migration-service';
+import { PolicyGeneratorService } from './services/policy-generator';
+import process from 'node:process';
 import { KnowledgeService } from './services/knowledge-service';
 import { BLOCK_QUESTIONS, PHASE_TITLES, POLICY_TEMPLATES } from './constants';
 
@@ -5044,6 +5046,263 @@ app.get('/api/v1/client/proposal', async (c) => {
     return c.json({ proposal_id: proposal.id, status: proposal.status });
   } catch (e: any) {
     return c.json({ error: 'Erro ao buscar proposta do cliente', detail: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  MÓDULOS DE CONFORMIDADE ISO 27001/27701 (GAPS DE AUDITORIA)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- ATIVOS (ASSETS) CRUD ---
+app.get('/api/v1/projects/:id/assets', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM assets WHERE project_id = ? ORDER BY created_at DESC'
+  ).bind(projectId).all();
+  return c.json(results || []);
+});
+
+app.post('/api/v1/projects/:id/assets', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { name, category, classification, owner, location, status, description } = await c.req.json();
+    if (!name || !category) return c.json({ error: 'Name and Category are required' }, 400);
+
+    const assetId = crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare(
+      'INSERT INTO assets (id, project_id, name, category, classification, owner, location, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(assetId, projectId, name, category, classification || 'Internal', owner || null, location || null, status || 'Active', description || null).run();
+
+    return c.json({ ok: true, id: assetId });
+  } catch (e: any) {
+    return c.json({ error: 'Error creating asset', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/assets/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { name, category, classification, owner, location, status, description } = await c.req.json();
+    
+    await c.env.DB.prepare(
+      'UPDATE assets SET name = COALESCE(?, name), category = COALESCE(?, category), classification = COALESCE(?, classification), owner = COALESCE(?, owner), location = COALESCE(?, location), status = COALESCE(?, status), description = COALESCE(?, description), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(name || null, category || null, classification || null, owner || null, location || null, status || null, description || null, id).run();
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Error updating asset', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/assets/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM assets WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Error deleting asset', detail: e.message }, 500);
+  }
+});
+
+// --- MÉTRICAS & KPIS CRUD ---
+app.get('/api/v1/projects/:id/metrics', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM performance_metrics WHERE project_id = ? ORDER BY created_at DESC'
+  ).bind(projectId).all();
+  return c.json(results || []);
+});
+
+app.post('/api/v1/projects/:id/metrics', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
+    if (!metric_name) return c.json({ error: 'Metric Name is required' }, 400);
+
+    const metricId = crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare(
+      'INSERT INTO performance_metrics (id, project_id, metric_name, target_value, current_value, frequency, last_measured_at, owner, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(metricId, projectId, metric_name, target_value !== undefined ? target_value : null, current_value !== undefined ? current_value : null, frequency || 'Monthly', last_measured_at || null, owner || null, status || 'On Track').run();
+
+    return c.json({ ok: true, id: metricId });
+  } catch (e: any) {
+    return c.json({ error: 'Error creating metric', detail: e.message }, 500);
+  }
+});
+
+app.put('/api/v1/metrics/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
+    
+    await c.env.DB.prepare(
+      'UPDATE performance_metrics SET metric_name = COALESCE(?, metric_name), target_value = COALESCE(?, target_value), current_value = COALESCE(?, current_value), frequency = COALESCE(?, frequency), last_measured_at = COALESCE(?, last_measured_at), owner = COALESCE(?, owner), status = COALESCE(?, status), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(metric_name || null, target_value !== undefined ? target_value : null, current_value !== undefined ? current_value : null, frequency || null, last_measured_at || null, owner || null, status || null, id).run();
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Error updating metric', detail: e.message }, 500);
+  }
+});
+
+app.delete('/api/v1/metrics/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Error deleting metric', detail: e.message }, 500);
+  }
+});
+
+// --- ACEITE DE POLÍTICAS ---
+app.get('/api/v1/projects/:id/policy-acknowledgments', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM policy_acknowledgments WHERE project_id = ? ORDER BY acknowledged_at DESC'
+  ).bind(projectId).all();
+  return c.json(results || []);
+});
+
+app.post('/api/v1/projects/:id/policy-acknowledgments', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { policy_type, user_name, user_email } = await c.req.json();
+    if (!policy_type || !user_name || !user_email) return c.json({ error: 'Policy Type, User Name and Email are required' }, 400);
+
+    const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+    const userAgent = c.req.header('User-Agent') || 'unknown';
+
+    const ackId = crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare(
+      'INSERT INTO policy_acknowledgments (id, project_id, policy_type, user_name, user_email, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(ackId, projectId, policy_type, user_name, user_email, ipAddress, userAgent).run();
+
+    return c.json({ ok: true, id: ackId });
+  } catch (e: any) {
+    return c.json({ error: 'Error recording policy acknowledgment', detail: e.message }, 500);
+  }
+});
+
+// --- TRILHA DE AUDITORIA ---
+app.get('/api/v1/projects/:id/audit-trail', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM audit_logs WHERE details LIKE ? OR details LIKE ? ORDER BY created_at DESC LIMIT 500`
+  ).bind(`%${projectId}%`, `%${projectId.substring(0, 8)}%`).all();
+  return c.json(results || []);
+});
+
+// --- DOWNLOAD DE EVIDÊNCIA CENTRALIZADA ---
+app.get('/api/v1/projects/:id/evidence/:evidenceId/download', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const evidenceId = c.req.param('evidenceId');
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ? AND project_id = ?').bind(evidenceId, projectId).first() as any;
+    if (!ev || !ev.r2_key) return c.json({ error: 'Evidence not found' }, 404);
+
+    const obj = await c.env.STORAGE.get(ev.r2_key);
+    if (!obj) return c.json({ error: 'File not found in storage' }, 404);
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': ev.file_type || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${ev.file_name || 'evidence'}"`
+      }
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Error downloading evidence', detail: e.message }, 500);
+  }
+});
+
+// --- TEMPLATES DE POLÍTICAS ---
+app.get('/api/v1/policies/templates', async (c) => {
+  try {
+    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+    const templates = await generator.listAvailableTemplates('v2022');
+    return c.json({ ok: true, templates });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao listar templates', detail: e.message }, 500);
+  }
+});
+
+app.post('/api/v1/projects/:id/policies/generate-from-template', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { template_name, control_id } = await c.req.json<{ template_name: string; control_id: string }>();
+
+    if (!template_name || !control_id) {
+      return c.json({ error: 'template_name e control_id são obrigatórios' }, 400);
+    }
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const user = c.get('user');
+    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+
+    // Gerar conteúdo a partir do template com variáveis do projeto
+    const markdown = await generator.generate(template_name, {
+      organizationName: project.client_name,
+      policyOwner: user?.name || 'Consultor nISO',
+      approver: 'Direção Executiva',
+      status: 'Draft',
+      standardVersion: 'v2022'
+    });
+
+    await logAudit(c.env.DB, 'policy.generated_from_template', user?.email ?? 'system', `Política gerada via template ${template_name} para o controle ${control_id}, projeto ${projectId}`);
+
+    return c.json({
+      ok: true,
+      policy_markdown: markdown,
+      control: control_id
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao gerar política a partir de template', detail: e.message }, 500);
+  }
+});
+
+// --- IMPORTAÇÃO DE TREINAMENTO EXTERNO ---
+app.post('/api/v1/projects/:id/training/import-external', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { records } = await c.req.json<{
+      records: Array<{
+        employee_name: string;
+        training_name: string;
+        completion_date?: string;
+        score?: number;
+        status?: string;
+      }>;
+    }>();
+
+    if (!records || !Array.isArray(records)) {
+      return c.json({ error: 'Array "records" é obrigatório' }, 400);
+    }
+
+    const stmt = c.env.DB.prepare(
+      `INSERT INTO training_records (id, project_id, employee_name, training_name, completion_date, score, status, created_at)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+    );
+
+    const batch = records.map(r =>
+      stmt.bind(
+        projectId,
+        r.employee_name,
+        r.training_name,
+        r.completion_date || new Date().toISOString().split('T')[0],
+        r.score !== undefined ? r.score : null,
+        r.status || 'Completed'
+      )
+    );
+
+    await c.env.DB.batch(batch);
+
+    await logAudit(c.env.DB, 'training.imported_external', c.get('user')?.email ?? 'system', `Importados ${records.length} registros de treinamento para o projeto ${projectId}`);
+
+    return c.json({ ok: true, count: records.length });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao importar registros de treinamento', detail: e.message }, 500);
   }
 });
 

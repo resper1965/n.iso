@@ -1,12 +1,13 @@
 import { PolicyGeneratorService } from './policy-generator';
 import { ArtifactService } from './artifact-service';
+import process from 'node:process';
 
 export class BulkArtifactGenerator {
   private policyGenerator: PolicyGeneratorService;
   private artifactService: ArtifactService;
 
   constructor(env: any) {
-    this.policyGenerator = new PolicyGeneratorService('/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso');
+    this.policyGenerator = new PolicyGeneratorService(process.cwd());
     this.artifactService = new ArtifactService(env);
   }
 

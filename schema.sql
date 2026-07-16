@@ -597,3 +597,49 @@ CREATE TABLE IF NOT EXISTS auditor_notes (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_auditor_notes_project ON auditor_notes(project_id);
+
+-- -----------------------------------------------
+-- SPRINT GAPS: ATIVOS, KPIS E ACEITES DE POLÍTICAS
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS assets (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  project_id TEXT REFERENCES projects(id),
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  classification TEXT DEFAULT 'Internal', -- Public, Internal, Confidential, Restricted
+  owner TEXT,
+  location TEXT,
+  status TEXT DEFAULT 'Active',
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
+
+CREATE TABLE IF NOT EXISTS performance_metrics (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  project_id TEXT REFERENCES projects(id),
+  metric_name TEXT NOT NULL,
+  target_value REAL,
+  current_value REAL,
+  frequency TEXT DEFAULT 'Monthly', -- Weekly, Monthly, Quarterly, Annual
+  last_measured_at DATE,
+  owner TEXT,
+  status TEXT DEFAULT 'On Track', -- On Track, At Risk, Critical
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_metrics_project ON performance_metrics(project_id);
+
+CREATE TABLE IF NOT EXISTS policy_acknowledgments (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  project_id TEXT REFERENCES projects(id),
+  policy_type TEXT NOT NULL, -- ISP, AUP, ACP, IRP, etc.
+  user_name TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  acknowledged_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ip_address TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_acknowledgments_project ON policy_acknowledgments(project_id);

@@ -1,5 +1,5 @@
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export type StandardVersion = 'v2022' | 'v2013' | 'v2026';
 
@@ -24,9 +24,11 @@ const TEMPLATE_DEPENDENCIES: Record<string, string[]> = {
 
 export class PolicyGeneratorService {
   private templatesBase: string;
+  private assetsFetcher?: any;
 
-  constructor(basePath: string) {
+  constructor(basePath: string, assetsFetcher?: any) {
     this.templatesBase = join(basePath, 'src/templates/policies');
+    this.assetsFetcher = assetsFetcher;
   }
 
   shouldGenerate(templateId: string, soa?: Record<string, boolean>): boolean {
@@ -41,9 +43,18 @@ export class PolicyGeneratorService {
       throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
     }
 
-    // Busca na pasta específica da versão da norma
-    const filePath = join(this.templatesBase, context.standardVersion, `${templateName}.md`);
-    let content = await readFile(filePath, 'utf-8');
+    let content = '';
+    if (this.assetsFetcher) {
+      const url = `http://assets/templates/policies/${context.standardVersion}/${templateName}.md`;
+      const res = await this.assetsFetcher.fetch(new Request(url));
+      if (!res.ok) {
+        throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
+      }
+      content = await res.text();
+    } else {
+      const filePath = join(this.templatesBase, context.standardVersion, `${templateName}.md`);
+      content = await readFile(filePath, 'utf-8');
+    }
 
     const now = new Date();
     const nextYear = new Date();
