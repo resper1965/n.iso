@@ -128,3 +128,8 @@ Rules:
 - Mark intentional simplifications with a ponytail: comment.
 
 Not lazy about: understanding the problem, input validation at trust boundaries, error handling, security, accessibility.
+
+## Regras Adicionais do Ecossistema
+- **test-driven-development**: Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
+- **requesting-code-review**: Activates between tasks. Reviews against plan, reports issues by severity. Critical issues block progress.
+- **finishing-a-development-branch**: Activates when tasks complete. Verifies tests, presents options (merge/PR/keep/discard), cleans up worktree.
