@@ -24,6 +24,7 @@ export type Bindings = {
   VECTOR_INDEX: VectorizeIndex;
   AI_GATEWAY_URL: string;
   AI_GATEWAY_TOKEN: string;
+  ASSETS?: any;
 };
 
 type Variables = {
@@ -5331,12 +5332,6 @@ app.post('/api/v1/projects/:id/training/import-external', async (c) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  STATIC FILES (catch-all — deve ser a última rota)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-app.get('/*', serveStatic({ root: './' }));
-
 // ─── MCP (Model Context Protocol) ──────────────────────────────────────────
 app.get('/api/v1/mcp', async (c) => {
     return c.json({
@@ -5386,6 +5381,28 @@ app.post('/api/v1/mcp/execute', async (c) => {
     }
 
     return c.json({ error: 'Tool not found' }, 404);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  STATIC FILES (catch-all — deve ser a última rota)
+// ═══════════════════════════════════════════════════════════════════════════════
+app.get('/*', async (c) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.includes('.') && !path.endsWith('.html')) {
+    if (c.env.ASSETS) {
+      return await c.env.ASSETS.fetch(c.req.raw);
+    }
+    return c.text('Not found', 404);
+  }
+  if (c.env.ASSETS) {
+    const res = await c.env.ASSETS.fetch(c.req.raw);
+    if (res.status === 404) {
+      const fallbackRequest = new Request(new URL('/', c.req.url).toString());
+      return await c.env.ASSETS.fetch(fallbackRequest);
+    }
+    return res;
+  }
+  return c.text('Not found', 404);
 });
 
 export default app;
