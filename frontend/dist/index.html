@@ -517,6 +517,14 @@
             from { transform: translateX(100%); }
             to { transform: translateX(0); }
         }
+        @keyframes pulse-highlight {
+            0% { background-color: rgba(0, 173, 232, 0.25); }
+            50% { background-color: rgba(0, 173, 232, 0.05); }
+            100% { background-color: transparent; }
+        }
+        .pulse-highlight {
+            animation: pulse-highlight 3s ease-in-out;
+        }
     </style>
 
 </head>
@@ -2673,8 +2681,8 @@
                     const sizeKB = e.file_size ? `${(e.file_size / 1024).toFixed(1)} KB` : '';
                     
                     const cisoSign = e.ciso_approved_by 
-                      ? `<span style="color:var(--success)">CISO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>` 
-                      : `<span style="color:var(--text-dim)">CISO: Pendente de assinatura</span>`;
+                      ? `<span style="color:var(--success)">DPO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>` 
+                      : `<span style="color:var(--text-dim)">DPO: Pendente de assinatura</span>`;
                       
                     const ceoSign = e.ceo_approved_by 
                       ? `<span style="color:var(--success)">CEO: Assinado por ${escapeHTML(e.ceo_approved_by)} (${new Date(e.ceo_approved_at).toLocaleDateString('pt-BR')})</span>` 
@@ -2682,7 +2690,7 @@
 
                     const isOrgUser = S.user && S.user.role === 'org_user';
                     const cisoBtn = (!e.ciso_approved_by && !isOrgUser)
-                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ciso')">Assinar CISO</button>` 
+                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ciso')">Assinar DPO</button>` 
                       : '';
                       
                     const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
@@ -3135,7 +3143,43 @@
 
         if (!n) return;
 
-        // 2. Contextual navigation based on link or metadata
+        // 2. Prioritize Action Type & Target ID (Deep-linking)
+        if (n.action_type && n.target_id) {
+            const actionType = n.action_type;
+            const targetId = n.target_id;
+            const projectId = S.activeProject ? S.activeProject.id : (S.projects && S.projects[0] ? S.projects[0].id : '');
+
+            if (actionType === 'open_finding') {
+                navigate('capa');
+                if (projectId) {
+                    try {
+                        const capas = await api('GET', `/api/v1/projects/${projectId}/capa`) || [];
+                        const ca = capas.find(x => x.id === targetId);
+                        if (ca) {
+                            setTimeout(() => {
+                                openEditCAPAModal(targetId, projectId, ca);
+                            }, 150);
+                        }
+                    } catch (e) {}
+                }
+                return;
+            } else if (actionType === 'open_soa') {
+                navigate('soa');
+                setTimeout(() => {
+                    const row = document.getElementById(`soa-row-${targetId}`);
+                    if (row) {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        row.classList.add('pulse-highlight');
+                        setTimeout(() => {
+                            row.classList.remove('pulse-highlight');
+                        }, 3000);
+                    }
+                }, 200);
+                return;
+            }
+        }
+
+        // 3. Contextual navigation based on link or metadata
         const link = n.link || '';
         const title = n.title || '';
         const message = n.message || '';
@@ -3347,12 +3391,16 @@
                             </td>
                             <td>
                                 <div style="display:flex;gap:6px">
-                                    <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#ef4444' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(239,68,68,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
+                                    <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.15)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.25)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
                                         R: ${risksCount}
                                     </span>
-                                    <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(0,173,232,0.1)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
+                                    <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
                                         E: ${evidenceCount}
                                     </span>
+                                </div>
+                                <div style="display:flex;gap:4px;margin-top:4px">
+                                    ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO ✓</span>` : ''}
+                                    ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO ✓</span>` : ''}
                                 </div>
                             </td>
                             <td>

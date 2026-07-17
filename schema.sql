@@ -242,6 +242,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     message TEXT,
     read INTEGER DEFAULT 0,
     link TEXT,
+    action_type TEXT,
+    target_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -620,12 +620,14 @@ async function createNotification(
   title: string,
   message: string,
   userId?: string,
-  link?: string
+  link?: string,
+  actionType?: string,
+  targetId?: string
 ) {
   await db.prepare(
-    `INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?, datetime('now'))`
-  ).bind(genId(), userId || null, type, title, message, link || null).run();
+    `INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'))`
+  ).bind(genId(), userId || null, type, title, message, link || null, actionType || null, targetId || null).run();
 }
 
 // ─── Helper: criar as 41 fases para um projeto ─────────────────────────────
@@ -2951,25 +2953,48 @@ app.put('/api/v1/evidence/:id/approve', async (c) => {
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
 
-    const { role, approved_by } = await c.req.json<{ role: 'ciso' | 'ceo'; approved_by: string }>();
-    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: 'Papel inválido' }, 400);
+    const user = c.get('user');
+    const email = user?.email || '';
+    const body = await c.req.json<{ role?: 'ciso' | 'ceo'; approved_by?: string }>().catch(() => ({} as any));
+    
+    let targetRole = body.role;
+    let approvedBy = body.approved_by || user?.name || '';
+
+    // Validação rígida com base em sessão para segurança da cliente
+    if (user?.role !== 'platform_admin' && user?.email !== 'admin@ness.io') {
+      if (email.includes('resper') || email === '44273656+resper1965@users.noreply.github.com') {
+        targetRole = 'ciso';
+        approvedBy = user?.name || 'Ricardo Esper';
+      } else if (email.includes('pessoa') || email === 'pessoa@exemplo.com.br') {
+        targetRole = 'ceo';
+        approvedBy = user?.name || 'Executivo do Cliente';
+      } else {
+        return c.json({ error: 'Acesso negado: Apenas o DPO (Ricardo Esper) ou o CEO (Executivo do Cliente) podem assinar evidências.' }, 403);
+      }
+    } else {
+      // Se for admin, aceita o que veio no body ou preenche default
+      if (!targetRole) targetRole = 'ciso';
+      if (!approvedBy) approvedBy = targetRole === 'ciso' ? 'Ricardo Esper' : 'Executivo do Cliente';
+    }
+
+    if (targetRole !== 'ciso' && targetRole !== 'ceo') return c.json({ error: 'Papel inválido' }, 400);
 
     const dateStr = new Date().toISOString();
-    if (role === 'ciso') {
+    if (targetRole === 'ciso') {
       await c.env.DB.prepare(
         `UPDATE evidence 
          SET ciso_approved_by = ?, ciso_approved_at = ?, updated_at = datetime('now')
          WHERE id = ?`
-      ).bind(approved_by, dateStr, id).run();
+      ).bind(approvedBy, dateStr, id).run();
     } else {
       await c.env.DB.prepare(
         `UPDATE evidence 
          SET ceo_approved_by = ?, ceo_approved_at = ?, updated_at = datetime('now')
          WHERE id = ?`
-      ).bind(approved_by, dateStr, id).run();
+      ).bind(approvedBy, dateStr, id).run();
     }
 
-    await logAudit(c.env.DB, 'evidence.signed', c.get('user')?.email ?? 'system', `Evidência ${id} assinada como ${role} por ${approved_by}`);
+    await logAudit(c.env.DB, 'evidence.signed', email || 'system', `Evidência ${id} assinada como ${targetRole} por ${approvedBy}`);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao assinar evidência', detail: e.message }, 500);
