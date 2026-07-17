@@ -1416,6 +1416,16 @@
                 assessmentStatus = 'Completed';
                 proposalStatus = S.clientProposalStatus || 'Draft';
             }
+
+            let assessmentActionHtml = '';
+            if (assessmentStatus === 'Completed') {
+                assessmentActionHtml = '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Concluído</span>';
+            } else if (S.clientAssessmentId) {
+                assessmentActionHtml = `<button class="btn btn-primary" onclick="navigate('self-service', { assessmentId: '${S.clientAssessmentId}' })">Responder Questionário</button>`;
+            } else {
+                assessmentActionHtml = '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Liberação</span>';
+            }
+
             let html = `
                 <div class="fade-in" style="max-width:800px; margin:0 auto; padding:2rem 0">
                     <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo à ness. nISO</h2>
@@ -1428,7 +1438,7 @@
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Questionário para mapear as atividades, equipe e tecnologia do seu negócio para cálculo do pricing e maturidade.</p>
                             </div>
                             <div style="text-align:right">
-                                ${assessmentStatus === 'Completed' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Concluído</span>' : S.clientAssessmentId ? '<button class="btn btn-primary" onclick="navigate('self-service', { assessmentId: '' + S.clientAssessmentId + '' })">Responder Questionário</button>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Liberação</span>'}
+                                ${assessmentActionHtml}
                             </div>
                         </div>
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
