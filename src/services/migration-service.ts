@@ -89,6 +89,59 @@ const CONTROL_MAP_2013_TO_2022: Record<string, string[]> = {
   'NEW': ['A.5.7', 'A.5.23', 'A.5.30', 'A.7.4', 'A.8.9', 'A.8.10', 'A.8.11', 'A.8.12', 'A.8.16', 'A.8.23', 'A.8.28']
 };
 
+const CONTROL_MAP_27701_2019_TO_2025: Record<string, string[]> = {
+  // Clause 7 (2019 Controller) -> Table A.1 (2025 Controller)
+  '7.2.1': ['A.1.1'], '7.2.2': ['A.1.1'],
+  '7.2.3': ['A.1.2'],
+  '7.2.4': ['A.1.3'],
+  '7.3.1': ['A.1.4'], '7.3.2': ['A.1.4'], '7.3.3': ['A.1.4'],
+  '7.3.4': ['A.1.5'],
+  '7.3.5': ['A.1.6'],
+  '7.3.6': ['A.1.7'],
+  '7.3.7': ['A.1.8'],
+  '7.4.1': ['A.1.9'], '7.4.2': ['A.1.9'],
+  '7.4.3': ['A.1.10'], '7.4.4': ['A.1.10'],
+  '7.5.1': ['A.1.13'],
+
+  // Clause 8 (2019 Processor) -> Table A.2 (2025 Processor)
+  '8.2.1': ['A.2.1'],
+  '8.2.2': ['A.2.2'],
+  '8.2.3': ['A.2.3'],
+  '8.2.4': ['A.2.4'],
+  '8.2.5': ['A.2.5'],
+  '8.2.6': ['A.2.6'],
+  '8.3.1': ['A.2.7'],
+  '8.4.1': ['A.2.8'],
+  '8.4.2': ['A.2.9'],
+  '8.4.3': ['A.2.10'],
+  '8.5.1': ['A.2.12'],
+
+  // Clauses 5 & 6 (2019 Common) -> Table A.3 (2025 Common)
+  '5.2': ['A.3.1'], '5.3': ['A.3.2'], '5.4': ['A.3.3'],
+  '6.2.1.1': ['A.3.1'], '6.2.1.2': ['A.3.1'],
+  '6.3.1.1': ['A.3.4'],
+  '6.3.2.1': ['A.3.5'],
+  '6.3.2.2': ['A.3.6'],
+  '6.4.1.1': ['A.3.7'], '6.4.1.2': ['A.3.8'],
+  '6.5.1.1': ['A.3.10'], '6.5.1.2': ['A.3.11'],
+  '6.6.1.1': ['A.3.13'],
+  '6.7.1.1': ['A.3.14'], '6.7.1.2': ['A.3.15'],
+  '6.7.2.1': ['A.3.16'],
+  '6.8.1.1': ['A.3.19'],
+  '6.8.2.1': ['A.3.20'],
+  '6.8.3.1': ['A.3.22'],
+  '6.9.1.1': ['A.3.23'], '6.9.1.2': ['A.3.24'],
+  '6.10.1.1': ['A.3.26'],
+  '6.11.1.1': ['A.3.28'], '6.11.1.2': ['A.3.30'],
+  '6.12.1.1': ['A.3.34'], '6.12.1.2': ['A.3.35'],
+  '6.13.1.1': ['A.3.37'], '6.13.1.2': ['A.3.38'], '6.13.1.3': ['A.3.39'],
+  '6.14.1.1': ['A.3.40'],
+  '6.15.1.1': ['A.3.41'],
+
+  // Novos controles introduzidos na v2025
+  'NEW': ['A.1.18', 'A.1.20', 'A.2.14', 'A.2.15', 'A.3.33', 'A.3.36']
+};
+
 export interface MigrationResult {
   newSoA: Record<string, boolean>;
   gaps: string[];
@@ -122,6 +175,36 @@ export class MigrationService {
     });
 
     const transformationRatio = Object.keys(newSoA).length / 93;
+
+    return { newSoA, gaps, transformationRatio };
+  }
+
+  /**
+   * Migra um Statement of Applicability do ISO 27701:2019 para a v2025
+   */
+  static migrateSoA27701(oldSoA: Record<string, boolean>): MigrationResult {
+    const newSoA: Record<string, boolean> = {};
+    const gaps: string[] = [];
+
+    // Mapeia controles antigos para novos
+    for (const [oldId, isApplicable] of Object.entries(oldSoA)) {
+      const targets = CONTROL_MAP_27701_2019_TO_2025[oldId];
+      if (targets) {
+        targets.forEach(newId => {
+          newSoA[newId] = isApplicable;
+        });
+      }
+    }
+
+    // Identifica novos controles que precisam de atenção
+    CONTROL_MAP_27701_2019_TO_2025['NEW'].forEach(newId => {
+      if (!(newId in newSoA)) {
+        newSoA[newId] = false;
+        gaps.push(newId);
+      }
+    });
+
+    const transformationRatio = Object.keys(newSoA).length / 78;
 
     return { newSoA, gaps, transformationRatio };
   }

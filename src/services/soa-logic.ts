@@ -30,6 +30,8 @@ interface Rule {
   condition: (a: DiscoveryAnswers) => boolean;
   justificationTrue: string;
   justificationFalse: string;
+  standard?: string;
+  role?: string;
 }
 
 // Helpers for common conditions
@@ -49,7 +51,7 @@ const byod = (a: DiscoveryAnswers) => a.hasBYOD;
 const multiCloud = (a: DiscoveryAnswers) => a.hasCloudMulti;
 const regulated = (a: DiscoveryAnswers) => ['finance', 'health', 'government'].includes(a.sector);
 
-const RULES: Rule[] = [
+const OLD_RULES: Rule[] = [
   // ═══════════════════════════════════════════════════════════════
   // A.5 Organizational Controls (37)
   // ═══════════════════════════════════════════════════════════════
@@ -160,10 +162,110 @@ const RULES: Rule[] = [
   { controlId: 'A.8.34', title: 'Protection of information systems during audit testing', condition: always, justificationTrue: 'Audit testing safeguards are universal.', justificationFalse: '' },
 ];
 
+const PIMS_RULES: Rule[] = [
+  // Table A.1 - PII Controller Controls (20 controls)
+  { controlId: 'A.1.1', title: 'Identify lawful basis and processing purposes', condition: always, justificationTrue: 'Legal basis identification is mandatory for Controllers.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.2', title: 'Obtaining and recording consent', condition: pii, justificationTrue: 'Consent records are required when processing PII.', justificationFalse: 'No PII processing requiring consent.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.3', title: 'Privacy notice transparency and details', condition: always, justificationTrue: 'Notice of privacy practices is required for transparency.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.4', title: 'PII Principal rights handling', condition: pii, justificationTrue: 'Rights of access, correction, and erasure must be supported.', justificationFalse: 'No direct PII principal rights to handle.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.5', title: 'Privacy by design and default', condition: always, justificationTrue: 'Privacy engineering is required for systems design.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.6', title: 'Data minimization and retention limits', condition: always, justificationTrue: 'Retention limit enforcement is required.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.7', title: 'Data accuracy and quality assurance', condition: always, justificationTrue: 'PII accuracy must be maintained.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.8', title: 'Privacy impact assessment (PIA/DPIA)', condition: pii, justificationTrue: 'DPIA required for processing activities.', justificationFalse: 'No high-risk PII processing requiring DPIA.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.9', title: 'Transfer of PII across jurisdictions', condition: cloud, justificationTrue: 'Cloud data transfers involve cross-border compliance.', justificationFalse: 'No international PII transfers.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.10', title: 'Sharing PII with third parties', condition: thirdParty, justificationTrue: 'PII shared with third-party suppliers.', justificationFalse: 'No PII sharing with third parties.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.11', title: 'PII principal feedback mechanisms', condition: pii, justificationTrue: 'Complaints and feedback handling for principals.', justificationFalse: 'No direct principal feedback interface.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.12', title: 'Automated decision-making limitations', condition: dev, justificationTrue: 'Automated processing rules apply to software systems.', justificationFalse: 'No automated decision-making.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.13', title: 'Privacy officer appointment', condition: always, justificationTrue: 'DPO/Privacy manager assignment is required.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.14', title: 'PII disclosure to authorities', condition: always, justificationTrue: 'Procedures for legal disclosures of PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.15', title: 'PII principal notification of breach', condition: always, justificationTrue: 'Breach notification procedures for principals.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.16', title: 'PII controller accountability records', condition: always, justificationTrue: 'Accountability documentation is mandatory.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.17', title: 'PII security by design requirements', condition: always, justificationTrue: 'Security requirements in project management.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.18', title: 'PII minimization in testing', condition: dev, justificationTrue: 'Use of masked data in test environments.', justificationFalse: 'No test environments processing PII.', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.19', title: 'PII retention policies', condition: always, justificationTrue: 'Retention rules for all controller records.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+  { controlId: 'A.1.20', title: 'PII de-identification and anonymization', condition: always, justificationTrue: 'Anonymization techniques for archival data.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Controller' },
+
+  // Table A.2 - PII Processor Controls (15 controls)
+  { controlId: 'A.2.1', title: 'Customer agreement compliance', condition: always, justificationTrue: 'Mandatory for PII Processors under customer contracts.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.2', title: 'Limitation of PII processing purpose', condition: always, justificationTrue: 'Processing restricted to customer instructions.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.3', title: 'Subcontractor authorization and agreements', condition: thirdParty, justificationTrue: 'Sub-processors require customer authorization.', justificationFalse: 'No sub-processors used.', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.4', title: 'Assistance with PII principal rights', condition: always, justificationTrue: 'Assisting Controller in resolving principal requests.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.5', title: 'PII incident notification to Controller', condition: always, justificationTrue: 'Immediate notification of breaches to Controller.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.6', title: 'Assistance with DPIAs', condition: always, justificationTrue: 'Assisting Controller with impact assessments.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.7', title: 'PII return or deletion at end of service', condition: always, justificationTrue: 'Obligation to delete or return PII post-contract.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.8', title: 'PII transmission and transport security', condition: always, justificationTrue: 'Secure transport of customer PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.9', title: 'PII access control for processor staff', condition: always, justificationTrue: 'Staff access to customer PII restricted.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.10', title: 'Record of processing activities for processors', condition: always, justificationTrue: 'Processor ROPA maintenance.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.11', title: 'Sub-processor tracking and audits', condition: thirdParty, justificationTrue: 'Oversight of sub-processors required.', justificationFalse: 'No sub-processors to audit.', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.12', title: 'PII disclosure request procedures', condition: always, justificationTrue: 'Handling statutory requests for customer PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.13', title: 'Assistance with compliance audits', condition: always, justificationTrue: 'Supporting Controller audits of the PIMS.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.14', title: 'PII temporary storage and caching', condition: always, justificationTrue: 'Secure caching and temp file policies.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+  { controlId: 'A.2.15', title: 'Processor security accountability', condition: always, justificationTrue: 'Demonstrated security posture to Controllers.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Processor' },
+
+  // Table A.3 - Common Privacy and Security Controls (43 controls)
+  { controlId: 'A.3.1', title: 'PIMS policies and objectives', condition: always, justificationTrue: 'PIMS policies and objectives must be documented.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.2', title: 'PIMS roles and responsibilities', condition: always, justificationTrue: 'Clear assignment of PIMS duties.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.3', title: 'Segregation of duties for PII', condition: always, justificationTrue: 'Prevents unauthorized access to PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.4', title: 'PII awareness and training', condition: always, justificationTrue: 'Staff training on privacy and PII handling.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.5', title: 'Confidentiality agreements for PIMS', condition: always, justificationTrue: 'NDAs covering PII processing.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.6', title: 'Disciplinary process for privacy breaches', condition: always, justificationTrue: 'Enforcement of privacy policy compliance.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.7', title: 'PIMS asset inventory', condition: always, justificationTrue: 'Inventory of PII assets and databases.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.8', title: 'PII classification and tagging', condition: always, justificationTrue: 'Identifying PII classification levels.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.9', title: 'Acceptable use of PII assets', condition: always, justificationTrue: 'Acceptable use rules for database access.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.10', title: 'Access control for PII databases', condition: always, justificationTrue: 'Logical access controls for databases.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.11', title: 'Identity and authentication for PII', condition: always, justificationTrue: 'MFA and password controls for PII access.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.12', title: 'Privileged access rights to PII', condition: always, justificationTrue: 'Restricting DBA and admin access to PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.13', title: 'Use of cryptography for PII', condition: always, justificationTrue: 'Encryption of PII at rest and in transit.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.14', title: 'Physical security of PII locations', condition: physical, justificationTrue: 'Physical protection for on-premise PII.', justificationFalse: 'No physical premises containing PII.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.15', title: 'Secure areas for PII processing', condition: physical, justificationTrue: 'Premises access controls for PII rooms.', justificationFalse: 'No physical secure areas.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.16', title: 'Clear desk and clear screen for PII', condition: always, justificationTrue: 'Preventing shoulder surfing of PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.17', title: 'PII storage media security', condition: always, justificationTrue: 'Safe disposal of media containing PII.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.18', title: 'Capacity management for PIMS', condition: always, justificationTrue: 'Ensuring database storage availability.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.19', title: 'Malware protection on PII endpoints', condition: always, justificationTrue: 'Antivirus and EDR on PII processing endpoints.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.20', title: 'Vulnerability management for PIMS', condition: always, justificationTrue: 'Scanning databases and PIMS servers.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.21', title: 'Configuration management for databases', condition: always, justificationTrue: 'Hardening profiles for DBMS.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.22', title: 'PII backup and recovery', condition: always, justificationTrue: 'Redundant backups for PII availability.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.23', title: 'Logging of PII database access', condition: always, justificationTrue: 'Query logs and access auditing.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.24', title: 'Monitoring of PII access events', condition: always, justificationTrue: 'SOC monitoring for PII access anomalies.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.25', title: 'Clock synchronization for PIMS', condition: always, justificationTrue: 'Ensuring log timestamp integrity.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.26', title: 'Network security for PII transfer', condition: always, justificationTrue: 'TLS and VPN requirements.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.27', title: 'Segregation of PII networks', condition: (a) => critical(a) || payments(a), justificationTrue: 'Network isolation for database zones.', justificationFalse: 'No network isolation requirement identified.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.28', title: 'Secure development for PIMS', condition: dev, justificationTrue: 'Privacy requirements in development.', justificationFalse: 'No software development activities.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.29', title: 'Web application security for PII', condition: webApps, justificationTrue: 'WAF and security tests for customer portals.', justificationFalse: 'No web applications processing PII.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.30', title: 'Secure coding for privacy', condition: dev, justificationTrue: 'Prevention of OWASP Top 10 vulnerabilities.', justificationFalse: 'No coding activities.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.31', title: 'Separation of PII environments', condition: dev, justificationTrue: 'Production database isolation.', justificationFalse: 'No development environments.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.32', title: 'Change management for PIMS', condition: always, justificationTrue: 'Database schema change controls.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.33', title: 'Test data privacy', condition: dev, justificationTrue: 'Masking customer PII in test environments.', justificationFalse: 'No test environments processing PII.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.34', title: 'Supplier relationship policies for PIMS', condition: thirdParty, justificationTrue: 'Supplier evaluations for privacy.', justificationFalse: 'No supplier relationships.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.35', title: 'Supplier agreements for PII', condition: thirdParty, justificationTrue: 'PIMS requirements in contracts.', justificationFalse: 'No supplier contracts.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.36', title: 'Sub-processor security monitoring', condition: thirdParty, justificationTrue: 'Auditing supplier compliance.', justificationFalse: 'No supplier services to monitor.', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.37', title: 'PII breach incident management planning', condition: always, justificationTrue: 'Incident plan covering PII leakage.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.38', title: 'Triage and assessment of privacy events', condition: always, justificationTrue: 'Privacy breach assessment rules.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.39', title: 'Response to PII breaches', condition: always, justificationTrue: 'Regulatory/customer notification workflow.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.40', title: 'Disaster recovery for PIMS', condition: always, justificationTrue: 'PIMS recovery time objectives (RTO).', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.41', title: 'Legal and regulatory PIMS compliance', condition: always, justificationTrue: 'General legal compliance review.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.42', title: 'Independent PIMS audits', condition: always, justificationTrue: 'Independent review of privacy controls.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' },
+  { controlId: 'A.3.43', title: 'Documented operating procedures for PIMS', condition: always, justificationTrue: 'Written procedures for database admins.', justificationFalse: '', standard: 'ISO 27701:2025', role: 'Both' }
+];
+
+const RULES: Rule[] = [
+  ...OLD_RULES.map(r => ({ ...r, standard: 'ISO 27001:2022' })),
+  ...PIMS_RULES
+];
+
 export class SoALogicEngine {
-  /** Dedução inteligente de aplicabilidade baseada no Assessment */
-  static generateDraftSoA(answers: DiscoveryAnswers): SoADecision[] {
-    return RULES.map((r) => {
+  /** Dedução inteligente de aplicabilidade baseada no Assessment e Standard/Role */
+  static generateDraftSoA(answers: DiscoveryAnswers, standard: string = 'ISO 27001:2022', orgRole: string = 'Both'): SoADecision[] {
+    const rules = RULES.filter(r => {
+      if (r.standard !== standard) return false;
+      if (standard === 'ISO 27701:2025') {
+        if (r.role === 'Controller' && orgRole === 'Processor') return false;
+        if (r.role === 'Processor' && orgRole === 'Controller') return false;
+      }
+      return true;
+    });
+
+    return rules.map((r) => {
       const applicable = r.condition(answers);
       return {
         controlId: r.controlId,

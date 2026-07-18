@@ -41,4 +41,22 @@ describe('SoA Logic Engine', () => {
     const devControl = result.find(r => r.controlId === 'A.8.25');
     expect(devControl?.isApplicable).toBe(true);
   });
+
+  it('should generate ISO 27701:2025 controls filtering by Controller role', () => {
+    const answers = { ...baseAnswers, processesPII: true };
+    const result = SoALogicEngine.generateDraftSoA(answers, 'ISO 27701:2025', 'Controller');
+    const controllerControl = result.find(r => r.controlId === 'A.1.1');
+    expect(controllerControl).toBeDefined();
+    const processorControl = result.find(r => r.controlId === 'A.2.1');
+    expect(processorControl).toBeUndefined();
+  });
+
+  it('should generate ISO 27701:2025 controls filtering by Processor role', () => {
+    const answers = { ...baseAnswers, processesPII: true };
+    const result = SoALogicEngine.generateDraftSoA(answers, 'ISO 27701:2025', 'Processor');
+    const controllerControl = result.find(r => r.controlId === 'A.1.1');
+    expect(controllerControl).toBeUndefined();
+    const processorControl = result.find(r => r.controlId === 'A.2.1');
+    expect(processorControl).toBeDefined();
+  });
 });

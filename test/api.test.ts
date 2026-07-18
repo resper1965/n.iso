@@ -147,6 +147,36 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(deleteResponse.status).toBe(200);
     });
 
+    it('should allow platform_admin to create new users', async () => {
+      const request = new Request('http://localhost/api/v1/users', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer admin-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'newuser@example.com', password: 'password123', name: 'New User', role: 'org_admin', client_project_id: '123' })
+      });
+
+      const envWithSession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'platform_admin' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, envWithSession);
+      expect(response.status).toBe(201);
+      const data = await response.json() as any;
+      expect(data).toHaveProperty('id');
+      expect(data.email).toBe('newuser@example.com');
+      expect(data.role).toBe('org_admin');
+    });
+
     it('should enforce read-only role (org_user) to block write but allow checklist-progress and evidence upload', async () => {
       const blockRequest = new Request('http://localhost/api/v1/projects/123/risks', {
         method: 'POST',
@@ -183,6 +213,56 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(allowResponse.status).not.toBe(403);
     });
 
+    it('should handle project assets CRUD scoping correctly', async () => {
+      // 1. Create asset under own project
+      const createRequest = new Request('http://localhost/api/v1/projects/123/assets', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer client-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Database RDS', category: 'Software', classification: 'Confidential', owner: 'DevOps', location: 'AWS', status: 'Active' })
+      });
+
+      // 2. Access assets list
+      const getRequest = new Request('http://localhost/api/v1/projects/123/assets', {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+
+      // 3. Block access to another project assets list
+      const getOtherRequest = new Request('http://localhost/api/v1/projects/999/assets', {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+
+      const dbMock = {
+        ...mockEnv.DB,
+        prepare: vi.fn().mockReturnThis(),
+        bind: vi.fn().mockReturnThis(),
+        all: vi.fn().mockResolvedValue({ results: [{ id: 'a1', name: 'Database RDS' }] }),
+        run: vi.fn().mockResolvedValue({ success: true })
+      };
+
+      const env = {
+        ...mockEnv,
+        DB: dbMock,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: '123' }))
+        }
+      };
+
+      // @ts-ignore
+      const createRes = await worker.fetch(createRequest, env);
+      expect(createRes.status).toBe(201);
+
+      // @ts-ignore
+      const getRes = await worker.fetch(getRequest, env);
+      expect(getRes.status).toBe(200);
+
+      // @ts-ignore
+      const getOtherRes = await worker.fetch(getOtherRequest, env);
+      expect(getOtherRes.status).toBe(403);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }
@@ -204,6 +284,203 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       // @ts-ignore
       const response = await worker.fetch(request, envWithLegacySession);
       expect(response.status).toBe(200);
+    });
+  });
+
+  describe('RBAC and Scoping checks', () => {
+    it('should restrict project listing for client role to their bound project', async () => {
+      const request = new Request('http://localhost/api/v1/projects', {
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+      
+      const firstMock = vi.fn().mockResolvedValue({ id: '123', client_name: 'Client Proj' });
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: firstMock
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toHaveLength(1);
+      expect(data[0].id).toBe('123');
+      expect(firstMock).toHaveBeenCalled();
+    });
+
+    it('should restrict controls listing for client role to their bound project', async () => {
+      const request = new Request('http://localhost/api/v1/controls', {
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+
+      const allMock = vi.fn().mockResolvedValue({ results: [{ id: 'ctrl_1', project_id: '123' }] });
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: allMock
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toHaveLength(1);
+      expect(data[0].project_id).toBe('123');
+    });
+
+    it('should block client access to other project evidence detail', async () => {
+      const request = new Request('http://localhost/api/v1/evidence/evidence_other/detail', {
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'evidence_other', project_id: '456' })
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(403);
+    });
+
+    it('should block client access to other project control maturity update', async () => {
+      const request = new Request('http://localhost/api/v1/controls/ctrl_other/maturity', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer client-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maturity: 3 })
+      });
+
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'ctrl_other', project_id: '456' })
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(403);
+    });
+
+    it('should block client access to global platform-wide dashboard', async () => {
+      const request = new Request('http://localhost/api/v1/dashboard', {
+        headers: { 'Authorization': 'Bearer client-token' }
+      });
+
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe('Password Recovery flow', () => {
+    it('should generate a recovery token when email exists', async () => {
+      const request = new Request('http://localhost/api/v1/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'test@example.com' })
+      });
+
+      const dbMock = {
+        ...mockEnv.DB,
+        first: vi.fn().mockResolvedValue({ id: 'u_test', email: 'test@example.com' })
+      };
+
+      const putSpy = vi.fn();
+      const sessionsMock = {
+        ...mockEnv.SESSIONS,
+        put: putSpy
+      };
+
+      const env = {
+        ...mockEnv,
+        DB: dbMock,
+        SESSIONS: sessionsMock,
+        ENVIRONMENT: 'development'
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data).toHaveProperty('ok', true);
+      expect(data).toHaveProperty('reset_token');
+      expect(putSpy).toHaveBeenCalled();
+    });
+
+    it('should reset password with valid token', async () => {
+      const request = new Request('http://localhost/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'recovery-token-123', newPassword: 'newPassword123' })
+      });
+
+      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ email: 'test@example.com' }));
+      const deleteSpy = vi.fn();
+      const runSpy = vi.fn().mockResolvedValue({ success: true });
+
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: getSpy,
+          delete: deleteSpy
+        },
+        DB: {
+          ...mockEnv.DB,
+          run: runSpy
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data).toHaveProperty('ok', true);
+      expect(getSpy).toHaveBeenCalledWith('reset_token:recovery-token-123');
+      expect(runSpy).toHaveBeenCalled();
+      expect(deleteSpy).toHaveBeenCalledWith('reset_token:recovery-token-123');
     });
   });
 });

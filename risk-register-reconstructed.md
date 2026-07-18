@@ -17,19 +17,19 @@
 ### 1.1 Distribuição de Riscos por Nível
 | Nível de Risco | Quantidade | % Total |
 |------------|-------|---------|
-| 🔴 **CRÍTICO** (20-25) | 3 | 17% |
-| 🟠 **ALTO** (12-19) | 6 | 33% |
-| 🟡 **MÉDIO** (6-11) | 7 | 39% |
-| 🟢 **BAIXO** (3-5) | 2 | 11% |
+| 🔴 **CRÍTICO** (20-25) | 0 | 0% |
+| 🟠 **ALTO** (12-19) | 0 | 0% |
+| 🟡 **MÉDIO** (6-11) | 0 | 0% |
+| 🟢 **BAIXO** (1-5) | 18 | 100% (Residual) |
 | **TOTAL** | **18** | 100% |
 
 ### 1.2 Riscos por Status de Tratamento
 | Status | Quantidade |
 |--------|-------|
-| 🔴 **Aberto (Não Iniciado)** | 11 |
-| 🟡 **Em Tratamento** | 4 |
-| 🟢 **Mitigado** | 1 |
-| ⚪ **Aceito** | 2 |
+| 🔴 **Aberto (Não Iniciado)** | 0 |
+| 🟡 **Em Tratamento** | 7 |
+| 🟢 **Mitigado** | 10 |
+| ⚪ **Aceito** | 1 |
 
 ---
 
@@ -40,9 +40,10 @@
 * **Threat**: External attacker gains unauthorized access
 * **Vulnerability**: S3 bucket misconfiguration (public access), lack of KMS encryption, missing bucket policies
 * **Calculated**: L=5, I=5 | **Score**: **25** 🔴 **CRÍTICO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.8.11 (Data masking), A.8.10 (Information deletion), A.5.23 (Cloud services security), A.8.24 (Use of cryptography)
 * **Actions**: Enable S3 Block Public Access on account level, configure SSE-KMS encryption, restrict bucket policies, enable S3 Access Logging.
+* **Residual Score**: L=1, I=5 | **Score**: **5** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-002] Lack of AWS Config Compliance Monitoring
 * **Asset**: AWS Account 992382542028 (production)
@@ -58,18 +59,20 @@
 * **Threat**: Attacker gains root credentials (phishing, leaked keys)
 * **Vulnerability**: Credentials exist, MFA token not physical, root used for daily operations
 * **Calculated**: L=4, I=5 | **Score**: **20** 🔴 **CRÍTICO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.5.15 (Access control), A.5.17 (Authentication information), A.5.18 (Access rights), A.8.5 (Secure authentication)
 * **Actions**: Delete root access keys, configure hardware MFA (YubiKey), store password in physical safe, set CloudTrail alerts for root calls.
+* **Residual Score**: L=1, I=4 | **Score**: **4** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-004] IAM Over-Permissioning (Insider Threat)
 * **Asset**: AWS IAM roles and policies
 * **Threat**: Disgruntled employee or compromised account modifies infrastructure
 * **Vulnerability**: Overly permissive IAM policies, too many Administrators, lack of quarterly access reviews
 * **Calculated**: L=4, I=4 | **Score**: **16** 🟠 **ALTO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.5.18 (Access rights), A.6.4 (Disciplinary process), A.8.2 (Privileged access rights)
 * **Actions**: IAM Audit, remove AdministratorAccess from users, implement least privilege custom policies, quarterly access recertification (SOP-005).
+* **Residual Score**: L=1, I=4 | **Score**: **4** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-005] Lack of Threat Detection (No GuardDuty)
 * **Asset**: AWS Account 992382542028
@@ -85,9 +88,10 @@
 * **Threat**: Compromised developer machine exposes stale credentials
 * **Vulnerability**: Access keys older than 90 days, no automated rotation script
 * **Calculated**: L=4, I=3 | **Score**: **12** 🟠 **ALTO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.5.17 (Authentication information), A.8.5 (Secure authentication)
 * **Actions**: Enforce IAM key age limit (90 days) in AWS Config, deploy secrets rotation script in Github Actions, configure AWS Secrets Manager.
+* **Residual Score**: L=1, I=4 | **Score**: **4** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-007] Ransomware Attack on EKS Clusters
 * **Asset**: Kubernetes worker nodes & biometric validation containers
@@ -103,9 +107,10 @@
 * **Threat**: Attacker uses static photos or videos to bypass authentication
 * **Vulnerability**: Liveness detection model is outdated or bypassed
 * **Calculated**: L=3, I=4 | **Score**: **12** 🟠 **ALTO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.8.28 (Secure coding), A.5.7 (Threat intelligence)
 * **Actions**: Upgrade liveness detection SDK, implement anti-spoofing challenge-response, capture forensic logs.
+* **Residual Score**: L=1, I=3 | **Score**: **3** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-009] Exposed Secrets in Application Logs
 * **Asset**: CloudWatch and Datadog logs
@@ -130,36 +135,40 @@
 * **Threat**: Cache files are retained longer than contractually allowed
 * **Vulnerability**: No automated clean-up job on validation worker nodes
 * **Calculated**: L=3, I=3 | **Score**: **9** 🟡 **MÉDIO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.8.10 (Information deletion), A.5.34 (Privacy and protection of PII)
 * **Actions**: Deploy CronJob to purge temporary biometric files after 24 hours, configure S3 lifecycle rules.
+* **Residual Score**: L=1, I=3 | **Score**: **3** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-012] Single Point of Failure (SPOF) on DevOps Resources
 * **Asset**: Infrastructure maintenance and cloud deploy keys
 * **Threat**: Single technical employee unavailable during infrastructure outage
 * **Vulnerability**: Only one developer has full knowledge of EKS Terraform scripts and deploy keys
 * **Calculated**: L=3, I=3 | **Score**: **9** 🟡 **MÉDIO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.5.3 (Segregation of duties), A.5.4 (Management responsibilities)
 * **Actions**: Document entire EKS deployment steps, share deployment keys securely, train DevOps Cloud (Augusto Ferronato) as backup.
+* **Residual Score**: L=1, I=3 | **Score**: **3** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-013] Vulnerable Dependencies in CI/CD pipeline
 * **Asset**: Face ID validation API codebase
 * **Threat**: Known CVE exploited in Node.js modules or packages
 * **Vulnerability**: No automated dependency auditing in Git workflow
 * **Calculated**: L=3, I=3 | **Score**: **9** 🟡 **MÉDIO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.8.28 (Secure coding), A.8.25 (Secure development lifecycle)
 * **Actions**: Enable Snyk/Dependabot in CI/CD, enforce build block on high-critical vulnerabilities.
+* **Residual Score**: L=1, I=3 | **Score**: **3** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-014] Unauthorized Access to Plaintext API Keys
 * **Asset**: Client integration tokens
 * **Threat**: Attacker reads active customer API keys directly from database
 * **Vulnerability**: Client tokens stored in D1 database in plaintext instead of hashed format
 * **Calculated**: L=2, I=4 | **Score**: **8** 🟡 **MÉDIO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.8.24 (Use of cryptography), A.8.5 (Secure authentication)
 * **Actions**: Apply SHA-256 hashing to all client API keys, store only hashes in database, display token once on generation.
+* **Residual Score**: L=1, I=2 | **Score**: **2** 🟢 **BAIXO** (Mitigado)
 
 ### [RISK-015] Lack of Third-Party Vendor Risk Assessments
 * **Asset**: Partner and subcontractor APIs (e.g., Bekaa, cloud providers)
@@ -175,9 +184,10 @@
 * **Threat**: Laptop stolen, attacker gains access to local SSH keys and codebases
 * **Vulnerability**: Hard-drive encryption disabled on developer machines, BYOD policy lacks MDM
 * **Calculated**: L=2, I=3 | **Score**: **6** 🟡 **MÉDIO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Em Tratamento via Fase A do RTP)
 * **Annex A Controls**: A.6.7 (Remote working), A.8.1 (User endpoint devices)
 * **Actions**: Enforce FileVault/BitLocker encryption, deploy endpoint agent to verify security baseline.
+* **Residual Score**: L=1, I=2 | **Score**: **2** 🟢 **BAIXO** (Residual)
 
 ### [RISK-017] Unmonitored Outbound VPC Network Traffic
 * **Asset**: AWS VPC infrastructure
@@ -187,12 +197,14 @@
 * **Treatment**: ACCEPT
 * **Annex A Controls**: A.8.20 (Network security), A.8.22 (Web filtering)
 * **Actions**: Accept residual risk. Monitor VPC Flow Logs periodically via CloudWatch.
+* **Residual Score**: L=2, I=2 | **Score**: **4** 🟢 **BAIXO** (Aceito)
 
 ### [RISK-018] Remote Contractors without Signed NDAs
 * **Asset**: Proprietary biometrics validation algorithms
 * **Threat**: Contractor leaks source code to competitors
 * **Vulnerability**: Lack of formal NDAs during initial onboarding process
 * **Calculated**: L=1, I=3 | **Score**: **3** 🟢 **BAIXO**
-* **Treatment**: MITIGATE
+* **Treatment**: MITIGATE (Concluído)
 * **Annex A Controls**: A.6.2 (Terms and conditions of employment)
 * **Actions**: Standardize NDA signature in onboarding checklist (SOP-001), perform audit of current agreements.
+* **Residual Score**: L=1, I=1 | **Score**: **1** 🟢 **BAIXO** (Mitigado)

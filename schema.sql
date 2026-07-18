@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS projects (
     org_role TEXT NOT NULL,
     status TEXT DEFAULT 'Active',
     assessment_id TEXT,
+    cnpj TEXT,
+    employee_count INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -271,6 +273,9 @@ CREATE TABLE IF NOT EXISTS assets (
     owner TEXT,
     location TEXT, -- ex: AWS S3, local, etc.
     status TEXT DEFAULT 'Active',
+    confidentiality_rating INTEGER DEFAULT 3,
+    integrity_rating INTEGER DEFAULT 3,
+    availability_rating INTEGER DEFAULT 3,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -322,6 +327,14 @@ CREATE TABLE IF NOT EXISTS vendors (
     last_assessment_date TEXT,
     notes TEXT,
     status TEXT DEFAULT 'Active',
+    has_mfa INTEGER DEFAULT 0,
+    has_encryption INTEGER DEFAULT 0,
+    has_backup INTEGER DEFAULT 0,
+    has_incident_plan INTEGER DEFAULT 0,
+    has_pentest INTEGER DEFAULT 0,
+    trust_center_url TEXT,
+    dpa_url TEXT,
+    attached_certifications TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -333,6 +346,7 @@ CREATE TABLE IF NOT EXISTS training_records (
     completion_date TEXT,
     score INTEGER,
     status TEXT DEFAULT 'Pending',
+    evidence_file TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -351,6 +365,8 @@ CREATE TABLE IF NOT EXISTS ropa_records (
     data_categories TEXT,
     data_subjects TEXT,
     legal_basis TEXT,
+    consent_details TEXT,
+    data_subject_rights_details TEXT,
     retention_period TEXT,
     recipients TEXT,
     international_transfers INTEGER DEFAULT 0,
@@ -614,6 +630,9 @@ CREATE TABLE IF NOT EXISTS assets (
   location TEXT,
   status TEXT DEFAULT 'Active',
   description TEXT,
+  confidentiality_rating INTEGER DEFAULT 3,
+  integrity_rating INTEGER DEFAULT 3,
+  availability_rating INTEGER DEFAULT 3,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -645,3 +664,33 @@ CREATE TABLE IF NOT EXISTS policy_acknowledgments (
   user_agent TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_acknowledgments_project ON policy_acknowledgments(project_id);
+
+CREATE TABLE IF NOT EXISTS dpia_assessments (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    system_name TEXT NOT NULL,
+    data_flow_description TEXT,
+    data_subjects_types TEXT,
+    personal_data_categories TEXT,
+    necessity_proportionality TEXT,
+    risks_identified TEXT,
+    mitigation_measures TEXT,
+    dpo_opinion TEXT,
+    dpo_signature TEXT,
+    ceo_signature TEXT,
+    status TEXT DEFAULT 'Draft', -- Draft, Under Review, Approved
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dpia_project ON dpia_assessments(project_id);
+
+CREATE TABLE IF NOT EXISTS project_governance (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    email TEXT,
+    role_category TEXT NOT NULL, -- 'consultor', 'executivo', 'tech', 'operacoes'
+    job_title TEXT NOT NULL,     -- 'CEO', 'CTO', 'CISO', 'DPO', etc.
+    is_primary INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_project_governance_project ON project_governance(project_id);
