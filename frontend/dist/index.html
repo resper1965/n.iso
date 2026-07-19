@@ -4424,8 +4424,8 @@
                                                                         ${(!isChecked && item.category === 'document') ? `
                                                                             <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
                                                                         ` : ''}
-                                                                        ${(!isChecked && item.id === 'p2_2') ? `
-                                                                            <button class="btn-inline-action primary" onclick="openInterviewWizard('${p.id}'); event.stopPropagation()">Conduzir Entrevistas</button>
+                                                                        ${(item.id === 'p2_2') ? `
+                                                                            <button class="btn-inline-action primary" onclick="openInterviewWizard('${p.id}'); event.stopPropagation()">${isChecked ? 'Ver Entrevistas' : 'Conduzir Entrevistas'}</button>
                                                                         ` : ''}
                                                                         <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
                                                                     </div>
