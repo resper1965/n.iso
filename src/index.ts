@@ -2988,6 +2988,21 @@ app.post('/api/v1/projects/:id/generate-document', async (c) => {
       .map(([k, v]) => `${k}: ${v}`)
       .join('\n');
 
+    // ponytail: load answers from project_interviews to feed into the prompt context for p2_3 and p2_4
+    let interviewsSummary = '';
+    if (itemId === 'p2_3' || itemId === 'p2_4') {
+      try {
+        const { results: interviews } = await c.env.DB.prepare(
+          'SELECT track, question, answer, interviewee, gap_detected FROM project_interviews WHERE project_id = ?'
+        ).bind(projectId).all<any>();
+        if (interviews && interviews.length > 0) {
+          interviewsSummary = '\nRESPOSTAS DAS ENTREVISTAS POR TRILHA:\n' + interviews.map((i: any) => 
+            `[Trilha: ${i.track}] P: ${i.question} | R: ${i.answer} (Entrevistado: ${i.interviewee || 'N/A'}) | ${i.gap_detected ? '⚠️ LACUNA DETECTADA' : '✅ CONFORME'}`
+          ).join('\n') + '\n';
+        }
+      } catch(e) { /* ignore database error */ }
+    }
+
     // ponytail: RAG context for richer generation
     let ragContext = '';
     try {
@@ -3000,6 +3015,8 @@ app.post('/api/v1/projects/:id/generate-document', async (c) => {
 
 DADOS FORNECIDOS PELO USUÁRIO:
 ${fieldsSummary}
+
+${interviewsSummary ? '\nDADOS COLETADOS NAS ENTREVISTAS POR TRILHA:\n' + interviewsSummary + '\n' : ''}
 
 ${ragContext ? 'CONTEXTO ADICIONAL DA ORGANIZAÇÃO:\n' + ragContext + '\n' : ''}
 

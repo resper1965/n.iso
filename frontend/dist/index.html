@@ -2020,6 +2020,209 @@
         }
     };
 
+    // ═══════════════════════════════════════════════════════════════
+    //  INTERVIEWS BY TRACK (FASE 2 - p2_2)
+    // ═══════════════════════════════════════════════════════════════
+
+    window.openInterviewWizard = function(projectId) {
+        const tracks = [
+            { id: 'executiva', name: 'Executiva' },
+            { id: 'tecnologia', name: 'Tecnologia' },
+            { id: 'juridico', name: 'Jurídico' },
+            { id: 'rh', name: 'Recursos Humanos' },
+            { id: 'operacoes', name: 'Operações' }
+        ];
+
+        // Ensure track progress state initialized
+        if (!S.interviewProgress) S.interviewProgress = {};
+
+        const sidebarHtml = tracks.map(t => {
+            const isDone = S.interviewProgress[projectId + '_' + t.id];
+            const check = isDone ? '<span style="color:var(--success); font-weight:bold; margin-right:4px;">✓</span>' : '';
+            return `<div class="wizard-sidebar-item" id="track-tab-${t.id}" onclick="changeInterviewTrack('${projectId}', '${t.id}')" style="padding: 10px 12px; font-size: 0.8rem; border-radius: 8px; cursor: pointer; color: var(--text-dim); transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between;">
+                <span>${check}${t.name}</span>
+            </div>`;
+        }).join('');
+
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">Conduzir Entrevistas por Trilha (Mapeamento Inicial)</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+            </div>
+            <div style="padding: 1.25rem 0; display: flex; gap: 20px; min-height: 480px;">
+                <div style="width: 200px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--border); padding-right: 12px;">
+                    <div style="font-size: 0.65rem; color: var(--accent); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">Trilhas de Auditoria</div>
+                    ${sidebarHtml}
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding-left: 8px;">
+                    <div id="interview-questions-container" style="max-height: 400px; overflow-y: auto; padding-right: 8px;">
+                        <div class="empty-state">
+                            <h3>Selecione uma Trilha</h3>
+                            <p>Escolha uma trilha na barra lateral para iniciar a entrevista.</p>
+                        </div>
+                    </div>
+                    <div id="interview-actions-container" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
+                        <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Fechar</button>
+                        <div id="interview-buttons-right" style="display: flex; gap: 10px;"></div>
+                    </div>
+                </div>
+            </div>
+        `, 'modal-large');
+
+        // Automatically load first track
+        changeInterviewTrack(projectId, 'executiva');
+    };
+
+    window.changeInterviewTrack = async function(projectId, track) {
+        // Highlight active tab
+        document.querySelectorAll('.wizard-sidebar-item').forEach(el => {
+            el.style.background = 'none';
+            el.style.color = 'var(--text-dim)';
+            el.style.borderLeftColor = 'transparent';
+        });
+        const tabEl = document.getElementById('track-tab-' + track);
+        if (tabEl) {
+            tabEl.style.background = 'rgba(0,173,232,0.05)';
+            tabEl.style.color = 'var(--text)';
+            tabEl.style.borderLeftColor = 'var(--accent)';
+        }
+
+        const container = document.getElementById('interview-questions-container');
+        container.innerHTML = '<div style="text-align:center; padding:3rem; color:var(--text-dim);">Carregando perguntas...</div>';
+        document.getElementById('interview-buttons-right').innerHTML = '';
+
+        try {
+            const res = await api('GET', `/api/v1/projects/${projectId}/interviews/${track}`);
+            const qs = res.questions || [];
+
+            if (qs.length === 0) {
+                container.innerHTML = '<div class="empty-state"><h3>Sem perguntas</h3><p>Nenhuma pergunta cadastrada para esta trilha.</p></div>';
+                return;
+            }
+
+            // Save active track questions metadata globally in S
+            S.activeInterviewTrackQuestions = qs;
+
+            container.innerHTML = qs.map((q, idx) => {
+                const ans = q.answer || '';
+                const who = q.interviewee || '';
+                const gap = q.gap_detected === 1;
+
+                return `
+                    <div class="list-item" style="display: flex; flex-direction: column; gap: 10px; padding: 1.25rem; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); margin-bottom: 12px;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text); line-height: 1.4;">
+                            ${idx + 1}. ${escapeHTML(q.question)}
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
+                            <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 500;">Resposta / Constatação do Auditor</label>
+                            <textarea id="ans-${q.key}" class="form-input" style="width: 100%; min-height: 70px; font-size: 0.8rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); resize: vertical; font-family: inherit;" placeholder="Registre a resposta ou evidências coletadas...">${escapeHTML(ans)}</textarea>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: center; margin-top: 4px;">
+                            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 500;">Entrevistado (Nome / Cargo)</label>
+                                <input type="text" id="who-${q.key}" class="form-input" style="font-size: 0.8rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text);" value="${escapeHTML(who)}" placeholder="Ex: João CISO, Maria DevOps">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; padding-top: 16px;">
+                                <input type="checkbox" id="gap-${q.key}" ${gap ? 'checked' : ''} style="cursor: pointer;">
+                                <label for="gap-${q.key}" style="font-size: 0.75rem; color: #ff4d4d; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                    ⚠️ Lacuna Detectada
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Load buttons
+            const tracksList = ['executiva', 'tecnologia', 'juridico', 'rh', 'operacoes'];
+            const allSaved = tracksList.every(tId => S.interviewProgress[projectId + '_' + tId]);
+
+            let rightButtons = `<button class="btn btn-primary" onclick="saveInterviewTrack('${projectId}', '${track}', this)">Salvar Trilha</button>`;
+            if (allSaved) {
+                rightButtons += `<button class="btn btn-primary" onclick="completeInterviewsTask('${projectId}', this)" style="background: var(--success); border-color: var(--success)">Concluir e Registrar</button>`;
+            }
+
+            document.getElementById('interview-buttons-right').innerHTML = rightButtons;
+
+        } catch (e) {
+            container.innerHTML = `<div style="color:#ff4d4d; text-align:center; padding:3rem;">Erro ao carregar perguntas: ${escapeHTML(e.message)}</div>`;
+        }
+    };
+
+    window.saveInterviewTrack = async function(projectId, track, btnEl) {
+        const qs = S.activeInterviewTrackQuestions || [];
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Salvando...';
+
+        try {
+            // Post each question-answer sequentially
+            for (const q of qs) {
+                const answer = document.getElementById('ans-' + q.key).value.trim();
+                const interviewee = document.getElementById('who-' + q.key).value.trim();
+                const gap_detected = document.getElementById('gap-' + q.key).checked ? 1 : 0;
+
+                if (answer) {
+                    await api('POST', `/api/v1/projects/${projectId}/interviews`, {
+                        track,
+                        question: q.question,
+                        answer,
+                        interviewee,
+                        gap_detected
+                    });
+                }
+            }
+
+            showToast(`Trilha '${track.toUpperCase()}' salva com sucesso!`);
+            
+            // Mark progress
+            S.interviewProgress[projectId + '_' + track] = true;
+            localStorage.setItem('niso_interviewProgress', JSON.stringify(S.interviewProgress));
+
+            // Reload wizard modal to update tabs checkmarks and complete buttons
+            openInterviewWizard(projectId);
+            changeInterviewTrack(projectId, track);
+
+        } catch (e) {
+            showToast('Erro ao salvar respostas: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
+
+    window.completeInterviewsTask = async function(projectId, btnEl) {
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Concluindo...';
+
+        try {
+            const checkKey = `${projectId}_p2_2`;
+            S.phaseChecks[checkKey] = true;
+            localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
+
+            await api('PUT', `/api/v1/projects/${projectId}/checklist-progress`, {
+                items: [{
+                    phase_number: 2,
+                    item_id: 'p2_2',
+                    is_checked: true,
+                    notes: 'Entrevistas por trilha (Executiva, Tecnologia, Jurídico, RH, Operações) concluídas e registradas.',
+                    assigned_to: S.user ? S.user.id : null,
+                    due_date: null
+                }]
+            });
+
+            showToast('Entrevistas por trilha concluídas e checklist atualizado!');
+            forceCloseModal();
+            render();
+        } catch (e) {
+            showToast('Erro ao concluir tarefa: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
+
     const ISO_GUIDELINES = {
         'p0_1': { control: 'Cl 5.1', tip: 'Definir sponsor executivo', advice: 'O auditor vai buscar atas de reuniões ou nomeações formais assinadas pela diretoria definindo a liderança do SGSI.', evidence: 'Termo de Compromisso assinado ou Ata de Reunião Executiva.' },
         'p0_3': { control: 'Cl 7.4', tip: 'Ata do Kick-off', advice: 'A ata deve conter a pauta, lista de participantes assinada e a formalização das responsabilidades de segurança.', evidence: 'Ata de reunião em PDF ou Documento Interno com participantes.' },
@@ -3945,6 +4148,7 @@
     if (!S.phaseChecksNotes) S.phaseChecksNotes = JSON.parse(localStorage.getItem('niso_phaseChecksNotes') || '{}');
     if (!S.phaseChecksAssigned) S.phaseChecksAssigned = JSON.parse(localStorage.getItem('niso_phaseChecksAssigned') || '{}');
     if (!S.phaseChecksDueDate) S.phaseChecksDueDate = JSON.parse(localStorage.getItem('niso_phaseChecksDueDate') || '{}');
+    if (!S.interviewProgress) S.interviewProgress = JSON.parse(localStorage.getItem('niso_interviewProgress') || '{}');
 
     async function renderProjectDetail(c, h, a) {
         const p = S.currentProject || S.activeProject;
@@ -4201,7 +4405,8 @@
                                                                     <div class="checklist-left" style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
                                                                         <input type="checkbox" class="checklist-item-checkbox" 
                                                                             ${isChecked ? 'checked' : ''} 
-                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this)">
+                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this)"
+                                                                            ${(!isChecked && item.id === 'p2_2') ? 'disabled' : ''}>
                                                                         <span class="badge-cat ${item.category}">${item.category}</span>
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
                                                                         ${badgeHtml}
@@ -4218,6 +4423,9 @@
                                                                         ` : ''}
                                                                         ${(!isChecked && item.category === 'document') ? `
                                                                             <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
+                                                                        ` : ''}
+                                                                        ${(!isChecked && item.id === 'p2_2') ? `
+                                                                            <button class="btn-inline-action primary" onclick="openInterviewWizard('${p.id}'); event.stopPropagation()">Conduzir Entrevistas</button>
                                                                         ` : ''}
                                                                         <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
                                                                     </div>
