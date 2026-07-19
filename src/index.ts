@@ -2988,17 +2988,18 @@ app.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
       'Documento gerado internamente pelo assistente de IA.'
     ).run();
 
-    // Atualizar checklist_progress
+    // Atualizar checklist_progress (ponytail: ensure proper random UUID / PK generated for checklist_progress)
+    const userId = c.get('user')?.id ?? null;
     await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
+      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
        ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
          is_checked = 1,
          checked_by = EXCLUDED.checked_by,
          checked_at = CURRENT_TIMESTAMP,
          evidence_id = EXCLUDED.evidence_id,
          notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userEmail, evidenceId).run();
+    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
 
     await logAudit(c.env.DB, 'document.generated', userEmail, `Documento ${fileName} gerado internamente para o item ${itemId}`);
 
@@ -3019,6 +3020,11 @@ app.get('/api/v1/evidence/:id/content', async (c) => {
     const id = c.req.param('id');
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    // ponytail: check file type to prevent reading binary attachments as text
+    if (ev.file_type && !ev.file_type.startsWith('text/') && ev.file_type !== 'application/json') {
+      return c.json({ error: 'Este arquivo é um anexo binário e não pode ser editado como texto.' }, 400);
+    }
 
     const object = await c.env.STORAGE.get(ev.r2_key);
     if (!object) return c.json({ error: 'Conteúdo não encontrado no storage' }, 404);
