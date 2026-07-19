@@ -308,9 +308,31 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* --- NEW INTERACTIVE PROJECT PHASES & JOURNEYS --- */
-        .journey-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 1.25rem; overflow: hidden; backdrop-filter: var(--glass-blur); }
-        .journey-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; cursor: pointer; transition: background 0.2s; user-select: none; }
-        .journey-header:hover { background: rgba(255,255,255,0.02); }
+        .journey-card { 
+            background: rgba(255,255,255,0.02); 
+            border: 1px solid var(--border); 
+            border-radius: 16px; 
+            margin-bottom: 1.25rem; 
+            overflow: hidden; 
+            backdrop-filter: var(--glass-blur); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .journey-card:hover {
+            border-color: rgba(0, 173, 232, 0.25);
+            box-shadow: 0 8px 32px rgba(0, 173, 232, 0.04);
+        }
+        .journey-header { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 1.25rem 1.5rem; 
+            cursor: pointer; 
+            transition: all 0.2s; 
+            user-select: none; 
+        }
+        .journey-header:hover { 
+            background: rgba(255,255,255,0.03); 
+        }
         .journey-title-container { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; }
         .journey-title { font-family: 'Montserrat', sans-serif; font-size: 0.95rem; font-weight: 500; color: var(--text); }
         .journey-meta { font-size: 0.7rem; color: var(--text-dim); }
@@ -320,8 +342,18 @@
         .journey-content { display: none; padding: 1rem 1.5rem 1.5rem; border-top: 1px solid var(--border); flex-direction: column; gap: 0.75rem; }
         .journey-content.expanded { display: flex; }
 
-        .phase-card { background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: all 0.2s; }
-        .phase-card:hover { border-color: rgba(255,255,255,0.12); }
+        .phase-card { 
+            background: rgba(255,255,255,0.01); 
+            border: 1px solid var(--border); 
+            border-radius: 12px; 
+            overflow: hidden; 
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .phase-card:hover { 
+            border-color: rgba(255,255,255,0.14); 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
         .phase-card-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; cursor: pointer; }
         .phase-card-title { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
         .phase-card-title .title-text { font-size: 0.8rem; color: var(--text); font-weight: 400; }
@@ -345,10 +377,31 @@
         .checklist-text { color: var(--text); }
         .checklist-text.checked { text-decoration: line-through; color: var(--text-dim); }
         
-        .badge-cat { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.02em; }
-        .badge-cat.task { background: rgba(0, 173, 232, 0.12); color: var(--accent); }
-        .badge-cat.document { background: rgba(34, 197, 94, 0.12); color: var(--success); }
-        .badge-cat.evidence { background: rgba(245, 158, 11, 0.12); color: var(--warning); }
+        .badge-cat { 
+            display: inline-block; 
+            padding: 0.15rem 0.4rem; 
+            border-radius: 4px; 
+            font-size: 0.6rem; 
+            font-weight: 500; 
+            text-transform: uppercase; 
+            letter-spacing: 0.02em;
+            border: 1px solid transparent;
+        }
+        .badge-cat.task { 
+            background: rgba(0, 173, 232, 0.05); 
+            border-color: rgba(0, 173, 232, 0.25); 
+            color: var(--accent); 
+        }
+        .badge-cat.document { 
+            background: rgba(34, 197, 94, 0.05); 
+            border-color: rgba(34, 197, 94, 0.25); 
+            color: var(--success); 
+        }
+        .badge-cat.evidence { 
+            background: rgba(245, 158, 11, 0.05); 
+            border-color: rgba(245, 158, 11, 0.25); 
+            color: var(--warning); 
+        }
         
         .checklist-actions { display: flex; gap: 0.5rem; }
         .btn-inline-action { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.65rem; cursor: pointer; transition: 0.2s; }
@@ -4232,15 +4285,15 @@
             `;
 
             const filtersHtml = `
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:1.5rem; background:rgba(255,255,255,0.01); padding:12px; border:1px solid var(--border); border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:1.5rem; background:rgba(255,255,255,0.01); padding:10px 16px; border:1px solid var(--border); border-radius:12px; backdrop-filter: var(--glass-blur);">
                     <div style="position:relative; flex:1;">
-                        <input type="text" class="form-input" style="width:100%; padding-left:2rem; font-size:0.8rem; height:36px; border-radius:8px;" placeholder="Buscar fase ou atividade..." value="${escapeHTML(S.jornadaSearchQuery || '')}" oninput="S.jornadaSearchQuery = this.value; render();">
-                        <svg viewBox="0 0 24 24" style="position:absolute; left:8px; top:9px; width:18px; height:18px; stroke:var(--text-dim); stroke-width:2; fill:none; pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" class="form-input" style="width:100%; padding-left:2.25rem; font-size:0.8rem; height:38px; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" placeholder="Buscar fase ou atividade..." value="${escapeHTML(S.jornadaSearchQuery || '')}" oninput="S.jornadaSearchQuery = this.value; render();">
+                        <svg viewBox="0 0 24 24" style="position:absolute; left:10px; top:10px; width:18px; height:18px; stroke:var(--text-dim); stroke-width:2; fill:none; pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
                     <div style="display:flex; gap:12px;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600;">Status</label>
-                            <select class="form-input" style="height:36px; padding:0 12px; font-size:0.8rem; border-radius:8px;" onchange="S.jornadaStatusFilter = this.value; render();">
+                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Status</label>
+                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaStatusFilter = this.value; render();">
                                 <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>Todos</option>
                                 <option value="pending" ${statusFilter === 'pending' ? 'selected' : ''}>Pending</option>
                                 <option value="in_progress" ${statusFilter === 'in_progress' ? 'selected' : ''}>In Progress</option>
@@ -4250,8 +4303,8 @@
                             </select>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600;">Categoria</label>
-                            <select class="form-input" style="height:36px; padding:0 12px; font-size:0.8rem; border-radius:8px;" onchange="S.jornadaCategoryFilter = this.value; render();">
+                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Categoria</label>
+                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaCategoryFilter = this.value; render();">
                                 <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>Todas</option>
                                 <option value="task" ${categoryFilter === 'task' ? 'selected' : ''}>Task</option>
                                 <option value="document" ${categoryFilter === 'document' ? 'selected' : ''}>Document</option>
@@ -4399,8 +4452,16 @@
                                                             badgeHtml = `<span style="font-size:0.6rem; padding:2px 6px; border-radius:4px; border:1px solid ${statusColor}; color:${statusColor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${statusLabel}</span>`;
                                                         }
 
+                                                        let borderLeftColor = 'rgba(255, 255, 255, 0.06)';
+                                                        if (isChecked) {
+                                                            borderLeftColor = 'var(--success)';
+                                                            if (itemStatus && itemStatus !== 'conforme') {
+                                                                borderLeftColor = 'var(--danger)';
+                                                            }
+                                                        }
+
                                                         return `
-                                                            <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem;">
+                                                            <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-left: 3px solid ${borderLeftColor}; border-radius: 10px; padding: 0.75rem;">
                                                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
                                                                     <div class="checklist-left" style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
                                                                         <input type="checkbox" class="checklist-item-checkbox" 
