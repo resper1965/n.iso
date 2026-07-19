@@ -874,6 +874,35 @@
         render();
     };
 
+    window.formatActivityNotes = function(notes) {
+        if (!notes) return '';
+        const trimmed = notes.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+                const obj = JSON.parse(trimmed);
+                const parts = [];
+                for (const [key, val] of Object.entries(obj)) {
+                    let label = key;
+                    if (key === 'engagement') label = 'Engajamento';
+                    else if (key === 'trustScore') label = 'Confiança';
+                    else if (key === 'sub_id') label = 'ID Cliente';
+                    else if (key === 'timeline') label = 'Prazo';
+                    else if (key === 'main_risk') label = 'Risco Principal';
+                    
+                    parts.push(`<span style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:3px 8px; border-radius:4px; margin-right:4px;"><strong>${label}</strong>: ${val}</span>`);
+                }
+                return `<div style="display:flex; flex-wrap:wrap; gap:8px; font-size:0.7rem; color:var(--text-dim); margin-bottom:8px;">${parts.join('')}</div>`;
+            } catch (e) {}
+        }
+        return '';
+    };
+
+    window.toggleChecklistDetails = function(itemId) {
+        if (!S.expandedChecklistDetails) S.expandedChecklistDetails = {};
+        S.expandedChecklistDetails[itemId] = !S.expandedChecklistDetails[itemId];
+        render();
+    };
+
     window.openJornada2Questionnaire = function(projectId) {
         if (!S.jornadaAnswers) S.jornadaAnswers = {};
         const currentAnswers = S.jornadaAnswers[projectId + '_j2'] || { cloud: 'aws', db: 'nuvem', dev: 'sim', auth: 'sim' };
@@ -2752,6 +2781,7 @@
                                                         const itemEvidenceId = (S.phaseChecksEvidence && S.phaseChecksEvidence[checkKey]) || '';
                                                         const itemStatus = (S.phaseChecksStatus && S.phaseChecksStatus[checkKey]) || '';
                                                         const itemEvalNotes = (S.phaseChecksEvaluationNotes && S.phaseChecksEvaluationNotes[checkKey]) || '';
+                                                        const isDetailsExpanded = S.expandedChecklistDetails && S.expandedChecklistDetails[item.id] === true;
                                                         
                                                         const hasTip = !!ISO_GUIDELINES[item.id];
                                                         const isTipExpanded = S.expandedTips && S.expandedTips[item.id] === true;
@@ -2798,6 +2828,7 @@
                                                                         ${(!isChecked && item.category === 'document') ? `
                                                                             <button class="btn-inline-action primary" onclick="generateDocumentNatively('${p.id}', '${item.id}', this); event.stopPropagation()">Gerar IA</button>
                                                                         ` : ''}
+                                                                        <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
                                                                     </div>
                                                                 </div>
                                                                 ${(hasTip && isTipExpanded) ? `
@@ -2813,29 +2844,32 @@
                                                                         <div style="color:var(--text);">${escapeHTML(itemEvalNotes)}</div>
                                                                     </div>
                                                                 ` : ''}
-                                                                <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
-                                                                    <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
-                                                                    <textarea class="form-input" 
-                                                                        placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
-                                                                        style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical; margin-bottom: 0.5rem;"
-                                                                        onblur="saveChecklistItemNotes('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">${escapeHTML(itemNotes)}</textarea>
-                                                                    
-                                                                    <div style="display: flex; gap: 12px; align-items: center;">
-                                                                        <div style="flex: 1;">
-                                                                            <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
-                                                                            <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
-                                                                                onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
-                                    ${window.renderGovernanceSelectOptions(S.currentGovernance, itemAssigned)}
-                                    </select>
-                                                                        </div>
-                                                                        <div style="width: 150px;">
-                                                                            <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
-                                                                            <input type="date" class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; color: var(--text);"
-                                                                                value="${itemDueDate}"
-                                                                                onchange="saveChecklistItemDueDate('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                ${isDetailsExpanded ? `
+                                                                    <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
+                                                                        <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
+                                                                        ${itemNotes.trim().startsWith('{') && itemNotes.trim().endsWith('}') ? formatActivityNotes(itemNotes) : ''}
+                                                                        <textarea class="form-input" 
+                                                                            placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
+                                                                            style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical; margin-bottom: 0.5rem;"
+                                                                            onblur="saveChecklistItemNotes('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">${itemNotes.trim().startsWith('{') && itemNotes.trim().endsWith('}') ? '' : escapeHTML(itemNotes)}</textarea>
+                                                                        
+                                                                        <div style="display: flex; gap: 12px; align-items: center;">
+                                                                            <div style="flex: 1;">
+                                                                                <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
+                                                                                <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
+                                                                                    onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                            ${window.renderGovernanceSelectOptions(S.currentGovernance, itemAssigned)}
+                                            </select>
+                                                                            </div>
+                                                                            <div style="width: 150px;">
+                                                                                <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
+                                                                                <input type="date" class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; color: var(--text);"
+                                                                                    value="${itemDueDate}"
+                                                                                    onchange="saveChecklistItemDueDate('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
+                                                                ` : ''}
                                                             </div>
                                                         `;
                                                     }).join('')}
