@@ -903,68 +903,324 @@
         render();
     };
 
-    window.openJornada2Questionnaire = function(projectId) {
+    const JORNADA_QUESTIONS = {
+        0: {
+            title: "Alinhamento e Escopo (Jornada 1)",
+            desc: "Mapeie o engajamento da diretoria, orçamento e escopo do SGSI.",
+            questions: [
+                { key: "sponsor", label: "1. O sponsor executivo (diretoria) está engajado?", type: "select", options: [
+                    { val: "sim", text: "Sim, patrocinador ativo nomeado" },
+                    { val: "parcial", text: "Parcialmente, apoia mas não acompanha" },
+                    { val: "nao", text: "Não, sem patrocinador executivo claro" }
+                ]},
+                { key: "budget", label: "2. O orçamento anual do SGSI foi aprovado?", type: "select", options: [
+                    { val: "sim", text: "Sim, orçamento integral disponível" },
+                    { val: "parcial", text: "Aprovado sob demanda por projeto" },
+                    { val: "nao", text: "Não, sem orçamento reservado" }
+                ]},
+                { key: "scope", label: "3. Qual a abrangência do escopo do SGSI?", type: "select", options: [
+                    { val: "total", text: "Toda a empresa (todas as áreas e escritórios)" },
+                    { val: "prod", text: "Apenas o produto SaaS e infraestrutura principal" },
+                    { val: "ti", text: "Apenas o departamento de TI" }
+                ]}
+            ]
+        },
+        1: {
+            title: "Coleta de Ativos & Riscos (Jornada 2)",
+            desc: "Responda às perguntas abaixo para preencher os ativos iniciais e riscos.",
+            questions: [
+                { key: "cloud", label: "1. Onde está hospedada sua infraestrutura?", type: "select", options: [
+                    { val: "aws", text: "Amazon Web Services (AWS)" },
+                    { val: "azure", text: "Microsoft Azure" },
+                    { val: "gcp", text: "Google Cloud Platform (GCP)" },
+                    { val: "local", text: "Infraestrutura Local (On-premises)" }
+                ]},
+                { key: "db", label: "2. Onde os bancos de dados estão localizados?", type: "select", options: [
+                    { val: "nuvem", text: "Banco de Dados Gerenciado (RDS, Cloud SQL, etc.)" },
+                    { val: "local", text: "Servidor de Banco Próprio (VM/Físico)" }
+                ]},
+                { key: "dev", label: "3. A empresa realiza desenvolvimento interno de software?", type: "select", options: [
+                    { val: "sim", text: "Sim, possuímos equipe de engenharia/devs" },
+                    { val: "nao", text: "Não, usamos apenas softwares de terceiros (SaaS/COTS)" }
+                ]},
+                { key: "auth", label: "4. Utilizam algum provedor de identidade centralizado (IdP)?", type: "select", options: [
+                    { val: "sim", text: "Sim (Google Workspace, Okta, Azure AD/Entra ID)" },
+                    { val: "nao", text: "Não, controle manual de logins por sistema" }
+                ]}
+            ]
+        },
+        2: {
+            title: "Controles do SGSI (Jornada 3)",
+            desc: "Mapeie o nível atual dos controles de segurança lógica da informação.",
+            questions: [
+                { key: "encryption", label: "1. Utilizam criptografia nos dados confidenciais em repouso?", type: "select", options: [
+                    { val: "sim", text: "Sim, criptografia total (discos e bancos)" },
+                    { val: "parcial", text: "Apenas em tabelas críticas selecionadas" },
+                    { val: "nao", text: "Não, sem criptografia em repouso" }
+                ]},
+                { key: "backup", label: "2. Com que frequência testam a restauração do backup?", type: "select", options: [
+                    { val: "mensal", text: "Mensalmente ou mais frequente" },
+                    { val: "semestral", text: "Semestralmente" },
+                    { val: "nunca", text: "Nunca testamos restauração de backup" }
+                ]},
+                { key: "mfa", label: "3. O uso de MFA (Duplo Fator) é obrigatório?", type: "select", options: [
+                    { val: "todos", text: "Sim, para todos os colaboradores e acessos" },
+                    { val: "admin", text: "Apenas para administradores e acessos críticos" },
+                    { val: "nao", text: "Não possuímos política obrigatória" }
+                ]}
+            ]
+        },
+        3: {
+            title: "Controles do PIMS/SGPI (Jornada 4)",
+            desc: "Verifique o nível de preparação para os requisitos de privacidade da ISO 27701.",
+            questions: [
+                { key: "dpo", label: "1. Possui encarregado de dados (DPO) formalizado?", type: "select", options: [
+                    { val: "sim", text: "Sim, interno ou terceirizado (DPO as a Service)" },
+                    { val: "nao", text: "Não, sem nomeação formal" }
+                ]},
+                { key: "ropa", label: "2. O Registro de Operações (ROPA) está mapeado?", type: "select", options: [
+                    { val: "completo", text: "Sim, mapeado e revisado anualmente" },
+                    { val: "andamento", text: "Parcial/Em andamento" },
+                    { val: "nao", text: "Não possuímos ROPA" }
+                ]},
+                { key: "dsr", label: "3. Existe procedimento para atendimento de direitos dos titulares?", type: "select", options: [
+                    { val: "sim", text: "Sim, com canal e SLA de atendimento definido" },
+                    { val: "nao", text: "Não há canal ou procedimento estruturado" }
+                ]}
+            ]
+        },
+        4: {
+            title: "Consciência & Auditoria Interna (Jornada 5)",
+            desc: "Avalie os controles operacionais e preparação final da auditoria estágio 1.",
+            questions: [
+                { key: "training", label: "1. Realizam treinamentos de segurança de dados?", type: "select", options: [
+                    { val: "sim", text: "Sim, treinamento anual + onboarding" },
+                    { val: "integracao", text: "Apenas durante a integração inicial" },
+                    { val: "nao", text: "Não há treinamentos periódicos" }
+                ]},
+                { key: "audit", label: "2. A auditoria interna do SGSI foi executada?", type: "select", options: [
+                    { val: "sim", text: "Sim, auditoria realizada por terceiro ou equipe certificada" },
+                    { val: "planejado", text: "Agendada/Em planejamento" },
+                    { val: "nao", text: "Não realizada ou planejada" }
+                ]},
+                { key: "review", label: "3. A Revisão pela Direção (Management Review) foi realizada?", type: "select", options: [
+                    { val: "sim", text: "Sim, ata assinada pela diretoria" },
+                    { val: "nao", text: "Não realizada" }
+                ]}
+            ]
+        },
+        5: {
+            title: "Preparação para Certificação (Jornada 6)",
+            desc: "Fase final de contratação da auditoria de terceira parte.",
+            questions: [
+                { key: "certifier", label: "1. O organismo de certificação foi contratado?", type: "select", options: [
+                    { val: "sim", text: "Sim, contrato assinado e datas agendadas" },
+                    { val: "negociacao", text: "Em negociação/cotação de propostas" },
+                    { val: "nao", text: "Não iniciamos contato com certificadoras" }
+                ]},
+                { key: "capa", label: "2. Existe um processo ativo de não-conformidade e ação corretiva?", type: "select", options: [
+                    { val: "sim", text: "Sim, registramos no módulo CAPA" },
+                    { val: "nao", text: "Não há controle formal de melhorias" }
+                ]}
+            ]
+        }
+    };
+
+    window.openJornadaQuestionnaire = function(jIdx, projectId) {
         if (!S.jornadaAnswers) S.jornadaAnswers = {};
-        const currentAnswers = S.jornadaAnswers[projectId + '_j2'] || { cloud: 'aws', db: 'nuvem', dev: 'sim', auth: 'sim' };
+        const config = JORNADA_QUESTIONS[jIdx];
+        if (!config) return;
+        const answersKey = projectId + '_j' + jIdx;
+        const currentAnswers = S.jornadaAnswers[answersKey] || {};
+
+        let questionsHtml = '';
+        config.questions.forEach(q => {
+            let optionsHtml = '';
+            q.options.forEach(opt => {
+                optionsHtml += `<option value="${opt.val}" ${currentAnswers[q.key] === opt.val ? 'selected' : ''}>${opt.text}</option>`;
+            });
+            questionsHtml += `
+                <div style="margin-bottom:1rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">${q.label}</label>
+                    <select id="q-${q.key}" class="form-input" style="width:100%;">
+                        ${optionsHtml}
+                    </select>
+                </div>
+            `;
+        });
 
         openModal(`
             <div class="modal-header">
-                <span class="modal-title">📋 Coleta de Ativos & Riscos (Jornada 2)</span>
+                <span class="modal-title">📋 ${config.title}</span>
                 <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
             </div>
             <div style="padding:1.5rem 0; text-align:left;">
                 <p style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem;">
-                    Responda às perguntas abaixo para preencher os ativos iniciais e gerar recomendações automáticas de conformidade para o SGSI.
+                    ${config.desc}
                 </p>
-                <div style="margin-bottom:1rem;">
-                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">1. Onde está hospedada sua infraestrutura?</label>
-                    <select id="q-cloud" class="form-input" style="width:100%;">
-                        <option value="aws" ${currentAnswers.cloud === 'aws' ? 'selected' : ''}>Amazon Web Services (AWS)</option>
-                        <option value="azure" ${currentAnswers.cloud === 'azure' ? 'selected' : ''}>Microsoft Azure</option>
-                        <option value="gcp" ${currentAnswers.cloud === 'gcp' ? 'selected' : ''}>Google Cloud Platform (GCP)</option>
-                        <option value="local" ${currentAnswers.cloud === 'local' ? 'selected' : ''}>Infraestrutura Local (On-premises)</option>
-                    </select>
-                </div>
-                <div style="margin-bottom:1rem;">
-                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">2. Onde os bancos de dados estão localizados?</label>
-                    <select id="q-db" class="form-input" style="width:100%;">
-                        <option value="nuvem" ${currentAnswers.db === 'nuvem' ? 'selected' : ''}>Banco de Dados Gerenciado (RDS, Cloud SQL, etc.)</option>
-                        <option value="local" ${currentAnswers.db === 'local' ? 'selected' : ''}>Servidor de Banco Próprio (VM/Físico)</option>
-                    </select>
-                </div>
-                <div style="margin-bottom:1rem;">
-                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">3. A empresa realiza desenvolvimento interno de software?</label>
-                    <select id="q-dev" class="form-input" style="width:100%;">
-                        <option value="sim" ${currentAnswers.dev === 'sim' ? 'selected' : ''}>Sim, possuímos equipe de engenharia/devs</option>
-                        <option value="nao" ${currentAnswers.dev === 'nao' ? 'selected' : ''}>Não, usamos apenas softwares de terceiros (SaaS/COTS)</option>
-                    </select>
-                </div>
-                <div style="margin-bottom:1.5rem;">
-                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">4. Utilizam algum provedor de identidade centralizado (IdP)?</label>
-                    <select id="q-auth" class="form-input" style="width:100%;">
-                        <option value="sim" ${currentAnswers.auth === 'sim' ? 'selected' : ''}>Sim (Google Workspace, Okta, Azure AD/Entra ID)</option>
-                        <option value="nao" ${currentAnswers.auth === 'nao' ? 'selected' : ''}>Não, controle manual de logins por sistema</option>
-                    </select>
-                </div>
+                ${questionsHtml}
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
                     <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
-                    <button class="btn btn-primary" onclick="saveJornada2Questionnaire('${projectId}')">Salvar Questionário</button>
+                    <button class="btn btn-primary" onclick="saveJornadaQuestionnaire(${jIdx}, '${projectId}')">Salvar Questionário</button>
                 </div>
             </div>
         `);
     };
 
-    window.saveJornada2Questionnaire = function(projectId) {
+    window.saveJornadaQuestionnaire = function(jIdx, projectId) {
         if (!S.jornadaAnswers) S.jornadaAnswers = {};
-        S.jornadaAnswers[projectId + '_j2'] = {
-            cloud: document.getElementById('q-cloud').value,
-            db: document.getElementById('q-db').value,
-            dev: document.getElementById('q-dev').value,
-            auth: document.getElementById('q-auth').value
-        };
-        showToast('Questionário de ativos salvo com sucesso!');
+        const config = JORNADA_QUESTIONS[jIdx];
+        if (!config) return;
+        const answersKey = projectId + '_j' + jIdx;
+        const answers = {};
+        config.questions.forEach(q => {
+            answers[q.key] = document.getElementById(`q-${q.key}`).value;
+        });
+        S.jornadaAnswers[answersKey] = answers;
+        showToast('Questionário de diagnóstico salvo com sucesso!');
         forceCloseModal();
         render();
+    };
+
+    window.renderJourneyDiagnosticPanel = function(jIdx, projectId) {
+        if (!S.jornadaAnswers) S.jornadaAnswers = {};
+        const answersKey = projectId + '_j' + jIdx;
+        const answers = S.jornadaAnswers[answersKey];
+        if (!answers) {
+            return `
+                <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(255,255,255,0.01); border: 1px dashed var(--border); border-radius: 8px; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-dim);">
+                        💡 <strong>Diagnóstico Pendente:</strong> Responda ao questionário desta jornada para receber recomendações e adequação automática dos controles do SGSI.
+                    </div>
+                    <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}'); event.stopPropagation();">Iniciar Diagnóstico</button>
+                </div>
+            `;
+        }
+
+        let summaryHtml = '';
+        let suggestionsList = '';
+
+        if (jIdx === 0) {
+            const sponsorText = answers.sponsor === 'sim' ? 'Engajado' : answers.sponsor === 'parcial' ? 'Parcial' : 'Sem Patrocínio';
+            const budgetText = answers.budget === 'sim' ? 'Aprovado' : answers.budget === 'parcial' ? 'Sob Demanda' : 'Sem Orçamento';
+            const scopeText = answers.scope === 'total' ? 'Corporativo' : answers.scope === 'prod' ? 'Foco SaaS' : 'Foco TI';
+
+            summaryHtml = `<strong>Sponsor:</strong> ${sponsorText} | <strong>Orçamento:</strong> ${budgetText} | <strong>Escopo:</strong> ${scopeText}`;
+
+            if (answers.sponsor !== 'sim') {
+                suggestionsList += `<li>⚠️ <strong>Sem sponsor executivo ativo:</strong> Risco crítico para a certificação (Requisito Cl 5.1). Recomendamos formalizar a nomeação do comitê com ata assinada.</li>`;
+            }
+            if (answers.budget === 'nao') {
+                suggestionsList += `<li>⚠️ <strong>Sem orçamento de segurança:</strong> Risco ao cronograma de contratação da certificadora. Recomenda-se reservar verba de auditoria externa preventiva.</li>`;
+            }
+            if (answers.scope === 'ti' || answers.scope === 'prod') {
+                suggestionsList += `<li>💡 <strong>Escopo restrito:</strong> Garanta que as fronteiras físicas e de redes estejam claramente delimitadas no documento de Escopo do SGSI (Requisito Cl 4.3).</li>`;
+            }
+        } 
+        else if (jIdx === 1) {
+            const cloudLabel = answers.cloud === 'aws' ? 'AWS' : answers.cloud === 'azure' ? 'Azure' : answers.cloud === 'gcp' ? 'GCP' : 'Local';
+            const dbLabel = answers.db === 'nuvem' ? 'Gerenciado' : 'Próprio';
+            const devLabel = answers.dev === 'sim' ? 'Sim' : 'Não';
+            const authLabel = answers.auth === 'sim' ? 'Sim' : 'Não';
+
+            summaryHtml = `<strong>Infra:</strong> ${cloudLabel} | <strong>Banco:</strong> ${dbLabel} | <strong>Dev:</strong> ${devLabel} | <strong>IDP:</strong> ${authLabel}`;
+
+            if (answers.cloud !== 'local') {
+                suggestionsList += `<li>💡 <strong>Cloud (${cloudLabel}):</strong> Revisar políticas do controle A.5.23 (Segurança de Serviços em Nuvem) e exigir MFA em todos os consoles.</li>`;
+            }
+            if (answers.db === 'local') {
+                suggestionsList += `<li>💡 <strong>Servidor de Banco de Dados Próprio:</strong> Implementar política rigorosa de backup criptografado fora do ambiente de execução (A.8.13 e A.8.24).</li>`;
+            }
+            if (answers.dev === 'sim') {
+                suggestionsList += `<li>💡 <strong>Desenvolvimento Interno:</strong> Ativar testes estáticos de segurança (SAST) e diretrizes para o controle A.8.28 (Segurança em Desenvolvimento).</li>`;
+            }
+            if (answers.auth === 'sim') {
+                suggestionsList += `<li>💡 <strong>IDP Centralizado:</strong> Habilitar provisionamento automatizado de credenciais e MFA em todos os endpoints de colaboração (A.5.15).</li>`;
+            }
+        }
+        else if (jIdx === 2) {
+            const encText = answers.encryption === 'sim' ? 'Total' : answers.encryption === 'parcial' ? 'Parcial' : 'Inativo';
+            const backupText = answers.backup === 'mensal' ? 'Mensal' : answers.backup === 'semestral' ? 'Semestral' : 'Sem Testes';
+            const mfaText = answers.mfa === 'todos' ? 'Obrigatório' : answers.mfa === 'admin' ? 'Apenas Admin' : 'Inativo';
+
+            summaryHtml = \`<strong>Cripto:</strong> \${encText} | <strong>Testes de Backup:</strong> \${backupText} | <strong>MFA:</strong> \${mfaText}\`;
+
+            if (answers.encryption !== 'sim') {
+                suggestionsList += \`<li>⚠️ <strong>Criptografia em repouso pendente:</strong> Essencial para proteger dados contra quebra física (A.8.24). Habilitar criptografia transparente no banco de dados.</li>\`;
+            }
+            if (answers.backup === 'nunca') {
+                suggestionsList += \`<li>⚠️ <strong>Sem testes de restauração:</strong> O auditor irá solicitar registros dos testes dos últimos 12 meses. Configure teste de simulação mensal (A.8.13).</li>\`;
+            }
+            if (answers.mfa !== 'todos') {
+                suggestionsList += \`<li>⚠️ <strong>MFA parcial ou inativo:</strong> Vulnerabilidade de controle de acesso (A.5.15). Ativar MFA obrigatório para toda equipe e e-mail corporativo.</li>\`;
+            }
+        }
+        else if (jIdx === 3) {
+            const dpoText = answers.dpo === 'sim' ? 'Formalizado' : 'Pendente';
+            const ropaText = answers.ropa === 'completo' ? 'Mapeado' : answers.ropa === 'andamento' ? 'Parcial' : 'Inativo';
+            const dsrText = answers.dsr === 'sim' ? 'Estruturado' : 'Pendente';
+
+            summaryHtml = \`<strong>DPO:</strong> \${dpoText} | <strong>ROPA:</strong> \${ropaText} | <strong>Direitos Titulares:</strong> \${dsrText}\`;
+
+            if (answers.dpo === 'nao') {
+                suggestionsList += \`<li>💡 <strong>Sem DPO nomeado:</strong> Para ISO 27701 (Cl 7.2.1) e LGPD, nomeie formalmente o encarregado de dados e publique o contato de e-mail no site.</li>\`;
+            }
+            if (answers.ropa !== 'completo') {
+                suggestionsList += \`<li>💡 <strong>ROPA pendente ou parcial:</strong> Utilize o módulo ROPA do nISO para mapear o fluxo de tratamento de cada dado pessoal coletado (Cl 7.3.2).</li>\`;
+            }
+            if (answers.dsr === 'nao') {
+                suggestionsList += \`<li>⚠️ <strong>Sem canal para titulares:</strong> OBRIGATÓRIO implementar canal de requisição DSR e registrar tempos de resposta no relatório de privacidade (Cl 7.3.1).</li>\`;
+            }
+        }
+        else if (jIdx === 4) {
+            const trText = answers.training === 'sim' ? 'Periódico' : answers.training === 'integracao' ? 'Integração' : 'Pendente';
+            const audText = answers.audit === 'sim' ? 'Realizada' : answers.audit === 'planejado' ? 'Planejada' : 'Pendente';
+            const revText = answers.review === 'sim' ? 'Realizada' : 'Pendente';
+
+            summaryHtml = \`<strong>Treinamento:</strong> \${trText} | <strong>Auditoria Interna:</strong> \${audText} | <strong>Revisão Direção:</strong> \${revText}\`;
+
+            if (answers.training !== 'sim') {
+                suggestionsList += \`<li>💡 <strong>Conscientização pendente:</strong> Implementar programa contínuo de conscientização (phishing simulado e segurança) além da integração (Cl 7.3).</li>\`;
+            }
+            if (answers.audit !== 'sim') {
+                suggestionsList += \`<li>⚠️ <strong>Auditoria Interna pendente:</strong> Requisito obrigatório para o Estágio 1 da certificação. Agende a auditoria antes da auditoria externa (Cl 9.2).</li>\`;
+            }
+            if (answers.review === 'nao') {
+                suggestionsList += \`<li>⚠️ <strong>Ata de Revisão pela Direção pendente:</strong> Documento chave exigido pelo auditor no Estágio 2. Agende reunião e registre a ata (Cl 9.3).</li>\`;
+            }
+        }
+        else if (jIdx === 5) {
+            const certText = answers.certifier === 'sim' ? 'Contratada' : answers.certifier === 'negociacao' ? 'Em Negociação' : 'Pendente';
+            const capaText = answers.capa === 'sim' ? 'Processo Ativo' : 'Pendente';
+
+            summaryHtml = \`<strong>Certificadora:</strong> \${certText} | <strong>Processo CAPA:</strong> \${capaText}\`;
+
+            if (answers.certifier !== 'sim') {
+                suggestionsList += \`<li>💡 <strong>Contratação da Certificadora:</strong> Solicitar propostas de organismos acreditados (INMETRO / UKAS) para agendar datas de estágio 1 e 2.</li>\`;
+            }
+            if (answers.capa === 'nao') {
+                suggestionsList += \`<li>⚠️ <strong>Sem processo CAPA estruturado:</strong> Essencial para comprovar melhoria contínua (Cl 10.1). Registre qualquer desvio na aba Ações Corretivas.</li>\`;
+            }
+        }
+
+        if (!suggestionsList) {
+            suggestionsList = \`<li>✅ <strong>Todos os controles da jornada mapeados:</strong> Ambiente com maturidade adequada de conformidade! Próximo para auditoria.</li>\`;
+        }
+
+        return `
+            <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(0, 173, 232, 0.04); border: 1px dashed rgba(0, 173, 232, 0.2); border-radius: 8px;">
+                <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 6px; text-align: left; display: flex; justify-content: space-between;">
+                    <span>⚙️ Diagnóstico de Conformidade (nISO Consultor)</span>
+                    <a href="javascript:void(0)" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}')" style="color:var(--accent); text-decoration:none; font-size:0.65rem;">Refazer Diagnóstico 🔄</a>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text); margin-bottom: 8px; text-align: left;">
+                    \${summaryHtml}
+                </div>
+                <ul style="font-size: 0.7rem; color: var(--text-dim); text-align: left; padding-left: 15px; margin: 0; list-style-type: square; line-height: 1.4;">
+                    \${suggestionsList}
+                </ul>
+            </div>
+        `;
     };
 
     window.generateDocumentNatively = async function(projectId, itemId, btnEl) {
@@ -2681,49 +2937,11 @@
                                 </div>
                                 <div class="journey-meta" style="font-weight:500; min-width:35px">${percent}%</div>
                             </div>
-                            ${isJ2 ? `
-                                <button class="btn-inline-action" style="margin-right:15px; border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornada2Questionnaire('${p.id}'); event.stopPropagation();">📋 Coleta de Ativos</button>
-                            ` : ''}
+                            <button class="btn-inline-action" style="margin-right:15px; border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornadaQuestionnaire(${jIdx}, '${p.id}'); event.stopPropagation();">📋 Diagnóstico J${jIdx + 1}</button>
                             <div class="journey-toggle-icon ${isJExpanded ? 'expanded' : ''}">&darr;</div>
                         </div>
                         <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${jIdx}">
-                            ${(() => {
-                                const answersKey = p.id + '_j2';
-                                const answers = S.jornadaAnswers && S.jornadaAnswers[answersKey];
-                                if (!isJ2 || !answers) return '';
-                                
-                                const cloudLabel = answers.cloud === 'aws' ? 'AWS' : answers.cloud === 'azure' ? 'Azure' : answers.cloud === 'gcp' ? 'GCP' : 'On-premises';
-                                const dbLabel = answers.db === 'nuvem' ? 'Gerenciado' : 'Próprio';
-                                const devLabel = answers.dev === 'sim' ? 'Sim' : 'Não';
-                                const authLabel = answers.auth === 'sim' ? 'Sim' : 'Não';
-
-                                let cloudSg = '';
-                                if (answers.cloud !== 'local') {
-                                    cloudSg = `<li>💡 <strong>Cloud (${cloudLabel}):</strong> Recomendado habilitar MFA na raiz, auditoria do log de console e revisar políticas do controle A.5.23 (Segurança de Serviços em Nuvem).</li>`;
-                                }
-                                let devSg = '';
-                                if (answers.dev === 'sim') {
-                                    devSg = `<li>💡 <strong>Dev interno:</strong> Habilitar testes de segurança SAST no pipeline CI/CD e revisar diretrizes do controle A.8.28 (Desenvolvimento Seguro).</li>`;
-                                }
-                                let authSg = '';
-                                if (answers.auth === 'sim') {
-                                    authSg = `<li>💡 <strong>IDP Centralizado:</strong> Configurar provisionamento automático (SCIM) e monitoramento de logins anômalos (A.5.15).</li>`;
-                                }
-
-                                return `
-                                    <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(0, 173, 232, 0.04); border: 1px dashed rgba(0, 173, 232, 0.2); border-radius: 8px;">
-                                        <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 6px; text-align: left;">⚙️ Diagnóstico do Ambiente (nISO Consultor)</div>
-                                        <div style="font-size: 0.75rem; color: var(--text); margin-bottom: 8px; text-align: left;">
-                                            <strong>Infra:</strong> ${cloudLabel} | <strong>Banco:</strong> ${dbLabel} | <strong>Desenvolvimento Seguro:</strong> ${devLabel} | <strong>SSO/IdP:</strong> ${authLabel}
-                                        </div>
-                                        <ul style="font-size: 0.7rem; color: var(--text-dim); padding-left: 12px; margin: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; list-style-type: disc;">
-                                            ${cloudSg}
-                                            ${devSg}
-                                            ${authSg}
-                                        </ul>
-                                    </div>
-                                `;
-                            })()}
+                            ${window.renderJourneyDiagnosticPanel(jIdx, p.id)}
                             ${filteredPhases.map(ph => {
                                 const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
                                 const phChecklist = S.checklistsConfig[ph.phase_number] || [];
