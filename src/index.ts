@@ -4798,25 +4798,6 @@ app.get('/api/v1/projects/:id/gap-analysis', async (c) => {
   });
 });
 
-// ─── 5E. Control Maturity ───────────────────────────────────────────────────
-
-app.put('/api/v1/controls/:id/maturity', async (c) => {
-  const id = c.req.param('id');
-  const { maturity_level } = await c.req.json();
-  if (maturity_level < 0 || maturity_level > 5) return c.json({ error: 'maturity_level must be 0-5' }, 400);
-
-  const db = c.env.DB;
-  try {
-    await db.prepare('UPDATE compliance_controls SET maturity_level = ? WHERE id = ?').bind(maturity_level, id).run();
-  } catch {
-    // ponytail: column may not exist yet — add it then retry
-    await db.prepare('ALTER TABLE compliance_controls ADD COLUMN maturity_level INTEGER DEFAULT 0').run();
-    await db.prepare('UPDATE compliance_controls SET maturity_level = ? WHERE id = ?').bind(maturity_level, id).run();
-  }
-  const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'maturity_updated', user.email, `Control ${id} maturity set to ${maturity_level}`).run();
-  return c.json({ ok: true });
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SPRINT 6: ENTERPRISE FEATURES
@@ -5007,9 +4988,9 @@ app.post('/api/v1/projects/:id/webhooks', async (c) => {
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_created', user.email, `Webhook ${id} created for ${body.url}`).run();
   return c.json({ ok: true, id }, 201);
 });
-
 app.delete('/api/v1/webhooks/:id', async (c) => {
   const id = c.req.param('id');
+  await requireResourceAccess(c, 'webhooks', id);
   await c.env.DB.prepare('DELETE FROM webhooks WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_deleted', user.email, `Webhook ${id} deleted`).run();
@@ -5018,6 +4999,7 @@ app.delete('/api/v1/webhooks/:id', async (c) => {
 
 app.post('/api/v1/webhooks/test/:id', async (c) => {
   const id = c.req.param('id');
+  await requireResourceAccess(c, 'webhooks', id);
   const webhook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(id).first() as any;
   if (!webhook) return c.json({ error: 'Webhook not found' }, 404);
 
@@ -5073,6 +5055,7 @@ app.get('/api/v1/projects/:id/api-keys', async (c) => {
 
 app.delete('/api/v1/api-keys/:id', async (c) => {
   const id = c.req.param('id');
+  await requireResourceAccess(c, 'api_keys', id);
   await c.env.DB.prepare("UPDATE api_keys SET status = 'Revoked' WHERE id = ?").bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_revoked', user.email, `API key ${id} revoked`).run();
@@ -5172,6 +5155,7 @@ app.post('/api/v1/projects/:id/certification', async (c) => {
 
 app.put('/api/v1/certification/:id', async (c) => {
   const id = c.req.param('id');
+  await requireResourceAccess(c, 'certification_tracking', id);
   const user = c.get('user');
   const body = await c.req.json<any>();
   const existing = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first() as any;
@@ -5566,8 +5550,9 @@ app.post('/api/v1/projects/:id/stakeholders', async (c) => {
 });
 
 app.put('/api/v1/stakeholders/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'stakeholders', id);
   try {
-    const id = c.req.param('id');
     const { name, type, category, requirements, influence, communication_method } = await c.req.json();
     await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
       requirements = COALESCE(?, requirements), influence = COALESCE(?, influence), communication_method = COALESCE(?, communication_method),
@@ -5581,8 +5566,9 @@ app.put('/api/v1/stakeholders/:id', async (c) => {
 });
 
 app.delete('/api/v1/stakeholders/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'stakeholders', id);
   try {
-    const id = c.req.param('id');
     await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
@@ -5741,8 +5727,9 @@ app.post('/api/v1/audits/:auditId/findings', async (c) => {
 });
 
 app.put('/api/v1/audit-findings/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'audit_findings', id);
   try {
-    const id = c.req.param('id');
     const { description, auditor_notes, status } = await c.req.json();
     await c.env.DB.prepare(`
       UPDATE audit_findings 
@@ -5758,8 +5745,9 @@ app.put('/api/v1/audit-findings/:id', async (c) => {
 });
 
 app.delete('/api/v1/audit-findings/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'audit_findings', id);
   try {
-    const id = c.req.param('id');
     await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
@@ -5818,8 +5806,9 @@ app.post('/api/v1/projects/:id/management-reviews', async (c) => {
 });
 
 app.put('/api/v1/management-reviews/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'management_reviews', id);
   try {
-    const id = c.req.param('id');
     const { decisions, action_items, status, minutes_url } = await c.req.json();
     await c.env.DB.prepare(`
       UPDATE management_reviews 
@@ -6009,8 +5998,9 @@ app.post('/api/v1/projects/:id/metrics', async (c) => {
 });
 
 app.put('/api/v1/metrics/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'performance_metrics', id);
   try {
-    const id = c.req.param('id');
     const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
     
     await c.env.DB.prepare(
@@ -6024,8 +6014,9 @@ app.put('/api/v1/metrics/:id', async (c) => {
 });
 
 app.delete('/api/v1/metrics/:id', async (c) => {
+  const id = c.req.param('id');
+  await requireResourceAccess(c, 'performance_metrics', id);
   try {
-    const id = c.req.param('id');
     await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
