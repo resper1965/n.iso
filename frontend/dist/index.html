@@ -663,7 +663,8 @@
             </div>
         </div>
         <div class="login-form-side">
-            <div class="login-box">
+            <!-- Standard Login Box -->
+            <div class="login-box" id="standard-login-box">
                 <h2 style="font-family:'Montserrat';margin-bottom:2rem">Acesso Corporate</h2>
                 <div style="margin-bottom:1.5rem">
                     <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
@@ -674,7 +675,53 @@
                     <input type="password" id="login-password" class="form-input" placeholder="••••••••">
                 </div>
                 <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
+                <div style="margin-top:1.5rem; text-align:center;">
+                    <a href="#" onclick="showForgotPasswordForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Esqueceu sua senha?</a>
+                </div>
                 <p id="login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+            </div>
+
+            <!-- First Login Password Change Box -->
+            <div class="login-box" id="first-login-reset-box" style="display:none">
+                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha Obrigatória</h2>
+                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este é seu primeiro acesso, você deve cadastrar uma nova senha segura para prosseguir.</p>
+                <div style="margin-bottom:1.5rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                    <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura">
+                </div>
+                <div style="margin-bottom:2rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
+                    <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha">
+                </div>
+                <button class="btn btn-primary" style="width:100%" onclick="doFirstLoginReset()">Definir Senha e Entrar</button>
+                <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+            </div>
+
+            <!-- Forgot Password Box -->
+            <div class="login-box" id="forgot-password-box" style="display:none">
+                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
+                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um código numérico de 6 dígitos.</p>
+                <div style="margin-bottom:1.5rem" id="forgot-email-step">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail Cadastrado</label>
+                    <input type="email" id="forgot-email" class="form-input" placeholder="seu@email.com">
+                    <button class="btn btn-primary" style="width:100%;margin-top:1.5rem" onclick="doForgotPasswordRequest()">Solicitar Código</button>
+                </div>
+                <div style="display:none" id="forgot-code-step">
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Código de 6 dígitos</label>
+                        <input type="text" id="forgot-code" class="form-input" placeholder="123456" maxlength="6" style="text-align:center;letter-spacing:4px;font-weight:bold;">
+                    </div>
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                        <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha">
+                    </div>
+                    <button class="btn btn-primary" style="width:100%" onclick="doForgotPasswordReset()">Alterar Senha e Entrar</button>
+                </div>
+                <div style="margin-top:1.5rem; text-align:center;">
+                    <a href="#" onclick="showStandardLoginForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Voltar para o Login</a>
+                </div>
+                <p id="forgot-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                <p id="forgot-success" style="color:var(--accent);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
             </div>
         </div>
     </div>
@@ -3259,6 +3306,23 @@
         return data;
     }
 
+    window.showForgotPasswordForm = function() {
+        document.getElementById('standard-login-box').style.display = 'none';
+        document.getElementById('first-login-reset-box').style.display = 'none';
+        document.getElementById('forgot-password-box').style.display = 'block';
+        document.getElementById('forgot-email-step').style.display = 'block';
+        document.getElementById('forgot-code-step').style.display = 'none';
+        document.getElementById('forgot-error').style.display = 'none';
+        document.getElementById('forgot-success').style.display = 'none';
+    };
+
+    window.showStandardLoginForm = function() {
+        document.getElementById('standard-login-box').style.display = 'block';
+        document.getElementById('first-login-reset-box').style.display = 'none';
+        document.getElementById('forgot-password-box').style.display = 'none';
+        document.getElementById('login-error').style.display = 'none';
+    };
+
     async function doLogin() {
         const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-password').value;
@@ -3269,8 +3333,107 @@
             S.token = res.token; S.user = res.user;
             localStorage.setItem('niso_token', res.token);
             localStorage.setItem('niso_user', JSON.stringify(res.user));
-            document.getElementById('login-overlay').classList.add('hidden');
             
+            if (res.requiresPasswordChange) {
+                document.getElementById('standard-login-box').style.display = 'none';
+                document.getElementById('first-login-reset-box').style.display = 'block';
+                document.getElementById('forgot-password-box').style.display = 'none';
+                document.getElementById('first-reset-error').style.display = 'none';
+            } else {
+                document.getElementById('login-overlay').classList.add('hidden');
+                initApp();
+            }
+        } catch(e) {
+            err.style.display = 'block';
+            err.textContent = e.message;
+        }
+    }
+
+    window.doFirstLoginReset = async function() {
+        const newPass = document.getElementById('first-new-password').value;
+        const confPass = document.getElementById('first-confirm-password').value;
+        const err = document.getElementById('first-reset-error');
+        err.style.display = 'none';
+        
+        if (!newPass) {
+            err.textContent = 'Nova senha é obrigatória';
+            err.style.display = 'block';
+            return;
+        }
+        if (newPass !== confPass) {
+            err.textContent = 'As senhas não coincidem';
+            err.style.display = 'block';
+            return;
+        }
+        
+        try {
+            await api('POST', '/api/v1/auth/reset-password-first', { newPassword: newPass });
+            document.getElementById('login-overlay').classList.add('hidden');
+            initApp();
+        } catch (e) {
+            err.textContent = e.message || 'Falha ao redefinir senha';
+            err.style.display = 'block';
+        }
+    };
+
+    window.doForgotPasswordRequest = async function() {
+        const email = document.getElementById('forgot-email').value;
+        const err = document.getElementById('forgot-error');
+        const success = document.getElementById('forgot-success');
+        err.style.display = 'none';
+        success.style.display = 'none';
+        
+        if (!email) {
+            err.textContent = 'E-mail é obrigatório';
+            err.style.display = 'block';
+            return;
+        }
+        
+        try {
+            const res = await api('POST', '/api/v1/auth/forgot-password', { email });
+            success.textContent = res.message || 'Código enviado!';
+            success.style.display = 'block';
+            
+            if (res.reset_token) {
+                document.getElementById('forgot-code').value = res.reset_token;
+            }
+            
+            document.getElementById('forgot-email-step').style.display = 'none';
+            document.getElementById('forgot-code-step').style.display = 'block';
+        } catch (e) {
+            err.textContent = e.message || 'Falha ao solicitar código';
+            err.style.display = 'block';
+        }
+    };
+
+    window.doForgotPasswordReset = async function() {
+        const code = document.getElementById('forgot-code').value;
+        const newPass = document.getElementById('forgot-new-password').value;
+        const err = document.getElementById('forgot-error');
+        err.style.display = 'none';
+        
+        if (!code || !newPass) {
+            err.textContent = 'Código e nova senha são obrigatórios';
+            err.style.display = 'block';
+            return;
+        }
+        
+        try {
+            await api('POST', '/api/v1/auth/reset-password', { token: code, newPassword: newPass });
+            const email = document.getElementById('forgot-email').value;
+            const res = await api('POST', '/api/v1/auth/login', { email, password: newPass });
+            S.token = res.token; S.user = res.user;
+            localStorage.setItem('niso_token', res.token);
+            localStorage.setItem('niso_user', JSON.stringify(res.user));
+            
+            document.getElementById('login-overlay').classList.add('hidden');
+            initApp();
+        } catch (e) {
+            err.textContent = e.message || 'Falha ao redefinir senha';
+            err.style.display = 'block';
+        }
+    };
+
     window.downloadEvidenceFile = async function(evidenceId) {
         try {
             const projectId = S.activeProject?.id || S.currentProject?.id;
@@ -3299,13 +3462,6 @@
             showToast('Erro ao baixar evidência: ' + e.message, 'error');
         }
     };
-
-    initApp();
-        } catch(e) {
-            err.style.display = 'block';
-            err.textContent = e.message;
-        }
-    }
 
     function doLogout() {
         S.token = null; S.user = null; S.activeProject = null;

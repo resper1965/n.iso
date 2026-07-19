@@ -69,6 +69,40 @@ function escapeHtml(s: string): string {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
+async function sendEmail(c: any, to: string, subject: string, html: string): Promise<boolean> {
+  const apiKey = c.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}\nConteúdo: ${html}`);
+    return true;
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'nISO <noreply@ness.lat>',
+        to: [to],
+        subject: subject,
+        html: html
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[EMAIL ERROR] Falha no Resend API: ${res.status} - ${errText}`);
+      return false;
+    }
+    console.log(`[EMAIL SUCCESS] E-mail enviado com sucesso para ${to}`);
+    return true;
+  } catch (err: any) {
+    console.error(`[EMAIL EXCEPTION] Erro ao enviar e-mail: ${err.message}`);
+    return false;
+  }
+}
+
 
 // ─── Checklists por Fase do Projeto ──────────────────────────────────────────
 
@@ -736,7 +770,7 @@ app.post('/api/v1/auth/login', async (c) => {
   try {
     const { email, password } = await c.req.json();
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, password_hash FROM users WHERE email = ?'
+      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change FROM users WHERE email = ?'
     ).bind(email).first() as any;
     
     if (!user || !(await verifyPassword(password, user.password_hash))) {
@@ -747,8 +781,12 @@ app.post('/api/v1/auth/login', async (c) => {
       const newHash = await hashPassword(password);
       await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(newHash, user.id).run();
     }
-    // Remove password_hash from response
+    
+    const requiresChange = user.requires_password_change === 1;
+    
+    // Remove password_hash and requires_password_change from response/session
     delete user.password_hash;
+    delete user.requires_password_change;
     
     // ponytail: compatibility mapping for legacy roles on login
     if (user.role === 'admin') {
@@ -760,9 +798,30 @@ app.post('/api/v1/auth/login', async (c) => {
     const token = genToken();
     await c.env.SESSIONS.put(token, JSON.stringify(user), { expirationTtl: 86400 });
     
-    return c.json({ token, user });
+    return c.json({ token, user, requiresPasswordChange: requiresChange });
   } catch (e: any) {
     return c.json({ error: 'Login failed', detail: e.message }, 500);
+  }
+});
+
+app.post('/api/v1/auth/reset-password-first', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Não autorizado' }, 403);
+
+    const { newPassword } = await c.req.json<{ newPassword: string }>();
+    if (!newPassword) return c.json({ error: 'Nova senha é obrigatória' }, 400);
+
+    const newHash = await hashPassword(newPassword);
+    
+    await c.env.DB.prepare(
+      'UPDATE users SET password_hash = ?, requires_password_change = 0 WHERE id = ?'
+    ).bind(newHash, user.id).run();
+
+    await logAudit(c.env.DB, 'auth.password_changed_first', user.email, `Senha do primeiro acesso redefinida com sucesso`);
+    return c.json({ ok: true, message: 'Senha redefinida com sucesso' });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao redefinir senha', detail: e.message }, 500);
   }
 });
 
@@ -772,17 +831,32 @@ app.post('/api/v1/auth/forgot-password', async (c) => {
     if (!email) return c.json({ error: 'Email é obrigatório' }, 400);
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email FROM users WHERE email = ?'
+      'SELECT id, email, name FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
     if (!user) {
       return c.json({ ok: true, message: 'Se o e-mail estiver cadastrado, um código foi gerado.' });
     }
 
-    const token = genToken().substring(0, 16);
+    const token = String(Math.floor(100000 + Math.random() * 900000));
     await c.env.SESSIONS.put(`reset_token:${token}`, JSON.stringify({ email: user.email }), { expirationTtl: 3600 });
 
     console.log(`[PASSWORD RESET] Token para ${user.email}: ${token}`);
+
+    // Disparar e-mail de recuperação
+    const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0; text-align: center;">Recuperação de Senha - nISO</h2>
+        <p>Olá, <strong>${escapeHtml(user.name)}</strong>,</p>
+        <p>Você solicitou a redefinição de sua senha de acesso ao portal do <strong>nISO</strong>.</p>
+        <p>Use o código de verificação de 6 dígitos abaixo para concluir a alteração (válido por 1 hora):</p>
+        <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; font-family: monospace; font-size: 2rem; letter-spacing: 5px; font-weight: bold; color: #00ade8;">
+          ${token}
+        </div>
+        <p style="color: #8e8e93; font-size: 0.85rem; text-align: center;">Se você não solicitou esta redefinição, por favor desconsidere este e-mail de forma segura.</p>
+      </div>
+    `;
+    await sendEmail(c, email, 'Recuperação de Senha - nISO', emailHtml);
 
     if (c.env.ENVIRONMENT === 'development' || c.env.ENVIRONMENT === 'test') {
       return c.json({ ok: true, reset_token: token, message: 'Código de recuperação gerado (Desenvolvimento)' });
@@ -807,7 +881,7 @@ app.post('/api/v1/auth/reset-password', async (c) => {
     const { email } = JSON.parse(storedData);
     const newHash = await hashPassword(newPassword);
 
-    await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE email = ?')
+    await c.env.DB.prepare('UPDATE users SET password_hash = ?, requires_password_change = 0 WHERE email = ?')
       .bind(newHash, email).run();
 
     await c.env.SESSIONS.delete(`reset_token:${token}`);
@@ -889,10 +963,30 @@ app.post('/api/v1/users', async (c) => {
     const hash = await hashPassword(password);
     
     await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, email, password_hash, name, role, client_project_id, requires_password_change) VALUES (?, ?, ?, ?, ?, ?, 1)`
     ).bind(id, email, hash, name, role, client_project_id || null).run();
 
     await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${role}`);
+
+    // Disparar e-mail de convite
+    const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao nISO!</h2>
+        <p>Olá, <strong>${escapeHtml(name)}</strong>,</p>
+        <p>Você foi convidado a acessar o portal de GRC da <strong>ness.</strong></p>
+        <p>Aqui estão suas credenciais temporárias para o primeiro acesso:</p>
+        <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 0.95rem;">
+          <strong>E-mail:</strong> ${escapeHtml(email)}<br/>
+          <strong>Senha Temporária:</strong> ${escapeHtml(password)}
+        </div>
+        <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
+        <p style="margin-top: 25px;">
+          <a href="https://niso.ness.workers.dev" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no nISO</a>
+        </p>
+      </div>
+    `;
+    await sendEmail(c, email, 'Seu acesso ao nISO', emailHtml);
+
     return c.json({ id, email, name, role, client_project_id }, 201);
   } catch (e: any) {
     if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
