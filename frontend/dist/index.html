@@ -2499,16 +2499,9 @@
             });
             
             c.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem">
-                    <div>
-                        <button class="btn" style="font-size:0.7rem; padding:0.3rem 0.75rem; background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)" onclick="openScopeChangeModal('${p.id}', ${JSON.stringify(p).replace(/'/g, '\x27')})">Alterar Escopo (6.3)</button>
-                    </div>
-                    <button class="btn" onclick="openGeneratePolicyModal('${p.id}')" style="background:rgba(0,173,232,0.12); color:var(--accent); border-color:rgba(0,173,232,0.25)">
-                        Gerar Política com IA
-                    </button>
+                <div style="margin-top: 0.5rem;">
+                    ${journeysHtml}
                 </div>
-                
-                ${journeysHtml}
             `;
             if (window.refreshDoDDrawer) window.refreshDoDDrawer();
         } catch (e) {
