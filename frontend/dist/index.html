@@ -847,6 +847,104 @@
 
 
     <script>
+    const ISO_GUIDELINES = {
+        'p0_1': { control: 'Cl 5.1', tip: 'Definir sponsor executivo', advice: 'O auditor vai buscar atas de reuniões ou nomeações formais assinadas pela diretoria definindo a liderança do SGSI.', evidence: 'Termo de Compromisso assinado ou Ata de Reunião Executiva.' },
+        'p0_3': { control: 'Cl 7.4', tip: 'Ata do Kick-off', advice: 'A ata deve conter a pauta, lista de participantes assinada e a formalização das responsabilidades de segurança.', evidence: 'Ata de reunião em PDF ou Documento Interno com participantes.' },
+        'p0_5': { control: 'Cl 5.2', tip: 'Carta de Mandato', advice: 'A política geral de segurança da informação (mandato) deve estar assinada e aprovada pela alta administração.', evidence: 'Carta de Mandato assinada digitalmente.' },
+        'p3_1': { control: 'Cl 4.3', tip: 'Escopo do SGSI', advice: 'A definição de escopo deve ser clara, justificar exclusões e delimitar perfeitamente o perímetro de infraestrutura/serviços.', evidence: 'Documento de Escopo (Cláusula 4.3).' },
+        'p5_5': { control: 'A.5.15', tip: 'Controle de Acesso', advice: 'O auditor quer ver as regras de concessão, revisão periódica e revogação de acessos de usuários e administradores.', evidence: 'Política de Controle de Acesso.' },
+        'p7_2': { control: 'A.5.9', tip: 'Inventário de Ativos', advice: 'O inventário deve listar proprietários de ativos, localização física/em nuvem e nível de classificação da informação.', evidence: 'Inventário de Ativos de Informação.' },
+        'p11_1': { control: 'A.5.7', tip: 'Intel de Ameaças', advice: 'Mapeamento de fontes de inteligência de ameaças externas utilizadas para mitigar vulnerabilidades ativamente.', evidence: 'Procedimento de Threat Intelligence.' },
+        'p14_1': { control: 'A.5.1', tip: 'Políticas de Segurança', advice: 'Conjunto formalizado de diretrizes de segurança da informação revisadas anualmente.', evidence: 'Manual de Políticas do SGSI.' },
+        'p14_2': { control: 'A.7.7', tip: 'Mesa Limpa / Tela Limpa', advice: 'Definição de bloqueio automático de tela (máx 5min) e política de mesa limpa nos escritórios.', evidence: 'Política de Mesa Limpa e Tela Limpa.' },
+        'p14_3': { control: 'A.5.10', tip: 'Uso Aceitável', advice: 'Os termos de uso aceitável de ativos devem ser assinados por todos os funcionários na contratação.', evidence: 'Política de Uso Aceitável (AUP).' },
+        'p14_4': { control: 'A.8.24', tip: 'Criptografia', advice: 'Regras para uso de chaves criptográficas, SSH, algoritmos permitidos (mínimo AES-256) e SSL/TLS.', evidence: 'Política de Criptografia.' },
+        'p14_5': { control: 'A.5.24', tip: 'Gestão de Incidentes', advice: 'Fluxo claro de reporte de incidentes, canais de denúncia e registro cronológico dos eventos de segurança.', evidence: 'Plano de Resposta a Incidentes.' },
+        'p14_6': { control: 'A.5.29', tip: 'Continuidade de Negócios', advice: 'Procedimentos de recuperação de desastres (DRP) e testes de backup anuais documentados.', evidence: 'Plano de Continuidade de Negócios (BCP).' },
+        'p14_7': { control: 'A.8.11', tip: 'Mascaramento de Dados', advice: 'Regras de anonimização e minimização de dados sensíveis em ambientes de testes e produção.', evidence: 'Política de Privacidade e Mascaramento.' },
+        'p14_8': { control: 'A.8.28', tip: 'Desenvolvimento Seguro', advice: 'Políticas de ciclo de vida seguro (SDLC), testes de vulnerabilidade SAST/DAST e revisão de código.', evidence: 'Política de Desenvolvimento Seguro (SDLC).' },
+        'p14_9': { control: 'A.8.9', tip: 'Gerenciamento de Configuração', advice: 'Padrões de hardening de servidores e auditoria de alterações de infraestrutura.', evidence: 'Política de Configuração e Hardening.' },
+        'p14_10': { control: 'A.5.19', tip: 'Segurança de Fornecedores', advice: 'Processo de avaliação de fornecedores críticos de nuvem/software e cláusulas de segurança padrão.', evidence: 'Política de Segurança de Fornecedores.' },
+        'p21_1': { control: 'Cl 6.1.3', tip: 'Declaração de Aplicabilidade (SoA)', advice: 'O SoA deve conter todos os 93 controles da Annex A com justificativa explícita de inclusão ou exclusão.', evidence: 'Statement of Applicability (SoA) gerado.' }
+    };
+
+    window.toggleAuditorTip = function(itemId) {
+        if (!S.expandedTips) S.expandedTips = {};
+        S.expandedTips[itemId] = !S.expandedTips[itemId];
+        render();
+    };
+
+    window.generateDocumentNatively = async function(projectId, itemId, btnEl) {
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Gerando...';
+        try {
+            const res = await api('POST', `/api/v1/projects/${projectId}/checklist/${itemId}/generate`);
+            showToast('Documento gerado com sucesso!');
+            render();
+        } catch(e) {
+            showToast('Erro ao gerar documento: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
+
+    window.openInternalDocumentEditor = async function(evidenceId) {
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">Editor de Documento Interno</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+            </div>
+            <div id="doc-editor-body" style="padding:1.5rem 0;">
+                <div class="loading"></div>
+            </div>
+        `, 'modal-large');
+
+        try {
+            const data = await api('GET', `/api/v1/evidence/${evidenceId}/content`);
+            
+            document.getElementById('doc-editor-body').innerHTML = `
+                <div style="margin-bottom:1rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">Nome do Arquivo</label>
+                    <input type="text" class="form-input" style="width:100%; font-size:0.85rem;" value="${escapeHTML(data.file_name)}" readonly disabled>
+                </div>
+                <div style="margin-bottom:1.5rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">Conteúdo do Documento (Markdown)</label>
+                    <textarea id="internal-doc-text" class="form-input" style="width:100%; height:450px; font-family:monospace; font-size:0.8rem; line-height:1.4; background:rgba(0,0,0,0.35); resize:vertical; padding:12px;">${escapeHTML(data.content || '')}</textarea>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveInternalDocument('${evidenceId}', this)">Salvar Alterações</button>
+                </div>
+            `;
+        } catch(e) {
+            document.getElementById('doc-editor-body').innerHTML = `
+                <div style="color:var(--danger); padding:1rem; text-align:center;">
+                    Erro ao carregar documento: ${escapeHTML(e.message)}
+                    <div style="margin-top:1rem; font-size:0.75rem; color:var(--text-dim)">Este arquivo pode ser um anexo binário externo (PDF, imagem, etc.).</div>
+                </div>
+            `;
+        }
+    };
+
+    window.saveInternalDocument = async function(evidenceId, btnEl) {
+        const content = document.getElementById('internal-doc-text').value;
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Salvando...';
+        try {
+            await api('PUT', `/api/v1/evidence/${evidenceId}/content`, { content });
+            showToast('Documento atualizado com sucesso!');
+            forceCloseModal();
+            render();
+        } catch(e) {
+            showToast('Erro ao salvar documento: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
     function toggleTheme() {
         const current = document.documentElement.getAttribute('data-theme') || 'dark';
         const next = current === 'dark' ? 'light' : 'dark';
@@ -2347,12 +2445,14 @@
             if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
             if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
             if (!S.phaseChecksDueDate) S.phaseChecksDueDate = {};
+            if (!S.phaseChecksEvidence) S.phaseChecksEvidence = {};
             if (Array.isArray(checklistProgress)) {
                 checklistProgress.forEach(row => {
                     S.phaseChecks[p.id + '_' + row.item_id] = !!row.is_checked;
                     S.phaseChecksNotes[p.id + '_' + row.item_id] = row.notes || '';
                     S.phaseChecksAssigned[p.id + '_' + row.item_id] = row.assigned_to || '';
                     S.phaseChecksDueDate[p.id + '_' + row.item_id] = row.due_date || '';
+                    S.phaseChecksEvidence[p.id + '_' + row.item_id] = row.evidence_id || '';
                 });
                 localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
                 localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
@@ -2369,10 +2469,100 @@
                 { name: "Jornada 6: Certificação Oficial", range: [34, 40], desc: "Melhorias contínuas, auditorias de certificação estágio 1 e 2" }
             ];
 
+            const allPhases = Array.isArray(phases) ? phases : [];
+            const totalPhasesCount = allPhases.length;
+            const completedPhasesCount = allPhases.filter(ph => ph.status === 'completed').length;
+            const blockedPhasesCount = allPhases.filter(ph => ph.status === 'blocked').length;
+            const overallPercent = totalPhasesCount > 0 ? Math.round((completedPhasesCount / totalPhasesCount) * 100) : 0;
+
+            const statusFilter = S.jornadaStatusFilter || 'all';
+            const categoryFilter = S.jornadaCategoryFilter || 'all';
+            const searchQuery = (S.jornadaSearchQuery || '').toLowerCase().trim();
+
+            const metricsHtml = `
+                <div class="stat-card" style="margin-bottom:1.5rem; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+                        <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
+                            <div style="font-size:0.65rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Progresso Geral</div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div style="font-size:1.5rem; font-weight:700; color:var(--text)">${overallPercent}%</div>
+                                <div class="progress-bar" style="flex:1; height:8px;">
+                                    <div class="progress-fill" style="width: ${overallPercent}%"></div>
+                                </div>
+                            </div>
+                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:6px">${completedPhasesCount} de ${totalPhasesCount} Fases Concluídas</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
+                            <div style="font-size:0.65rem; color:${blockedPhasesCount > 0 ? 'var(--danger)' : 'var(--text-dim)'}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Impedimentos / Bloqueios</div>
+                            <div style="font-size:1.5rem; font-weight:700; color:${blockedPhasesCount > 0 ? 'var(--danger)' : 'var(--text)'}">${blockedPhasesCount}</div>
+                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:6px">Fases necessitando de intervenção</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const filtersHtml = `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:1.5rem; background:rgba(255,255,255,0.01); padding:12px; border:1px solid var(--border); border-radius:10px;">
+                    <div style="position:relative; flex:1;">
+                        <input type="text" class="form-input" style="width:100%; padding-left:2rem; font-size:0.8rem; height:36px; border-radius:8px;" placeholder="Buscar fase ou atividade..." value="${escapeHTML(S.jornadaSearchQuery || '')}" oninput="S.jornadaSearchQuery = this.value; render();">
+                        <svg viewBox="0 0 24 24" style="position:absolute; left:8px; top:9px; width:18px; height:18px; stroke:var(--text-dim); stroke-width:2; fill:none; pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600;">Status</label>
+                            <select class="form-input" style="height:36px; padding:0 12px; font-size:0.8rem; border-radius:8px;" onchange="S.jornadaStatusFilter = this.value; render();">
+                                <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>Todos</option>
+                                <option value="pending" ${statusFilter === 'pending' ? 'selected' : ''}>Pending</option>
+                                <option value="in_progress" ${statusFilter === 'in_progress' ? 'selected' : ''}>In Progress</option>
+                                <option value="completed" ${statusFilter === 'completed' ? 'selected' : ''}>Completed</option>
+                                <option value="blocked" ${statusFilter === 'blocked' ? 'selected' : ''}>Blocked</option>
+                                <option value="skipped" ${statusFilter === 'skipped' ? 'selected' : ''}>Skipped</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600;">Categoria</label>
+                            <select class="form-input" style="height:36px; padding:0 12px; font-size:0.8rem; border-radius:8px;" onchange="S.jornadaCategoryFilter = this.value; render();">
+                                <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>Todas</option>
+                                <option value="task" ${categoryFilter === 'task' ? 'selected' : ''}>Task</option>
+                                <option value="document" ${categoryFilter === 'document' ? 'selected' : ''}>Document</option>
+                                <option value="evidence" ${categoryFilter === 'evidence' ? 'selected' : ''}>Evidence</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            `;
+
             let journeysHtml = '';
             
             JOURNEYS.forEach((j, jIdx) => {
                 const jPhases = Array.isArray(phases) ? phases.filter(ph => ph.phase_number >= j.range[0] && ph.phase_number <= j.range[1]) : [];
+                
+                // Filter phases inside this journey
+                let filteredPhases = jPhases.filter(ph => {
+                    if (statusFilter !== 'all' && ph.status !== statusFilter) return false;
+                    const phChecklist = S.checklistsConfig[ph.phase_number] || [];
+                    const matchingItems = phChecklist.filter(item => {
+                        if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
+                        if (searchQuery) {
+                            return item.text.toLowerCase().includes(searchQuery);
+                        }
+                        return true;
+                    });
+                    if (searchQuery) {
+                        const phaseTitleMatch = ph.title.toLowerCase().includes(searchQuery) || String(ph.phase_number).includes(searchQuery);
+                        if (phaseTitleMatch) return true;
+                        return matchingItems.length > 0;
+                    }
+                    if (categoryFilter !== 'all') {
+                        return matchingItems.length > 0;
+                    }
+                    return true;
+                });
+
+                if (filteredPhases.length === 0 && (searchQuery || statusFilter !== 'all' || categoryFilter !== 'all')) {
+                    return;
+                }
+
                 const completedCount = jPhases.filter(ph => ph.status === 'completed').length;
                 const totalCount = jPhases.length;
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -2396,9 +2586,18 @@
                             <div class="journey-toggle-icon ${isJExpanded ? 'expanded' : ''}">&darr;</div>
                         </div>
                         <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${jIdx}">
-                            ${jPhases.map(ph => {
+                            ${filteredPhases.map(ph => {
                                 const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
                                 const phChecklist = S.checklistsConfig[ph.phase_number] || [];
+                                const filteredItems = phChecklist.filter(item => {
+                                    if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
+                                    if (searchQuery) {
+                                        const matchText = item.text.toLowerCase().includes(searchQuery);
+                                        const phaseTitleMatch = ph.title.toLowerCase().includes(searchQuery) || String(ph.phase_number).includes(searchQuery);
+                                        return matchText || phaseTitleMatch;
+                                    }
+                                    return true;
+                                });
                                 
                                 return `
                                     <div class="phase-card">
@@ -2433,15 +2632,20 @@
                                             ` : ''}
                                             
                                             <div class="checklist-title">Checklist de Conformidade (${phChecklist.length} itens)</div>
-                                            ${phChecklist.length > 0 ? `
+                                            ${filteredItems.length > 0 ? `
                                                 <div class="checklist-list">
-                                                    ${phChecklist.map(item => {
+                                                    ${filteredItems.map(item => {
                                                         const checkKey = `${p.id}_${item.id}`;
                                                         const isChecked = S.phaseChecks[checkKey] === true;
                                                         const itemNotes = (S.phaseChecksNotes && S.phaseChecksNotes[checkKey]) || '';
                                                         const itemAssigned = (S.phaseChecksAssigned && S.phaseChecksAssigned[checkKey]) || '';
                                                         const itemDueDate = (S.phaseChecksDueDate && S.phaseChecksDueDate[checkKey]) || '';
+                                                        const itemEvidenceId = (S.phaseChecksEvidence && S.phaseChecksEvidence[checkKey]) || '';
                                                         
+                                                        const hasTip = !!ISO_GUIDELINES[item.id];
+                                                        const isTipExpanded = S.expandedTips && S.expandedTips[item.id] === true;
+                                                        const tipInfo = ISO_GUIDELINES[item.id];
+
                                                         return `
                                                             <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem;">
                                                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
@@ -2451,16 +2655,29 @@
                                                                             onclick="toggleChecklistItem('${p.id}', '${item.id}', this)">
                                                                         <span class="badge-cat ${item.category}">${item.category}</span>
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
+                                                                        ${hasTip ? `
+                                                                            <button class="btn-ghost" onclick="toggleAuditorTip('${item.id}'); event.stopPropagation()" style="font-size:0.85rem; padding:2px 6px; color:var(--accent); line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">💡</button>
+                                                                        ` : ''}
                                                                     </div>
                                                                     <div class="checklist-actions" style="display: flex; align-items: center; gap: 0.5rem;">
+                                                                        ${itemEvidenceId ? `
+                                                                            <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent);" onclick="openInternalDocumentEditor('${itemEvidenceId}'); event.stopPropagation()">Editar Doc</button>
+                                                                        ` : ''}
                                                                         ${(item.category === 'evidence' || item.category === 'document') ? `
                                                                             <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
                                                                         ` : ''}
-                                                                        ${ph.phase_number >= 14 && item.category === 'document' ? `
-                                                                            <button class="btn-inline-action primary" onclick="openGeneratePolicyModal('${p.id}')">Gerar com IA</button>
+                                                                        ${(!isChecked && item.category === 'document') ? `
+                                                                            <button class="btn-inline-action primary" onclick="generateDocumentNatively('${p.id}', '${item.id}', this); event.stopPropagation()">Gerar IA</button>
                                                                         ` : ''}
                                                                     </div>
                                                                 </div>
+                                                                ${(hasTip && isTipExpanded) ? `
+                                                                    <div style="margin-top:0.6rem; background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.1); border-radius:8px; padding:10px; font-size:0.75rem;">
+                                                                        <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">💡 Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
+                                                                        <div style="color:var(--text); margin-bottom:6px;"><strong style="color:var(--text-dim);">Dica:</strong> ${escapeHTML(tipInfo.advice)}</div>
+                                                                        <div style="color:var(--text-dim);"><strong style="color:var(--text-dim);">Evidência Recomendada:</strong> ${escapeHTML(tipInfo.evidence)}</div>
+                                                                    </div>
+                                                                ` : ''}
                                                                 <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
                                                                     <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
                                                                     <textarea class="form-input" 
@@ -2500,7 +2717,9 @@
             
             c.innerHTML = `
                 <div style="margin-top: 0.5rem;">
-                    ${journeysHtml}
+                    ${metricsHtml}
+                    ${filtersHtml}
+                    ${journeysHtml || '<div class="empty-state"><h3>Nenhuma fase correspondente aos filtros</h3></div>'}
                 </div>
             `;
             if (window.refreshDoDDrawer) window.refreshDoDDrawer();

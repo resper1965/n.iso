@@ -2925,6 +2925,149 @@ app.post('/api/v1/projects/:id/generate-policy', async (c) => {
   }
 });
 
+// Helper para encontrar item de checklist
+function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: number } | null {
+  for (const phaseStr in PHASE_CHECKLISTS) {
+    const phaseNumber = parseInt(phaseStr);
+    const item = PHASE_CHECKLISTS[phaseNumber].find(i => i.id === itemId);
+    if (item) return { item, phaseNumber };
+  }
+  return null;
+}
+
+// POST /api/v1/projects/:id/checklist/:itemId/generate
+app.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const itemId = c.req.param('itemId');
+    const userEmail = c.get('user')?.email ?? 'system';
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const found = findChecklistItem(itemId);
+    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
+
+    const { item, phaseNumber } = found;
+
+    // Gerar conteúdo com o PolicyAgent
+    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
+    const prompt = `Gere um documento ou política detalhada em formato markdown para atender ao item de checklist "${item.text}" do projeto "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}). O documento deve ser completo, profissional, prático e pronto para auditoria, sem placeholders e com formatação markdown limpa.`;
+    
+    const result = await agent.run(prompt, { organizationId: projectId });
+    let docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
+
+    // Salvar no R2
+    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
+    await c.env.STORAGE.put(r2Key, docContent, { httpMetadata: { contentType: 'text/markdown' } });
+
+    // Calcular hash SHA-256
+    const encoder = new TextEncoder();
+    const data = encoder.encode(docContent);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Criar registro na tabela de evidence
+    const evidenceId = crypto.randomUUID();
+    const fileName = `${item.text}.md`;
+    const fileSize = data.byteLength;
+
+    await c.env.DB.prepare(
+      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      evidenceId,
+      projectId,
+      fileName,
+      r2Key,
+      hashHex,
+      'text/markdown',
+      fileSize,
+      userEmail,
+      'conforme',
+      'Documento gerado internamente pelo assistente de IA.'
+    ).run();
+
+    // Atualizar checklist_progress
+    await c.env.DB.prepare(
+      `INSERT INTO checklist_progress (project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
+       VALUES (?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
+       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
+         is_checked = 1,
+         checked_by = EXCLUDED.checked_by,
+         checked_at = CURRENT_TIMESTAMP,
+         evidence_id = EXCLUDED.evidence_id,
+         notes = EXCLUDED.notes`
+    ).bind(projectId, phaseNumber, itemId, userEmail, evidenceId).run();
+
+    await logAudit(c.env.DB, 'document.generated', userEmail, `Documento ${fileName} gerado internamente para o item ${itemId}`);
+
+    return c.json({
+      ok: true,
+      evidence_id: evidenceId,
+      file_name: fileName,
+      r2_key: r2Key
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
+  }
+});
+
+// GET /api/v1/evidence/:id/content
+app.get('/api/v1/evidence/:id/content', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    const object = await c.env.STORAGE.get(ev.r2_key);
+    if (!object) return c.json({ error: 'Conteúdo não encontrado no storage' }, 404);
+
+    const content = await object.text();
+    return c.json({
+      ok: true,
+      file_name: ev.file_name,
+      content
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao buscar conteúdo', detail: e.message }, 500);
+  }
+});
+
+// PUT /api/v1/evidence/:id/content
+app.put('/api/v1/evidence/:id/content', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ content: string }>().catch(() => ({} as any));
+    if (typeof body.content !== 'string') return c.json({ error: 'Conteúdo inválido' }, 400);
+
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    // Salvar no R2
+    await c.env.STORAGE.put(ev.r2_key, body.content, { httpMetadata: { contentType: 'text/markdown' } });
+
+    // Calcular hash SHA-256 e tamanho
+    const encoder = new TextEncoder();
+    const data = encoder.encode(body.content);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const fileSize = data.byteLength;
+
+    // Atualizar no banco
+    await c.env.DB.prepare(
+      'UPDATE evidence SET file_hash = ?, file_size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(hashHex, fileSize, id).run();
+
+    await logAudit(c.env.DB, 'document.updated', c.get('user')?.email ?? 'system', `Documento ${ev.file_name} atualizado pelo editor interno`);
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao atualizar conteúdo', detail: e.message }, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  EVIDENCE AGENT — Avaliação Automática de Evidências
 // ═══════════════════════════════════════════════════════════════════════════════
