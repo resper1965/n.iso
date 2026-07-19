@@ -1388,6 +1388,467 @@
       'p39_1': { title: 'Relatório de Auditoria Recebido', fields: [{ id: 'summary', label: 'Resumo do relatório', type: 'textarea', required: true }, { id: 'result', label: 'Resultado', type: 'select', options: ['Certificado', 'Certificado com observações', 'NC menores (90 dias para correção)', 'NC maiores (re-auditoria necessária)'], required: true }], auditorTip: 'Pós-auditoria — O relatório oficial é a base para ações de melhoria.', isoRef: 'Cert Resultado' },
       'p40_1': { title: 'Calendário de Auditorias de Supervisão', fields: [{ id: 'schedule', label: 'Cronograma de supervisão', type: 'textarea', required: true, placeholder: 'Ano 1: Supervisão 1 (mês X)\nAno 2: Supervisão 2 (mês Y)\nAno 3: Recertificação (mês Z)' }], auditorTip: 'Manutenção — Supervisões são obrigatórias para manter a certificação.', isoRef: 'Manutenção' }
     };
+
+      // ═══════════════════════════════════════════════════════════════
+      //  EVIDENCE_WIZARDS — Coleta guiada de evidência (sem IA)
+      // ═══════════════════════════════════════════════════════════════
+
+      // ─── Aprovações genéricas (padrão reutilizável) ───
+      'p3_6': { title: 'Registro de Aprovação do Escopo', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou? (nome e cargo)', type: 'text', required: true, placeholder: 'Ex: João Silva — CEO' },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'reference', label: 'Referência do documento aprovado', type: 'text', placeholder: 'Ex: DOC-ESC-001 v1.0' },
+        { id: 'notes', label: 'Observações', type: 'textarea', placeholder: 'Condições, ressalvas ou comentários da direção' }
+      ], auditorTip: 'Cl 4.3 — O auditor pedirá evidência de que a alta direção revisou e aprovou formalmente o escopo do SGSI.', isoRef: 'Cl 4.3' },
+
+      'p4_2': { title: 'Registro de Entrevistas Realizadas', evidenceOnly: true, fields: [
+        { id: 'interviewees', label: 'Entrevistados (nome — cargo — área)', type: 'textarea', required: true, placeholder: 'Ex:\nMaria Santos — CISO — TI\nCarlos Lima — DPO — Jurídico\nAna Souza — Gerente — RH' },
+        { id: 'dates', label: 'Datas das entrevistas', type: 'textarea', required: true, placeholder: 'Ex: TI: 15/01, RH: 16/01, Jurídico: 17/01' },
+        { id: 'method', label: 'Formato das entrevistas', type: 'select', options: ['Presencial', 'Videoconferência', 'Híbrido', 'Questionário escrito'] },
+        { id: 'notes', label: 'Observações gerais', type: 'textarea' }
+      ], auditorTip: 'Cl 4.1 — Evidência de que entrevistas foram conduzidas com as áreas relevantes.', isoRef: 'Cl 4.1' },
+
+      'p4_6': { title: 'Registro de Aprovação do Gap Assessment', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'compliance_pct', label: 'Percentual de conformidade aprovado', type: 'text', placeholder: 'Ex: 38%' },
+        { id: 'next_steps', label: 'Próximos passos definidos', type: 'textarea' }
+      ], auditorTip: 'Cl 6.1 — Aprovação formal do gap assessment demonstra ciência da direção sobre o estado atual.', isoRef: 'Cl 6.1' },
+
+      'p5_4': { title: 'Aprovação da Estrutura de Governança', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'structure_summary', label: 'Resumo da estrutura aprovada', type: 'textarea', placeholder: 'Descreva brevemente a estrutura: comitê, papéis, frequência de reuniões' }
+      ], auditorTip: 'Cl 5.3 — A estrutura de governança deve ser formalmente aprovada pela alta direção.', isoRef: 'Cl 5.3' },
+
+      'p6_4': { title: 'Aprovação da Análise de Contexto', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'notes', label: 'Observações da direção', type: 'textarea' }
+      ], auditorTip: 'Cl 4.1, 4.2 — Análise de contexto deve ser revisada e validada pela direção.', isoRef: 'Cl 4.1, 4.2' },
+
+      'p7_5': { title: 'Aprovação do Inventário de Ativos', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'total_assets', label: 'Total de ativos inventariados', type: 'text', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'review_date', label: 'Próxima revisão agendada', type: 'date' }
+      ], auditorTip: 'A.5.9 — Inventário deve ser revisado e aprovado periodicamente.', isoRef: 'A.5.9' },
+
+      'p9_2': { title: 'Ativos de Informação Inventariados (Ref. Fase 7)', evidenceOnly: true, linkedTo: 'p7_1', fields: [
+        { id: 'ref_note', label: 'Este item reutiliza o inventário da Fase 7 (p7_1). Confirme a vinculação:', type: 'select', options: ['Inventário da Fase 7 está completo e atualizado', 'Inventário precisa de atualização', 'Inventário não existe ainda'], required: true },
+        { id: 'last_update', label: 'Data da última atualização do inventário', type: 'date', required: true },
+        { id: 'total_assets', label: 'Total de ativos no inventário', type: 'text' }
+      ], auditorTip: 'A.5.9 — O inventário de ativos é insumo direto para a análise de riscos (Cl 6.1.2).', isoRef: 'A.5.9, Cl 6.1.2' },
+
+      'p9_8': { title: 'Aceitação Formal de Risco Residual', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aceitou os riscos residuais?', type: 'text', required: true, placeholder: 'Deve ser a alta direção ou proprietário do risco' },
+        { id: 'date', label: 'Data da aceitação', type: 'date', required: true },
+        { id: 'total_accepted', label: 'Quantidade de riscos aceitos', type: 'text', required: true },
+        { id: 'highest_risk', label: 'Maior risco residual aceito (score)', type: 'text', placeholder: 'Ex: R-015 (score 8/25)' },
+        { id: 'justification', label: 'Justificativa da aceitação', type: 'textarea', required: true, placeholder: 'Por que os riscos residuais são aceitáveis?' }
+      ], auditorTip: 'Cl 6.1.3 — O auditor SEMPRE verifica se há aceitação formal documentada do risco residual.', isoRef: 'Cl 6.1.3' },
+
+      'p10_4': { title: 'Aprovação do DPIA pelo DPO', evidenceOnly: true, fields: [
+        { id: 'dpo_name', label: 'Nome do DPO', type: 'text', required: true },
+        { id: 'date', label: 'Data do parecer', type: 'date', required: true },
+        { id: 'result', label: 'Resultado do parecer', type: 'select', options: ['Aprovado sem ressalvas', 'Aprovado com condições', 'Reprovado — requer ajustes'], required: true },
+        { id: 'conditions', label: 'Condições ou ressalvas (se houver)', type: 'textarea' }
+      ], auditorTip: '27701 A.7.2.5 — DPIA deve ter parecer formal do DPO antes do início da operação.', isoRef: '27701 A.7.2.5' },
+
+      'p11_4': { title: 'Aprovação do Cronograma de Implementação', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'deadline', label: 'Prazo final de implementação', type: 'date' }
+      ], auditorTip: 'Cl 6.1.3 — Cronograma deve ser aprovado e acompanhado pela direção.', isoRef: 'Cl 6.1.3' },
+
+      'p12_3': { title: 'Status de Implementação por Controle', evidenceOnly: true, linkedTo: 'soa', fields: [
+        { id: 'ref_note', label: 'A SoA do sistema já contém o status por controle. Confirme:', type: 'select', options: ['SoA gerada e atualizada no sistema', 'SoA precisa de atualização', 'SoA não foi gerada ainda'], required: true },
+        { id: 'last_update', label: 'Data da última atualização da SoA', type: 'date' },
+        { id: 'total_implemented', label: 'Controles implementados', type: 'text' },
+        { id: 'total_partial', label: 'Controles parciais', type: 'text' },
+        { id: 'total_not', label: 'Controles não implementados', type: 'text' }
+      ], auditorTip: 'Cl 6.1.3d — SoA deve refletir o status real de implementação.', isoRef: 'Cl 6.1.3d' },
+
+      'p12_4': { title: 'Evidências Vinculadas por Controle', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status da vinculação de evidências', type: 'select', options: ['Todas as evidências vinculadas', 'Maioria vinculada (>80%)', 'Parcialmente vinculada (<80%)', 'Não iniciado'], required: true },
+        { id: 'total_linked', label: 'Controles com evidência vinculada', type: 'text' },
+        { id: 'gaps', label: 'Controles sem evidência (listar)', type: 'textarea', placeholder: 'Liste os controles que ainda precisam de evidência' }
+      ], auditorTip: 'Cl 6.1.3d — Cada controle aplicável na SoA deve ter evidência de implementação.', isoRef: 'Cl 6.1.3d' },
+
+      'p12_6': { title: 'Aprovação Formal da SoA', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método de aprovação', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true },
+        { id: 'version', label: 'Versão da SoA aprovada', type: 'text', placeholder: 'Ex: v1.0' }
+      ], auditorTip: 'Cl 6.1.3d — A SoA é o documento mais importante da auditoria. Aprovação formal é obrigatória.', isoRef: 'Cl 6.1.3d' },
+
+      'p13_3': { title: 'Evidências de Conformidade SGPI', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status das evidências', type: 'select', options: ['Todas vinculadas', 'Maioria vinculada (>80%)', 'Parcialmente (<80%)', 'Não iniciado'], required: true },
+        { id: 'gaps', label: 'Controles sem evidência', type: 'textarea' }
+      ], auditorTip: '27701 — Evidências de privacidade devem complementar as de segurança.', isoRef: '27701' },
+
+      'p13_4': { title: 'Aprovação da SoA do SGPI', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'method', label: 'Método', type: 'select', options: ['Ata de reunião', 'E-mail formal', 'Assinatura em documento', 'Deliberação em comitê'], required: true }
+      ], auditorTip: '27701 — SoA de privacidade deve ter aprovação separada ou conjunta com SoA de segurança.', isoRef: '27701' },
+
+      // ─── Evidências técnicas (Fases 15–20) ───
+      'p15_3': { title: 'Evidência: Controles de Acesso Implementados', evidenceOnly: true, fields: [
+        { id: 'iam_tool', label: 'Ferramenta IAM utilizada', type: 'text', required: true, placeholder: 'Ex: Azure AD, Okta, Google Workspace, AWS IAM' },
+        { id: 'mfa', label: 'MFA implementado?', type: 'select', options: ['Sim, para todos os usuários', 'Sim, apenas admin/privilegiados', 'Não implementado'], required: true },
+        { id: 'access_review', label: 'Revisão periódica de acessos?', type: 'select', options: ['Trimestral', 'Semestral', 'Anual', 'Não há processo'] },
+        { id: 'privileged', label: 'Gestão de acessos privilegiados', type: 'textarea', placeholder: 'Como são gerenciadas contas admin? PAM? Princípio de menor privilégio?' },
+        { id: 'evidence_desc', label: 'Descreva as evidências disponíveis', type: 'textarea', required: true, placeholder: 'Ex: Print da config do Azure AD com MFA habilitado, relatório de revisão de acessos, política de senhas' }
+      ], auditorTip: 'A.5.15-A.5.18 — O auditor verificará configuração real de IAM, MFA e revisão de acessos.', isoRef: 'A.5.15-A.5.18' },
+
+      'p15_4': { title: 'Evidência: Políticas Aprovadas pela Direção', evidenceOnly: true, fields: [
+        { id: 'policies_approved', label: 'Políticas aprovadas (lista)', type: 'textarea', required: true, placeholder: 'Ex:\n- Política de Segurança da Informação v1.0\n- Política de Controle de Acesso v1.0\n- Política de Gestão de Incidentes v1.0' },
+        { id: 'approver', label: 'Aprovadas por', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true }
+      ], auditorTip: 'Cl 5.2 — Todas as políticas devem ser aprovadas pela alta direção e comunicadas.', isoRef: 'Cl 5.2' },
+
+      'p16_3': { title: 'Evidência: Termos de Confidencialidade (NDA)', evidenceOnly: true, fields: [
+        { id: 'coverage', label: 'Cobertura de assinaturas', type: 'select', options: ['100% dos colaboradores', '>90% assinaram', '50-90% assinaram', '<50% assinaram'], required: true },
+        { id: 'includes_third', label: 'Terceirizados também assinam?', type: 'select', options: ['Sim', 'Não', 'Parcialmente'] },
+        { id: 'template', label: 'Template utilizado', type: 'textarea', placeholder: 'Descreva brevemente o que o NDA cobre' },
+        { id: 'evidence_desc', label: 'Onde estão armazenados os termos assinados?', type: 'text', required: true, placeholder: 'Ex: RH — pasta digital, sistema de gestão de documentos' }
+      ], auditorTip: 'A.6.2 — NDAs devem ser assinados ANTES do primeiro acesso a sistemas.', isoRef: 'A.6.2, A.6.6' },
+
+      'p17_2': { title: 'Evidência: Controles de Acesso Físico', evidenceOnly: true, fields: [
+        { id: 'controls', label: 'Controles implementados', type: 'textarea', required: true, placeholder: 'Ex: Catracas com crachá, biometria no data center, CFTV 24h, registro de visitantes' },
+        { id: 'areas', label: 'Áreas protegidas', type: 'textarea', placeholder: 'Recepção, escritório, sala de servidores, cofre' },
+        { id: 'evidence_desc', label: 'Evidências disponíveis', type: 'textarea', required: true, placeholder: 'Ex: Fotos da catraca, log de acesso do data center, registro de visitantes' }
+      ], auditorTip: 'A.7.1-A.7.2 — O auditor pode visitar as instalações e verificar controles in loco.', isoRef: 'A.7.1-A.7.2' },
+
+      // ─── Fase 18: Controles Tecnológicos (5 itens) ───
+      'p18_1': { title: 'Evidência: Controles Tecnológicos Tema 8', evidenceOnly: true, fields: [
+        { id: 'endpoint', label: 'Proteção de endpoint (EDR/XDR)', type: 'text', placeholder: 'Ex: CrowdStrike, SentinelOne, Microsoft Defender' },
+        { id: 'network', label: 'Segurança de rede', type: 'textarea', placeholder: 'Firewalls, segmentação, IDS/IPS, WAF' },
+        { id: 'data_protection', label: 'Proteção de dados', type: 'textarea', placeholder: 'DLP, classificação, backup, criptografia' },
+        { id: 'access', label: 'Controle de acesso técnico', type: 'textarea', placeholder: 'IAM, MFA, PAM, SSO' },
+        { id: 'evidence_desc', label: 'Evidências disponíveis (prints, relatórios, configs)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.1-A.8.34 — O auditor verificará configurações reais, não apenas documentos.', isoRef: 'A.8 (Tema 8)' },
+
+      'p18_2': { title: 'Evidência: Gestão de Vulnerabilidades', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Ferramenta de scan utilizada', type: 'text', required: true, placeholder: 'Ex: Nessus, Qualys, OpenVAS, Nuclei' },
+        { id: 'frequency', label: 'Frequência de scan', type: 'select', options: ['Contínuo', 'Semanal', 'Mensal', 'Trimestral', 'Ad-hoc'], required: true },
+        { id: 'patching_sla', label: 'SLA de patching', type: 'textarea', placeholder: 'Crítico: 48h, Alto: 7 dias, Médio: 30 dias, Baixo: 90 dias' },
+        { id: 'pentest', label: 'Último pentest realizado', type: 'date' },
+        { id: 'evidence_desc', label: 'Evidências (relatório de scan, registro de patches)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.8 — O auditor pedirá relatório recente de vulnerabilidades e evidência de correção.', isoRef: 'A.8.8' },
+
+      'p18_3': { title: 'Evidência: Logs e Monitoramento', evidenceOnly: true, fields: [
+        { id: 'siem', label: 'SIEM/ferramenta de monitoramento', type: 'text', required: true, placeholder: 'Ex: Splunk, ELK, Datadog, Wazuh, Microsoft Sentinel' },
+        { id: 'sources', label: 'Fontes de log coletadas', type: 'textarea', required: true, placeholder: 'Servidores, firewalls, AD, cloud, aplicações, endpoints' },
+        { id: 'retention', label: 'Retenção de logs', type: 'text', placeholder: 'Ex: 12 meses online + 24 meses archive' },
+        { id: 'alerting', label: 'Alertas configurados?', type: 'select', options: ['Sim, com playbooks', 'Sim, alertas básicos', 'Não há alertas automáticos'] },
+        { id: 'evidence_desc', label: 'Evidências (dashboard, print do SIEM)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.15, A.8.16 — O auditor verificará se logs são coletados, correlacionados e analisados.', isoRef: 'A.8.15, A.8.16' },
+
+      'p18_4': { title: 'Evidência: Criptografia em Trânsito e Repouso', evidenceOnly: true, fields: [
+        { id: 'transit', label: 'Criptografia em trânsito', type: 'textarea', required: true, placeholder: 'TLS 1.2/1.3 para APIs e web, VPN para acesso remoto, protocolo para e-mail' },
+        { id: 'rest', label: 'Criptografia em repouso', type: 'textarea', required: true, placeholder: 'Encryption at rest no DB, BitLocker nos endpoints, S3 encryption, KMS' },
+        { id: 'key_mgmt', label: 'Gestão de chaves', type: 'textarea', placeholder: 'AWS KMS, Azure Key Vault, HashiCorp Vault, rotação de chaves' },
+        { id: 'evidence_desc', label: 'Evidências (config TLS, print do KMS)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.24 — O auditor verificará config real de TLS e encryption at rest.', isoRef: 'A.8.24' },
+
+      'p18_5': { title: 'Evidência: Proteção contra Malware', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Solução antimalware/EDR', type: 'text', required: true, placeholder: 'Ex: CrowdStrike, SentinelOne, Microsoft Defender for Endpoint' },
+        { id: 'coverage', label: 'Cobertura', type: 'select', options: ['100% dos endpoints', '>90%', '50-90%', '<50%'], required: true },
+        { id: 'updates', label: 'Atualização de assinaturas', type: 'select', options: ['Automática (real-time)', 'Diária', 'Semanal', 'Manual'] },
+        { id: 'evidence_desc', label: 'Evidências (dashboard, cobertura, alertas)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.7 — O auditor verificará cobertura real e atualização de assinaturas.', isoRef: 'A.8.7' },
+
+      // ─── Fases 19-20: Dev Seguro + Cloud ───
+      'p19_2': { title: 'Evidência: SSDLC no Pipeline', evidenceOnly: true, fields: [
+        { id: 'pipeline', label: 'Pipeline CI/CD utilizado', type: 'text', required: true, placeholder: 'Ex: GitHub Actions, GitLab CI, Jenkins, Azure DevOps' },
+        { id: 'stages', label: 'Estágios de segurança no pipeline', type: 'textarea', required: true, placeholder: 'Lint → SAST → Unit Tests → Build → DAST → Deploy → Monitor' },
+        { id: 'gates', label: 'Gates de segurança (bloqueiam deploy?)', type: 'select', options: ['Sim, vulnerabilidades críticas bloqueiam', 'Alertas apenas, não bloqueiam', 'Sem gates de segurança'] },
+        { id: 'evidence_desc', label: 'Evidências (print do pipeline, relatório SAST)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.25 — O auditor pedirá para ver o pipeline rodando com gates de segurança.', isoRef: 'A.8.25' },
+
+      'p19_3': { title: 'Evidência: Code Review Obrigatório', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Plataforma de code review', type: 'text', required: true, placeholder: 'Ex: GitHub Pull Requests, GitLab Merge Requests, Gerrit' },
+        { id: 'policy', label: 'Política de aprovação', type: 'select', options: ['Mínimo 1 aprovação', 'Mínimo 2 aprovações', 'Aprovação do tech lead obrigatória', 'Sem política formal'], required: true },
+        { id: 'branch_protection', label: 'Branch protection habilitado?', type: 'select', options: ['Sim, main/master protegida', 'Parcialmente', 'Não'] },
+        { id: 'evidence_desc', label: 'Evidências (config do repo, PRs aprovados)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.25 — O auditor verificará branch protection rules e histórico de PRs.', isoRef: 'A.8.25' },
+
+      'p19_4': { title: 'Evidência: Ferramentas SAST/SCA Integradas', evidenceOnly: true, fields: [
+        { id: 'sast', label: 'Ferramenta SAST', type: 'text', placeholder: 'Ex: SonarQube, Semgrep, CodeQL, Snyk Code' },
+        { id: 'sca', label: 'Ferramenta SCA (dependências)', type: 'text', placeholder: 'Ex: Dependabot, Snyk, Trivy, OWASP Dependency-Check' },
+        { id: 'dast', label: 'Ferramenta DAST (se houver)', type: 'text', placeholder: 'Ex: OWASP ZAP, Burp Suite, Nuclei' },
+        { id: 'frequency', label: 'Frequência de execução', type: 'select', options: ['A cada commit/PR', 'Diário', 'Semanal', 'Manual'] },
+        { id: 'evidence_desc', label: 'Evidências (relatórios, dashboards)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.28 — O auditor pedirá relatório recente de SAST/SCA e ações tomadas.', isoRef: 'A.8.28' },
+
+      'p20_2': { title: 'Evidência: IAM e Least Privilege na Cloud', evidenceOnly: true, fields: [
+        { id: 'provider', label: 'Cloud provider(s)', type: 'text', required: true, placeholder: 'AWS, Azure, GCP' },
+        { id: 'iam_config', label: 'Configuração IAM', type: 'textarea', required: true, placeholder: 'Roles, policies, grupos, service accounts. Princípio de menor privilégio aplicado?' },
+        { id: 'root_protection', label: 'Conta root/admin protegida?', type: 'select', options: ['MFA + chave física + sem uso diário', 'MFA ativado', 'Sem proteção adicional'], required: true },
+        { id: 'evidence_desc', label: 'Evidências (IAM policies, screenshots)', type: 'textarea', required: true }
+      ], auditorTip: 'A.5.15 — O auditor verificará se least privilege é aplicado na cloud.', isoRef: 'A.5.15, A.5.23' },
+
+      'p20_3': { title: 'Evidência: Pipeline CI/CD Seguro', evidenceOnly: true, fields: [
+        { id: 'secrets', label: 'Gestão de secrets', type: 'text', required: true, placeholder: 'Ex: GitHub Secrets, Vault, AWS Secrets Manager' },
+        { id: 'artifacts', label: 'Assinatura/verificação de artefatos?', type: 'select', options: ['Sim (Cosign, Sigstore)', 'Não'] },
+        { id: 'permissions', label: 'Permissões do pipeline (least privilege)?', type: 'select', options: ['Sim, OIDC + temporary credentials', 'Credenciais fixas com escopo limitado', 'Credenciais amplas'] },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.25 — Pipeline seguro é controle novo na 2022.', isoRef: 'A.8.25, A.8.9' },
+
+      'p20_4': { title: 'Evidência: Monitoramento e Alertas Operacionais', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Ferramenta de monitoramento', type: 'text', required: true, placeholder: 'Ex: Datadog, Grafana, CloudWatch, New Relic' },
+        { id: 'coverage', label: 'O que é monitorado?', type: 'textarea', required: true, placeholder: 'Infra, aplicação, segurança, disponibilidade, performance' },
+        { id: 'alerting', label: 'Alertas configurados e testados?', type: 'select', options: ['Sim, com runbooks', 'Sim, alertas básicos', 'Parcialmente', 'Não'] },
+        { id: 'oncall', label: 'Há equipe on-call?', type: 'select', options: ['Sim, 24x7', 'Sim, horário comercial', 'Não'] },
+        { id: 'evidence_desc', label: 'Evidências (dashboards, alertas)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.16 — O auditor verificará se monitoramento é ativo e alertas são atuados.', isoRef: 'A.8.16' },
+
+      // ─── Fases 21-28: Privacidade ───
+      'p21_2': { title: 'Evidência: DPO/Encarregado Nomeado', evidenceOnly: true, fields: [
+        { id: 'dpo_name', label: 'Nome do DPO/Encarregado', type: 'text', required: true },
+        { id: 'dpo_role', label: 'Cargo/função', type: 'text', required: true },
+        { id: 'independence', label: 'DPO tem independência funcional?', type: 'select', options: ['Sim, dedicado à função', 'Parcial, acumula com outra função compatível', 'Não, função conflitante'], required: true },
+        { id: 'publication', label: 'Nome publicado no site e comunicado à ANPD?', type: 'select', options: ['Sim, ambos', 'Apenas no site', 'Apenas à ANPD', 'Nenhum'] },
+        { id: 'evidence_desc', label: 'Evidências (portaria, publicação, comunicação ANPD)', type: 'textarea', required: true }
+      ], auditorTip: 'LGPD Art. 41 — DPO deve ser nomeado formalmente e publicado.', isoRef: 'LGPD Art. 41' },
+
+      'p22_3': { title: 'Evidência: Minimização de Dados', evidenceOnly: true, fields: [
+        { id: 'measures', label: 'Medidas de minimização implementadas', type: 'textarea', required: true, placeholder: 'Campos desnecessários removidos, retenção limitada, pseudonimização' },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: '27701 — Minimização é princípio fundamental de Privacy by Design.', isoRef: '27701' },
+
+      'p22_4': { title: 'Evidência: Privacy by Default Configurado', evidenceOnly: true, fields: [
+        { id: 'defaults', label: 'Configurações padrão de privacidade', type: 'textarea', required: true, placeholder: 'Ex: Opt-in para marketing, dados mínimos no cadastro, compartilhamento desabilitado por padrão' },
+        { id: 'evidence_desc', label: 'Evidências (prints das configurações)', type: 'textarea', required: true }
+      ], auditorTip: '27701 — Privacy by Default = configuração mais restritiva como padrão.', isoRef: '27701' },
+
+      'p23_1': { title: 'Evidência: Canal de Atendimento a Titulares', evidenceOnly: true, fields: [
+        { id: 'channel', label: 'Canal implementado', type: 'text', required: true, placeholder: 'Ex: privacidade@empresa.com, formulário web, SAC dedicado' },
+        { id: 'sla', label: 'SLA de resposta definido', type: 'text', placeholder: 'Ex: 15 dias úteis' },
+        { id: 'published', label: 'Canal publicado (Política de Privacidade, site)?', type: 'select', options: ['Sim', 'Não'], required: true },
+        { id: 'evidence_desc', label: 'Evidências (print do canal, política de privacidade)', type: 'textarea', required: true }
+      ], auditorTip: 'LGPD Art. 18 — O canal deve estar acessível e funcional.', isoRef: 'LGPD Art. 18' },
+
+      'p23_4': { title: 'Evidência: Teste de Exercício de Direitos', evidenceOnly: true, fields: [
+        { id: 'test_date', label: 'Data do teste', type: 'date', required: true },
+        { id: 'rights_tested', label: 'Direitos testados', type: 'textarea', required: true, placeholder: 'Acesso, correção, exclusão, portabilidade' },
+        { id: 'result', label: 'Resultado', type: 'select', options: ['Todos os direitos atendidos no SLA', 'Maioria atendida, gaps identificados', 'Falhas significativas'], required: true },
+        { id: 'gaps', label: 'Gaps identificados', type: 'textarea' }
+      ], auditorTip: 'LGPD — Teste real demonstra capacidade operacional de atender titulares.', isoRef: 'LGPD Art. 18' },
+
+      'p24_1': { title: 'Evidência: Fluxo de Consentimento', evidenceOnly: true, fields: [
+        { id: 'mechanism', label: 'Mecanismo de coleta de consentimento', type: 'textarea', required: true, placeholder: 'Ex: Checkbox no cadastro, banner de cookies, opt-in por e-mail' },
+        { id: 'granularity', label: 'Consentimento é granular?', type: 'select', options: ['Sim, por finalidade', 'Parcialmente', 'Consentimento único (bundle)'], required: true },
+        { id: 'evidence_desc', label: 'Evidências (print do formulário, logs de consentimento)', type: 'textarea', required: true }
+      ], auditorTip: 'LGPD Art. 8 — Consentimento deve ser livre, informado, inequívoco e granular.', isoRef: 'LGPD Art. 8' },
+
+      'p24_2': { title: 'Evidência: Mecanismo de Revogação', evidenceOnly: true, fields: [
+        { id: 'mechanism', label: 'Como o titular revoga consentimento?', type: 'textarea', required: true, placeholder: 'Ex: Link no rodapé do e-mail, painel de preferências, solicitação por canal' },
+        { id: 'ease', label: 'Revogação é tão fácil quanto o consentimento?', type: 'select', options: ['Sim, mesmo canal', 'Parcialmente', 'Não, processo mais difícil'], required: true },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'LGPD Art. 8 §5 — Revogação deve ser tão fácil quanto o consentimento.', isoRef: 'LGPD Art. 8' },
+
+      'p24_4': { title: 'Evidência: Cookie Banner/Consent Manager', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Ferramenta utilizada', type: 'text', required: true, placeholder: 'Ex: Cookiebot, OneTrust, Custom, Google Consent Mode' },
+        { id: 'categories', label: 'Categorias de cookies gerenciadas', type: 'textarea', placeholder: 'Necessários, Analytics, Marketing, Preferências' },
+        { id: 'opt_out', label: 'Opt-out funciona corretamente?', type: 'select', options: ['Sim, testado e verificado', 'Parcialmente', 'Não testado'], required: true },
+        { id: 'evidence_desc', label: 'Evidências (print do banner, config)', type: 'textarea', required: true }
+      ], auditorTip: 'LGPD — Cookie banner deve bloquear cookies não-essenciais antes do consentimento.', isoRef: 'LGPD' },
+
+      'p25_4': { title: 'Evidência: Jobs de Exclusão de Dados', evidenceOnly: true, fields: [
+        { id: 'mechanism', label: 'Mecanismo de exclusão', type: 'select', options: ['Job automatizado (cron/scheduled)', 'Manual com checklist', 'Não implementado'], required: true },
+        { id: 'frequency', label: 'Frequência de execução', type: 'text', placeholder: 'Ex: Diário, Semanal, Mensal' },
+        { id: 'data_types', label: 'Tipos de dados cobertos', type: 'textarea', placeholder: 'Logs, dados de clientes inativos, backups expirados' },
+        { id: 'evidence_desc', label: 'Evidências (logs de execução, relatórios)', type: 'textarea', required: true }
+      ], auditorTip: 'A.8.10 — Information deletion é controle novo na 2022.', isoRef: 'A.8.10' },
+
+      'p27_2': { title: 'Evidência: DPAs Assinados com Fornecedores', evidenceOnly: true, fields: [
+        { id: 'total', label: 'Total de fornecedores com DPA', type: 'text', required: true, placeholder: 'Ex: 12 de 15 fornecedores' },
+        { id: 'pending', label: 'Fornecedores sem DPA (se houver)', type: 'textarea', placeholder: 'Liste os que ainda não assinaram e o plano de ação' },
+        { id: 'template', label: 'Template de DPA utilizado', type: 'select', options: ['Template próprio aprovado pelo jurídico', 'Template do fornecedor (revisado)', 'Sem template padrão'] },
+        { id: 'evidence_desc', label: 'Evidências (lista de DPAs, cópias)', type: 'textarea', required: true }
+      ], auditorTip: 'A.5.20 — Todos os fornecedores que tratam dados devem ter DPA ou cláusula contratual.', isoRef: 'A.5.20, 27701' },
+
+      // ─── Fases 28-33: Execução + Auditoria ───
+      'p28_8': { title: 'Evidência: Simulação de Incidente (Tabletop)', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data da simulação', type: 'date', required: true },
+        { id: 'scenario', label: 'Cenário simulado', type: 'textarea', required: true, placeholder: 'Ex: Ransomware no file server, vazamento de dados de clientes' },
+        { id: 'participants', label: 'Participantes', type: 'textarea', required: true },
+        { id: 'result', label: 'Resultado e lições aprendidas', type: 'textarea', required: true },
+        { id: 'improvements', label: 'Melhorias identificadas', type: 'textarea' }
+      ], auditorTip: 'A.5.24 — Simulações demonstram prontidão da organização para incidentes reais.', isoRef: 'A.5.24' },
+
+      'p29_3': { title: 'Evidência: Treinamento Inicial Realizado', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data do treinamento', type: 'date', required: true },
+        { id: 'format', label: 'Formato', type: 'select', options: ['Presencial', 'Online ao vivo', 'E-learning', 'Híbrido'], required: true },
+        { id: 'attendance', label: 'Taxa de participação', type: 'text', required: true, placeholder: 'Ex: 92% (230 de 250 colaboradores)' },
+        { id: 'topics', label: 'Temas cobertos', type: 'textarea', placeholder: 'Segurança da informação, phishing, senhas, clean desk, LGPD' },
+        { id: 'evidence_desc', label: 'Evidências (lista de presença, relatório LMS)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 7.2, 7.3 — O auditor verificará registros de participação e conteúdo.', isoRef: 'Cl 7.2, 7.3' },
+
+      'p29_4': { title: 'Evidência: Registros de Presença/Conclusão', evidenceOnly: true, fields: [
+        { id: 'total', label: 'Total de colaboradores treinados', type: 'text', required: true },
+        { id: 'coverage_pct', label: 'Percentual de cobertura', type: 'text', required: true, placeholder: 'Ex: 92%' },
+        { id: 'storage', label: 'Onde estão os registros?', type: 'text', required: true, placeholder: 'Ex: LMS, planilha RH, sistema de gestão' },
+        { id: 'evidence_desc', label: 'Evidências (relatório do LMS, lista)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 7.2 — Registros devem ser mantidos como evidência de competência.', isoRef: 'Cl 7.2' },
+
+      'p30_2': { title: 'Evidência: Dashboard de Métricas Implementado', evidenceOnly: true, fields: [
+        { id: 'tool', label: 'Ferramenta de dashboard', type: 'text', required: true, placeholder: 'Ex: Grafana, Power BI, nISO dashboard, planilha' },
+        { id: 'kpis', label: 'KPIs monitorados', type: 'textarea', required: true },
+        { id: 'evidence_desc', label: 'Evidências (print do dashboard)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 9.1 — Dashboard deve apresentar KPIs relevantes para a análise crítica.', isoRef: 'Cl 9.1' },
+
+      'p31_3': { title: 'Evidência: Auditor Interno Qualificado', evidenceOnly: true, fields: [
+        { id: 'auditor_name', label: 'Nome do auditor interno', type: 'text', required: true },
+        { id: 'qualification', label: 'Qualificação', type: 'textarea', required: true, placeholder: 'Ex: Lead Auditor ISO 27001 (certificação XYZ), experiência em auditoria' },
+        { id: 'independence', label: 'Independência garantida?', type: 'select', options: ['Sim, externo contratado', 'Sim, interno de outra área', 'Não, mesma equipe do SGSI'], required: true },
+        { id: 'evidence_desc', label: 'Evidências (certificado, contrato)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 9.2 — Auditor deve ser competente E independente da área auditada.', isoRef: 'Cl 9.2' },
+
+      'p31_5': { title: 'Evidência: Auditoria Interna Executada', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data(s) da auditoria', type: 'text', required: true },
+        { id: 'scope', label: 'Escopo coberto', type: 'textarea', required: true, placeholder: 'Cláusulas auditadas, controles do Annex A cobertos' },
+        { id: 'findings', label: 'Resumo dos achados', type: 'textarea', required: true, placeholder: 'X NCs maiores, Y NCs menores, Z observações' },
+        { id: 'evidence_desc', label: 'Evidências (relatório de auditoria)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 9.2 — A auditoria interna deve cobrir todas as cláusulas obrigatórias.', isoRef: 'Cl 9.2' },
+
+      'p31_8': { title: 'Evidência: Plano de Ação Corretiva Aprovado', evidenceOnly: true, fields: [
+        { id: 'approver', label: 'Quem aprovou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da aprovação', type: 'date', required: true },
+        { id: 'total_actions', label: 'Total de ações corretivas', type: 'text', required: true },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 10.1 — Ações corretivas da auditoria interna devem estar implementadas antes do Stage 2.', isoRef: 'Cl 10.1' },
+
+      'p32_4': { title: 'Evidência: Verificação de Eficácia das Correções', evidenceOnly: true, fields: [
+        { id: 'verifier', label: 'Quem verificou?', type: 'text', required: true },
+        { id: 'date', label: 'Data da verificação', type: 'date', required: true },
+        { id: 'result', label: 'Resultado', type: 'select', options: ['Todas as correções eficazes', 'Maioria eficaz, retrabalho em algumas', 'Correções ineficazes'], required: true },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 10.1 — O auditor verificará se as correções eliminaram a causa raiz.', isoRef: 'Cl 10.1' },
+
+      'p33_2': { title: 'Evidência: Análise Crítica pela Direção Realizada', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data da reunião', type: 'date', required: true },
+        { id: 'participants', label: 'Participantes da alta direção', type: 'textarea', required: true },
+        { id: 'inputs_covered', label: 'Inputs obrigatórios cobertos (Cl 9.3.2)', type: 'textarea', required: true, placeholder: 'Status de ações anteriores, mudanças, desempenho SI, auditorias, NCs, melhoria contínua' },
+        { id: 'evidence_desc', label: 'Evidências (ata, deliberações)', type: 'textarea', required: true }
+      ], auditorTip: 'Cl 9.3 — O auditor SEMPRE pede a ata da análise crítica. É evidência obrigatória.', isoRef: 'Cl 9.3' },
+
+      // ─── Fase 34: Readiness Review (8 itens de verificação final) ───
+      'p34_1': { title: 'Verificação: Todas as Políticas Aprovadas', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status', type: 'select', options: ['Todas aprovadas e comunicadas', 'Maioria aprovada (>80%)', 'Parcialmente (<80%)', 'Pendente'], required: true },
+        { id: 'list', label: 'Lista de políticas e versões', type: 'textarea', required: true },
+        { id: 'gaps', label: 'Políticas pendentes (se houver)', type: 'textarea' }
+      ], auditorTip: 'Readiness — Todas as políticas devem estar aprovadas antes do Stage 1.', isoRef: 'Cl 5.2' },
+
+      'p34_2': { title: 'Verificação: SoA Finalizado com Evidências', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status da SoA', type: 'select', options: ['Completa com todas evidências', 'Completa, faltam evidências pontuais', 'Incompleta'], required: true },
+        { id: 'coverage', label: 'Cobertura de evidências (%)', type: 'text', required: true }
+      ], auditorTip: 'Cl 6.1.3d — SoA é o documento central de Stage 1.', isoRef: 'Cl 6.1.3d' },
+
+      'p34_3': { title: 'Verificação: Risk Treatment Plan Implementado', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status', type: 'select', options: ['100% implementado', '>80% implementado', '50-80%', '<50%'], required: true },
+        { id: 'pending', label: 'Ações pendentes', type: 'textarea' }
+      ], auditorTip: 'Cl 6.1.3 — Todas as ações do plano devem estar implementadas ou justificadas.', isoRef: 'Cl 6.1.3' },
+
+      'p34_4': { title: 'Verificação: Auditoria Interna Concluída', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status', type: 'select', options: ['Concluída, NCs corrigidas', 'Concluída, NCs em correção', 'Em andamento', 'Não realizada'], required: true },
+        { id: 'report_ref', label: 'Referência do relatório', type: 'text' }
+      ], auditorTip: 'Cl 9.2 — Auditoria interna deve estar concluída antes do Stage 1.', isoRef: 'Cl 9.2' },
+
+      'p34_5': { title: 'Verificação: Análise Crítica Realizada', evidenceOnly: true, fields: [
+        { id: 'status', label: 'Status', type: 'select', options: ['Realizada com ata', 'Agendada', 'Não realizada'], required: true },
+        { id: 'date', label: 'Data', type: 'date' }
+      ], auditorTip: 'Cl 9.3 — Análise crítica deve ser realizada antes do Stage 1.', isoRef: 'Cl 9.3' },
+
+      'p34_6': { title: 'Verificação: NCs Corrigidas', evidenceOnly: true, fields: [
+        { id: 'total', label: 'Total de NCs identificadas', type: 'text', required: true },
+        { id: 'corrected', label: 'NCs corrigidas', type: 'text', required: true },
+        { id: 'status', label: 'Status', type: 'select', options: ['Todas corrigidas e verificadas', 'Maioria corrigida', 'Correção em andamento'], required: true }
+      ], auditorTip: 'Cl 10.1 — NCs da auditoria interna devem estar corrigidas antes da certificação.', isoRef: 'Cl 10.1' },
+
+      'p34_7': { title: 'Verificação: Simulação de Stage 1', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data da simulação', type: 'date', required: true },
+        { id: 'result', label: 'Resultado', type: 'select', options: ['Aprovado, pronto para Stage 1', 'Aprovado com ressalvas menores', 'Reprovado, precisa de ajustes'], required: true },
+        { id: 'findings', label: 'Achados da simulação', type: 'textarea' }
+      ], auditorTip: 'Preparação — Simulação reduz significativamente o risco de não conformidades.', isoRef: 'Preparação' },
+
+      'p34_8': { title: 'Verificação: Readiness Score', evidenceOnly: true, fields: [
+        { id: 'score', label: 'Score de prontidão', type: 'text', required: true, placeholder: 'Ex: 85%' },
+        { id: 'status', label: 'Acima de 80%?', type: 'select', options: ['Sim, pronto para certificação', 'Marginal (70-80%)', 'Abaixo de 70% — não recomendado'], required: true },
+        { id: 'gaps', label: 'Áreas com menor score', type: 'textarea' }
+      ], auditorTip: 'Readiness — Score ≥80% indica boa probabilidade de sucesso na certificação.', isoRef: 'Readiness' },
+
+      // ─── Fases 36-39: Pós-Auditoria ───
+      'p36_3': { title: 'Evidência: Correções do Stage 1 Implementadas', evidenceOnly: true, fields: [
+        { id: 'total', label: 'Total de achados a corrigir', type: 'text', required: true },
+        { id: 'corrected', label: 'Quantos corrigidos', type: 'text', required: true },
+        { id: 'evidence_desc', label: 'Evidências das correções', type: 'textarea', required: true }
+      ], auditorTip: 'Stage 1 → Stage 2 — Correções devem estar implementadas antes do Stage 2.', isoRef: 'Cert' },
+
+      'p36_4': { title: 'Evidência: Evidências de Correção Coletadas', evidenceOnly: true, fields: [
+        { id: 'evidence_list', label: 'Lista de evidências coletadas', type: 'textarea', required: true },
+        { id: 'storage', label: 'Onde estão armazenadas?', type: 'text', required: true }
+      ], auditorTip: 'Stage 1 — Evidências devem estar organizadas e acessíveis.', isoRef: 'Cert' },
+
+      'p37_1': { title: 'Evidência: Evidências de Implementação Organizadas', evidenceOnly: true, fields: [
+        { id: 'structure', label: 'Como as evidências estão organizadas?', type: 'textarea', required: true, placeholder: 'Pasta por controle, por cláusula, ou por tema' },
+        { id: 'format', label: 'Formato predominante', type: 'select', options: ['Digital (plataforma GRC)', 'Digital (pastas + planilha)', 'Misto (digital + físico)'], required: true },
+        { id: 'status', label: 'Status de organização', type: 'select', options: ['Completo e acessível', 'Maioria organizada', 'Precisa de organização'], required: true }
+      ], auditorTip: 'Stage 2 — Evidências desorganizadas atrasam a auditoria e causam má impressão.', isoRef: 'Cert Stage 2' },
+
+      'p37_4': { title: 'Evidência: NCs do Stage 1 Corrigidas', evidenceOnly: true, fields: [
+        { id: 'total', label: 'NCs do Stage 1', type: 'text', required: true },
+        { id: 'corrected', label: 'Corrigidas', type: 'text', required: true },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'Stage 2 — O auditor verificará todas as correções do Stage 1.', isoRef: 'Cert' },
+
+      'p37_5': { title: 'Evidência: Eficácia Operacional', evidenceOnly: true, fields: [
+        { id: 'period', label: 'Período de operação evidenciado', type: 'text', required: true, placeholder: 'Ex: 3 meses de operação do SGSI' },
+        { id: 'metrics', label: 'Métricas de eficácia', type: 'textarea', required: true, placeholder: 'KPIs atingidos, incidentes tratados, treinamentos realizados' },
+        { id: 'evidence_desc', label: 'Evidências', type: 'textarea', required: true }
+      ], auditorTip: 'Stage 2 — O auditor quer ver que o SGSI funciona na prática, não apenas no papel.', isoRef: 'Cert Stage 2' },
+
+      'p37_6': { title: 'Evidência: Logs de Auditoria Disponíveis', evidenceOnly: true, fields: [
+        { id: 'logs_available', label: 'Logs disponíveis para o auditor', type: 'textarea', required: true, placeholder: 'Audit trail do sistema, logs de acesso, registros de mudanças' },
+        { id: 'period', label: 'Período coberto', type: 'text', required: true }
+      ], auditorTip: 'Stage 2 — Logs são evidência de operação real do SGSI.', isoRef: 'Cert Stage 2' },
+
+      'p38_2': { title: 'Evidência: Evidências Solicitadas Fornecidas', evidenceOnly: true, fields: [
+        { id: 'total_requested', label: 'Total de evidências solicitadas pelo auditor', type: 'text', required: true },
+        { id: 'provided', label: 'Fornecidas com sucesso', type: 'text', required: true },
+        { id: 'issues', label: 'Evidências não encontradas (se houver)', type: 'textarea' }
+      ], auditorTip: 'Stage 2 — Resposta rápida às solicitações causa boa impressão.', isoRef: 'Cert Stage 2' },
+
+      'p38_4': { title: 'Evidência: Encerramento Formal da Auditoria', evidenceOnly: true, fields: [
+        { id: 'date', label: 'Data do encerramento', type: 'date', required: true },
+        { id: 'result', label: 'Resultado comunicado', type: 'select', options: ['Recomendação para certificação', 'Certificação com NCs menores (90 dias)', 'NCs maiores (re-auditoria)', 'Não certificado'], required: true },
+        { id: 'notes', label: 'Observações do auditor', type: 'textarea' }
+      ], auditorTip: 'Stage 2 — O resultado formal define o próximo passo.', isoRef: 'Cert Stage 2' },
+
+      'p39_2': { title: 'Evidência: NCs Menores Corrigidas (90 dias)', evidenceOnly: true, fields: [
+        { id: 'total', label: 'Total de NCs menores', type: 'text', required: true },
+        { id: 'corrected', label: 'Corrigidas', type: 'text', required: true },
+        { id: 'deadline', label: 'Prazo', type: 'date' },
+        { id: 'evidence_desc', label: 'Evidências enviadas à certificadora', type: 'textarea', required: true }
+      ], auditorTip: 'Pós-auditoria — NCs menores devem ser corrigidas em até 90 dias.', isoRef: 'Cert' },
+
+      'p39_3': { title: 'Evidência: Certificado Recebido', evidenceOnly: true, fields: [
+        { id: 'cert_date', label: 'Data de emissão do certificado', type: 'date', required: true },
+        { id: 'cert_body', label: 'Organismo certificador', type: 'text', required: true, placeholder: 'Ex: BSI, Bureau Veritas, DNV, TÜV' },
+        { id: 'cert_number', label: 'Número do certificado', type: 'text' },
+        { id: 'validity', label: 'Validade (3 anos)', type: 'date' },
+        { id: 'scope', label: 'Escopo certificado', type: 'textarea' }
+      ], auditorTip: 'Certificação — Parabéns! Agora começa a fase de manutenção.', isoRef: 'Cert' },
+
     // ponytail: DOC_WIZARDS populated for all 6 journeys
 
 
@@ -1478,6 +1939,36 @@
         wizSaveProgress(projectId, itemId);
         const prevText = btnEl.textContent;
         btnEl.disabled = true;
+
+        // ponytail: evidenceOnly items generate document locally without AI
+        if (wiz.evidenceOnly) {
+            btnEl.textContent = 'Gerando registro...';
+            let content = '# ' + wiz.title + '\n\n';
+            content += '**Referência ISO:** ' + wiz.isoRef + '\n';
+            content += '**Data de registro:** ' + new Date().toLocaleDateString('pt-BR') + '\n\n';
+            content += '---\n\n';
+            wiz.fields.forEach(f => {
+                if (data[f.id]) content += '## ' + f.label + '\n' + data[f.id] + '\n\n';
+            });
+            if (wiz.auditorTip) content += '---\n\n> **Nota do Auditor:** ' + wiz.auditorTip + '\n';
+            if (wiz.linkedTo) content += '\n> **Vinculado a:** ' + wiz.linkedTo + '\n';
+            // Show preview directly
+            document.getElementById('wiz-form-fields').style.display = 'none';
+            const preview = document.getElementById('wiz-preview-area');
+            preview.style.display = 'block';
+            preview.innerHTML = `
+                <div style="margin-bottom:0.75rem; font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Preview do Registro de Evidência</div>
+                <textarea id="wiz-doc-content" class="form-input" style="width:100%; height:350px; font-family:monospace; font-size:0.8rem; line-height:1.5; background:rgba(0,0,0,0.3); resize:vertical; padding:12px; color:var(--text); border:1px solid var(--border); border-radius:8px;">${escapeHTML(content)}</textarea>
+            `;
+            document.getElementById('wiz-actions').innerHTML = `
+                <button class="btn" onclick="wizBackToForm('${projectId}', '${itemId}')" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar</button>
+                <button class="btn btn-primary" onclick="wizApprove('${projectId}', '${itemId}', this)">Confirmar e Registrar Evidência</button>
+            `;
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+            return;
+        }
+
         btnEl.textContent = 'Gerando documento...';
         try {
             const res = await api('POST', `/api/v1/projects/${projectId}/generate-document`, { itemId, fields: data });
@@ -3726,7 +4217,7 @@
                                                                             <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
                                                                         ` : ''}
                                                                         ${(!isChecked && item.category === 'document') ? `
-                                                                            <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? 'Preencher e Gerar' : 'Gerar IA'}</button>
+                                                                            <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
                                                                         ` : ''}
                                                                         <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
                                                                     </div>
