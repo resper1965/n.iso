@@ -10175,6 +10175,7 @@
 
     // ——— CLIENT INVITATION ———————————————————————————————
     function openInviteClientModal(projectId) {
+        const tempPassword = 'Niso@' + Math.floor(Math.random() * 9000 + 1000);
         openModal(`
             <div class="modal-header"><span class="modal-title">Convidar Cliente</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
             <div class="form-group">
@@ -10187,7 +10188,7 @@
             </div>
             <div class="form-group">
                 <label class="form-label">Senha Inicial</label>
-                <input class="form-input" id="invite-password" type="text" value="Niso@2024">
+                <input class="form-input" id="invite-password" type="text" value="${tempPassword}">
             </div>
             <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">O cliente terá acesso exclusivo ao portal do projeto vinculado.</p>
             <button class="btn btn-primary" id="btn-do-invite" style="width:100%" onclick="doInviteClient('${projectId}')">Criar Acesso</button>
