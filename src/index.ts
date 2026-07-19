@@ -444,19 +444,46 @@ app.use('/api/v1/*', async (c, next) => {
     return next();
   }
   
+  let user: any = null;
   const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized: Missing or invalid token' }, 401);
+  const apiKeyHeader = c.req.header('x-api-key');
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const userJson = await c.env.SESSIONS.get(token);
+    if (userJson) {
+      user = JSON.parse(userJson);
+    }
+  } else if (apiKeyHeader) {
+    // ponytail: authenticate with API key using SHA-256 hash match
+    const keyBytes = new TextEncoder().encode(apiKeyHeader);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', keyBytes);
+    const keyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const keyRecord = await c.env.DB.prepare(
+      "SELECT * FROM api_keys WHERE key_hash = ? AND status = 'Active'"
+    ).bind(keyHash).first<any>();
+
+    if (keyRecord) {
+      user = {
+        id: 'system',
+        email: `api-key-${keyRecord.id}@system`,
+        role: keyRecord.permissions === 'write' ? 'consultor' : 'org_user',
+        client_project_id: keyRecord.project_id
+      };
+      
+      // Update last used timestamp in background
+      c.executionCtx.waitUntil(
+        c.env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?')
+          .bind(new Date().toISOString(), keyRecord.id)
+          .run()
+      );
+    }
   }
-  
-  const token = authHeader.split(' ')[1];
-  const userJson = await c.env.SESSIONS.get(token);
-  
-  if (!userJson) {
-    return c.json({ error: 'Unauthorized: Invalid or expired token' }, 401);
+
+  if (!user) {
+    return c.json({ error: 'Unauthorized: Invalid or expired token or API key' }, 401);
   }
-  
-  const user = JSON.parse(userJson);
   
   // ponytail: compatibility mapping for legacy roles
   if (user.role === 'admin') {
@@ -3000,6 +3027,11 @@ app.post('/api/v1/projects/:id/approve-document', async (c) => {
     const body = await c.req.json<{ itemId: string; content: string }>().catch(() => ({} as any));
     const { itemId, content } = body;
     if (!itemId || !content) return c.json({ error: 'itemId and content are required' }, 400);
+    
+    // ponytail: validate document size maximum limit (2MB) to prevent Edge memory exhaustion
+    if (content.length > 2 * 1024 * 1024) {
+      return c.json({ error: 'Document size exceeds 2MB limit' }, 400);
+    }
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
