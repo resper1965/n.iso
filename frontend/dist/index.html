@@ -681,6 +681,10 @@
                     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                     <span class="sidebar-nav-text">SoA</span>
                 </div>
+                <div class="sidebar-nav" id="nav-governance" onclick="navigate('governance')">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">Governança</span>
+                </div>
             </div>
 
             <div class="sidebar-label collapsed group-project-only" onclick="toggleGroup('group-ops')" style="display:none">Operacional</div>
@@ -1708,6 +1712,7 @@
         else if (S.view === 'capa') renderCAPA(c, h, a);
         else if (S.view === 'evidence') renderEvidence(c, h, a);
         else if (S.view === 'controls') renderControls(c, h, a);
+        else if (S.view === 'governance') renderGovernance(c, h, a);
         else if (S.view === 'certification') renderCertification(c, h, a);
         else if (S.view === 'ai-chat') renderAIChat(c, h, a);
         else if (S.view === 'knowledge') renderKnowledge(c, h, a);
@@ -2506,8 +2511,6 @@
                     </button>
                 </div>
                 
-                ${window.renderProjectGovernance(S.currentGovernance, p.id)}
-                
                 ${journeysHtml}
             `;
             if (window.refreshDoDDrawer) window.refreshDoDDrawer();
@@ -2609,6 +2612,30 @@
             }
         }, 500);
     };
+
+    async function renderGovernance(c, h, a) {
+        h.textContent = 'Governança & Equipe';
+        a.innerHTML = '';
+        const p = S.currentProject || S.activeProject;
+        if (!p) {
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para visualizar a governança.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>';
+            return;
+        }
+        c.innerHTML = '<div class="loading"></div>';
+        try {
+            const members = await api('GET', `/api/v1/projects/${p.id}/governance`);
+            S.currentGovernance = members || [];
+            
+            c.innerHTML = `
+                <div class="card fade-in">
+                    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem">Organize e gerencie os papéis da equipe do SGSI do seu projeto.</div>
+                    ${window.renderProjectGovernance(S.currentGovernance, p.id)}
+                </div>
+            `;
+        } catch(e) {
+            c.innerHTML = `<div class="error">Erro ao carregar governança: ${e.message}</div>`;
+        }
+    }
 
     async function renderProjects(c, h, a) {
         h.textContent = 'Projetos';
