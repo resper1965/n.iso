@@ -1439,8 +1439,7 @@
       'p36_2': { title: 'Plano de Correção Pós-Stage 1', fields: [{ id: 'plan', label: 'Plano de correção', type: 'textarea', required: true, placeholder: 'Achado → Ação corretiva → Responsável → Prazo' }], auditorTip: 'Stage 1 — Todas as NCs devem estar corrigidas antes do Stage 2.', isoRef: 'Cert Stage 1' },
       'p38_3': { title: 'Registro de Observações do Auditor', fields: [{ id: 'observations', label: 'Observações do auditor durante Stage 2', type: 'textarea', required: true }], auditorTip: 'Stage 2 — Documente tudo para facilitar correções e próximas auditorias.', isoRef: 'Cert Stage 2' },
       'p39_1': { title: 'Relatório de Auditoria Recebido', fields: [{ id: 'summary', label: 'Resumo do relatório', type: 'textarea', required: true }, { id: 'result', label: 'Resultado', type: 'select', options: ['Certificado', 'Certificado com observações', 'NC menores (90 dias para correção)', 'NC maiores (re-auditoria necessária)'], required: true }], auditorTip: 'Pós-auditoria — O relatório oficial é a base para ações de melhoria.', isoRef: 'Cert Resultado' },
-      'p40_1': { title: 'Calendário de Auditorias de Supervisão', fields: [{ id: 'schedule', label: 'Cronograma de supervisão', type: 'textarea', required: true, placeholder: 'Ano 1: Supervisão 1 (mês X)\nAno 2: Supervisão 2 (mês Y)\nAno 3: Recertificação (mês Z)' }], auditorTip: 'Manutenção — Supervisões são obrigatórias para manter a certificação.', isoRef: 'Manutenção' }
-    };
+      'p40_1': { title: 'Calendário de Auditorias de Supervisão', fields: [{ id: 'schedule', label: 'Cronograma de supervisão', type: 'textarea', required: true, placeholder: 'Ano 1: Supervisão 1 (mês X)\nAno 2: Supervisão 2 (mês Y)\nAno 3: Recertificação (mês Z)' }], auditorTip: 'Manutenção — Supervisões são obrigatórias para manter a certificação.', isoRef: 'Manutenção' },
 
       // ═══════════════════════════════════════════════════════════════
       //  EVIDENCE_WIZARDS — Coleta guiada de evidência (sem IA)
@@ -1900,7 +1899,8 @@
         { id: 'cert_number', label: 'Número do certificado', type: 'text' },
         { id: 'validity', label: 'Validade (3 anos)', type: 'date' },
         { id: 'scope', label: 'Escopo certificado', type: 'textarea' }
-      ], auditorTip: 'Certificação — Parabéns! Agora começa a fase de manutenção.', isoRef: 'Cert' },
+      ], auditorTip: 'Certificação — Parabéns! Agora começa a fase de manutenção.', isoRef: 'Cert' }
+    };
 
     // ponytail: DOC_WIZARDS populated for all 6 journeys
 
@@ -2572,16 +2572,16 @@
             const backupText = answers.backup === 'mensal' ? 'Mensal' : answers.backup === 'semestral' ? 'Semestral' : 'Sem Testes';
             const mfaText = answers.mfa === 'todos' ? 'Obrigatório' : answers.mfa === 'admin' ? 'Apenas Admin' : 'Inativo';
 
-            summaryHtml = \`<strong>Cripto:</strong> \${encText} | <strong>Testes de Backup:</strong> \${backupText} | <strong>MFA:</strong> \${mfaText}\`;
+            summaryHtml = `<strong>Cripto:</strong> ${encText} | <strong>Testes de Backup:</strong> ${backupText} | <strong>MFA:</strong> ${mfaText}`;
 
             if (answers.encryption !== 'sim') {
-                suggestionsList += \`<li>⚠️ <strong>Criptografia em repouso pendente:</strong> Essencial para proteger dados contra quebra física (A.8.24). Habilitar criptografia transparente no banco de dados.</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Criptografia em repouso pendente:</strong> Essencial para proteger dados contra quebra física (A.8.24). Habilitar criptografia transparente no banco de dados.</li>`;
             }
             if (answers.backup === 'nunca') {
-                suggestionsList += \`<li>⚠️ <strong>Sem testes de restauração:</strong> O auditor irá solicitar registros dos testes dos últimos 12 meses. Configure teste de simulação mensal (A.8.13).</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Sem testes de restauração:</strong> O auditor irá solicitar registros dos testes dos últimos 12 meses. Configure teste de simulação mensal (A.8.13).</li>`;
             }
             if (answers.mfa !== 'todos') {
-                suggestionsList += \`<li>⚠️ <strong>MFA parcial ou inativo:</strong> Vulnerabilidade de controle de acesso (A.5.15). Ativar MFA obrigatório para toda equipe e e-mail corporativo.</li>\`;
+                suggestionsList += `<li>⚠️ <strong>MFA parcial ou inativo:</strong> Vulnerabilidade de controle de acesso (A.5.15). Ativar MFA obrigatório para toda equipe e e-mail corporativo.</li>`;
             }
         }
         else if (jIdx === 3) {
@@ -2589,16 +2589,16 @@
             const ropaText = answers.ropa === 'completo' ? 'Mapeado' : answers.ropa === 'andamento' ? 'Parcial' : 'Inativo';
             const dsrText = answers.dsr === 'sim' ? 'Estruturado' : 'Pendente';
 
-            summaryHtml = \`<strong>DPO:</strong> \${dpoText} | <strong>ROPA:</strong> \${ropaText} | <strong>Direitos Titulares:</strong> \${dsrText}\`;
+            summaryHtml = `<strong>DPO:</strong> ${dpoText} | <strong>ROPA:</strong> ${ropaText} | <strong>Direitos Titulares:</strong> ${dsrText}`;
 
             if (answers.dpo === 'nao') {
-                suggestionsList += \`<li>💡 <strong>Sem DPO nomeado:</strong> Para ISO 27701 (Cl 7.2.1) e LGPD, nomeie formalmente o encarregado de dados e publique o contato de e-mail no site.</li>\`;
+                suggestionsList += `<li>💡 <strong>Sem DPO nomeado:</strong> Para ISO 27701 (Cl 7.2.1) e LGPD, nomeie formalmente o encarregado de dados e publique o contato de e-mail no site.</li>`;
             }
             if (answers.ropa !== 'completo') {
-                suggestionsList += \`<li>💡 <strong>ROPA pendente ou parcial:</strong> Utilize o módulo ROPA do nISO para mapear o fluxo de tratamento de cada dado pessoal coletado (Cl 7.3.2).</li>\`;
+                suggestionsList += `<li>💡 <strong>ROPA pendente ou parcial:</strong> Utilize o módulo ROPA do nISO para mapear o fluxo de tratamento de cada dado pessoal coletado (Cl 7.3.2).</li>`;
             }
             if (answers.dsr === 'nao') {
-                suggestionsList += \`<li>⚠️ <strong>Sem canal para titulares:</strong> OBRIGATÓRIO implementar canal de requisição DSR e registrar tempos de resposta no relatório de privacidade (Cl 7.3.1).</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Sem canal para titulares:</strong> OBRIGATÓRIO implementar canal de requisição DSR e registrar tempos de resposta no relatório de privacidade (Cl 7.3.1).</li>`;
             }
         }
         else if (jIdx === 4) {
@@ -2606,34 +2606,34 @@
             const audText = answers.audit === 'sim' ? 'Realizada' : answers.audit === 'planejado' ? 'Planejada' : 'Pendente';
             const revText = answers.review === 'sim' ? 'Realizada' : 'Pendente';
 
-            summaryHtml = \`<strong>Treinamento:</strong> \${trText} | <strong>Auditoria Interna:</strong> \${audText} | <strong>Revisão Direção:</strong> \${revText}\`;
+            summaryHtml = `<strong>Treinamento:</strong> ${trText} | <strong>Auditoria Interna:</strong> ${audText} | <strong>Revisão Direção:</strong> ${revText}`;
 
             if (answers.training !== 'sim') {
-                suggestionsList += \`<li>💡 <strong>Conscientização pendente:</strong> Implementar programa contínuo de conscientização (phishing simulado e segurança) além da integração (Cl 7.3).</li>\`;
+                suggestionsList += `<li>💡 <strong>Conscientização pendente:</strong> Implementar programa contínuo de conscientização (phishing simulado e segurança) além da integração (Cl 7.3).</li>`;
             }
             if (answers.audit !== 'sim') {
-                suggestionsList += \`<li>⚠️ <strong>Auditoria Interna pendente:</strong> Requisito obrigatório para o Estágio 1 da certificação. Agende a auditoria antes da auditoria externa (Cl 9.2).</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Auditoria Interna pendente:</strong> Requisito obrigatório para o Estágio 1 da certificação. Agende a auditoria antes da auditoria externa (Cl 9.2).</li>`;
             }
             if (answers.review === 'nao') {
-                suggestionsList += \`<li>⚠️ <strong>Ata de Revisão pela Direção pendente:</strong> Documento chave exigido pelo auditor no Estágio 2. Agende reunião e registre a ata (Cl 9.3).</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Ata de Revisão pela Direção pendente:</strong> Documento chave exigido pelo auditor no Estágio 2. Agende reunião e registre a ata (Cl 9.3).</li>`;
             }
         }
         else if (jIdx === 5) {
             const certText = answers.certifier === 'sim' ? 'Contratada' : answers.certifier === 'negociacao' ? 'Em Negociação' : 'Pendente';
             const capaText = answers.capa === 'sim' ? 'Processo Ativo' : 'Pendente';
 
-            summaryHtml = \`<strong>Certificadora:</strong> \${certText} | <strong>Processo CAPA:</strong> \${capaText}\`;
+            summaryHtml = `<strong>Certificadora:</strong> ${certText} | <strong>Processo CAPA:</strong> ${capaText}`;
 
             if (answers.certifier !== 'sim') {
-                suggestionsList += \`<li>💡 <strong>Contratação da Certificadora:</strong> Solicitar propostas de organismos acreditados (INMETRO / UKAS) para agendar datas de estágio 1 e 2.</li>\`;
+                suggestionsList += `<li>💡 <strong>Contratação da Certificadora:</strong> Solicitar propostas de organismos acreditados (INMETRO / UKAS) para agendar datas de estágio 1 e 2.</li>`;
             }
             if (answers.capa === 'nao') {
-                suggestionsList += \`<li>⚠️ <strong>Sem processo CAPA estruturado:</strong> Essencial para comprovar melhoria contínua (Cl 10.1). Registre qualquer desvio na aba Ações Corretivas.</li>\`;
+                suggestionsList += `<li>⚠️ <strong>Sem processo CAPA estruturado:</strong> Essencial para comprovar melhoria contínua (Cl 10.1). Registre qualquer desvio na aba Ações Corretivas.</li>`;
             }
         }
 
         if (!suggestionsList) {
-            suggestionsList = \`<li>✅ <strong>Todos os controles da jornada mapeados:</strong> Ambiente com maturidade adequada de conformidade! Próximo para auditoria.</li>\`;
+            suggestionsList = `<li>✅ <strong>Todos os controles da jornada mapeados:</strong> Ambiente com maturidade adequada de conformidade! Próximo para auditoria.</li>`;
         }
 
         return `
@@ -2643,10 +2643,10 @@
                     <a href="javascript:void(0)" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}')" style="color:var(--accent); text-decoration:none; font-size:0.65rem;">Refazer Diagnóstico 🔄</a>
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text); margin-bottom: 8px; text-align: left;">
-                    \${summaryHtml}
+                    ${summaryHtml}
                 </div>
                 <ul style="font-size: 0.7rem; color: var(--text-dim); text-align: left; padding-left: 15px; margin: 0; list-style-type: square; line-height: 1.4;">
-                    \${suggestionsList}
+                    ${suggestionsList}
                 </ul>
             </div>
         `;
