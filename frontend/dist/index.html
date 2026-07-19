@@ -157,12 +157,6 @@
         .header-title { font-family: 'Montserrat', sans-serif; font-size: 1rem; font-weight: 500; }
         .header-actions { display: flex; align-items: center; gap: 0.5rem; }
 
-        /* ——— LANGUAGE SELECTOR ———————————————————————————— */
-        .lang-selector { display: flex; gap: 0.25rem; background: var(--surface); border-radius: 8px; padding: 0.15rem; border: 1px solid var(--border); }
-        .lang-opt { background: none; border: none; color: var(--text-dim); font-size: 0.6rem; font-weight: 500; padding: 0.25rem 0.5rem; border-radius: 6px; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.2s; }
-        .lang-opt.active { background: var(--accent); color: #000; }
-        .lang-opt:hover:not(.active) { color: var(--text); }
-
         /* ——— NOTIFICATIONS ———————————————————————————————— */
         .notif-badge { position: relative; cursor: pointer; padding: 0.4rem; border-radius: 8px; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
         .notif-badge:hover { background: var(--surface-hover); }
@@ -862,11 +856,6 @@
             </div>
             <div class="header-right">
                 <div class="header-actions" id="header-actions"></div>
-                <div class="lang-selector" id="lang-selector">
-                    <button class="lang-opt active" onclick="setLang('pt')" id="lang-pt">PT</button>
-                    <button class="lang-opt" onclick="setLang('en')" id="lang-en">EN</button>
-                    <button class="lang-opt" onclick="setLang('es')" id="lang-es">ES</button>
-                </div>
                 <div style="position:relative">
                     <div class="notif-badge" id="notif-badge" onclick="toggleNotifications()"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="notif-count" id="notif-count" style="display:none">0</span></div>
                     <div class="notif-dropdown" id="notif-dropdown"></div>
@@ -2817,13 +2806,9 @@
     // ——— STATE ——————————————————————————————————————————
     // ——— i18n ——————————————————————————————————————————
     function setLang(lang) {
-        S.lang = lang;
-        localStorage.setItem('niso_lang', lang);
-        document.querySelectorAll('.lang-opt').forEach(btn => {
-            btn.classList.toggle('active', btn.id === 'lang-' + lang);
-        });
-        // ponytail: logic for actual text translation could go here, for now it's just state
-        console.log('Language set to:', lang);
+        S.lang = 'pt';
+        localStorage.setItem('niso_lang', 'pt');
+        console.log('Language set to: pt');
     }
 
     function escapeHTML(str) {
@@ -2990,7 +2975,7 @@
 
 
     const S = {
-        view: 'dashboard', lang: localStorage.getItem('niso-lang') || 'pt',
+        view: 'dashboard', lang: 'pt',
         token: localStorage.getItem('niso_token') || null,
         user: localStorage.getItem('niso_user') ? JSON.parse(localStorage.getItem('niso_user')) : null,
         activeProject: localStorage.getItem('niso_activeProject') ? JSON.parse(localStorage.getItem('niso_activeProject')) : null,

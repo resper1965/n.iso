@@ -131,7 +131,8 @@ CREATE TABLE IF NOT EXISTS projects (
     assessment_id TEXT,
     cnpj TEXT,
     employee_count INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    language TEXT DEFAULT 'pt-BR'
 );
 
 CREATE TABLE IF NOT EXISTS project_phases (
