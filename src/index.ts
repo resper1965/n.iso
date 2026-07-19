@@ -5145,7 +5145,12 @@ app.get('/api/v1/public/stats', async (c) => {
 
 app.get('/api/v1/projects/:id/checklist-progress', async (c) => {
   const projectId = c.req.param('id');
-  const rows = await c.env.DB.prepare('SELECT phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes, assigned_to, due_date FROM checklist_progress WHERE project_id = ?').bind(projectId).all();
+  const rows = await c.env.DB.prepare(`
+    SELECT cp.phase_number, cp.item_id, cp.is_checked, cp.checked_by, cp.checked_at, cp.evidence_id, cp.notes, cp.assigned_to, cp.due_date, ev.evaluation_status, ev.evaluation_notes
+    FROM checklist_progress cp
+    LEFT JOIN evidence ev ON cp.evidence_id = ev.id
+    WHERE cp.project_id = ?
+  `).bind(projectId).all();
   return c.json(rows.results || []);
 });
 

@@ -874,6 +874,70 @@
         render();
     };
 
+    window.openJornada2Questionnaire = function(projectId) {
+        if (!S.jornadaAnswers) S.jornadaAnswers = {};
+        const currentAnswers = S.jornadaAnswers[projectId + '_j2'] || { cloud: 'aws', db: 'nuvem', dev: 'sim', auth: 'sim' };
+
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">📋 Coleta de Ativos & Riscos (Jornada 2)</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+            </div>
+            <div style="padding:1.5rem 0; text-align:left;">
+                <p style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem;">
+                    Responda às perguntas abaixo para preencher os ativos iniciais e gerar recomendações automáticas de conformidade para o SGSI.
+                </p>
+                <div style="margin-bottom:1rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">1. Onde está hospedada sua infraestrutura?</label>
+                    <select id="q-cloud" class="form-input" style="width:100%;">
+                        <option value="aws" ${currentAnswers.cloud === 'aws' ? 'selected' : ''}>Amazon Web Services (AWS)</option>
+                        <option value="azure" ${currentAnswers.cloud === 'azure' ? 'selected' : ''}>Microsoft Azure</option>
+                        <option value="gcp" ${currentAnswers.cloud === 'gcp' ? 'selected' : ''}>Google Cloud Platform (GCP)</option>
+                        <option value="local" ${currentAnswers.cloud === 'local' ? 'selected' : ''}>Infraestrutura Local (On-premises)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">2. Onde os bancos de dados estão localizados?</label>
+                    <select id="q-db" class="form-input" style="width:100%;">
+                        <option value="nuvem" ${currentAnswers.db === 'nuvem' ? 'selected' : ''}>Banco de Dados Gerenciado (RDS, Cloud SQL, etc.)</option>
+                        <option value="local" ${currentAnswers.db === 'local' ? 'selected' : ''}>Servidor de Banco Próprio (VM/Físico)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">3. A empresa realiza desenvolvimento interno de software?</label>
+                    <select id="q-dev" class="form-input" style="width:100%;">
+                        <option value="sim" ${currentAnswers.dev === 'sim' ? 'selected' : ''}>Sim, possuímos equipe de engenharia/devs</option>
+                        <option value="nao" ${currentAnswers.dev === 'nao' ? 'selected' : ''}>Não, usamos apenas softwares de terceiros (SaaS/COTS)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:1.5rem;">
+                    <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; display:block; margin-bottom:0.5rem">4. Utilizam algum provedor de identidade centralizado (IdP)?</label>
+                    <select id="q-auth" class="form-input" style="width:100%;">
+                        <option value="sim" ${currentAnswers.auth === 'sim' ? 'selected' : ''}>Sim (Google Workspace, Okta, Azure AD/Entra ID)</option>
+                        <option value="nao" ${currentAnswers.auth === 'nao' ? 'selected' : ''}>Não, controle manual de logins por sistema</option>
+                    </select>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveJornada2Questionnaire('${projectId}')">Salvar Questionário</button>
+                </div>
+            </div>
+        `);
+    };
+
+    window.saveJornada2Questionnaire = function(projectId) {
+        if (!S.jornadaAnswers) S.jornadaAnswers = {};
+        S.jornadaAnswers[projectId + '_j2'] = {
+            cloud: document.getElementById('q-cloud').value,
+            db: document.getElementById('q-db').value,
+            dev: document.getElementById('q-dev').value,
+            auth: document.getElementById('q-auth').value
+        };
+        showToast('Questionário de ativos salvo com sucesso!');
+        forceCloseModal();
+        render();
+    };
+
     window.generateDocumentNatively = async function(projectId, itemId, btnEl) {
         const prevText = btnEl.textContent;
         btnEl.disabled = true;
@@ -2446,6 +2510,8 @@
             if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
             if (!S.phaseChecksDueDate) S.phaseChecksDueDate = {};
             if (!S.phaseChecksEvidence) S.phaseChecksEvidence = {};
+            if (!S.phaseChecksStatus) S.phaseChecksStatus = {};
+            if (!S.phaseChecksEvaluationNotes) S.phaseChecksEvaluationNotes = {};
             if (Array.isArray(checklistProgress)) {
                 checklistProgress.forEach(row => {
                     S.phaseChecks[p.id + '_' + row.item_id] = !!row.is_checked;
@@ -2453,6 +2519,8 @@
                     S.phaseChecksAssigned[p.id + '_' + row.item_id] = row.assigned_to || '';
                     S.phaseChecksDueDate[p.id + '_' + row.item_id] = row.due_date || '';
                     S.phaseChecksEvidence[p.id + '_' + row.item_id] = row.evidence_id || '';
+                    S.phaseChecksStatus[p.id + '_' + row.item_id] = row.evaluation_status || '';
+                    S.phaseChecksEvaluationNotes[p.id + '_' + row.item_id] = row.evaluation_notes || '';
                 });
                 localStorage.setItem('niso_phaseChecks', JSON.stringify(S.phaseChecks));
                 localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
@@ -2568,6 +2636,7 @@
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                 
                 const isJExpanded = S.expandedJourneys[jIdx] === true;
+                const isJ2 = jIdx === 1;
                 
                 journeysHtml += `
                     <div class="journey-card fade-in">
@@ -2583,9 +2652,49 @@
                                 </div>
                                 <div class="journey-meta" style="font-weight:500; min-width:35px">${percent}%</div>
                             </div>
+                            ${isJ2 ? `
+                                <button class="btn-inline-action" style="margin-right:15px; border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornada2Questionnaire('${p.id}'); event.stopPropagation();">📋 Coleta de Ativos</button>
+                            ` : ''}
                             <div class="journey-toggle-icon ${isJExpanded ? 'expanded' : ''}">&darr;</div>
                         </div>
                         <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${jIdx}">
+                            ${(() => {
+                                const answersKey = p.id + '_j2';
+                                const answers = S.jornadaAnswers && S.jornadaAnswers[answersKey];
+                                if (!isJ2 || !answers) return '';
+                                
+                                const cloudLabel = answers.cloud === 'aws' ? 'AWS' : answers.cloud === 'azure' ? 'Azure' : answers.cloud === 'gcp' ? 'GCP' : 'On-premises';
+                                const dbLabel = answers.db === 'nuvem' ? 'Gerenciado' : 'Próprio';
+                                const devLabel = answers.dev === 'sim' ? 'Sim' : 'Não';
+                                const authLabel = answers.auth === 'sim' ? 'Sim' : 'Não';
+
+                                let cloudSg = '';
+                                if (answers.cloud !== 'local') {
+                                    cloudSg = `<li>💡 <strong>Cloud (${cloudLabel}):</strong> Recomendado habilitar MFA na raiz, auditoria do log de console e revisar políticas do controle A.5.23 (Segurança de Serviços em Nuvem).</li>`;
+                                }
+                                let devSg = '';
+                                if (answers.dev === 'sim') {
+                                    devSg = `<li>💡 <strong>Dev interno:</strong> Habilitar testes de segurança SAST no pipeline CI/CD e revisar diretrizes do controle A.8.28 (Desenvolvimento Seguro).</li>`;
+                                }
+                                let authSg = '';
+                                if (answers.auth === 'sim') {
+                                    authSg = `<li>💡 <strong>IDP Centralizado:</strong> Configurar provisionamento automático (SCIM) e monitoramento de logins anômalos (A.5.15).</li>`;
+                                }
+
+                                return `
+                                    <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(0, 173, 232, 0.04); border: 1px dashed rgba(0, 173, 232, 0.2); border-radius: 8px;">
+                                        <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 6px; text-align: left;">⚙️ Diagnóstico do Ambiente (nISO Consultor)</div>
+                                        <div style="font-size: 0.75rem; color: var(--text); margin-bottom: 8px; text-align: left;">
+                                            <strong>Infra:</strong> ${cloudLabel} | <strong>Banco:</strong> ${dbLabel} | <strong>Desenvolvimento Seguro:</strong> ${devLabel} | <strong>SSO/IdP:</strong> ${authLabel}
+                                        </div>
+                                        <ul style="font-size: 0.7rem; color: var(--text-dim); padding-left: 12px; margin: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; list-style-type: disc;">
+                                            ${cloudSg}
+                                            ${devSg}
+                                            ${authSg}
+                                        </ul>
+                                    </div>
+                                `;
+                            })()}
                             ${filteredPhases.map(ph => {
                                 const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
                                 const phChecklist = S.checklistsConfig[ph.phase_number] || [];
@@ -2641,10 +2750,29 @@
                                                         const itemAssigned = (S.phaseChecksAssigned && S.phaseChecksAssigned[checkKey]) || '';
                                                         const itemDueDate = (S.phaseChecksDueDate && S.phaseChecksDueDate[checkKey]) || '';
                                                         const itemEvidenceId = (S.phaseChecksEvidence && S.phaseChecksEvidence[checkKey]) || '';
+                                                        const itemStatus = (S.phaseChecksStatus && S.phaseChecksStatus[checkKey]) || '';
+                                                        const itemEvalNotes = (S.phaseChecksEvaluationNotes && S.phaseChecksEvaluationNotes[checkKey]) || '';
                                                         
                                                         const hasTip = !!ISO_GUIDELINES[item.id];
                                                         const isTipExpanded = S.expandedTips && S.expandedTips[item.id] === true;
                                                         const tipInfo = ISO_GUIDELINES[item.id];
+
+                                                        let badgeHtml = '';
+                                                        if (isChecked && itemEvidenceId) {
+                                                            let statusColor = 'var(--text-dim)';
+                                                            let statusLabel = 'Pendente [AI]';
+                                                            if (itemStatus === 'conforme') {
+                                                                statusColor = '#00ade8';
+                                                                statusLabel = 'Conforme [AI]';
+                                                            } else if (itemStatus === 'parcial') {
+                                                                statusColor = '#ffc107';
+                                                                statusLabel = 'Aviso [AI]';
+                                                            } else if (itemStatus === 'nao conforme') {
+                                                                statusColor = '#ff4d4d';
+                                                                statusLabel = 'Falha [AI]';
+                                                            }
+                                                            badgeHtml = `<span style="font-size:0.6rem; padding:2px 6px; border-radius:4px; border:1px solid ${statusColor}; color:${statusColor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${statusLabel}</span>`;
+                                                        }
 
                                                         return `
                                                             <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem;">
@@ -2655,6 +2783,7 @@
                                                                             onclick="toggleChecklistItem('${p.id}', '${item.id}', this)">
                                                                         <span class="badge-cat ${item.category}">${item.category}</span>
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
+                                                                        ${badgeHtml}
                                                                         ${hasTip ? `
                                                                             <button class="btn-ghost" onclick="toggleAuditorTip('${item.id}'); event.stopPropagation()" style="font-size:0.85rem; padding:2px 6px; color:var(--accent); line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">💡</button>
                                                                         ` : ''}
@@ -2672,10 +2801,16 @@
                                                                     </div>
                                                                 </div>
                                                                 ${(hasTip && isTipExpanded) ? `
-                                                                    <div style="margin-top:0.6rem; background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.1); border-radius:8px; padding:10px; font-size:0.75rem;">
+                                                                    <div style="margin-top:0.6rem; background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.1); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
                                                                         <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">💡 Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
                                                                         <div style="color:var(--text); margin-bottom:6px;"><strong style="color:var(--text-dim);">Dica:</strong> ${escapeHTML(tipInfo.advice)}</div>
                                                                         <div style="color:var(--text-dim);"><strong style="color:var(--text-dim);">Evidência Recomendada:</strong> ${escapeHTML(tipInfo.evidence)}</div>
+                                                                    </div>
+                                                                ` : ''}
+                                                                ${(isChecked && itemStatus && itemStatus !== 'conforme' && itemEvalNotes) ? `
+                                                                    <div style="margin-top:0.6rem; background:rgba(255,77,77,0.03); border:1px solid rgba(255,77,77,0.15); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
+                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">⚠️ Gaps Identificados [AI]</div>
+                                                                        <div style="color:var(--text);">${escapeHTML(itemEvalNotes)}</div>
                                                                     </div>
                                                                 ` : ''}
                                                                 <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
