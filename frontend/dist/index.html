@@ -670,9 +670,9 @@
 
             <div class="sidebar-label collapsed" onclick="toggleGroup('group-impl')">Implementacao</div>
             <div class="sidebar-group" id="group-impl">
-                <div class="sidebar-nav" id="nav-certification" onclick="navigate('certification')">
+                <div class="sidebar-nav" id="nav-project" onclick="navigate('project-detail')">
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-                    <span class="sidebar-nav-text">Trilha ISO</span>
+                    <span class="sidebar-nav-text">Jornada</span>
                 </div>
                 <div class="sidebar-nav" id="nav-monitor" onclick="navigate('monitor')">
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -2329,7 +2329,7 @@
     async function renderProjectDetail(c, h, a) {
         const p = S.currentProject || S.activeProject;
         if (!p) { navigate('projects'); return; }
-        h.textContent = p.project_name || p.client_name;
+        h.textContent = 'Jornada';
         a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
@@ -2501,11 +2501,7 @@
             c.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem">
                     <div>
-                        <div style="font-size:0.75rem; color:var(--text-dim)">Jornada de Adequação do Projeto</div>
-                        <h2 style="font-family:'Montserrat'; font-weight:500; font-size:1.4rem; margin-top:0.25rem">
-                            ${escapeHTML(p.project_name || p.client_name)}
-                            <button class="btn" style="font-size:0.6rem; padding:0.2rem 0.5rem; margin-left:0.5rem; display:inline-block; vertical-align:middle; background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)" onclick="openScopeChangeModal('${p.id}', ${JSON.stringify(p).replace(/'/g, '\x27')})">Alterar Escopo (6.3)</button>
-                        </h2>
+                        <button class="btn" style="font-size:0.7rem; padding:0.3rem 0.75rem; background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)" onclick="openScopeChangeModal('${p.id}', ${JSON.stringify(p).replace(/'/g, '\x27')})">Alterar Escopo (6.3)</button>
                     </div>
                     <button class="btn" onclick="openGeneratePolicyModal('${p.id}')" style="background:rgba(0,173,232,0.12); color:var(--accent); border-color:rgba(0,173,232,0.25)">
                         Gerar Política com IA
