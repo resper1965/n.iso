@@ -847,6 +847,688 @@
 
 
     <script>
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DOC_WIZARDS — Guided Document Generation per Checklist Item
+    // ═══════════════════════════════════════════════════════════════
+    const DOC_WIZARDS = {
+      // ─── JORNADA 1: Mobilização e Diagnóstico (Fases 0–6) ───
+      'p0_1': {
+        title: 'Definição do Sponsor Executivo',
+        fields: [
+          { id: 'sponsor_name', label: 'Nome completo do patrocinador', type: 'text', required: true, placeholder: 'Ex: João Silva' },
+          { id: 'sponsor_role', label: 'Cargo', type: 'text', required: true, placeholder: 'Ex: CEO, CTO, CISO' },
+          { id: 'sponsor_authority', label: 'Nível de autoridade sobre orçamento de SI', type: 'select', options: ['Total (C-Level)', 'Parcial (Diretor)', 'Limitada (Gerente)'] }
+        ],
+        auditorTip: 'Cl 5.1 — O auditor verificará se o sponsor é C-level com poder decisório real sobre recursos.',
+        isoRef: 'Cl 5.1'
+      },
+      'p0_2': {
+        title: 'Nomeação da Equipe do Projeto SGSI',
+        fields: [
+          { id: 'members', label: 'Membros da equipe (nome — cargo — papel no SGSI)', type: 'textarea', required: true, placeholder: 'Ex:\nMaria Santos — CISO — Líder\nCarlos Lima — DPO — Privacidade\nAna Souza — TI — Controles Técnicos' },
+          { id: 'meeting_freq', label: 'Frequência de reuniões', type: 'select', options: ['Semanal', 'Quinzenal', 'Mensal'] },
+          { id: 'report_to', label: 'A quem a equipe reporta?', type: 'text', placeholder: 'Ex: Comitê de Segurança / CEO' }
+        ],
+        auditorTip: 'Cl 5.3 — O auditor verificará se há formalização dos papéis, responsabilidades e autoridades.',
+        isoRef: 'Cl 5.3'
+      },
+      'p0_3': {
+        title: 'Ata de Kick-off do Projeto SGSI',
+        fields: [
+          { id: 'date', label: 'Data do kick-off', type: 'date', required: true },
+          { id: 'participants', label: 'Participantes (nome e cargo)', type: 'textarea', required: true, placeholder: 'Ex:\nJoão Silva — CEO\nMaria Santos — CISO\nPedro Oliveira — CTO' },
+          { id: 'agenda', label: 'Pauta principal', type: 'textarea', required: true, placeholder: 'Ex: Apresentação do projeto, escopo preliminar, cronograma, próximos passos' },
+          { id: 'decisions', label: 'Decisões tomadas', type: 'textarea', placeholder: 'Ex: Aprovação do cronograma, nomeação da equipe, definição de reuniões semanais' },
+          { id: 'next_steps', label: 'Próximos passos', type: 'textarea', placeholder: 'Ex: Agendar entrevistas executivas, iniciar gap assessment' }
+        ],
+        auditorTip: 'Cl 5.1 — A ata de kick-off demonstra comprometimento da alta direção desde o início.',
+        isoRef: 'Cl 5.1'
+      },
+      'p0_4': {
+        title: 'Cronograma do Projeto de Certificação',
+        fields: [
+          { id: 'start_date', label: 'Data de início do projeto', type: 'date', required: true },
+          { id: 'target_cert', label: 'Data pretendida de certificação', type: 'date', required: true },
+          { id: 'milestones', label: 'Marcos principais', type: 'textarea', required: true, placeholder: 'Ex:\nMês 1-2: Diagnóstico e Gap\nMês 3-4: Documentação\nMês 5-6: Implementação\nMês 7: Auditoria Interna\nMês 8: Stage 1\nMês 9: Stage 2' },
+          { id: 'resources', label: 'Recursos alocados', type: 'textarea', placeholder: 'Ex: 2 consultores externos, CISO interno 50%, equipe TI 20%' }
+        ],
+        auditorTip: 'Cl 6.2 — O cronograma deve ter marcos claros, responsáveis e recursos definidos.',
+        isoRef: 'Cl 6.2'
+      },
+      'p0_5': {
+        title: 'Carta de Mandato do SGSI',
+        fields: [
+          { id: 'org_name', label: 'Nome da organização', type: 'text', required: true },
+          { id: 'sponsor', label: 'Sponsor executivo (nome e cargo)', type: 'text', required: true },
+          { id: 'scope', label: 'Escopo do SGSI (localidades, sistemas, processos)', type: 'textarea', required: true, placeholder: 'Ex: Sede São Paulo, Data Center AWS us-east-1, sistemas de e-commerce e CRM' },
+          { id: 'target_date', label: 'Data pretendida de certificação', type: 'date', required: true },
+          { id: 'budget_status', label: 'Orçamento aprovado?', type: 'select', options: ['Sim, formalmente aprovado', 'Aprovação verbal', 'Pendente de aprovação'] },
+          { id: 'objectives', label: 'Objetivos de segurança da informação', type: 'textarea', placeholder: 'Ex: Proteger dados de clientes, garantir continuidade, atender requisitos regulatórios' }
+        ],
+        auditorTip: 'Cl 5.1 — Documento primário de comprometimento. O auditor pedirá este documento no primeiro dia do Stage 1.',
+        isoRef: 'Cl 5.1'
+      },
+      'p0_6': {
+        title: 'Definição de Canais de Comunicação do SGSI',
+        fields: [
+          { id: 'channels', label: 'Canais definidos para comunicação do SGSI', type: 'textarea', required: true, placeholder: 'Ex:\n- E-mail: sgsi@empresa.com\n- Slack: #sgsi-projeto\n- Reuniões semanais: Terça 10h\n- SharePoint: /SGSI/Documentos' },
+          { id: 'internal_comm', label: 'Como a organização comunicará o SGSI internamente?', type: 'select', options: ['Intranet + e-mail', 'Reuniões all-hands', 'Newsletter interna', 'Portal dedicado'] }
+        ],
+        auditorTip: 'Cl 7.4 — O auditor verificará se há plano de comunicação interna e externa sobre o SGSI.',
+        isoRef: 'Cl 7.4'
+      },
+      'p0_7': {
+        title: 'Avaliação de Recursos Necessários',
+        fields: [
+          { id: 'people', label: 'Recursos humanos necessários', type: 'textarea', required: true, placeholder: 'Ex: CISO (interno), 2 consultores ISO (externo), DPO (interno)' },
+          { id: 'budget', label: 'Orçamento estimado', type: 'text', placeholder: 'Ex: R$ 150.000 (consultoria) + R$ 50.000 (ferramentas)' },
+          { id: 'tools', label: 'Ferramentas necessárias', type: 'textarea', placeholder: 'Ex: GRC platform, scanner de vulnerabilidades, SIEM' },
+          { id: 'training', label: 'Treinamentos necessários', type: 'textarea', placeholder: 'Ex: Lead Implementer ISO 27001, treinamento de auditoria interna' }
+        ],
+        auditorTip: 'Cl 7.1 — O auditor verificará se a organização alocou recursos suficientes.',
+        isoRef: 'Cl 7.1'
+      },
+      // ─── Fase 1: Entrevista Executiva ───
+      'p1_1': {
+        title: 'Agendamento de Entrevista com C-Level',
+        fields: [
+          { id: 'exec_names', label: 'Executivos a serem entrevistados', type: 'textarea', required: true, placeholder: 'Ex: CEO — João Silva\nCTO — Maria Santos\nCFO — Carlos Lima' },
+          { id: 'dates', label: 'Datas propostas', type: 'textarea', placeholder: 'Ex: CEO: 15/01, CTO: 16/01, CFO: 17/01' },
+          { id: 'topics', label: 'Temas principais da entrevista', type: 'textarea', placeholder: 'Visão de segurança, apetite de risco, governança, orçamento, incidentes' }
+        ],
+        auditorTip: 'Cl 4.1, 5.1 — Entrevistas executivas são essenciais para entender o contexto e comprometimento.',
+        isoRef: 'Cl 4.1, 5.1'
+      },
+      'p1_3': {
+        title: 'Relatório de Entrevistas Executivas',
+        fields: [
+          { id: 'summary', label: 'Resumo das entrevistas realizadas', type: 'textarea', required: true, placeholder: 'Descreva os principais achados de cada entrevista' },
+          { id: 'expectations', label: 'Expectativas da diretoria', type: 'textarea', required: true, placeholder: 'O que a diretoria espera do programa de segurança?' },
+          { id: 'gaps', label: 'Gaps identificados', type: 'textarea', placeholder: 'Ex: Falta de orçamento dedicado, sem comitê formal, baixa conscientização' },
+          { id: 'risk_appetite', label: 'Apetite de risco identificado', type: 'select', options: ['Conservador (baixo risco)', 'Moderado', 'Agressivo (tolera riscos)', 'Não definido formalmente'] }
+        ],
+        auditorTip: 'Cl 4.1, 4.2 — Este relatório evidencia a compreensão do contexto organizacional.',
+        isoRef: 'Cl 4.1, 4.2'
+      },
+      'p1_4': {
+        title: 'Registro de Gaps Identificados (Entrevista)',
+        fields: [
+          { id: 'gaps_list', label: 'Lista de gaps identificados nas entrevistas', type: 'textarea', required: true, placeholder: 'Ex:\n1. Sem política de SI formalizada\n2. Controle de acesso sem MFA\n3. Backup sem teste de restore\n4. Sem programa de conscientização' },
+          { id: 'priority', label: 'Gaps prioritários (críticos)', type: 'textarea', placeholder: 'Quais gaps representam risco imediato?' }
+        ],
+        auditorTip: 'Cl 6.1 — Gaps das entrevistas alimentam a análise de riscos e o plano de tratamento.',
+        isoRef: 'Cl 6.1'
+      },
+      // ─── Fase 2: Entrevistas por Trilha ───
+      'p2_3': {
+        title: 'Documentação de Achados por Trilha',
+        fields: [
+          { id: 'track', label: 'Trilha avaliada', type: 'select', options: ['TI / Infraestrutura', 'RH / Pessoas', 'Jurídico / Compliance', 'Operações / Processos', 'Desenvolvimento / DevOps'], required: true },
+          { id: 'findings', label: 'Achados principais', type: 'textarea', required: true, placeholder: 'Descreva o estado atual da área em relação à segurança da informação' },
+          { id: 'gaps', label: 'Gaps específicos da trilha', type: 'textarea', placeholder: 'Controles ausentes ou parcialmente implementados' },
+          { id: 'strengths', label: 'Pontos fortes', type: 'textarea', placeholder: 'O que já está bem implementado na área' }
+        ],
+        auditorTip: 'Cl 4.1 — Achados por trilha demonstram profundidade na análise de contexto.',
+        isoRef: 'Cl 4.1'
+      },
+      'p2_4': {
+        title: 'Relatório Consolidado de Entrevistas',
+        fields: [
+          { id: 'total_areas', label: 'Quantas áreas foram entrevistadas?', type: 'text', required: true },
+          { id: 'executive_summary', label: 'Resumo executivo dos achados', type: 'textarea', required: true, placeholder: 'Visão geral do estado de maturidade da organização' },
+          { id: 'critical_gaps', label: 'Gaps críticos (cross-functional)', type: 'textarea', required: true, placeholder: 'Gaps que afetam múltiplas áreas' },
+          { id: 'maturity_level', label: 'Nível de maturidade estimado', type: 'select', options: ['Inicial (1)', 'Repetível (2)', 'Definido (3)', 'Gerenciado (4)', 'Otimizado (5)'] },
+          { id: 'recommendations', label: 'Recomendações prioritárias', type: 'textarea', placeholder: 'Top 5 ações recomendadas' }
+        ],
+        auditorTip: 'Cl 4.1, 4.2 — Consolidação demonstra visão holística do contexto.',
+        isoRef: 'Cl 4.1, 4.2'
+      },
+      // ─── Fase 3: Definição de Escopo ───
+      'p3_1': {
+        title: 'Declaração de Escopo do SGSI',
+        fields: [
+          { id: 'org_name', label: 'Nome da organização', type: 'text', required: true },
+          { id: 'locations', label: 'Localidades incluídas', type: 'textarea', required: true, placeholder: 'Ex: Sede São Paulo (Av. Paulista, 1000)\nFilial Rio de Janeiro\nData Center AWS us-east-1' },
+          { id: 'systems', label: 'Sistemas e infraestrutura incluídos', type: 'textarea', required: true, placeholder: 'Ex: ERP SAP, CRM Salesforce, AWS EC2/RDS/S3, rede corporativa' },
+          { id: 'processes', label: 'Processos de negócio incluídos', type: 'textarea', required: true, placeholder: 'Ex: Vendas online, gestão financeira, RH, suporte ao cliente' },
+          { id: 'exclusions', label: 'Exclusões justificadas', type: 'textarea', placeholder: 'Ex: Filial Manaus (operação descontinuada em 2025)' },
+          { id: 'people_count', label: 'Número de colaboradores no escopo', type: 'text', placeholder: 'Ex: 250 internos + 50 terceirizados' }
+        ],
+        auditorTip: 'Cl 4.3 — O auditor verificará se o escopo é claro, sem ambiguidades, e cobre todos os processos relevantes.',
+        isoRef: 'Cl 4.3'
+      },
+      'p3_2': {
+        title: 'Unidades Organizacionais no Escopo',
+        fields: [
+          { id: 'units', label: 'Unidades/departamentos dentro do escopo', type: 'textarea', required: true, placeholder: 'Ex:\n- Diretoria\n- TI / Infraestrutura\n- Desenvolvimento\n- RH\n- Jurídico\n- Comercial\n- Financeiro' },
+          { id: 'headcount_per_unit', label: 'Headcount por unidade (aproximado)', type: 'textarea', placeholder: 'TI: 30, RH: 15, Comercial: 50...' }
+        ],
+        auditorTip: 'Cl 4.3 — Cada unidade no escopo deve ter responsável de SI definido.',
+        isoRef: 'Cl 4.3'
+      },
+      'p3_3': {
+        title: 'Processos Incluídos no Escopo',
+        fields: [
+          { id: 'processes', label: 'Lista de processos dentro do escopo', type: 'textarea', required: true, placeholder: 'Ex:\n1. Gestão de acessos (TI)\n2. Desenvolvimento de software (Dev)\n3. Onboarding/offboarding (RH)\n4. Contratação de fornecedores (Jurídico)' },
+          { id: 'critical', label: 'Processos críticos para o negócio', type: 'textarea', placeholder: 'Quais processos, se interrompidos, causam maior impacto?' }
+        ],
+        auditorTip: 'Cl 4.3 — Processos críticos devem ter controles proporcionais ao risco.',
+        isoRef: 'Cl 4.3'
+      },
+      'p3_4': {
+        title: 'Exclusões Justificadas do Escopo',
+        fields: [
+          { id: 'exclusions', label: 'O que está FORA do escopo e por quê?', type: 'textarea', required: true, placeholder: 'Ex:\n- Filial Manaus: operação descontinuada\n- Sistema legado XYZ: será descomissionado em 6 meses\n- Controle A.7.3 (Segurança em escritórios): 100% remoto' },
+          { id: 'justification', label: 'Justificativa formal para cada exclusão', type: 'textarea', required: true, placeholder: 'Cada exclusão deve ter justificativa documentada e aprovada' }
+        ],
+        auditorTip: 'Cl 6.1.3d — Exclusões na SoA devem ser justificadas. O auditor questionará cada exclusão.',
+        isoRef: 'Cl 6.1.3d'
+      },
+      'p3_5': {
+        title: 'Limites Geográficos do SGSI',
+        fields: [
+          { id: 'physical', label: 'Localidades físicas no escopo', type: 'textarea', required: true, placeholder: 'Endereços completos dos escritórios, data centers, fábricas' },
+          { id: 'cloud', label: 'Regiões cloud no escopo', type: 'textarea', placeholder: 'Ex: AWS us-east-1, Azure Brazil South, GCP southamerica-east1' },
+          { id: 'remote', label: 'Trabalho remoto incluído?', type: 'select', options: ['Sim, todos os colaboradores remotos', 'Sim, apenas alguns', 'Não, apenas presencial'] }
+        ],
+        auditorTip: 'Cl 4.3 — O auditor pode visitar qualquer localidade no escopo durante o Stage 2.',
+        isoRef: 'Cl 4.3'
+      },
+      // ─── Fase 4: Gap Assessment ───
+      'p4_3': {
+        title: 'Documentação de Gaps por Controle',
+        fields: [
+          { id: 'assessment_method', label: 'Método de avaliação utilizado', type: 'select', options: ['Entrevistas + evidências', 'Questionário + validação', 'Auditoria interna', 'Auto-avaliação'], required: true },
+          { id: 'total_controls', label: 'Total de controles avaliados', type: 'text', placeholder: 'Ex: 93 (Annex A completo)' },
+          { id: 'compliant', label: 'Controles conformes', type: 'text', placeholder: 'Ex: 35' },
+          { id: 'partial', label: 'Controles parcialmente implementados', type: 'text', placeholder: 'Ex: 28' },
+          { id: 'non_compliant', label: 'Controles não conformes', type: 'text', placeholder: 'Ex: 30' },
+          { id: 'critical_gaps', label: 'Gaps críticos identificados', type: 'textarea', required: true, placeholder: 'Liste os gaps mais graves que requerem ação imediata' }
+        ],
+        auditorTip: 'Cl 6.1.3 — O gap assessment alimenta diretamente a SoA e o plano de tratamento de riscos.',
+        isoRef: 'Cl 6.1.3'
+      },
+      'p4_4': {
+        title: 'Relatório de Gap Assessment',
+        fields: [
+          { id: 'exec_summary', label: 'Resumo executivo', type: 'textarea', required: true, placeholder: 'Visão geral do estado de conformidade da organização' },
+          { id: 'compliance_pct', label: 'Percentual de conformidade atual', type: 'text', required: true, placeholder: 'Ex: 38%' },
+          { id: 'top_risks', label: 'Top 5 riscos identificados', type: 'textarea', required: true, placeholder: '1. Sem gestão de vulnerabilidades\n2. Backup sem teste\n3. Sem MFA\n4. Sem programa de awareness\n5. Sem gestão de incidentes' },
+          { id: 'roadmap', label: 'Roadmap de remediação sugerido', type: 'textarea', placeholder: 'Prioridade alta → média → baixa com prazos' },
+          { id: 'investment', label: 'Investimento estimado', type: 'text', placeholder: 'Ex: R$ 200.000–350.000' }
+        ],
+        auditorTip: 'Este relatório é a base para aprovação do investimento pela diretoria.',
+        isoRef: 'Cl 6.1'
+      },
+      'p4_5': {
+        title: 'Plano de Tratamento de Gaps',
+        fields: [
+          { id: 'gaps', label: 'Lista de gaps a tratar', type: 'textarea', required: true, placeholder: 'Gap → Ação → Responsável → Prazo' },
+          { id: 'quick_wins', label: 'Quick wins (ações imediatas)', type: 'textarea', placeholder: 'Ações que podem ser feitas em até 2 semanas' },
+          { id: 'medium_term', label: 'Ações de médio prazo (1-3 meses)', type: 'textarea' },
+          { id: 'long_term', label: 'Ações de longo prazo (3-6 meses)', type: 'textarea' }
+        ],
+        auditorTip: 'Cl 6.1.3 — O plano de tratamento deve ser aprovado pela direção e ter acompanhamento.',
+        isoRef: 'Cl 6.1.3'
+      },
+      // ─── Fase 5: Governança e Papéis ───
+      'p5_2': {
+        title: 'Papéis e Responsabilidades do SGSI',
+        fields: [
+          { id: 'roles', label: 'Papéis definidos', type: 'textarea', required: true, placeholder: 'Ex:\n- CISO: Responsável geral pelo SGSI\n- DPO: Privacidade e proteção de dados\n- Gestor de Riscos: Análise e tratamento\n- Auditor Interno: Auditoria independente' },
+          { id: 'raci', label: 'Matriz RACI simplificada', type: 'textarea', placeholder: 'Atividade → Responsável → Aprovador → Consultado → Informado' }
+        ],
+        auditorTip: 'Cl 5.3 — O auditor verificará se cada papel tem autoridade e recursos adequados.',
+        isoRef: 'Cl 5.3'
+      },
+      'p5_3': {
+        title: 'Organograma de Segurança da Informação',
+        fields: [
+          { id: 'structure', label: 'Estrutura hierárquica do SI', type: 'textarea', required: true, placeholder: 'Descreva a linha de reporte:\nCEO → CISO → Equipe SI\nCEO → DPO (independente)' },
+          { id: 'committee', label: 'Composição do comitê de SI', type: 'textarea', required: true, placeholder: 'Membros, frequência de reunião, escopo de decisões' }
+        ],
+        auditorTip: 'Cl 5.3 — O organograma deve mostrar independência do CISO e reporte direto à alta direção.',
+        isoRef: 'Cl 5.3'
+      },
+      // ─── Fase 6: Contexto e Partes Interessadas ───
+      'p6_1': {
+        title: 'Análise de Contexto Interno e Externo',
+        fields: [
+          { id: 'internal', label: 'Fatores internos relevantes', type: 'textarea', required: true, placeholder: 'Ex: Cultura organizacional, estrutura, estratégia, capacidades técnicas, processos...' },
+          { id: 'external', label: 'Fatores externos relevantes', type: 'textarea', required: true, placeholder: 'Ex: Regulamentações (LGPD, BACEN), mercado, concorrência, tecnologia, ameaças cibernéticas...' },
+          { id: 'swot', label: 'Análise SWOT (opcional)', type: 'textarea', placeholder: 'Forças, Fraquezas, Oportunidades, Ameaças' }
+        ],
+        auditorTip: 'Cl 4.1 — O auditor verificará se a análise de contexto é abrangente e atual.',
+        isoRef: 'Cl 4.1'
+      },
+      'p6_2': {
+        title: 'Identificação de Partes Interessadas',
+        fields: [
+          { id: 'stakeholders', label: 'Partes interessadas identificadas', type: 'textarea', required: true, placeholder: 'Ex:\n- Clientes: Esperam proteção de dados\n- Reguladores (ANPD): Conformidade LGPD\n- Acionistas: Gestão de riscos\n- Colaboradores: Privacidade\n- Fornecedores: Segurança da cadeia' },
+          { id: 'requirements', label: 'Requisitos por parte interessada', type: 'textarea', required: true, placeholder: 'Para cada parte, listar seus requisitos de SI relevantes' }
+        ],
+        auditorTip: 'Cl 4.2 — O auditor pedirá evidência de que os requisitos das partes interessadas foram considerados.',
+        isoRef: 'Cl 4.2'
+      },
+      'p6_3': {
+        title: 'Requisitos das Partes Interessadas',
+        fields: [
+          { id: 'legal', label: 'Requisitos legais e regulatórios', type: 'textarea', required: true, placeholder: 'Ex: LGPD, Marco Civil, regulamentação setorial (BACEN, ANS, ANATEL)' },
+          { id: 'contractual', label: 'Requisitos contratuais', type: 'textarea', placeholder: 'Ex: Cláusulas de SI em contratos com clientes, SLAs de disponibilidade' },
+          { id: 'business', label: 'Requisitos de negócio', type: 'textarea', placeholder: 'Ex: Certificação ISO para participar de licitações' }
+        ],
+        auditorTip: 'Cl 4.2 — Requisitos legais devem estar mapeados e atualizados periodicamente.',
+        isoRef: 'Cl 4.2'
+      },
+      // ─── JORNADA 2: Mapeamento e Riscos (Fases 7–13) ───
+      'p7_1': {
+        title: 'Inventário de Ativos de Informação',
+        fields: [
+          { id: 'categories', label: 'Categorias de ativos mapeados', type: 'textarea', required: true, placeholder: 'Ex:\n- Hardware: servidores, laptops, mobile\n- Software: ERP, CRM, custom apps\n- Dados: bancos de dados, file servers\n- Serviços: cloud, SaaS, APIs\n- Pessoas: equipes críticas' },
+          { id: 'classification', label: 'Esquema de classificação adotado', type: 'select', options: ['Público / Interno / Confidencial / Restrito', 'Baixo / Médio / Alto / Crítico', 'Outro'], required: true },
+          { id: 'total_count', label: 'Quantidade total de ativos inventariados', type: 'text', placeholder: 'Ex: 250 ativos' }
+        ],
+        auditorTip: 'A.5.9 — O inventário deve ser completo, com proprietários definidos e classificação aplicada.',
+        isoRef: 'A.5.9, A.5.10, A.5.12'
+      },
+      'p7_2': {
+        title: 'Classificação de Ativos por Criticidade',
+        fields: [
+          { id: 'criteria', label: 'Critérios de classificação de criticidade', type: 'textarea', required: true, placeholder: 'Como a criticidade é determinada? (impacto no negócio, sensibilidade dos dados, regulatório)' },
+          { id: 'critical_assets', label: 'Ativos classificados como críticos', type: 'textarea', required: true, placeholder: 'Liste os ativos de maior criticidade' },
+          { id: 'review_freq', label: 'Frequência de revisão do inventário', type: 'select', options: ['Mensal', 'Trimestral', 'Semestral', 'Anual'] }
+        ],
+        auditorTip: 'A.5.12 — Classificação deve ser aplicada consistentemente e revisada periodicamente.',
+        isoRef: 'A.5.12'
+      },
+      'p7_4': {
+        title: 'Mapeamento de Dados Pessoais (RoPA)',
+        fields: [
+          { id: 'data_categories', label: 'Categorias de dados pessoais tratados', type: 'textarea', required: true, placeholder: 'Ex: Nome, CPF, e-mail, endereço, dados financeiros, dados de saúde' },
+          { id: 'purposes', label: 'Finalidades de tratamento', type: 'textarea', required: true, placeholder: 'Para cada categoria, qual a finalidade?' },
+          { id: 'legal_bases', label: 'Bases legais aplicáveis', type: 'textarea', placeholder: 'Consentimento, execução de contrato, legítimo interesse, obrigação legal...' },
+          { id: 'retention', label: 'Prazos de retenção', type: 'textarea', placeholder: 'Categoria → Prazo → Justificativa' }
+        ],
+        auditorTip: 'ISO 27701 A.7.2.8 — RoPA é obrigatório pela LGPD e essencial para ISO 27701.',
+        isoRef: '27701 A.7.2.8'
+      },
+      'p8_1': {
+        title: 'Mapeamento de Processos de Negócio',
+        fields: [
+          { id: 'processes', label: 'Processos de negócio identificados', type: 'textarea', required: true, placeholder: 'Liste os processos principais com breve descrição' },
+          { id: 'owners', label: 'Proprietários dos processos', type: 'textarea', required: true, placeholder: 'Processo → Responsável' },
+          { id: 'dependencies', label: 'Dependências entre processos', type: 'textarea', placeholder: 'Quais processos dependem de quais?' }
+        ],
+        auditorTip: 'Cl 4.1 — Processos devem estar mapeados para identificar riscos e controles proporcionais.',
+        isoRef: 'Cl 4.1'
+      },
+      'p8_2': {
+        title: 'Fluxos de Dados Documentados',
+        fields: [
+          { id: 'flows', label: 'Fluxos de dados identificados', type: 'textarea', required: true, placeholder: 'Descreva os fluxos: origem → processamento → destino → armazenamento' },
+          { id: 'external', label: 'Fluxos externos (terceiros, cloud)', type: 'textarea', placeholder: 'Dados que saem da organização, para onde e por quê' },
+          { id: 'sensitive', label: 'Fluxos de dados sensíveis', type: 'textarea', placeholder: 'Quais fluxos envolvem dados sensíveis ou regulados?' }
+        ],
+        auditorTip: 'A.5.9 — Fluxos de dados ajudam a identificar pontos de controle e vulnerabilidades.',
+        isoRef: 'A.5.9'
+      },
+      'p8_3': {
+        title: 'Dependências entre Processos',
+        fields: [
+          { id: 'dependencies', label: 'Mapa de dependências', type: 'textarea', required: true, placeholder: 'Processo A depende de → Processo B, Sistema X\nProcesso B depende de → Fornecedor Y' },
+          { id: 'single_points', label: 'Pontos únicos de falha identificados', type: 'textarea', placeholder: 'Sistemas ou pessoas sem redundância' }
+        ],
+        auditorTip: 'A.5.30 — Dependências são insumo para o BCP (Business Continuity Plan).',
+        isoRef: 'A.5.30'
+      },
+      'p9_1': {
+        title: 'Metodologia de Análise de Riscos',
+        fields: [
+          { id: 'approach', label: 'Abordagem escolhida', type: 'select', options: ['Qualitativa (matriz 5x5)', 'Semi-quantitativa', 'Quantitativa (FAIR)', 'Híbrida'], required: true },
+          { id: 'impact_scale', label: 'Escala de impacto', type: 'textarea', required: true, placeholder: '1-Negligível, 2-Baixo, 3-Médio, 4-Alto, 5-Crítico\nDescreva cada nível' },
+          { id: 'likelihood_scale', label: 'Escala de probabilidade', type: 'textarea', required: true, placeholder: '1-Raro, 2-Improvável, 3-Possível, 4-Provável, 5-Quase certo' },
+          { id: 'acceptance', label: 'Critério de aceitação de risco', type: 'text', required: true, placeholder: 'Ex: Riscos com score ≤ 6 são aceitos' },
+          { id: 'frequency', label: 'Frequência de reavaliação', type: 'select', options: ['Trimestral', 'Semestral', 'Anual', 'Após incidentes'] }
+        ],
+        auditorTip: 'Cl 6.1.2 — O auditor verificará se a metodologia é consistente, repetível e aprovada.',
+        isoRef: 'Cl 6.1.2'
+      },
+      'p9_3': {
+        title: 'Ameaças e Vulnerabilidades Identificadas',
+        fields: [
+          { id: 'threats', label: 'Ameaças identificadas', type: 'textarea', required: true, placeholder: 'Ex: Ransomware, phishing, insider threat, falha de hardware, desastre natural' },
+          { id: 'vulns', label: 'Vulnerabilidades identificadas', type: 'textarea', required: true, placeholder: 'Ex: Sistemas sem patch, senhas fracas, sem MFA, falta de backup off-site' },
+          { id: 'scenarios', label: 'Cenários de risco (top 10)', type: 'textarea', placeholder: 'Ameaça + Vulnerabilidade + Ativo = Cenário de risco' }
+        ],
+        auditorTip: 'Cl 6.1.2 — Ameaças e vulnerabilidades devem estar vinculadas a ativos específicos.',
+        isoRef: 'Cl 6.1.2'
+      },
+      'p9_4': {
+        title: 'Matriz de Risco (Impacto x Probabilidade)',
+        fields: [
+          { id: 'total_risks', label: 'Total de riscos avaliados', type: 'text', required: true },
+          { id: 'critical', label: 'Riscos críticos (vermelho)', type: 'textarea', required: true, placeholder: 'Score ≥ 15. Liste cada risco.' },
+          { id: 'high', label: 'Riscos altos (laranja)', type: 'textarea', placeholder: 'Score 10-14' },
+          { id: 'medium', label: 'Riscos médios (amarelo)', type: 'textarea', placeholder: 'Score 5-9' },
+          { id: 'low', label: 'Riscos baixos (verde)', type: 'textarea', placeholder: 'Score ≤ 4' }
+        ],
+        auditorTip: 'Cl 6.1.2 — A matriz deve ser visual e os riscos priorizados para tratamento.',
+        isoRef: 'Cl 6.1.2'
+      },
+      'p9_5': {
+        title: 'Critérios de Aceitação de Risco',
+        fields: [
+          { id: 'criteria', label: 'Critérios de aceitação definidos', type: 'textarea', required: true, placeholder: 'Quais níveis de risco são aceitáveis? Quem aprova a aceitação?' },
+          { id: 'approver', label: 'Quem aprova a aceitação de riscos?', type: 'text', required: true, placeholder: 'Ex: CISO para riscos médios, CEO para riscos altos' }
+        ],
+        auditorTip: 'Cl 6.1.2 — Critérios devem ser formalizados e aprovados pela direção.',
+        isoRef: 'Cl 6.1.2'
+      },
+      'p9_7': {
+        title: 'Plano de Tratamento de Riscos',
+        fields: [
+          { id: 'risks', label: 'Riscos a tratar (acima do critério de aceitação)', type: 'textarea', required: true, placeholder: 'Risco → Opção de tratamento → Controle → Responsável → Prazo' },
+          { id: 'treatment_options', label: 'Opções de tratamento utilizadas', type: 'textarea', placeholder: 'Mitigar, Transferir, Evitar, Aceitar — para cada risco' },
+          { id: 'budget', label: 'Orçamento para tratamento', type: 'text', placeholder: 'Custo estimado das ações' }
+        ],
+        auditorTip: 'Cl 6.1.3 — O plano deve vincular cada risco a um controle e ter aprovação da direção.',
+        isoRef: 'Cl 6.1.3'
+      },
+      'p10_1': {
+        title: 'DPIA / RIPD para Operações de Alto Risco',
+        fields: [
+          { id: 'operation', label: 'Operação avaliada', type: 'text', required: true, placeholder: 'Ex: Processamento de dados de saúde, scoring de crédito' },
+          { id: 'data_types', label: 'Tipos de dados envolvidos', type: 'textarea', required: true },
+          { id: 'risks', label: 'Riscos à privacidade identificados', type: 'textarea', required: true },
+          { id: 'measures', label: 'Medidas mitigatórias propostas', type: 'textarea', required: true },
+          { id: 'dpo_opinion', label: 'Parecer do DPO', type: 'textarea', placeholder: 'Recomendação do DPO sobre a operação' }
+        ],
+        auditorTip: '27701 A.7.2.5 — DPIA é obrigatório para operações de alto risco à privacidade.',
+        isoRef: '27701 A.7.2.5'
+      },
+      'p10_2': {
+        title: 'Riscos de Privacidade Identificados',
+        fields: [
+          { id: 'risks', label: 'Riscos de privacidade', type: 'textarea', required: true, placeholder: 'Liste os riscos de privacidade com impacto e probabilidade' },
+          { id: 'affected_groups', label: 'Grupos de titulares afetados', type: 'textarea', required: true, placeholder: 'Clientes, colaboradores, candidatos, parceiros...' }
+        ],
+        auditorTip: '27701 — Riscos de privacidade devem ser integrados ao registro geral de riscos.',
+        isoRef: '27701'
+      },
+      'p10_3': {
+        title: 'Medidas Mitigatórias de Privacidade',
+        fields: [
+          { id: 'measures', label: 'Medidas implementadas ou planejadas', type: 'textarea', required: true, placeholder: 'Para cada risco de privacidade, qual a medida de mitigação?' },
+          { id: 'status', label: 'Status de implementação', type: 'textarea', placeholder: 'Medida → Status (implementada/em andamento/planejada)' }
+        ],
+        auditorTip: '27701 — Medidas devem ser proporcionais ao risco e verificáveis.',
+        isoRef: '27701'
+      },
+      'p11_1': {
+        title: 'Plano de Tratamento de Riscos (Elaborado)',
+        fields: [
+          { id: 'plan', label: 'Plano detalhado de tratamento', type: 'textarea', required: true, placeholder: 'Risco → Controle → Responsável → Prazo → Status' },
+          { id: 'priority', label: 'Priorização', type: 'textarea', placeholder: 'Alta, Média, Baixa para cada ação' }
+        ],
+        auditorTip: 'Cl 6.1.3 — O plano deve ser vivo e acompanhado em reuniões periódicas.',
+        isoRef: 'Cl 6.1.3'
+      },
+      'p11_2': {
+        title: 'Controles Selecionados por Risco',
+        fields: [
+          { id: 'mapping', label: 'Mapeamento risco → controle', type: 'textarea', required: true, placeholder: 'Risco X → Controle A.8.24 (Criptografia)\nRisco Y → Controle A.5.15 (Controle de Acesso)' }
+        ],
+        auditorTip: 'Cl 6.1.3 — Cada risco deve ter pelo menos um controle associado.',
+        isoRef: 'Cl 6.1.3'
+      },
+      'p12_1': {
+        title: 'Statement of Applicability (SoA) Draft',
+        fields: [
+          { id: 'total_controls', label: 'Total de controles no SoA', type: 'text', required: true, placeholder: '93 (Annex A ISO 27001:2022)' },
+          { id: 'applicable', label: 'Controles aplicáveis', type: 'text', required: true, placeholder: 'Ex: 88' },
+          { id: 'excluded', label: 'Controles excluídos com justificativa', type: 'textarea', placeholder: 'Controle → Justificativa de exclusão' }
+        ],
+        auditorTip: 'Cl 6.1.3d — A SoA é o documento mais revisado em auditorias. Cada exclusão será questionada.',
+        isoRef: 'Cl 6.1.3d'
+      },
+      'p12_2': {
+        title: 'Justificativa de Inclusão/Exclusão por Controle',
+        fields: [
+          { id: 'justifications', label: 'Justificativas por controle excluído', type: 'textarea', required: true, placeholder: 'A.7.3 — Excluído: 100% trabalho remoto, sem escritório físico\nA.7.4 — Excluído: sem monitoramento CFTV' }
+        ],
+        auditorTip: 'Cl 6.1.3d — Justificativas devem ser baseadas em análise de risco, não em conveniência.',
+        isoRef: 'Cl 6.1.3d'
+      },
+      'p13_1': {
+        title: 'SoA de Privacidade (ISO 27701)',
+        fields: [
+          { id: 'privacy_controls', label: 'Controles de privacidade aplicáveis', type: 'textarea', required: true, placeholder: 'Liste os controles ISO 27701 aplicáveis' },
+          { id: 'status', label: 'Status de implementação', type: 'textarea', required: true, placeholder: 'Controle → Status (implementado/parcial/não implementado)' }
+        ],
+        auditorTip: '27701 — SoA de privacidade deve complementar o SoA de segurança.',
+        isoRef: '27701'
+      },
+      'p13_2': {
+        title: 'Controles de Privacidade Mapeados',
+        fields: [
+          { id: 'controls', label: 'Mapeamento de controles ISO 27701', type: 'textarea', required: true, placeholder: 'Seção → Controle → Descrição → Status' }
+        ],
+        auditorTip: '27701 — Mapear controles do Anexo A e B da 27701.',
+        isoRef: '27701'
+      },
+      // ─── JORNADA 3: Implementação SGSI (Fases 14–20) ───
+      'p14_2': {
+        title: 'Nomenclatura Padrão de Documentos',
+        fields: [
+          { id: 'convention', label: 'Convenção de nomenclatura adotada', type: 'textarea', required: true, placeholder: 'Ex: [TIPO]-[CÓDIGO]-[NOME]-v[VERSÃO]\nPOL-SI-001-Política de Segurança-v1.0' },
+          { id: 'types', label: 'Tipos de documentos definidos', type: 'textarea', placeholder: 'POL = Política, PRO = Procedimento, REG = Registro, FOR = Formulário' }
+        ],
+        auditorTip: 'Cl 7.5 — O auditor verificará se há controle de documentos e nomenclatura consistente.',
+        isoRef: 'Cl 7.5'
+      },
+      'p14_3': { title: 'Template de Política Aprovado', fields: [{ id: 'template_sections', label: 'Seções do template de política', type: 'textarea', required: true, placeholder: '1. Objetivo\n2. Escopo\n3. Definições\n4. Diretrizes\n5. Responsabilidades\n6. Sanções\n7. Histórico de revisões' }], auditorTip: 'Cl 7.5 — Templates padronizados garantem consistência documental.', isoRef: 'Cl 7.5' },
+      'p14_4': { title: 'Template de Procedimento Aprovado', fields: [{ id: 'template_sections', label: 'Seções do template de procedimento', type: 'textarea', required: true, placeholder: '1. Objetivo\n2. Escopo\n3. Responsáveis\n4. Passo-a-passo\n5. Registros\n6. Referências' }], auditorTip: 'Cl 7.5 — Procedimentos devem ser detalhados o suficiente para execução sem ambiguidade.', isoRef: 'Cl 7.5' },
+      'p14_7': { title: 'Lista Mestra de Documentos', fields: [{ id: 'documents', label: 'Lista de todos os documentos do SGSI', type: 'textarea', required: true, placeholder: 'Código → Nome → Versão → Status → Aprovador → Data' }], auditorTip: 'Cl 7.5 — A lista mestra é o controle central de documentação do SGSI.', isoRef: 'Cl 7.5' },
+      'p15_1': { title: 'Políticas Organizacionais (Tema 5)', fields: [{ id: 'policies', label: 'Políticas a serem redigidas', type: 'textarea', required: true, placeholder: 'A.5.1 - Política de SI\nA.5.10 - Uso aceitável\nA.5.15 - Controle de acesso\nA.5.23 - Cloud\nA.5.24 - Incidentes' }], auditorTip: 'A.5.1 — Políticas devem ser aprovadas pela direção e comunicadas.', isoRef: 'A.5.1' },
+      'p15_2': { title: 'Procedimentos de Gestão de Ativos', fields: [{ id: 'procedures', label: 'Procedimentos de gestão de ativos', type: 'textarea', required: true, placeholder: 'Inventário, classificação, rotulagem, manuseio, devolução' }], auditorTip: 'A.5.9-A.5.14 — Procedimentos devem cobrir o ciclo de vida completo do ativo.', isoRef: 'A.5.9-A.5.14' },
+      'p16_1': { title: 'Política de Segurança para RH', fields: [{ id: 'scope', label: 'Escopo da política (contratação, durante, desligamento)', type: 'textarea', required: true }, { id: 'screening', label: 'Nível de verificação pré-contratação', type: 'select', options: ['Background check completo', 'Verificação de referências', 'Apenas documentação padrão'] }], auditorTip: 'A.6.1-A.6.8 — Controles de pessoas do ciclo completo.', isoRef: 'A.6.1-A.6.8' },
+      'p16_4': { title: 'Procedimento de Desligamento Seguro', fields: [{ id: 'steps', label: 'Etapas do desligamento seguro', type: 'textarea', required: true, placeholder: '1. Revogação de acessos (mesmo dia)\n2. Devolução de equipamentos\n3. Transferência de dados\n4. Assinatura de termo de confidencialidade pós-contrato' }], auditorTip: 'A.6.5 — SLA de revogação deve ser imediato.', isoRef: 'A.6.5' },
+      'p17_1': { title: 'Perímetros de Segurança Física', fields: [{ id: 'perimeters', label: 'Perímetros definidos', type: 'textarea', required: true, placeholder: 'Descreva os perímetros de segurança física (áreas restritas, data center, escritório)' }], auditorTip: 'A.7.1-A.7.4 — O auditor pode inspecionar fisicamente as instalações.', isoRef: 'A.7.1-A.7.4' },
+      'p17_3': { title: 'Proteção de Equipamentos', fields: [{ id: 'measures', label: 'Medidas de proteção implementadas', type: 'textarea', required: true, placeholder: 'UPS, climatização, CFTV, controle de acesso ao rack, cabeamento seguro' }], auditorTip: 'A.7.8-A.7.14 — Proteção contra ameaças ambientais e roubo.', isoRef: 'A.7.8-A.7.14' },
+      'p19_1': { title: 'Política de Desenvolvimento Seguro', fields: [{ id: 'sdlc', label: 'Fases do SDLC seguro adotado', type: 'textarea', required: true, placeholder: 'Requisitos → Design → Coding → Testing → Deploy → Manutenção' }, { id: 'tools', label: 'Ferramentas de segurança no pipeline', type: 'textarea', placeholder: 'SAST, DAST, SCA, secrets scanning, container scanning' }], auditorTip: 'A.8.25-A.8.31 — O auditor verificará se o SDLC seguro está integrado ao pipeline.', isoRef: 'A.8.25-A.8.31' },
+      'p20_1': { title: 'Segurança de Cloud Provider', fields: [{ id: 'providers', label: 'Provedores cloud utilizados', type: 'textarea', required: true, placeholder: 'AWS, Azure, GCP — serviços utilizados em cada um' }, { id: 'shared_resp', label: 'Matriz de responsabilidade compartilhada', type: 'textarea', required: true, placeholder: 'O que é responsabilidade do provedor vs da organização' }], auditorTip: 'A.5.23 — O auditor pedirá evidência de SLA e certificações do provedor.', isoRef: 'A.5.23' },
+      // ─── JORNADA 4: Implementação SGPI (Fases 21–28) ───
+      'p21_1': { title: 'Programa de Privacidade', fields: [{ id: 'scope', label: 'Escopo do programa de privacidade', type: 'textarea', required: true }, { id: 'framework', label: 'Framework adotado', type: 'select', options: ['ISO 27701', 'NIST Privacy', 'LGPD-based', 'Híbrido'] }], auditorTip: '27701 — Programa deve estar integrado ao SGSI.', isoRef: '27701 Cl 6' },
+      'p21_3': { title: 'Bases Legais Mapeadas', fields: [{ id: 'mapping', label: 'Mapeamento: operação → base legal', type: 'textarea', required: true, placeholder: 'Marketing → Consentimento\nRH → Execução de contrato\nSaúde → Obrigação legal' }], auditorTip: 'LGPD Art. 7 — Base legal incorreta é não conformidade grave.', isoRef: 'LGPD Art. 7' },
+      'p21_4': { title: 'RoPA Completo', fields: [{ id: 'activities', label: 'Atividades de tratamento documentadas', type: 'textarea', required: true, placeholder: 'Atividade → Dados → Finalidade → Base legal → Retenção → Compartilhamento' }], auditorTip: '27701 A.7.2.8 — RoPA deve ser completo e atualizado.', isoRef: '27701 A.7.2.8' },
+      'p22_1': { title: 'Metodologia de Privacy by Design', fields: [{ id: 'principles', label: 'Princípios PbD adotados', type: 'textarea', required: true, placeholder: '1. Proativo\n2. Privacidade como padrão\n3. Privacidade embutida\n4. Funcionalidade total\n5. Segurança fim-a-fim\n6. Visibilidade\n7. Respeito ao usuário' }], auditorTip: '27701 — PbD deve ser aplicado a novos projetos e mudanças.', isoRef: '27701' },
+      'p22_2': { title: 'Checklist PbD para Novos Projetos', fields: [{ id: 'checklist', label: 'Itens do checklist PbD', type: 'textarea', required: true, placeholder: '☐ Minimização de dados\n☐ Pseudonimização\n☐ Criptografia\n☐ Consentimento\n☐ Retenção definida' }], auditorTip: '27701 — O checklist deve ser aplicado antes do go-live.', isoRef: '27701' },
+      'p23_2': { title: 'Procedimento de DSR', fields: [{ id: 'rights', label: 'Direitos atendidos', type: 'textarea', required: true, placeholder: 'Acesso, Correção, Exclusão, Portabilidade, Oposição, Revogação' }, { id: 'sla', label: 'SLA de resposta', type: 'text', placeholder: 'Ex: 15 dias úteis' }, { id: 'channel', label: 'Canal de atendimento', type: 'text', placeholder: 'Ex: privacidade@empresa.com' }], auditorTip: 'LGPD Art. 18 — O auditor testará o canal de atendimento.', isoRef: 'LGPD Art. 18' },
+      'p23_3': { title: 'SLA de Resposta a Titulares', fields: [{ id: 'sla_detail', label: 'SLAs por tipo de direito', type: 'textarea', required: true, placeholder: 'Acesso: 15 dias\nCorreção: 15 dias\nExclusão: 15 dias\nPortabilidade: 15 dias' }], auditorTip: 'LGPD — Boas práticas: máximo 15 dias úteis para qualquer solicitação.', isoRef: 'LGPD Art. 18' },
+      'p24_3': { title: 'Bases Legais por Operação', fields: [{ id: 'operations', label: 'Operações e bases legais aplicáveis', type: 'textarea', required: true }], auditorTip: 'LGPD Art. 7 — Cada operação deve ter base legal definida.', isoRef: 'LGPD Art. 7' },
+      'p25_1': { title: 'Política de Retenção de Dados', fields: [{ id: 'categories', label: 'Categorias de dados e prazos de retenção', type: 'textarea', required: true, placeholder: 'Dados de RH: 5 anos após desligamento\nDados de clientes: 5 anos após término do contrato\nLogs: 1 ano' }], auditorTip: '27701 A.7.4.7 — Retenção deve ser proporcional e justificada.', isoRef: '27701 A.7.4.7' },
+      'p25_2': { title: 'Tabela de Temporalidade', fields: [{ id: 'table', label: 'Tabela de temporalidade por tipo de dado', type: 'textarea', required: true, placeholder: 'Dado → Retenção → Base legal → Método de descarte' }], auditorTip: '27701 — Tabela deve ser revisada anualmente.', isoRef: '27701' },
+      'p25_3': { title: 'Procedimento de Descarte Seguro', fields: [{ id: 'methods', label: 'Métodos de descarte por tipo de mídia', type: 'textarea', required: true, placeholder: 'HD: degaussing + destruição física\nSSD: crypto-erase + destruição\nPapel: fragmentadora\nCloud: deleção + verificação' }], auditorTip: 'A.7.14 — Descarte deve ser verificável e documentado.', isoRef: 'A.7.14' },
+      'p26_1': { title: 'Transferências Internacionais Mapeadas', fields: [{ id: 'transfers', label: 'Transferências identificadas', type: 'textarea', required: true, placeholder: 'Destino → Dados → Mecanismo de proteção (SCC, adequação)' }], auditorTip: 'LGPD Art. 33 — Cloud em região fora do Brasil já constitui transferência.', isoRef: 'LGPD Art. 33' },
+      'p26_2': { title: 'Cláusulas Contratuais Padrão (SCCs)', fields: [{ id: 'sccs', label: 'SCCs utilizadas', type: 'textarea', required: true }], auditorTip: 'LGPD Art. 33 — SCCs devem ser atualizadas e adequadas.', isoRef: 'LGPD Art. 33' },
+      'p26_3': { title: 'Avaliação de Adequação de País Receptor', fields: [{ id: 'assessment', label: 'Avaliação por país receptor', type: 'textarea', required: true }], auditorTip: 'LGPD Art. 33 — Verificar se país tem nível adequado de proteção.', isoRef: 'LGPD Art. 33' },
+      'p26_4': { title: 'Compartilhamentos de Dados Documentados', fields: [{ id: 'shares', label: 'Compartilhamentos documentados', type: 'textarea', required: true, placeholder: 'Destinatário → Dados → Finalidade → Base legal → Contrato' }], auditorTip: '27701 — Todos os compartilhamentos devem ser documentados e autorizados.', isoRef: '27701' },
+      'p27_1': { title: 'Lista de Subprocessadores', fields: [{ id: 'list', label: 'Subprocessadores atualizados', type: 'textarea', required: true, placeholder: 'Fornecedor → Serviço → Dados acessados → País → DPA assinado?' }], auditorTip: '27701 A.7.2.6 — Lista deve ser mantida atualizada e acessível.', isoRef: '27701 A.7.2.6' },
+      'p27_3': { title: 'Avaliação de Segurança de Fornecedores', fields: [{ id: 'criteria', label: 'Critérios de avaliação', type: 'textarea', required: true, placeholder: 'Certificações, pentest, SLA, backup, incidentes' }], auditorTip: 'A.5.21-A.5.22 — Fornecedores críticos devem ser avaliados periodicamente.', isoRef: 'A.5.21-A.5.22' },
+      'p28_1': { title: 'Procedimento de Resposta a Incidentes', fields: [{ id: 'phases', label: 'Fases do procedimento', type: 'textarea', required: true, placeholder: '1. Detecção e registro\n2. Classificação de severidade\n3. Contenção\n4. Erradicação\n5. Recuperação\n6. Lições aprendidas' }, { id: 'sla', label: 'SLAs por severidade', type: 'textarea', placeholder: 'Crítico: 1h contenção\nAlto: 4h\nMédio: 24h\nBaixo: 72h' }], auditorTip: 'A.5.24-A.5.28 — O auditor pode simular um incidente durante a auditoria.', isoRef: 'A.5.24-A.5.28' },
+      'p28_2': { title: 'Classificação de Severidade de Incidentes', fields: [{ id: 'levels', label: 'Níveis de severidade', type: 'textarea', required: true, placeholder: 'P1-Crítico: Dados vazados, sistema core indisponível\nP2-Alto: Comprometimento parcial\nP3-Médio: Incidente contido\nP4-Baixo: Tentativa bloqueada' }], auditorTip: 'A.5.25 — Classificação deve ser objetiva e aplicável.', isoRef: 'A.5.25' },
+      'p28_5': { title: 'Template de Registro de Incidente', fields: [{ id: 'template', label: 'Campos do template de incidente', type: 'textarea', required: true, placeholder: 'Data/hora, reporter, tipo, severidade, ativos afetados, descrição, ações tomadas, lições aprendidas' }], auditorTip: 'A.5.25 — Registros devem ser completos e auditáveis.', isoRef: 'A.5.25' },
+      'p28_6': { title: 'Processo de Notificação à ANPD', fields: [{ id: 'process', label: 'Procedimento de notificação', type: 'textarea', required: true, placeholder: 'Quem notifica, quando (72h), conteúdo da notificação, notificação aos titulares' }], auditorTip: 'LGPD Art. 48 — Notificação em prazo razoável (recomendação: 72h).', isoRef: 'LGPD Art. 48' },
+      'p28_7': { title: 'Lições Aprendidas de Incidentes', fields: [{ id: 'lessons', label: 'Lições aprendidas documentadas', type: 'textarea', required: true, placeholder: 'Incidente → Causa raiz → O que melhorar → Ação preventiva' }], auditorTip: 'A.5.27 — Lições aprendidas devem alimentar a melhoria contínua.', isoRef: 'A.5.27' },
+      // ─── JORNADA 5: Operação e Auditoria (Fases 29–33) ───
+      'p29_1': { title: 'Programa de Conscientização', fields: [{ id: 'scope', label: 'Escopo do programa', type: 'textarea', required: true, placeholder: 'Público-alvo, temas, frequência, métodos de avaliação' }, { id: 'topics', label: 'Temas obrigatórios', type: 'textarea', placeholder: 'Phishing, senhas, clean desk, engenharia social, LGPD' }], auditorTip: 'Cl 7.2, 7.3 — O auditor verificará se há programa formal com métricas de eficácia.', isoRef: 'Cl 7.2, 7.3' },
+      'p29_2': { title: 'Material de Treinamento', fields: [{ id: 'materials', label: 'Materiais elaborados', type: 'textarea', required: true, placeholder: 'Apresentações, vídeos, e-learning, simulações de phishing, quizzes' }], auditorTip: 'Cl 7.3 — Materiais devem ser atualizados e relevantes ao contexto.', isoRef: 'Cl 7.3' },
+      'p30_1': { title: 'KPIs de Segurança da Informação', fields: [{ id: 'kpis', label: 'KPIs definidos', type: 'textarea', required: true, placeholder: '- % de patches aplicados em SLA\n- Tempo médio de resposta a incidentes\n- % de colaboradores treinados\n- Número de vulnerabilidades críticas\n- % de conformidade SoA' }, { id: 'targets', label: 'Metas por KPI', type: 'textarea', placeholder: 'KPI → Meta → Frequência de medição' }], auditorTip: 'Cl 9.1 — O auditor verificará se KPIs são medidos e reportados.', isoRef: 'Cl 9.1' },
+      'p30_3': { title: 'Processo de Monitoramento Contínuo', fields: [{ id: 'process', label: 'Processo de monitoramento', type: 'textarea', required: true, placeholder: 'O que é monitorado, como, frequência, alertas, escalação' }], auditorTip: 'Cl 9.1 — Monitoramento deve ser contínuo e documentado.', isoRef: 'Cl 9.1' },
+      'p30_4': { title: 'Relatório Periódico de Métricas', fields: [{ id: 'content', label: 'Conteúdo do relatório', type: 'textarea', required: true, placeholder: 'KPIs, tendências, incidentes, ações corretivas, próximos passos' }, { id: 'frequency', label: 'Frequência', type: 'select', options: ['Mensal', 'Trimestral', 'Semestral'] }], auditorTip: 'Cl 9.1 — Relatórios devem ser apresentados na análise crítica pela direção.', isoRef: 'Cl 9.1, 9.3' },
+      'p31_1': { title: 'Programa de Auditoria Interna', fields: [{ id: 'program', label: 'Programa de auditoria (escopo, agenda, critérios)', type: 'textarea', required: true, placeholder: 'Frequência: anual\nEscopo: Todas as cláusulas + Annex A\nCritério: ISO 27001:2022\nAuditor: independente qualificado' }], auditorTip: 'Cl 9.2 — Programa deve cobrir todas as cláusulas em ciclo completo.', isoRef: 'Cl 9.2' },
+      'p31_2': { title: 'Critérios e Escopo de Auditoria Interna', fields: [{ id: 'criteria', label: 'Critérios de auditoria', type: 'textarea', required: true }, { id: 'scope', label: 'Escopo da auditoria', type: 'textarea', required: true }], auditorTip: 'Cl 9.2 — Critérios devem ser objetivos e baseados na norma.', isoRef: 'Cl 9.2' },
+      'p31_4': { title: 'Checklist de Auditoria Interna', fields: [{ id: 'checklist', label: 'Itens do checklist de auditoria', type: 'textarea', required: true, placeholder: 'Cláusula/Controle → Pergunta → Evidência esperada → Resultado' }], auditorTip: 'Cl 9.2 — Checklist deve cobrir todos os requisitos obrigatórios.', isoRef: 'Cl 9.2' },
+      'p31_6': { title: 'Relatório de Auditoria Interna', fields: [{ id: 'findings', label: 'Achados da auditoria', type: 'textarea', required: true, placeholder: 'NC maiores, NC menores, oportunidades de melhoria, observações' }, { id: 'conclusion', label: 'Conclusão geral', type: 'textarea', required: true }], auditorTip: 'Cl 9.2 — O relatório alimenta a análise crítica pela direção.', isoRef: 'Cl 9.2' },
+      'p31_7': { title: 'Não Conformidades de Auditoria', fields: [{ id: 'ncs', label: 'Não conformidades identificadas', type: 'textarea', required: true, placeholder: 'NC → Cláusula/Controle → Descrição → Evidência → Severidade' }], auditorTip: 'Cl 10.1 — Cada NC deve ter ação corretiva com prazo.', isoRef: 'Cl 10.1' },
+      'p32_1': { title: 'Registro de Não Conformidades', fields: [{ id: 'ncs', label: 'Não conformidades registradas', type: 'textarea', required: true }], auditorTip: 'Cl 10.1 — NCs devem ser rastreáveis e verificáveis.', isoRef: 'Cl 10.1' },
+      'p32_2': { title: 'Análise de Causa Raiz', fields: [{ id: 'analysis', label: 'Análise de causa raiz por NC', type: 'textarea', required: true, placeholder: 'NC → Causa raiz → Método (5 Porquês, Ishikawa)' }], auditorTip: 'Cl 10.1 — O auditor verificará se a causa raiz é real e não superficial.', isoRef: 'Cl 10.1' },
+      'p32_3': { title: 'Ações Corretivas Definidas', fields: [{ id: 'actions', label: 'Ações corretivas', type: 'textarea', required: true, placeholder: 'NC → Ação corretiva → Responsável → Prazo → Status' }], auditorTip: 'Cl 10.1 — Ações devem ser proporcionais à NC.', isoRef: 'Cl 10.1' },
+      'p33_1': { title: 'Pauta da Análise Crítica pela Direção', fields: [{ id: 'agenda', label: 'Itens da pauta', type: 'textarea', required: true, placeholder: '1. Status de ações anteriores\n2. Mudanças internas/externas\n3. Desempenho de SI (KPIs)\n4. Resultados de auditoria\n5. NCs e ações corretivas\n6. Oportunidades de melhoria\n7. Recursos necessários' }], auditorTip: 'Cl 9.3 — A pauta deve cobrir todos os inputs obrigatórios da norma.', isoRef: 'Cl 9.3' },
+      'p33_3': { title: 'Ata de Análise Crítica pela Direção', fields: [{ id: 'date', label: 'Data da reunião', type: 'date', required: true }, { id: 'participants', label: 'Participantes', type: 'textarea', required: true }, { id: 'decisions', label: 'Decisões tomadas', type: 'textarea', required: true }, { id: 'actions', label: 'Ações definidas', type: 'textarea', required: true }], auditorTip: 'Cl 9.3 — A ata é evidência primária da análise crítica. O auditor SEMPRE pede.', isoRef: 'Cl 9.3' },
+      'p33_4': { title: 'Decisões e Ações da Análise Crítica', fields: [{ id: 'decisions', label: 'Decisões registradas', type: 'textarea', required: true }, { id: 'actions', label: 'Ações com responsável e prazo', type: 'textarea', required: true }], auditorTip: 'Cl 9.3 — Decisões devem ter follow-up rastreável.', isoRef: 'Cl 9.3' },
+      // ─── JORNADA 6: Certificação (Fases 34–40) ───
+      'p35_1': { title: 'Documentação Stage 1 Empacotada', fields: [{ id: 'docs', label: 'Documentos incluídos no pacote', type: 'textarea', required: true, placeholder: 'SoA, Política de SI, Declaração de Escopo, Metodologia de Riscos, Plano de Tratamento, Auditoria Interna, Ata de Análise Crítica' }], auditorTip: 'Stage 1 — O auditor revisará toda a documentação antes da visita.', isoRef: 'Cert Stage 1' },
+      'p35_2': { title: 'Documentos Enviados à Certificadora', fields: [{ id: 'sent_docs', label: 'Documentos enviados', type: 'textarea', required: true }, { id: 'sent_date', label: 'Data de envio', type: 'date', required: true }], auditorTip: 'Stage 1 — Enviar com pelo menos 2 semanas de antecedência.', isoRef: 'Cert Stage 1' },
+      'p35_5': { title: 'FAQ de Auditoria', fields: [{ id: 'faq', label: 'Perguntas frequentes e respostas preparadas', type: 'textarea', required: true, placeholder: 'Pergunta do auditor → Resposta → Evidência de suporte' }], auditorTip: 'Preparação — FAQ reduz ansiedade e melhora desempenho durante a auditoria.', isoRef: 'Preparação' },
+      'p36_1': { title: 'Achados do Stage 1', fields: [{ id: 'findings', label: 'Achados documentados', type: 'textarea', required: true }], auditorTip: 'Stage 1 — Achados devem ser corrigidos antes do Stage 2.', isoRef: 'Cert Stage 1' },
+      'p36_2': { title: 'Plano de Correção Pós-Stage 1', fields: [{ id: 'plan', label: 'Plano de correção', type: 'textarea', required: true, placeholder: 'Achado → Ação corretiva → Responsável → Prazo' }], auditorTip: 'Stage 1 — Todas as NCs devem estar corrigidas antes do Stage 2.', isoRef: 'Cert Stage 1' },
+      'p38_3': { title: 'Registro de Observações do Auditor', fields: [{ id: 'observations', label: 'Observações do auditor durante Stage 2', type: 'textarea', required: true }], auditorTip: 'Stage 2 — Documente tudo para facilitar correções e próximas auditorias.', isoRef: 'Cert Stage 2' },
+      'p39_1': { title: 'Relatório de Auditoria Recebido', fields: [{ id: 'summary', label: 'Resumo do relatório', type: 'textarea', required: true }, { id: 'result', label: 'Resultado', type: 'select', options: ['Certificado', 'Certificado com observações', 'NC menores (90 dias para correção)', 'NC maiores (re-auditoria necessária)'], required: true }], auditorTip: 'Pós-auditoria — O relatório oficial é a base para ações de melhoria.', isoRef: 'Cert Resultado' },
+      'p40_1': { title: 'Calendário de Auditorias de Supervisão', fields: [{ id: 'schedule', label: 'Cronograma de supervisão', type: 'textarea', required: true, placeholder: 'Ano 1: Supervisão 1 (mês X)\nAno 2: Supervisão 2 (mês Y)\nAno 3: Recertificação (mês Z)' }], auditorTip: 'Manutenção — Supervisões são obrigatórias para manter a certificação.', isoRef: 'Manutenção' }
+    };
+    // ponytail: DOC_WIZARDS populated for all 6 journeys
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  openDocWizard — Multi-step wizard for guided document generation
+    // ═══════════════════════════════════════════════════════════════
+    window.openDocWizard = function(projectId, itemId) {
+        const wiz = DOC_WIZARDS[itemId];
+        if (!wiz) { generateDocumentNatively(projectId, itemId, event.target); return; }
+
+        // Pre-fill from existing notes if available
+        const noteKey = projectId + '_' + itemId;
+        let savedAnswers = {};
+        try {
+            const raw = (S.phaseChecksNotes && S.phaseChecksNotes[noteKey]) || '';
+            if (raw.trim().startsWith('{') && raw.trim().endsWith('}')) savedAnswers = JSON.parse(raw);
+        } catch(e) {}
+
+        let fieldsHtml = wiz.fields.map(f => {
+            const val = savedAnswers[f.id] || '';
+            const escapedVal = typeof val === 'string' ? val.replace(/"/g, '&quot;').replace(/</g, '&lt;') : val;
+            const req = f.required ? '<span style="color:#ff4d4d">*</span>' : '';
+            let input = '';
+            if (f.type === 'textarea') {
+                input = `<textarea id="wiz-${f.id}" class="form-input" style="width:100%; min-height:80px; font-size:0.8rem; resize:vertical; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:inherit;" placeholder="${f.placeholder || ''}">${escapedVal}</textarea>`;
+            } else if (f.type === 'select') {
+                const opts = (f.options || []).map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('');
+                input = `<select id="wiz-${f.id}" class="form-input" style="width:100%; font-size:0.8rem; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; color:var(--text);"><option value="">Selecionar...</option>${opts}</select>`;
+            } else if (f.type === 'date') {
+                input = `<input type="date" id="wiz-${f.id}" class="form-input" style="width:100%; font-size:0.8rem; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; color:var(--text);" value="${escapedVal}">`;
+            } else {
+                input = `<input type="text" id="wiz-${f.id}" class="form-input" style="width:100%; font-size:0.8rem; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; color:var(--text);" value="${escapedVal}" placeholder="${f.placeholder || ''}">`;
+            }
+            return `<div style="margin-bottom:1rem;"><label style="font-size:0.75rem; color:var(--text-dim); font-weight:500; display:block; margin-bottom:4px;">${f.label} ${req}</label>${input}</div>`;
+        }).join('');
+
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">${escapeHTML(wiz.title)}</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+            </div>
+            <div style="padding:1.5rem 0;">
+                <div style="background:rgba(0,173,232,0.04); border:1px solid rgba(0,173,232,0.1); border-radius:10px; padding:12px; margin-bottom:1.25rem; font-size:0.75rem;">
+                    <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.65rem; letter-spacing:0.5px;">Dica do Auditor (${wiz.isoRef})</div>
+                    <div style="color:var(--text); line-height:1.4;">${escapeHTML(wiz.auditorTip)}</div>
+                </div>
+                <div id="wiz-form-fields">${fieldsHtml}</div>
+                <div id="wiz-preview-area" style="display:none;"></div>
+                <div id="wiz-actions" style="display:flex; justify-content:flex-end; gap:10px; margin-top:1.25rem;">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn" onclick="wizSaveProgress('${projectId}', '${itemId}')" style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
+                    <button class="btn btn-primary" id="wiz-generate-btn" onclick="wizGenerate('${projectId}', '${itemId}', this)">Gerar Documento</button>
+                </div>
+            </div>
+        `, 'modal-large');
+    };
+
+    window.wizCollectFields = function(itemId) {
+        const wiz = DOC_WIZARDS[itemId];
+        if (!wiz) return {};
+        const data = {};
+        wiz.fields.forEach(f => {
+            const el = document.getElementById('wiz-' + f.id);
+            if (el) data[f.id] = el.value || '';
+        });
+        return data;
+    };
+
+    window.wizSaveProgress = function(projectId, itemId) {
+        const data = wizCollectFields(itemId);
+        const noteKey = projectId + '_' + itemId;
+        if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
+        S.phaseChecksNotes[noteKey] = JSON.stringify(data);
+        localStorage.setItem('niso_phaseChecksNotes', JSON.stringify(S.phaseChecksNotes));
+        showToast('Rascunho salvo localmente');
+    };
+
+    window.wizGenerate = async function(projectId, itemId, btnEl) {
+        const wiz = DOC_WIZARDS[itemId];
+        const data = wizCollectFields(itemId);
+        // Validate required fields
+        const missing = wiz.fields.filter(f => f.required && !data[f.id]);
+        if (missing.length > 0) {
+            showToast('Preencha os campos obrigatórios: ' + missing.map(f => f.label).join(', '), 'error');
+            return;
+        }
+        // Save progress first
+        wizSaveProgress(projectId, itemId);
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Gerando documento...';
+        try {
+            const res = await api('POST', `/api/v1/projects/${projectId}/generate-document`, { itemId, fields: data });
+            // Show preview
+            document.getElementById('wiz-form-fields').style.display = 'none';
+            const preview = document.getElementById('wiz-preview-area');
+            preview.style.display = 'block';
+            preview.innerHTML = `
+                <div style="margin-bottom:0.75rem; font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Preview do Documento Gerado</div>
+                <textarea id="wiz-doc-content" class="form-input" style="width:100%; height:350px; font-family:monospace; font-size:0.8rem; line-height:1.5; background:rgba(0,0,0,0.3); resize:vertical; padding:12px; color:var(--text); border:1px solid var(--border); border-radius:8px;">${escapeHTML(res.content || '')}</textarea>
+            `;
+            document.getElementById('wiz-actions').innerHTML = `
+                <button class="btn" onclick="wizBackToForm('${projectId}', '${itemId}')" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar Dados</button>
+                <button class="btn btn-primary" onclick="wizApprove('${projectId}', '${itemId}', this)">Aprovar e Salvar como Evidencia</button>
+            `;
+        } catch(e) {
+            showToast('Erro ao gerar documento: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
+
+    window.wizBackToForm = function(projectId, itemId) {
+        document.getElementById('wiz-form-fields').style.display = 'block';
+        document.getElementById('wiz-preview-area').style.display = 'none';
+        document.getElementById('wiz-actions').innerHTML = `
+            <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+            <button class="btn" onclick="wizSaveProgress('${projectId}', '${itemId}')" style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
+            <button class="btn btn-primary" id="wiz-generate-btn" onclick="wizGenerate('${projectId}', '${itemId}', this)">Gerar Documento</button>
+        `;
+    };
+
+    window.wizApprove = async function(projectId, itemId, btnEl) {
+        const content = document.getElementById('wiz-doc-content').value;
+        const prevText = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Salvando...';
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/approve-document`, { itemId, content });
+            showToast('Documento aprovado e salvo como evidência!');
+            forceCloseModal();
+            render();
+        } catch(e) {
+            showToast('Erro ao aprovar: ' + e.message, 'error');
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = prevText;
+        }
+    };
+
     const ISO_GUIDELINES = {
         'p0_1': { control: 'Cl 5.1', tip: 'Definir sponsor executivo', advice: 'O auditor vai buscar atas de reuniões ou nomeações formais assinadas pela diretoria definindo a liderança do SGSI.', evidence: 'Termo de Compromisso assinado ou Ata de Reunião Executiva.' },
         'p0_3': { control: 'Cl 7.4', tip: 'Ata do Kick-off', advice: 'A ata deve conter a pauta, lista de participantes assinada e a formalização das responsabilidades de segurança.', evidence: 'Ata de reunião em PDF ou Documento Interno com participantes.' },
@@ -3044,7 +3726,7 @@
                                                                             <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
                                                                         ` : ''}
                                                                         ${(!isChecked && item.category === 'document') ? `
-                                                                            <button class="btn-inline-action primary" onclick="generateDocumentNatively('${p.id}', '${item.id}', this); event.stopPropagation()">Gerar IA</button>
+                                                                            <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? 'Preencher e Gerar' : 'Gerar IA'}</button>
                                                                         ` : ''}
                                                                         <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
                                                                     </div>

@@ -2935,6 +2935,120 @@ function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: 
   return null;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DOCUMENT WIZARD — Guided Document Generation with Field Context
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/v1/projects/:id/generate-document
+app.post('/api/v1/projects/:id/generate-document', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json<{ itemId: string; fields: Record<string, string> }>().catch(() => ({} as any));
+    const { itemId, fields } = body;
+    if (!itemId || !fields) return c.json({ error: 'itemId and fields are required' }, 400);
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const found = findChecklistItem(itemId);
+    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
+    const { item } = found;
+
+    // Build context from fields
+    const fieldsSummary = Object.entries(fields)
+      .filter(([_, v]) => v)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('\n');
+
+    // ponytail: RAG context for richer generation
+    let ragContext = '';
+    try {
+      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
+      ragContext = await memory.retrieveContext(projectId, `${item.text} ${fieldsSummary.substring(0, 200)}`, 'policy', 3) || '';
+    } catch(e) { /* vectorize may not be populated yet */ }
+
+    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
+    const prompt = `Gere um documento completo em formato markdown para "${item.text}" da organização "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).
+
+DADOS FORNECIDOS PELO USUÁRIO:
+${fieldsSummary}
+
+${ragContext ? 'CONTEXTO ADICIONAL DA ORGANIZAÇÃO:\n' + ragContext + '\n' : ''}
+
+REQUISITOS:
+- Documento profissional, completo e pronto para auditoria ISO 27001:2022
+- Use os dados fornecidos acima para personalizar o conteúdo
+- Incluir seções de: Objetivo, Escopo, Definições, Conteúdo Principal, Responsabilidades, Revisões
+- Formato markdown limpo, sem placeholders
+- Tom formal e executivo
+- Incluir referências às cláusulas ISO relevantes`;
+
+    const result = await agent.run(prompt, { organizationId: projectId });
+    const content = result.success ? result.content : `# ${item.text}\n\nDocumento gerado para ${project.client_name}.\n\n${fieldsSummary}`;
+
+    return c.json({ ok: true, content });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
+  }
+});
+
+// POST /api/v1/projects/:id/approve-document
+app.post('/api/v1/projects/:id/approve-document', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json<{ itemId: string; content: string }>().catch(() => ({} as any));
+    const { itemId, content } = body;
+    if (!itemId || !content) return c.json({ error: 'itemId and content are required' }, 400);
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const found = findChecklistItem(itemId);
+    if (!found) return c.json({ error: 'Item não encontrado' }, 404);
+    const { item, phaseNumber } = found;
+    const userEmail = c.get('user')?.email ?? 'system';
+    const userId = c.get('user')?.id ?? null;
+
+    // Save to R2
+    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
+    await c.env.STORAGE.put(r2Key, content, { httpMetadata: { contentType: 'text/markdown' } });
+
+    // Hash
+    const data = new TextEncoder().encode(content);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Create evidence record
+    const evidenceId = crypto.randomUUID();
+    const fileName = `${item.text}.md`;
+    await c.env.DB.prepare(
+      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforme', 'Documento gerado e aprovado via wizard guiado.').run();
+
+    // Auto-check checklist item
+    await c.env.DB.prepare(
+      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Aprovado via wizard guiado')
+       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
+         is_checked = 1, checked_by = EXCLUDED.checked_by, checked_at = CURRENT_TIMESTAMP,
+         evidence_id = EXCLUDED.evidence_id, notes = EXCLUDED.notes`
+    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
+
+    // Store in RAG
+    try {
+      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
+      await memory.storeFact(projectId, `Doc aprovado ${item.text}: ${content.substring(0, 500)}`, 'policy', { itemId });
+    } catch(e) { /* non-blocking */ }
+
+    await logAudit(c.env.DB, 'document.approved', userEmail, `Documento "${fileName}" aprovado via wizard para item ${itemId}`);
+
+    return c.json({ ok: true, evidence_id: evidenceId, file_name: fileName });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao aprovar documento', detail: e.message }, 500);
+  }
+});
+
 // POST /api/v1/projects/:id/checklist/:itemId/generate
 app.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
   try {
