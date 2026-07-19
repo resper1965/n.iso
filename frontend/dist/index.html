@@ -4421,7 +4421,7 @@
                                                                         ${(item.category === 'evidence' || item.category === 'document') ? `
                                                                             <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
                                                                         ` : ''}
-                                                                        ${(!isChecked && item.category === 'document') ? `
+                                                                        ${(!isChecked && (item.category === 'document' || DOC_WIZARDS[item.id])) ? `
                                                                             <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
                                                                         ` : ''}
                                                                         ${(item.id === 'p2_2') ? `
