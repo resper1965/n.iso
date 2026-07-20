@@ -1,7 +1,12 @@
 import './style.css';
+import { S } from './state.js';
+import { api, API_BASE } from './api.js';
+import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
+import { navigate, render } from './router.js';
+import './data/wizards.js';
+import './data/assessment.js';
+import './data/journeys.js';
 
-// Phase 1: Verify Vite build works
-console.log('[nISO] Vite build loaded successfully');
-
-// Full app code will be migrated in subsequent phases
-// For now, the monolithic index.html in dist/ remains the active frontend
+// The rest of the app code will be migrated in subsequent phases
+// For now, import remaining inline code below
+console.log('[nISO] Modules loaded:', { S, api, navigate });
