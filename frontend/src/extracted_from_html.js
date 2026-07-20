@@ -6547,7 +6547,7 @@
                 cisoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
-                            <strong>CISO:</strong> 
+                            <strong>Líder SGSI:</strong> 
                             <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}</span>
                         </div>
                     </div>
@@ -6556,7 +6556,7 @@
                 cisoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
-                            <strong>CISO:</strong> 
+                            <strong>Líder SGSI:</strong> 
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
@@ -6572,7 +6572,7 @@
                 ceoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
-                            <strong>CEO (Direção):</strong> 
+                            <strong>Direção Executiva:</strong> 
                             <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}</span>
                         </div>
                     </div>
@@ -6581,7 +6581,7 @@
                 ceoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
-                            <strong>CEO (Direção):</strong> 
+                            <strong>Direção Executiva:</strong> 
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
@@ -6747,17 +6747,17 @@
                         <div style="display:flex;flex-direction:column;gap:0.75rem">
                             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
                                 <div>
-                                    <strong>CISO:</strong> 
+                                    <strong>Líder SGSI:</strong> 
                                     <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como CISO</button>` : ''}
+                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como Líder SGSI</button>` : ''}
                             </div>
                             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
                                 <div>
-                                    <strong>CEO (Direção):</strong> 
+                                    <strong>Direção Executiva:</strong> 
                                     <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como CEO</button>` : ''}
+                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como Direção Executiva</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -6779,7 +6779,8 @@
             alert('Não é possível assinar: ID do controle não mapeado.');
             return;
         }
-        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
+        const roleLabel = role === 'ciso' ? 'Líder SGSI' : 'Direção Executiva';
+        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${roleLabel}:`);
         if (!name) return;
         
         try {
@@ -6803,7 +6804,8 @@
             alert('Não é possível assinar: ID da evidência inválido.');
             return;
         }
-        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
+        const roleLabel = role === 'ciso' ? 'Líder SGSI' : 'Direção Executiva';
+        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${roleLabel}:`);
         if (!name) return;
         
         try {
@@ -8162,7 +8164,7 @@
                             <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:var(--danger); margin-top:8px">${draft}</div>
                         </div>
                         <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
-                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Aprovadas CISO</div>
+                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Aprovadas Líder SGSI</div>
                             <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:#feca57; margin-top:8px">${ciso}</div>
                         </div>
                         <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
@@ -8177,8 +8179,8 @@
                                 <tr>
                                     <th>Controle ID</th>
                                     <th>Política / Controle</th>
-                                    <th>Assinatura CISO</th>
-                                    <th>Assinatura CEO</th>
+                                    <th>Assinatura Líder SGSI</th>
+                                    <th>Assinatura Direção</th>
                                     <th>Estágio</th>
                                     <th>Status SoA</th>
                                     <th style="width:180px; text-align:center">Ações</th>
@@ -8194,10 +8196,10 @@
                     stageText = 'Vigente';
                     stageColor = 'var(--success)';
                 } else if (ctrl.ciso_approved_by) {
-                    stageText = 'Revisão CISO';
+                    stageText = 'Revisão Líder SGSI';
                     stageColor = '#feca57';
                 } else if (ctrl.ceo_approved_by) {
-                    stageText = 'Revisão Direção';
+                    stageText = 'Revisão Direção Executiva';
                     stageColor = '#ff9f43';
                 }
                 
