@@ -2573,6 +2573,82 @@ app.get('/api/v1/controls', async (c) => {
   }
 });
 
+// Endpoint temporário de auditoria de integridade física R2 das políticas
+app.get('/api/v1/debug/audit-r2-policies', async (c) => {
+  try {
+    const projectId = 'mr9c1qugo16zic2eko';
+    const { results: controls } = await c.env.DB.prepare(
+      'SELECT id, title, description, status FROM compliance_controls WHERE project_id = ? ORDER BY id ASC'
+    ).bind(projectId).all<any>();
+
+    const auditResults = [];
+
+    for (const ctrl of (controls || [])) {
+      const cleanId = ctrl.id.replace('ctrl-', '').toUpperCase();
+      const evidence = await c.env.DB.prepare(
+        'SELECT id, file_name, r2_key FROM evidence WHERE project_id = ? AND control_id = ?'
+      ).bind(projectId, ctrl.id).first<any>();
+
+      let r2Status = 'Sem evidência no D1';
+      let activeKey = null;
+      let fileSize = 0;
+
+      if (evidence) {
+        let file = await c.env.STORAGE.get(evidence.r2_key);
+        if (file) {
+          r2Status = 'Disponível (Chave Principal)';
+          activeKey = evidence.r2_key;
+          fileSize = file.size || 0;
+        } else {
+          const alternativeKeys = [
+            `cliente/${evidence.file_name}`,
+            `niso/${evidence.file_name}`,
+            `${projectId}/${evidence.file_name}`,
+            evidence.file_name,
+            `cliente/evidence/${evidence.file_name}`
+          ];
+
+          let foundAlt = false;
+          for (const altKey of alternativeKeys) {
+            if (altKey === evidence.r2_key) continue;
+            const altFile = await c.env.STORAGE.get(altKey);
+            if (altFile) {
+              r2Status = `Disponível (Chave Alternativa: ${altKey})`;
+              activeKey = altKey;
+              fileSize = altFile.size || 0;
+              foundAlt = true;
+              break;
+            }
+          }
+          if (!foundAlt) {
+            r2Status = 'Ausente no R2 (Será gerada via template ao visualizar)';
+          }
+        }
+      }
+
+      auditResults.push({
+        control_id: ctrl.id,
+        iso_ref: cleanId,
+        title: ctrl.title,
+        status_soa: ctrl.status,
+        evidence_id: evidence?.id || null,
+        r2_status: r2Status,
+        active_key: activeKey,
+        size_bytes: fileSize
+      });
+    }
+
+    return c.json({
+      success: true,
+      project_id: projectId,
+      total_controls: auditResults.length,
+      results: auditResults
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro na auditoria R2', detail: e.message }, 500);
+  }
+});
+
 // Obter conteúdo da política/evidência de um controle
 app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
   try {
@@ -2590,12 +2666,57 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
     }
 
     // 2. Busca se há alguma evidência associada no D1
-    const evidence = await c.env.DB.prepare(
+    let evidence = await c.env.DB.prepare(
       'SELECT * FROM evidence WHERE project_id = ? AND control_id = ?'
     ).bind(projectId, normId).first<any>();
 
     let content = ctrl.description || '';
     let evidenceId = null;
+
+    if (!evidence) {
+      // Se não há evidência cadastrada, vamos criá-la automaticamente com o template padrão!
+      const cleanId = controlId.toUpperCase();
+      const templateName = CONTROL_TO_TEMPLATE[cleanId] || 'isms-policy';
+      const fileName = `POL-${templateName.toUpperCase().substring(0, 3)}-001 - Politica.md`;
+      const r2Key = `${projectId}/evidence/${fileName}`;
+      const newEvId = 'ev-' + genId();
+
+      try {
+        const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+        const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+        const generatedMarkdown = await generator.generate(templateName, {
+          organizationName: project?.client_name || 'Organização',
+          policyOwner: 'Líder SGSI',
+          approver: 'Direção Executiva',
+          status: 'Approved',
+          standardVersion: 'v2022'
+        });
+
+        if (generatedMarkdown) {
+          content = generatedMarkdown;
+          // Grava no R2
+          const arrayBuffer = new TextEncoder().encode(generatedMarkdown);
+          await c.env.STORAGE.put(r2Key, arrayBuffer, {
+            httpMetadata: { contentType: 'text/markdown' }
+          });
+
+          // Insere na tabela evidence
+          const encoder = new TextEncoder();
+          const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(generatedMarkdown));
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+          await c.env.DB.prepare(
+            'INSERT INTO evidence (id, project_id, control_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(newEvId, projectId, normId, fileName, r2Key, hashHex, 'markdown', arrayBuffer.byteLength, 'System').run();
+
+          // Atualiza para o fluxo posterior
+          evidence = { id: newEvId, r2_key: r2Key, file_name: fileName };
+        }
+      } catch (genErr) {
+        console.error('Erro ao auto-criar evidência de política:', genErr);
+      }
+    }
 
     if (evidence) {
       evidenceId = evidence.id;
@@ -4108,6 +4229,189 @@ app.delete('/api/v1/ropa/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// APROVAÇÃO ROPA
+app.post('/api/v1/projects/:id/ropa/:recordId/approve', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const recordId = c.req.param('recordId');
+    const { role } = await c.req.json<{ role: 'ciso' | 'ceo' }>();
+    const user = c.get('user');
+
+    if (role !== 'ciso' && role !== 'ceo') {
+      return c.json({ error: 'Papel de aprovação inválido' }, 400);
+    }
+
+    const dbUser = await c.env.DB.prepare(
+      'SELECT * FROM users WHERE email = ?'
+    ).bind(user.email).first<any>();
+
+    let approvedBy = dbUser?.name || user.email;
+    const now = new Date().toISOString();
+
+    if (role === 'ciso') {
+      await c.env.DB.prepare(
+        'UPDATE ropa_records SET ciso_approved_by = ?, ciso_approved_at = ?, status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, now, 'Approved', recordId, projectId).run();
+      await logAudit(c.env.DB, 'ropa.approved_ciso', user.email, `ROPA ${recordId} aprovado pelo Líder SGSI (${approvedBy})`);
+    } else {
+      await c.env.DB.prepare(
+        'UPDATE ropa_records SET ceo_approved_by = ?, ceo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, now, 'Approved', recordId, projectId).run();
+      await logAudit(c.env.DB, 'ropa.approved_ceo', user.email, `ROPA ${recordId} aprovado pela Direção Executiva (${approvedBy})`);
+    }
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao aprovar ROPA', detail: e.message }, 500);
+  }
+});
+
+// RELATÓRIO ROPA (HTML)
+app.get('/api/v1/projects/:id/ropa/report', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.html('<h3>Projeto não encontrado</h3>', 404);
+
+    const { results: records } = await c.env.DB.prepare(
+      'SELECT * FROM ropa_records WHERE project_id = ? ORDER BY created_at ASC'
+    ).bind(projectId).all<any>();
+
+    let rowsHtml = '';
+    for (const r of (records || [])) {
+      const cisoSig = r.ciso_approved_by ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${r.ciso_approved_by} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#ffaa00">Aguardando Líder SGSI</span>';
+      const ceoSig = r.ceo_approved_by ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${r.ceo_approved_by} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#ffaa00">Aguardando Direção</span>';
+      
+      rowsHtml += `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <td style="padding: 12px; font-weight: 500;">${r.processing_purpose}</td>
+          <td style="padding: 12px; color: #a5b4fc;">${r.data_categories || '-'}</td>
+          <td style="padding: 12px;">${r.data_subjects || '-'}</td>
+          <td style="padding: 12px; font-weight: 300;">${r.legal_basis}</td>
+          <td style="padding: 12px;">${r.retention_period || '-'}</td>
+          <td style="padding: 12px;">${r.recipients || '-'}</td>
+          <td style="padding: 12px; font-size: 0.8rem;">
+            <div><strong>Líder SGSI:</strong> ${cisoSig}</div>
+            <div style="margin-top: 4px;"><strong>Direção Executiva:</strong> ${ceoSig}</div>
+          </td>
+        </tr>
+      `;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório ROPA - ${project.client_name || 'Projeto GRC'}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            background-color: #070b14;
+            color: #f5f5f7;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 3rem;
+            line-height: 1.6;
+          }
+          .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.01);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+          }
+          h1, h2, h3 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            color: #00ade8;
+            margin-top: 0;
+          }
+          .header-meta {
+            font-size: 0.85rem;
+            color: rgba(229,235,255,0.6);
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 1rem;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+          }
+          th {
+            background: rgba(0, 173, 232, 0.05);
+            color: #00ade8;
+            text-align: left;
+            padding: 12px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid rgba(0, 173, 232, 0.2);
+          }
+          .btn-print {
+            background: #00ade8;
+            color: #070b14;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            float: right;
+            font-family: 'Montserrat', sans-serif;
+          }
+          @media print {
+            body { background-color: #fff; color: #000; padding: 0; }
+            .container { border: none; box-shadow: none; padding: 0; }
+            .btn-print { display: none; }
+            th { background: #eee; color: #000; border-bottom: 2px solid #000; }
+            tr { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <button class="btn-print" onclick="window.print()">Imprimir / PDF</button>
+          <h1>ness<span>.</span> GRC - nISO</h1>
+          <h2>Registro de Operações de Tratamento (ROPA)</h2>
+          <div class="header-meta">
+            <div><strong>Cliente:</strong> ${project.client_name || 'Não especificado'}</div>
+            <div><strong>Projeto ID:</strong> ${project.id}</div>
+            <div><strong>Norma Referência:</strong> ISO 27701:2022 / LGPD</div>
+            <div><strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Atividade / Finalidade</th>
+                <th>Categorias de Dados</th>
+                <th>Titulares</th>
+                <th>Base Legal</th>
+                <th>Retenção</th>
+                <th>Destinatários</th>
+                <th>Status / Assinaturas</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="7" style="padding: 24px; text-align: center; color: rgba(229,235,255,0.4);">Nenhuma atividade de tratamento cadastrada neste projeto.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return c.html(html);
+  } catch (e: any) {
+    return c.html(`<h3>Falha ao gerar relatório ROPA: ${e.message}</h3>`, 500);
+  }
+});
+
 // ─── 4E. DPIA / RIPD Assessments (CRUD) ──────────────────────────────────────
 
 app.get('/api/v1/projects/:id/dpia', async (c) => {
@@ -4147,6 +4451,234 @@ app.put('/api/v1/dpia/:id', async (c) => {
   const user = c.get('user');
   await logAudit(c.env.DB, 'dpia.updated', user.email, `DPIA ${id} updated`);
   return c.json({ ok: true });
+});
+
+// APROVAÇÃO DPIA
+app.post('/api/v1/projects/:id/dpia/:assessmentId/approve', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const assessmentId = c.req.param('assessmentId');
+    const { role } = await c.req.json<{ role: 'ciso' | 'ceo' }>();
+    const user = c.get('user');
+
+    if (role !== 'ciso' && role !== 'ceo') {
+      return c.json({ error: 'Papel de aprovação inválido' }, 400);
+    }
+
+    const dbUser = await c.env.DB.prepare(
+      'SELECT * FROM users WHERE email = ?'
+    ).bind(user.email).first<any>();
+
+    let approvedBy = dbUser?.name || user.email;
+    const now = new Date().toISOString();
+
+    if (role === 'ciso') {
+      await c.env.DB.prepare(
+        'UPDATE dpia_assessments SET dpo_signature = ?, dpo_opinion = COALESCE(dpo_opinion, ?), status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, 'Aprovado pelo Encarregado DPO / Líder SGSI.', 'Under Review', assessmentId, projectId).run();
+      await logAudit(c.env.DB, 'dpia.approved_ciso', user.email, `DPIA ${assessmentId} assinado pelo Líder SGSI (${approvedBy})`);
+    } else {
+      await c.env.DB.prepare(
+        'UPDATE dpia_assessments SET ceo_signature = ?, status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, 'Approved', assessmentId, projectId).run();
+      await logAudit(c.env.DB, 'dpia.approved_ceo', user.email, `DPIA ${assessmentId} assinado pela Direção Executiva (${approvedBy})`);
+    }
+
+    // Se ambos assinaram, garante status = Approved
+    const dpia = await c.env.DB.prepare(
+      'SELECT dpo_signature, ceo_signature FROM dpia_assessments WHERE id = ?'
+    ).bind(assessmentId).first<any>();
+
+    if (dpia && dpia.dpo_signature && dpia.ceo_signature) {
+      await c.env.DB.prepare(
+        "UPDATE dpia_assessments SET status = 'Approved' WHERE id = ?"
+      ).bind(assessmentId).run();
+    }
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao aprovar DPIA', detail: e.message }, 500);
+  }
+});
+
+// RELATÓRIO DPIA (HTML)
+app.get('/api/v1/projects/:id/dpia/:assessmentId/report', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const assessmentId = c.req.param('assessmentId');
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.html('<h3>Projeto não encontrado</h3>', 404);
+
+    const dpia = await c.env.DB.prepare(
+      'SELECT * FROM dpia_assessments WHERE id = ? AND project_id = ?'
+    ).bind(assessmentId, projectId).first<any>();
+    if (!dpia) return c.html('<h3>Avaliação DPIA não encontrada</h3>', 404);
+
+    const dpoSigHtml = dpia.dpo_signature ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${dpia.dpo_signature}</span>` : '<span style="color:#ffaa00">Aguardando Assinatura do Líder SGSI</span>';
+    const ceoSigHtml = dpia.ceo_signature ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${dpia.ceo_signature}</span>` : '<span style="color:#ffaa00">Aguardando Assinatura da Direção Executiva</span>';
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório DPIA - ${dpia.system_name}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            background-color: #070b14;
+            color: #f5f5f7;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 3rem;
+            line-height: 1.6;
+          }
+          .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.01);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+          }
+          h1, h2, h3, h4 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            color: #00ade8;
+            margin-top: 0;
+          }
+          .header-meta {
+            font-size: 0.85rem;
+            color: rgba(229,235,255,0.6);
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 1rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+          .section-block {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+          }
+          .section-title {
+            font-size: 0.75rem;
+            color: #00ade8;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+            font-weight: 700;
+          }
+          .signature-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 2.5rem;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding-top: 1.5rem;
+          }
+          .sig-card {
+            background: rgba(255,255,255,0.01);
+            border: 1px dashed rgba(255,255,255,0.1);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+          }
+          .btn-print {
+            background: #00ade8;
+            color: #070b14;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            float: right;
+            font-family: 'Montserrat', sans-serif;
+          }
+          @media print {
+            body { background-color: #fff; color: #000; padding: 0; }
+            .container { border: none; box-shadow: none; padding: 0; }
+            .btn-print { display: none; }
+            .section-block { background: #fff; border: 1px solid #ccc; page-break-inside: avoid; }
+            .sig-card { border: 1px dashed #000; background: #fff; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <button class="btn-print" onclick="window.print()">Imprimir / PDF</button>
+          <h1>ness<span>.</span> GRC - nISO</h1>
+          <h2>Relatório de Impacto à Proteção de Dados (DPIA/RIPD)</h2>
+          <div class="header-meta">
+            <div>
+              <div><strong>Sistema / Fluxo:</strong> ${dpia.system_name}</div>
+              <div><strong>Cliente:</strong> ${project.client_name || 'Não especificado'}</div>
+            </div>
+            <div>
+              <div><strong>Status:</strong> ${dpia.status}</div>
+              <div><strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</div>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Descrição do Fluxo de Dados</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.data_flow_description || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Tipos de Titulares Impactados</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.data_subjects_types || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Categorias de Dados Pessoais</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.personal_data_categories || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Necessidade e Proporcionalidade</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.necessity_proportionality || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Riscos Identificados</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.risks_identified || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Medidas de Mitigação</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.mitigation_measures || 'Não especificado.'}</div>
+          </div>
+
+          <div class="section-block">
+            <div class="section-title">Opinião / Parecer do Encarregado (DPO)</div>
+            <div style="white-space: pre-wrap; font-size: 0.9rem;">${dpia.dpo_opinion || 'Aguardando avaliação.'}</div>
+          </div>
+
+          <div class="signature-box">
+            <div class="sig-card">
+              <strong>Assinatura do Líder SGSI (Encarregado DPO):</strong>
+              <div style="margin-top: 8px;">${dpoSigHtml}</div>
+            </div>
+            <div class="sig-card">
+              <strong>Assinatura da Direção Executiva:</strong>
+              <div style="margin-top: 8px;">${ceoSigHtml}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return c.html(html);
+  } catch (e: any) {
+    return c.html(`<h3>Falha ao gerar relatório DPIA: ${e.message}</h3>`, 500);
+  }
 });
 
 app.delete('/api/v1/dpia/:id', async (c) => {

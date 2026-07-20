@@ -378,6 +378,10 @@ CREATE TABLE IF NOT EXISTS ropa_records (
     dpia_required INTEGER DEFAULT 0,
     status TEXT DEFAULT 'Active',
     owner TEXT,
+    ciso_approved_by TEXT,
+    ciso_approved_at TEXT,
+    ceo_approved_by TEXT,
+    ceo_approved_at TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
