@@ -6364,22 +6364,47 @@
 
     async function renderStakeholders(c, h, a) {
         h.textContent = 'Partes Interessadas (Cláusula 4.2)';
-        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn-primary">Novo Stakeholder</button>`;
-        if (!S.activeProject) {
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) {
             c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
             return;
         }
         
+        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn btn-primary">+ Novo Stakeholder</button>`;
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando partes interessadas...</div>';
+        
+        const getCategoryLabel = cat => {
+            const map = {
+                client: 'Cliente',
+                regulator: 'Regulador / Auditor',
+                shareholder: 'Diretoria / Acionista',
+                employee: 'Colaborador',
+                supplier: 'Fornecedor / Operador',
+                partner: 'Parceiro',
+                consultant: 'Consultor'
+            };
+            return map[cat] || cat;
+        };
+
+        const getInfluenceLabel = inf => {
+            const map = {
+                High: 'Alta',
+                Medium: 'Média',
+                Low: 'Baixa'
+            };
+            return map[inf] || inf;
+        };
+
         try {
-            const list = await api('GET', `/api/v1/projects/${S.activeProject.id}/stakeholders`) || [];
+            const list = await api('GET', `/api/v1/projects/${proj.id}/stakeholders`) || [];
             S.stakeholders = list;
             
             if (list.length === 0) {
                 c.innerHTML = `
-                    <div style="padding:3rem;text-align:center;color:var(--muted)">
-                        Nenhum stakeholder cadastrado ainda.<br><br>
-                        <button onclick="window.openStakeholderModal()" class="btn-primary">Adicionar Primeira Parte Interessada</button>
+                    <div class="empty-state">
+                        <h3>Nenhum stakeholder cadastrado ainda</h3>
+                        <p>Adicione partes interessadas para mapear requisitos e expectativas do SGSI.</p>
+                        <button onclick="window.openStakeholderModal()" class="btn btn-primary" style="margin-top:1rem">Adicionar Primeira Parte Interessada</button>
                     </div>
                 `;
                 return;
@@ -6396,24 +6421,25 @@
                                 <th>Expectativas / Requisitos de SI</th>
                                 <th>Influência</th>
                                 <th>Método de Comunicação</th>
-                                <th style="width:120px;text-align:center">Ações</th>
+                                <th style="width:140px;text-align:center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
             
             list.forEach(s => {
+                const influenceClass = s.influence === 'High' ? 'badge-high' : s.influence === 'Medium' ? 'badge-medium' : 'badge-low';
                 html += `
                     <tr>
-                        <td style="font-weight:600">${escapeHTML(s.name)}</td>
+                        <td style="font-weight:500; color:var(--text)">${escapeHTML(s.name)}</td>
                         <td><span class="badge ${s.type === 'internal' ? 'badge-implemented' : 'badge-partial'}">${s.type === 'internal' ? 'Interno' : 'Externo'}</span></td>
-                        <td>${escapeHTML(s.category || 'N/A')}</td>
-                        <td style="font-size:0.85rem">${escapeHTML(s.requirements || '')}</td>
-                        <td><span class="badge badge-${(s.influence || 'Medium').toLowerCase()}">${escapeHTML(s.influence || 'Medium')}</span></td>
-                        <td style="font-size:0.85rem">${escapeHTML(s.communication_method || '')}</td>
+                        <td><span class="badge badge-default">${getCategoryLabel(s.category)}</span></td>
+                        <td style="font-size:0.8rem; color:var(--text-dim)">${escapeHTML(s.requirements || '')}</td>
+                        <td><span class="badge ${influenceClass}">${getInfluenceLabel(s.influence || 'Medium')}</span></td>
+                        <td style="font-size:0.8rem; color:var(--text-dim)">${escapeHTML(s.communication_method || '')}</td>
                         <td style="text-align:center">
-                            <button onclick="window.openStakeholderModal('${s.id}')" class="btn-secondary" style="padding:4px 8px;margin-right:4px">Editar</button>
-                            <button onclick="window.deleteStakeholder('${s.id}')" class="btn-secondary" style="padding:4px 8px;color:red;border-color:rgba(255,0,0,0.2)">Deletar</button>
+                            <button onclick="window.openStakeholderModal('${s.id}')" class="btn" style="padding:4px 8px; font-size:0.65rem; margin-right:4px">Editar</button>
+                            <button onclick="window.deleteStakeholder('${s.id}')" class="btn" style="padding:4px 8px; font-size:0.65rem; color:var(--danger); border-color:rgba(239,68,68,0.2)">Deletar</button>
                         </td>
                     </tr>
                 `;
@@ -6434,25 +6460,26 @@
         const s = id ? S.stakeholders.find(x => x.id === id) : null;
         const isEdit = !!s;
         const html = `
-            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
-                ${isEdit ? 'Editar Parte Interessada' : 'Nova Parte Interessada'}
+            <div class="modal-header">
+                <span class="modal-title">${isEdit ? 'Editar Parte Interessada' : 'Nova Parte Interessada'}</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
             </div>
-            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})">
-                <div class="form-group" style="margin-bottom:12px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nome / Identificação</label>
-                    <input type="text" name="name" value="${s ? escapeHTML(s.name) : ''}" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})" style="font-family:'Inter',sans-serif;">
+                <div class="form-group">
+                    <label class="form-label">Nome / Identificação</label>
+                    <input type="text" name="name" class="form-input" value="${s ? escapeHTML(s.name) : ''}" required placeholder="Ex: Acionistas, Clientes Corporativos" />
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Tipo</label>
-                        <select name="type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Tipo</label>
+                        <select name="type" class="form-select">
                             <option value="external" ${s && s.type === 'external' ? 'selected' : ''}>Externo</option>
                             <option value="internal" ${s && s.type === 'internal' ? 'selected' : ''}>Interno</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Categoria</label>
-                        <select name="category" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Categoria</label>
+                        <select name="category" class="form-select">
                             <option value="client" ${s && s.category === 'client' ? 'selected' : ''}>Cliente</option>
                             <option value="regulator" ${s && s.category === 'regulator' ? 'selected' : ''}>Regulador / Auditor</option>
                             <option value="shareholder" ${s && s.category === 'shareholder' ? 'selected' : ''}>Diretoria / Acionista</option>
@@ -6463,27 +6490,27 @@
                         </select>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nível de Influência</label>
-                        <select name="influence" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Nível de Influência</label>
+                        <select name="influence" class="form-select">
                             <option value="Low" ${s && s.influence === 'Low' ? 'selected' : ''}>Baixo</option>
                             <option value="Medium" ${s && s.influence === 'Medium' ? 'selected' : ''}>Médio</option>
                             <option value="High" ${s && s.influence === 'High' ? 'selected' : ''}>Alto</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Método de Comunicação</label>
-                        <input type="text" name="communication_method" value="${s ? escapeHTML(s.communication_method || '') : ''}" placeholder="Ex: Email trimestral, Reunião" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                        <label class="form-label">Método de Comunicação</label>
+                        <input type="text" name="communication_method" class="form-input" value="${s ? escapeHTML(s.communication_method || '') : ''}" placeholder="Ex: E-mail trimestral, Reunião" />
                     </div>
                 </div>
-                <div class="form-group" style="margin-bottom:20px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Expectativas e Requisitos de SI</label>
-                    <textarea name="requirements" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${s ? escapeHTML(s.requirements || '') : ''}</textarea>
+                <div class="form-group">
+                    <label class="form-label">Expectativas e Requisitos de SI</label>
+                    <textarea name="requirements" class="form-input" style="height:100px" placeholder="Ex: Garantia de disponibilidade de 99.9%, criptografia de dados em repouso...">${s ? escapeHTML(s.requirements || '') : ''}</textarea>
                 </div>
-                <div style="text-align:right">
-                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
-                    <button type="submit" class="btn-primary">${isEdit ? 'Salvar Alterações' : 'Criar'}</button>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px">
+                    <button type="button" onclick="forceCloseModal()" class="btn">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">${isEdit ? 'Salvar Alterações' : 'Criar'}</button>
                 </div>
             </form>
         `;
