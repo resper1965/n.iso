@@ -3665,7 +3665,7 @@
                 // Filter phases inside this journey
                 let filteredPhases = jPhases.filter(ph => {
                     if (statusFilter !== 'all' && ph.status !== statusFilter) return false;
-                    const phChecklist = S.checklistsConfig[ph.phase_number] || [];
+                    const phChecklist = (S.checklistsConfig && S.checklistsConfig[ph.phase_number]) || [];
                     const matchingItems = phChecklist.filter(item => {
                         if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
                         if (searchQuery) {
@@ -3716,7 +3716,7 @@
                             ${window.renderJourneyDiagnosticPanel(journeyIdx, p.id)}
                             ${filteredPhases.map(ph => {
                                 const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
-                                const phChecklist = S.checklistsConfig[ph.phase_number] || [];
+                                const phChecklist = (S.checklistsConfig && S.checklistsConfig[ph.phase_number]) || [];
                                 const filteredItems = phChecklist.filter(item => {
                                     if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
                                     if (searchQuery) {
