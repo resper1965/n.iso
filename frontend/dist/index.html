@@ -4362,7 +4362,7 @@
         const p = S.currentProject || S.activeProject;
         if (!p) { navigate('projects'); return; }
         h.textContent = 'Jornada';
-        a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
+        a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openGitRepoModal('${p.id}')">Repositório Git</button><button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
         try {
@@ -4873,6 +4873,92 @@
             navigate('project-detail');
         } catch(e) { alert('Erro ao carregar projeto'); }
     }
+
+    window.openGitRepoModal = function(projectId) {
+        const p = S.currentProject || S.activeProject || {};
+        const hasConfig = !!(p.repository_url && p.repository_token);
+        
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">Configurações de Repositório Git</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px; font-family:'Inter',sans-serif;">
+                <p style="font-size:0.8rem; color:var(--text-dim); line-height:1.4">
+                    Configure o repositório Git do cliente para versionamento real dos relatórios mandatórios do SGSI (Scope, Risk Assessment Report, RTP, SoA).
+                </p>
+                <div class="form-group">
+                    <label class="form-label">URL do Repositório Git</label>
+                    <input type="text" id="proj-git-url" class="form-input" placeholder="https://github.com/org/repo" value="${escapeHTML(p.repository_url || '')}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Token de Acesso Pessoal (PAT)</label>
+                    <input type="password" id="proj-git-token" class="form-input" placeholder="ghp_••••••••••••••••••••" value="${escapeHTML(p.repository_token || '')}">
+                </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" onclick="window.saveGitRepoConfig('${projectId}')">Salvar Configurações</button>
+                
+                ${hasConfig ? `
+                    <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:15px;">
+                        <h4 style="font-family:'Montserrat',sans-serif; font-size:0.85rem; font-weight:700; color:var(--accent); margin-bottom:8px">Sincronização Ativa</h4>
+                        <p style="font-size:0.75rem; color:var(--text-dim); margin-bottom:12px">
+                            Gere e envie as versões controladas dos documentos mandatórios (Scope, RAR, RTP, SoA) direto para o repositório.
+                        </p>
+                        <button class="btn" style="width:100%; border-color:var(--accent); color:var(--accent);" id="btn-git-sync" onclick="window.syncControlledDocuments('${projectId}')">Sincronizar Documentos Controlados</button>
+                    </div>
+                ` : ''}
+            </div>
+        `);
+    };
+
+    window.saveGitRepoConfig = async function(projectId) {
+        const url = document.getElementById('proj-git-url').value.trim();
+        const token = document.getElementById('proj-git-token').value.trim();
+        try {
+            await api('PUT', `/api/v1/projects/${projectId}`, {
+                repository_url: url,
+                repository_token: token
+            });
+            
+            if (S.currentProject && S.currentProject.id === projectId) {
+                S.currentProject.repository_url = url;
+                S.currentProject.repository_token = token;
+            }
+            if (S.activeProject && S.activeProject.id === projectId) {
+                S.activeProject.repository_url = url;
+                S.activeProject.repository_token = token;
+            }
+            
+            alert('Configurações de repositório salvas com sucesso!');
+            forceCloseModal();
+            render();
+        } catch(e) {
+            alert('Erro ao salvar configurações: ' + e.message);
+        }
+    };
+
+    window.syncControlledDocuments = async function(projectId) {
+        const btn = document.getElementById('btn-git-sync');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Sincronizando...';
+        }
+        try {
+            const resp = await api('POST', `/api/v1/projects/${projectId}/git-sync`);
+            if (resp && resp.ok) {
+                alert('Documentos mandatórios sincronizados com o repositório Git com sucesso!');
+                forceCloseModal();
+            } else {
+                alert('Erro na sincronização: ' + (resp.error || 'Erro inesperado'));
+            }
+        } catch(e) {
+            alert('Falha na requisição de sincronização: ' + e.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Sincronizar Documentos Controlados';
+            }
+        }
+    };
 
     async function promoteToProject(id) {
         if (!confirm('Deseja converter este assessment em um projeto ativo?')) return;

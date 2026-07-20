@@ -2135,11 +2135,18 @@ app.get('/api/v1/projects', async (c) => {
 app.put('/api/v1/projects/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string; project_name?: string }>();
+    const body = await c.req.json<{
+      status?: string;
+      project_name?: string;
+      repository_url?: string;
+      repository_token?: string;
+    }>();
     const updates: string[] = [];
     const values: any[] = [];
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
     if (body.project_name !== undefined) { updates.push('project_name = ?'); values.push(body.project_name); }
+    if (body.repository_url !== undefined) { updates.push('repository_url = ?'); values.push(body.repository_url); }
+    if (body.repository_token !== undefined) { updates.push('repository_token = ?'); values.push(body.repository_token); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(id);
     await c.env.DB.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
@@ -4098,6 +4105,205 @@ app.get('/api/v1/portfolio', async (c) => {
   }
 
   return c.json(portfolio);
+});
+
+app.post('/api/v1/projects/:id/git-sync', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first<any>();
+    if (!p) {
+      return c.json({ error: 'Projeto não encontrado' }, 404);
+    }
+    
+    if (!p.repository_url || !p.repository_token) {
+      return c.json({ error: 'Configuração do repositório Git incompleta. URL e token do PAT são obrigatórios.' }, 400);
+    }
+
+    let repoPath = '';
+    if (p.repository_url.includes('github.com')) {
+      const parts = p.repository_url.split('github.com/');
+      if (parts.length > 1) {
+        repoPath = parts[1].replace(/\.git$/, '');
+      }
+    }
+    if (!repoPath) {
+      return c.json({ error: 'Somente repositórios públicos ou privados do GitHub são suportados atualmente.' }, 400);
+    }
+
+    const [owner, repoName] = repoPath.split('/');
+    if (!owner || !repoName) {
+      return c.json({ error: 'Formato de URL do repositório Git inválido. Use o padrão https://github.com/org/repo.' }, 400);
+    }
+
+    // Obter dados das tabelas
+    const [risksRes, controlsRes, capaRes] = await Promise.all([
+      c.env.DB.prepare('SELECT * FROM risks WHERE project_id = ?').bind(id).all<any>(),
+      c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ?').bind(id).all<any>(),
+      c.env.DB.prepare('SELECT * FROM corrective_actions WHERE project_id = ?').bind(id).all<any>()
+    ]);
+
+    const risks = risksRes.results || [];
+    const controls = controlsRes.results || [];
+    const capas = capaRes.results || [];
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 1. Scope.md
+    const scopeMd = `---
+ID: SGSI-DOC-SCOPE
+Título: Escopo do SGSI
+Versão: 1.0
+Data: ${todayStr}
+Autor: nISO GRC System
+Status: Publicado
+---
+
+# Escopo do Sistema de Gestão de Segurança da Informação (SGSI)
+
+Este documento formaliza o escopo de conformidade de Segurança da Informação e Privacidade para a organização **${p.client_name}**.
+
+## Metadados do Projeto
+- **Projeto**: ${p.project_name || 'N/A'}
+- **Setor**: ${p.sector || 'N/A'}
+- **CNPJ**: ${p.cnpj || 'N/A'}
+- **Normas de Referência**: ${p.standards || 'ISO 27001'}
+- **Papel da Organização**: ${p.org_role || 'N/A'}
+- **Total de Colaboradores**: ${p.employee_count || 'N/A'}
+- **Criado em**: ${p.created_at}
+
+## Definição do Escopo
+${p.scope || 'Nenhum escopo detalhado cadastrado no sistema.'}
+`;
+
+    // 2. Risk_Assessment_Report.md
+    const riskAssessmentMd = `---
+ID: SGSI-DOC-RAR
+Título: Relatório de Avaliação de Riscos (RAR)
+Versão: 1.0
+Data: ${todayStr}
+Autor: nISO GRC System
+Status: Publicado
+---
+
+# Relatório de Avaliação de Riscos (Risk Assessment Report)
+
+Este relatório apresenta a identificação, análise e avaliação dos riscos de segurança da informação e privacidade para a organização **${p.client_name}**.
+
+## Inventário de Riscos Cadastrados
+| Ativo | Ameaça | Vulnerabilidade | Impacto | Probabilidade | Nível de Risco | Status | Tratamento |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+${risks.map(r => `| ${r.asset} | ${r.threat} | ${r.vulnerability || 'N/A'} | ${r.impact} | ${r.probability} | ${r.risk_score} (${r.risk_level || 'Médio'}) | ${r.status} | ${r.treatment} |`).join('\n')}
+`;
+
+    // 3. Risk_Treatment_Plan.md
+    const riskTreatmentMd = `---
+ID: SGSI-DOC-RTP
+Título: Plano de Tratamento de Riscos (RTP)
+Versão: 1.0
+Data: ${todayStr}
+Autor: nISO GRC System
+Status: Publicado
+---
+
+# Plano de Tratamento de Riscos (Risk Treatment Plan)
+
+O Plano de Tratamento de Riscos descreve as ações corretivas, prazos, causas raízes e responsáveis pelas medidas de mitigação e conformidade da organização **${p.client_name}**.
+
+## Ações Corretivas e Mitigações (CAPA)
+| Título da Ação | Descrição | Gravidade | Responsável | Prazo | Status | Resolução |
+| :--- | :--- | :---: | :--- | :---: | :---: | :--- |
+${capas.map(ca => `| ${ca.title} | ${ca.description || 'N/A'} | ${ca.severity} | ${ca.assigned_to || 'N/A'} | ${ca.due_date || 'N/A'} | ${ca.status} | ${ca.resolution || 'N/A'} |`).join('\n')}
+`;
+
+    // 4. Statement_of_Applicability.md
+    const soaMd = `---
+ID: SGSI-DOC-SOA
+Título: Declaração de Aplicabilidade (SoA)
+Versão: 1.0
+Data: ${todayStr}
+Autor: nISO GRC System
+Status: Publicado
+---
+
+# Declaração de Aplicabilidade (Statement of Applicability - SoA)
+
+Este documento estabelece o status de aplicabilidade e implementação dos controles da norma ISO 27001 para a organização **${p.client_name}**.
+
+## Controles de Segurança da Informação
+| Controle | Standard | Título | Status | Maturidade (0-5) | Responsável |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+${controls.map(c => `| ${c.id} | ${c.standard} | ${c.title} | ${c.status} | ${c.maturity || 0} | ${c.owner || 'N/A'} |`).join('\n')}
+`;
+
+    const files = [
+      { path: 'docs/sgsi/Scope.md', content: scopeMd, name: 'Scope.md' },
+      { path: 'docs/sgsi/Risk_Assessment_Report.md', content: riskAssessmentMd, name: 'Risk_Assessment_Report.md' },
+      { path: 'docs/sgsi/Risk_Treatment_Plan.md', content: riskTreatmentMd, name: 'Risk_Treatment_Plan.md' },
+      { path: 'docs/sgsi/Statement_of_Applicability.md', content: soaMd, name: 'Statement_of_Applicability.md' }
+    ];
+
+    const results: Array<{ name: string; path: string; success: boolean; sha?: string; error?: string }> = [];
+
+    const toBase64 = (str: string) => {
+      const bytes = new TextEncoder().encode(str);
+      let binString = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binString += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binString);
+    };
+
+    for (const file of files) {
+      try {
+        const url = `https://api.github.com/repos/${owner}/${repoName}/contents/${file.path}`;
+        const headers: Record<string, string> = {
+          'Authorization': `token ${p.repository_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'niso-app-worker'
+        };
+
+        let sha: string | undefined;
+        const checkResp = await fetch(url, { headers });
+        if (checkResp.status === 200) {
+          const checkData = await checkResp.json<any>();
+          sha = checkData.sha;
+        }
+
+        const putResp = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: `docs(sgsi): update controlled document ${file.name} (automated v1.0)`,
+            content: toBase64(file.content),
+            sha
+          })
+        });
+
+        if (putResp.status === 200 || putResp.status === 201) {
+          results.push({ name: file.name, path: file.path, success: true, sha });
+        } else {
+          const putErr = await putResp.text();
+          results.push({ name: file.name, path: file.path, success: false, error: `GitHub API error: ${putResp.status} - ${putErr}` });
+        }
+      } catch (err: any) {
+        results.push({ name: file.name, path: file.path, success: false, error: err.message });
+      }
+    }
+
+    const failed = results.filter(r => !r.success);
+    if (failed.length === files.length) {
+      return c.json({ error: 'Falha total ao sincronizar documentos com o repositório', details: results }, 502);
+    }
+
+    await logAudit(c.env.DB, 'git.synchronized', c.get('user')?.email ?? 'system', `Sincronização de documentos mandatórios do projeto ${id} concluída. Sucesso: ${results.filter(r => r.success).length}/${results.length}`);
+
+    return c.json({ ok: true, results });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao sincronizar com Git', detail: e.message }, 500);
+  }
 });
 
 // ─── 6C. Audit Calendar (CRUD) ─────────────────────────────────────────────

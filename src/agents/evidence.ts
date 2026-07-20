@@ -11,12 +11,9 @@ REGRAS CRÍTICAS:
 - Use Markdown para estruturar o feedback.
 
 CRITÉRIOS DE AUDITORIA:
-1. **Verificabilidade**: A evidência possui carimbo de tempo e autoria clara?
-2. **Eficácia Operacional**: O documento prova que o controle está sendo EXECUTADO, não apenas planejado?
+1. **Verificabilidade**: A evidência possui carimbo de tempo, vigência legível e autoria clara?
+2. **Evidência Operacional vs Design**: Você deve diferenciar estritamente entre "Evidência de Design" (modelos, políticas teóricas, templates vazios ou arquivos estáticos de configuração como infraestrutura como código/Terraform) e "Evidência de Operação" (logs reais de execução, prints de auditoria datados de painéis ativos, relatórios de execução real, atas de reuniões assinadas ou aprovações formais). O arquivo deve provar que o controle de fato OPERA no dia a dia com registros operacionais concretos. Caso o envio seja meramente uma declaração de design sem prova de operação histórica/transacional, o veredito deve ser PARCIAL ou NÃO CONFORME.
 3. **Conformidade Normativa**: O conteúdo cobre todos os pontos exigidos pelo controle ${controlId}?
-
-REFERÊNCIA DO CONTROLE:
-${standardReference || 'Utilize o conhecimento base das normas ISO 27001:2022 e ISO 27701:2026.'}
 
 ESTRUTURA DA RESPOSTA:
 # Veredito: [CONFORME | PARCIAL | NÃO CONFORME]

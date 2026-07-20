@@ -133,7 +133,9 @@ CREATE TABLE IF NOT EXISTS projects (
     cnpj TEXT,
     employee_count INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    language TEXT DEFAULT 'pt-BR'
+    language TEXT DEFAULT 'pt-BR',
+    repository_url TEXT,
+    repository_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS project_phases (
