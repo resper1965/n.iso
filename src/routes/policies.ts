@@ -4,6 +4,7 @@ import { PHASE_CHECKLISTS, ChecklistItem } from '../checklists';
 import { genId, logAudit, escapeHtml } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
+import { PolicyGeneratorService } from '../services/policy-generator';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -722,6 +723,89 @@ policies.get('/public/govbr-mock-portal', (c) => {
     </html>
   `;
   return c.html(html);
+});
+// --- TEMPLATES DE POLÍTICAS ---
+policies.get('/api/v1/policies/templates', async (c) => {
+  try {
+    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+    const templates = await generator.listAvailableTemplates('v2022');
+    return c.json({ ok: true, templates });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao listar templates', detail: e.message }, 500);
+  }
+});
+
+policies.get('/api/v1/policies/templates/:templateName', async (c) => {
+  try {
+    const templateName = c.req.param('templateName');
+    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+    const markdown = await generator.generate(templateName, {
+      organizationName: '[Nome da Organização]',
+      policyOwner: 'Consultor nISO',
+      approver: 'Direção Executiva',
+      status: 'Draft',
+      standardVersion: 'v2022'
+    });
+    return c.json({ ok: true, markdown });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao obter conteúdo do template', detail: e.message }, 500);
+  }
+});
+
+policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const { template_name, control_id } = await c.req.json<{ template_name: string; control_id: string }>();
+
+    if (!template_name || !control_id) {
+      return c.json({ error: 'template_name e control_id são obrigatórios' }, 400);
+    }
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const user = c.get('user');
+    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+
+    // Gerar conteúdo a partir do template com variáveis do projeto
+    const markdown = await generator.generate(template_name, {
+      organizationName: project.client_name,
+      policyOwner: user?.name || 'Consultor nISO',
+      approver: 'Direção Executiva',
+      status: 'Draft',
+      standardVersion: 'v2022'
+    });
+
+    // Save policy markdown directly to compliance_controls.description
+    const normId = 'ctrl-' + control_id.toLowerCase().replace(/[^a-z0-9]/g, '');
+    await c.env.DB.prepare(
+      'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+    ).bind(markdown, normId, control_id, projectId).run();
+
+    // Insert new version in policy_versions
+    try {
+      const countRow = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
+      ).bind(projectId, normId, control_id).first<{ count: number }>();
+      const nextVer = (countRow?.count || 0) + 1;
+      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      await c.env.DB.prepare(
+        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(versionId, projectId, normId, nextVer, markdown, user?.email || 'system').run();
+    } catch (e) {
+      console.error("Erro ao registrar versão da política", e);
+    }
+
+    await logAudit(c.env.DB, 'policy.generated_from_template', user?.email ?? 'system', `Política gerada via template ${template_name} para o controle ${control_id}, projeto ${projectId}`);
+
+    return c.json({
+      ok: true,
+      policy_markdown: markdown,
+      control: control_id
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao gerar política a partir de template', detail: e.message }, 500);
+  }
 });
 
 
