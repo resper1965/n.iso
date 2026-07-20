@@ -725,7 +725,14 @@ import { navigate } from '../router.js';
                     if (clean.startsWith('a')) {
                         const parts = clean.substring(1).match(/\d+/g);
                         if (parts && parts.length) {
-                            displayId = 'A.' + clean.substring(1).split('').join('.');
+                            const num = clean.substring(1);
+                        if (num.length >= 2) {
+                            const chapter = num.charAt(0);
+                            const controlNum = num.substring(1);
+                            displayId = `A.${chapter}.${controlNum}`;
+                        } else {
+                            displayId = `A.${num.charAt(0)}.0`;
+                        }
                         } else {
                             displayId = clean.toUpperCase();
                         }
@@ -781,13 +788,29 @@ import { navigate } from '../router.js';
             }
         } catch(e) {}
 
-        let templates = [];
+        // --- CARREGAR POLITICA DO R2 (EVIDENCIA CORRESPONDENTE) ---
+        let policyText = ctrl.description || '';
+        let evidenceId = null;
         try {
-            const res = await api('GET', '/api/v1/policies/templates');
-            if (res.ok) templates = res.templates || [];
-        } catch(e) {}
-
-        const options = templates.map(t => `<option value="${t}">${t}</option>`).join('');
+            const evidences = await api('GET', `/api/v1/projects/${projectId}/evidence`) || [];
+            const suffix = normId.replace('ctrl-', '');
+            const matchingEvidence = evidences.find(ev => ev.id && ev.id.endsWith('-' + suffix));
+            if (matchingEvidence) {
+                evidenceId = matchingEvidence.id;
+                try {
+                    const contentRes = await api('GET', `/api/v1/evidence/${matchingEvidence.id}/content`);
+                    if (contentRes && contentRes.content) {
+                        policyText = contentRes.content;
+                    } else if (contentRes && typeof contentRes === 'string' && contentRes.trim()) {
+                        policyText = contentRes;
+                    }
+                } catch(e) {
+                    console.log("Erro ao carregar conteudo da evidencia, usando descricao padrao:", e);
+                }
+            }
+        } catch(e) {
+            console.error("Erro ao buscar evidencias:", e);
+        }
 
         const isDefaultDescription = !ctrl.description || 
                                      ctrl.description === 'Universal ISMS requirement.' || 
@@ -832,29 +855,10 @@ import { navigate } from '../router.js';
                 versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
             } catch(e) {}
 
-            // Buscar assinaturas do gov.br
-            let govbrSigs = [];
-            try {
-                govbrSigs = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/govbr-signatures`) || [];
-            } catch(e) {}
-
-            const cisoSig = govbrSigs.find(s => s.signature_type === 'ciso');
-            const ceoSig = govbrSigs.find(s => s.signature_type === 'ceo');
+            
 
             let cisoStatusHtml = '';
-            if (cisoSig) {
-                cisoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
-                        <div>
-                            <strong>CISO:</strong> 
-                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:8px; background:rgba(0,173,232,0.05); border:1px solid rgba(0,173,232,0.2); padding:3px 8px; border-radius:6px">
-                                <img src="https://www.gov.br/tpl-ds/img/govbr-logo-sem-fundo.png" style="height:12px; width:auto; filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(170deg);" alt="gov.br">
-                                Assinado digitalmente por ${escapeHTML(cisoSig.signed_by_name)} (CPF: ${escapeHTML(cisoSig.signed_by_cpf)}) em ${new Date(cisoSig.created_at).toLocaleDateString()}
-                            </span>
-                        </div>
-                    </div>
-                `;
-            } else if (ctrl.ciso_approved_by) {
+            if (ctrl.ciso_approved_by) {
                 cisoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
@@ -871,27 +875,15 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ciso')">Assinar com gov.br</button>
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar com senha</button>
+                            
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar</button>
                         </div>
                     </div>
                 `;
             }
 
             let ceoStatusHtml = '';
-            if (ceoSig) {
-                ceoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
-                        <div>
-                            <strong>CEO (Direção):</strong> 
-                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:8px; background:rgba(0,173,232,0.05); border:1px solid rgba(0,173,232,0.2); padding:3px 8px; border-radius:6px">
-                                <img src="https://www.gov.br/tpl-ds/img/govbr-logo-sem-fundo.png" style="height:12px; width:auto; filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(170deg);" alt="gov.br">
-                                Assinado digitalmente por ${escapeHTML(ceoSig.signed_by_name)} (CPF: ${escapeHTML(ceoSig.signed_by_cpf)}) em ${new Date(ceoSig.created_at).toLocaleDateString()}
-                            </span>
-                        </div>
-                    </div>
-                `;
-            } else if (ctrl.ceo_approved_by) {
+            if (ctrl.ceo_approved_by) {
                 ceoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
@@ -908,8 +900,8 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ceo')">Assinar com gov.br</button>
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar com senha</button>
+                            
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar</button>
                         </div>
                     </div>
                 `;
@@ -942,7 +934,7 @@ import { navigate } from '../router.js';
                     ${versionsSelectHtml}
 
                     <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
-                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.75rem; line-height:1.6; white-space:pre-wrap; font-family:'Inter',sans-serif;" id="policy-content-text">${escapeHTML(ctrl.description)}</div>
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.75rem; line-height:1.6; white-space:pre-wrap; font-family:'Inter',sans-serif;" id="policy-content-text">${escapeHTML(policyText)}</div>
                     
                     <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:8px">
                         <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
@@ -965,13 +957,7 @@ import { navigate } from '../router.js';
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
             
-            window.startGovBrSignature = function(pId, cId, type) {
-                const width = 500;
-                const height = 650;
-                const left = (window.screen.width / 2) - (width / 2);
-                const top = (window.screen.height / 2) - (height / 2);
-                window.open(`/api/v1/projects/${pId}/controls/${cId}/govbr/start?type=${type}`, 'govbr_signature_popup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`);
-            };
+            
 
             window.activeVersionsList = versions;
             window.onPolicyVersionChange = async function(pId, cId, verId) {

@@ -713,24 +713,6 @@ CREATE TABLE IF NOT EXISTS policy_versions (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_policy_versions_control ON policy_versions(project_id, control_id);
-
--- -----------------------------------------------
--- GOV.BR DIGITAL SIGNATURES (ISO 27001 A.5.1 / A.5.15)
--- -----------------------------------------------
-
-CREATE TABLE IF NOT EXISTS govbr_signatures (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    control_id TEXT REFERENCES compliance_controls(id) ON DELETE CASCADE,
-    policy_version_id TEXT REFERENCES policy_versions(id) ON DELETE CASCADE,
-    signed_by_name TEXT NOT NULL,
-    signed_by_cpf TEXT NOT NULL,
-    signature_type TEXT NOT NULL, -- 'ciso' or 'ceo'
-    signature_data TEXT NOT NULL, -- PKCS#7 or mock signature payload
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_govbr_signatures_control ON govbr_signatures(project_id, control_id);
-
 -- -----------------------------------------------
 -- POLICY TEMPLATES (Migrated from constants.ts)
 -- -----------------------------------------------

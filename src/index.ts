@@ -25,10 +25,6 @@ export type Bindings = {
   AI_GATEWAY_TOKEN: string;
   ASSETS?: any;
   ENVIRONMENT: string;
-  GOVBR_CLIENT_ID?: string;
-  GOVBR_CLIENT_SECRET?: string;
-  GOVBR_REDIRECT_URI?: string;
-  GOVBR_ENVIRONMENT?: string;
 };
 
 export type Variables = {
