@@ -2623,8 +2623,22 @@ app.get('/api/v1/evidence/:id/content', async (c) => {
       return c.json({ error: 'Este arquivo é um anexo binário e não pode ser editado como texto.' }, 400);
     }
 
+    if (ev.r2_key === 'pending_upload' || !ev.r2_key) {
+      return c.json({
+        ok: true,
+        file_name: ev.file_name,
+        content: `# ${ev.file_name}\n\nEscreva o conteúdo do documento interno aqui...`
+      });
+    }
+
     const object = await c.env.STORAGE.get(ev.r2_key);
-    if (!object) return c.json({ error: 'Conteúdo não encontrado no storage' }, 404);
+    if (!object) {
+      return c.json({
+        ok: true,
+        file_name: ev.file_name,
+        content: `# ${ev.file_name}\n\nEscreva o conteúdo do documento interno aqui...`
+      });
+    }
 
     const content = await object.text();
     return c.json({
@@ -2647,8 +2661,14 @@ app.put('/api/v1/evidence/:id/content', async (c) => {
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
+    let r2Key = ev.r2_key;
+    if (r2Key === 'pending_upload' || !r2Key) {
+      r2Key = `evidence/${id}.md`;
+      await c.env.DB.prepare('UPDATE evidence SET r2_key = ?, file_type = ? WHERE id = ?').bind(r2Key, 'text/markdown', id).run();
+    }
+
     // Salvar no R2
-    await c.env.STORAGE.put(ev.r2_key, body.content, { httpMetadata: { contentType: 'text/markdown' } });
+    await c.env.STORAGE.put(r2Key, body.content, { httpMetadata: { contentType: 'text/markdown' } });
 
     // Calcular hash SHA-256 e tamanho
     const encoder = new TextEncoder();
