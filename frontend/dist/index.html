@@ -7018,7 +7018,7 @@
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewAssetModal('${proj.id}')">+ Novo Ativo</button>` : '';
+        a.innerHTML = `<button class="btn" onclick="exportCSV('assets')" style="margin-right:8px">Exportar CSV</button>` + (canCrud ? `<button class="btn btn-primary" onclick="window.openNewAssetModal('${proj.id}')">+ Novo Ativo</button>` : '');
         
         let assets = [];
         try { assets = await api('GET', `/api/v1/projects/${proj.id}/assets`); } catch(e) {}
@@ -7443,6 +7443,25 @@
         };
 
         if (hasPolicy) {
+            // Buscar histórico de versões da política
+            let versions = [];
+            try {
+                versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
+            } catch(e) {}
+
+            let versionsSelectHtml = '';
+            if (versions.length > 0) {
+                versionsSelectHtml = `
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
+                        <label style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; min-width:120px">Histórico de Versões:</label>
+                        <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" onchange="window.onPolicyVersionChange('${projectId}', '${controlId}', this.value)">
+                            ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? `v${v.version} (Atual)` : `v${v.version}`} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
+                        </select>
+                        <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" onclick="window.doRestorePolicyVersion('${projectId}', '${controlId}')">Restaurar vX</button>
+                    </div>
+                `;
+            }
+
             const html = `
                 <div class="modal-header">
                     <span class="modal-title">Política Ativa — ${escapeHTML(controlId)}</span>
@@ -7454,6 +7473,8 @@
                         ${escapeHTML(ctrl.title)}
                     </div>
                     
+                    ${versionsSelectHtml}
+
                     <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
                     <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.75rem; line-height:1.6; white-space:pre-wrap; font-family:'Inter',sans-serif;" id="policy-content-text">${escapeHTML(ctrl.description)}</div>
                     
@@ -7485,6 +7506,47 @@
             `;
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
+
+            window.activeVersionsList = versions;
+            window.onPolicyVersionChange = async function(pId, cId, verId) {
+                const selected = window.activeVersionsList.find(v => v.id === verId);
+                if (!selected) return;
+                
+                try {
+                    const detail = await api('GET', `/api/v1/projects/${pId}/controls/${cId}/versions/${verId}`);
+                    document.getElementById('policy-content-text').textContent = detail.policy_text;
+                    
+                    const restoreBtn = document.getElementById('btn-restore-version');
+                    if (restoreBtn) {
+                        const isLatest = window.activeVersionsList[0].id === verId;
+                        if (isLatest) {
+                            restoreBtn.style.display = 'none';
+                        } else {
+                            restoreBtn.style.display = 'block';
+                            restoreBtn.textContent = `Restaurar v${detail.version}`;
+                        }
+                    }
+                } catch (e) {
+                    showToast('Erro ao carregar texto da versão', 'error');
+                }
+            };
+            
+            window.doRestorePolicyVersion = async function(pId, cId) {
+                const selector = document.getElementById('policy-version-selector');
+                const verId = selector.value;
+                if (!verId) return;
+                
+                try {
+                    const res = await api('POST', `/api/v1/projects/${pId}/controls/${cId}/restore-version`, { version_id: verId });
+                    if (res.ok) {
+                        showToast('Política restaurada com sucesso');
+                        window.openGeneratePolicyModal(pId, cId);
+                        render();
+                    }
+                } catch(e) {
+                    showToast('Erro ao restaurar versão', 'error');
+                }
+            };
         } else {
             showGenerationFormHtml();
         }

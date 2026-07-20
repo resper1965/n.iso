@@ -3032,6 +3032,20 @@ app.post('/api/v1/projects/:id/generate-policy', async (c) => {
       'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(result.content, normId, controlId, projectId).run();
 
+    // Insert new version in policy_versions
+    try {
+      const countRow = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
+      ).bind(projectId, normId, controlId).first<{ count: number }>();
+      const nextVer = (countRow?.count || 0) + 1;
+      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      await c.env.DB.prepare(
+        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(versionId, projectId, normId, nextVer, result.content, c.get('user')?.email || 'system').run();
+    } catch (e) {
+      console.error("Erro ao registrar versão da política", e);
+    }
+
     await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Política gerada para controle ${controlId}, projeto ${projectId}`);
 
     return c.json({
@@ -5203,6 +5217,75 @@ app.get('/api/v1/projects/:id/export/audit-log', async (c) => {
   return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="audit-log.csv"' } });
 });
 
+app.get('/api/v1/projects/:id/export/assets', async (c) => {
+  const projectId = c.req.param('id');
+  const result = await c.env.DB.prepare('SELECT * FROM assets WHERE project_id = ?').bind(projectId).all();
+  const rows = (result.results || []) as any[];
+  const headers = 'name,category,classification,owner,location,status,description,confidentiality_rating,integrity_rating,availability_rating';
+  const csv = headers + '\n' + rows.map(r => 
+    `${safeCsvCell(r.name)},${safeCsvCell(r.category)},${safeCsvCell(r.classification)},${safeCsvCell(r.owner)},${safeCsvCell(r.location)},${safeCsvCell(r.status)},${safeCsvCell(r.description)},${safeCsvCell(r.confidentiality_rating)},${safeCsvCell(r.integrity_rating)},${safeCsvCell(r.availability_rating)}`
+  ).join('\n');
+  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="assets.csv"' } });
+});
+
+app.get('/api/v1/projects/:id/controls/:controlId/versions', async (c) => {
+  const projectId = c.req.param('id');
+  const controlIdRaw = c.req.param('controlId');
+  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  const result = await c.env.DB.prepare(
+    'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
+  ).bind(projectId, normId, controlIdRaw).all();
+  
+  return c.json(result.results || []);
+});
+
+app.get('/api/v1/projects/:id/controls/:controlId/versions/:versionId', async (c) => {
+  const projectId = c.req.param('id');
+  const controlIdRaw = c.req.param('controlId');
+  const versionId = c.req.param('versionId');
+  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
+  ).bind(versionId, projectId, normId, controlIdRaw).first<any>();
+  
+  if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
+  return c.json(row);
+});
+
+app.post('/api/v1/projects/:id/controls/:controlId/restore-version', async (c) => {
+  const projectId = c.req.param('id');
+  const controlIdRaw = c.req.param('controlId');
+  const { version_id } = await c.req.json<{ version_id: string }>();
+  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
+  ).bind(version_id, projectId, normId, controlIdRaw).first<any>();
+  
+  if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
+  
+  // Update compliance_controls description
+  await c.env.DB.prepare(
+    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+  ).bind(row.policy_text, normId, controlIdRaw, projectId).run();
+  
+  const countRow = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
+  ).bind(projectId, normId, controlIdRaw).first<{ count: number }>();
+  const nextVer = (countRow?.count || 0) + 1;
+  const newVerId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+  
+  await c.env.DB.prepare(
+    'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(newVerId, projectId, normId, nextVer, row.policy_text, c.get('user')?.email || 'system').run();
+  
+  await logAudit(c.env.DB, 'policy.restored', c.get('user')?.email || 'system', `Política ${controlIdRaw} restaurada para versão ${row.version}, projeto ${projectId}`);
+  
+  return c.json({ ok: true, version: nextVer, policy_markdown: row.policy_text });
+});
+
 // ═══════════════════════════════════════════════
 //  SPRINT 8: MARKET READY
 // ═══════════════════════════════════════════════
@@ -6262,6 +6345,20 @@ app.post('/api/v1/projects/:id/policies/generate-from-template', async (c) => {
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(markdown, normId, control_id, projectId).run();
+
+    // Insert new version in policy_versions
+    try {
+      const countRow = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
+      ).bind(projectId, normId, control_id).first<{ count: number }>();
+      const nextVer = (countRow?.count || 0) + 1;
+      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      await c.env.DB.prepare(
+        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(versionId, projectId, normId, nextVer, markdown, user?.email || 'system').run();
+    } catch (e) {
+      console.error("Erro ao registrar versão da política", e);
+    }
 
     await logAudit(c.env.DB, 'policy.generated_from_template', user?.email ?? 'system', `Política gerada via template ${template_name} para o controle ${control_id}, projeto ${projectId}`);
 

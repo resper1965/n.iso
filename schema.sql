@@ -696,3 +696,18 @@ CREATE TABLE IF NOT EXISTS project_governance (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_project_governance_project ON project_governance(project_id);
+
+-- -----------------------------------------------
+-- POLICY VERSION CONTROL (ISO 27001 A.5.1)
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS policy_versions (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    control_id TEXT REFERENCES compliance_controls(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    policy_text TEXT NOT NULL,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_policy_versions_control ON policy_versions(project_id, control_id);
