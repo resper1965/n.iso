@@ -6804,52 +6804,116 @@
 
     window.openEditMgmtReviewModal = function(id) {
         const review = S.managementReviews.find(x => x.id === id) || {};
-        const agenda = JSON.parse(review.agenda_json || '{"items":[]}');
         
-        let agendaHtml = `<div style="max-height:300px;overflow-y:auto;background:rgba(255,255,255,0.01);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px">`;
+        let agenda = { items: [] };
+        try {
+            agenda = JSON.parse(review.agenda_json || '{"items":[]}');
+        } catch (e) {
+            console.error("Erro ao analisar agenda_json", e);
+        }
+        
+        let agendaHtml = `<div style="max-height:250px;overflow-y:auto;background:rgba(255,255,255,0.01);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px">`;
         (agenda.items || []).forEach(item => {
-            let dataStr = typeof item.data === 'string' ? item.data : JSON.stringify(item.data);
-            if (Array.isArray(item.data)) {
-                dataStr = item.data.map(d => `${d.status || 'N/A'}: ${d.cnt}`).join(', ');
+            let topicName = '';
+            let dataStr = '';
+            
+            if (typeof item === 'string') {
+                topicName = item;
+            } else if (item && typeof item === 'object') {
+                topicName = item.topic || item.title || item.name || '';
+                if (item.data !== undefined) {
+                    if (typeof item.data === 'string') {
+                        dataStr = item.data;
+                    } else if (Array.isArray(item.data)) {
+                        dataStr = item.data.map(d => `${d.status || 'N/A'}: ${d.cnt}`).join(', ');
+                    } else {
+                        dataStr = JSON.stringify(item.data);
+                    }
+                }
             }
+            
             agendaHtml += `
                 <div style="margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px">
-                    <div style="font-weight:600;color:var(--accent);font-size:0.85rem">${escapeHTML(item.topic)}</div>
-                    <div style="font-size:0.8rem;color:var(--muted);margin-top:2px"><strong>Dados consolidados:</strong> ${escapeHTML(dataStr)}</div>
+                    <div style="font-weight:600;color:var(--accent);font-size:0.85rem">${escapeHTML(topicName)}</div>
+                    ${dataStr ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:2px"><strong>Dados consolidados:</strong> ${escapeHTML(dataStr)}</div>` : ''}
                 </div>
             `;
         });
         agendaHtml += `</div>`;
 
+        const isOrgUser = S.user && S.user.role === 'org_user';
+        const decisionsText = review.decisions || 'Nenhuma decisão registrada ainda.';
+        const actionItemsText = review.action_items || 'Nenhuma ação corretiva ou oportunidade definida ainda.';
+
         const html = `
             <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
-                Pauta & Registro da Análise Crítica (${review.review_date})
+                Ata da Análise Crítica (${review.review_date})
+            </div>
+            
+            <div style="margin-bottom:16px">
+                <div style="font-weight:600;font-size:0.95rem;margin-bottom:6px;color:var(--text)">Participantes</div>
+                <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.4">${escapeHTML(review.attendees || 'Não definidos')}</div>
+            </div>
+
+            <div style="margin-bottom:16px">
+                <div style="font-weight:600;font-size:0.95rem;margin-bottom:6px;color:var(--text)">Pauta da Reunião (Cláusula 9.3.2)</div>
+                ${agendaHtml}
+            </div>
+
+            <div style="margin-bottom:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px; padding:12px">
+                <div style="font-weight:600;font-size:0.95rem;margin-bottom:6px;color:var(--accent)">Decisões Tomadas (Diretrizes, recursos...)</div>
+                <div style="font-size:0.9rem;color:var(--text);white-space:pre-wrap;line-height:1.5">${escapeHTML(decisionsText)}</div>
+            </div>
+
+            <div style="margin-bottom:20px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px; padding:12px">
+                <div style="font-weight:600;font-size:0.95rem;margin-bottom:6px;color:var(--accent)">Ações Corretivas / Oportunidades Definidas</div>
+                <div style="font-size:0.9rem;color:var(--text);white-space:pre-wrap;line-height:1.5">${escapeHTML(actionItemsText)}</div>
+            </div>
+
+            <div style="margin-bottom:20px; display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:600;font-size:0.9rem">Status:</span>
+                <span class="badge ${review.status === 'Completed' ? 'badge-implemented' : 'badge-pending'}">${review.status === 'Completed' ? 'Concluída' : 'Planejada'}</span>
+            </div>
+
+            <div style="text-align:right">
+                <button onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Fechar</button>
+                ${!isOrgUser ? `<button onclick="window.openEditMgmtReviewForm('${review.id}')" class="btn-primary">Editar Ata</button>` : ''}
+            </div>
+        `;
+        openModal(html);
+    };
+
+    window.openEditMgmtReviewForm = function(id) {
+        const review = S.managementReviews.find(x => x.id === id) || {};
+        
+        const html = `
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
+                Editar Ata da Análise Crítica (${review.review_date})
             </div>
             <form id="edit-mgmt-form" onsubmit="window.saveMgmtReviewDetails(event, '${review.id}')">
-                <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px">Participantes</div>
-                <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">${escapeHTML(review.attendees || 'Não definidos')}</div>
-                
-                <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px">Pauta da Reunião (Cláusula 9.3.2)</div>
-                ${agendaHtml}
-                
-                <div class="form-group" style="margin-bottom:12px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Decisões Tomadas (Diretrizes, recursos...)</label>
-                    <textarea name="decisions" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${escapeHTML(review.decisions || '')}</textarea>
+                <div class="form-group" style="margin-bottom:16px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600">Participantes</label>
+                    <textarea name="attendees" required style="width:100%;height:60px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:0.85rem">${escapeHTML(review.attendees || '')}</textarea>
                 </div>
-                <div class="form-group" style="margin-bottom:12px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Ações Corretivas / Oportunidades Definidas</label>
-                    <textarea name="action_items" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${escapeHTML(review.action_items || '')}</textarea>
+                
+                <div class="form-group" style="margin-bottom:16px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600">Decisões Tomadas (Diretrizes, recursos...)</label>
+                    <textarea name="decisions" style="width:100%;height:150px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:0.9rem">${escapeHTML(review.decisions || '')}</textarea>
+                </div>
+                <div class="form-group" style="margin-bottom:16px">
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600">Ações Corretivas / Oportunidades Definidas</label>
+                    <textarea name="action_items" style="width:100%;height:150px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:0.9rem">${escapeHTML(review.action_items || '')}</textarea>
                 </div>
                 <div class="form-group" style="margin-bottom:20px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Status da Reunião</label>
+                    <label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600">Status da Reunião</label>
                     <select name="status" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
                         <option value="Planned" ${review.status === 'Planned' ? 'selected' : ''}>Planejada</option>
                         <option value="Completed" ${review.status === 'Completed' ? 'selected' : ''}>Concluída</option>
                     </select>
                 </div>
                 <div style="text-align:right">
-                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
-                    <button type="submit" class="btn-primary">Salvar Detalhes da Ata</button>
+                    <button type="button" onclick="window.openEditMgmtReviewModal('${review.id}')" class="btn-secondary" style="margin-right:8px">Voltar</button>
+                    <button type="submit" class="btn-primary">Salvar Alterações</button>
                 </div>
             </form>
         `;
@@ -6861,6 +6925,7 @@
         const form = document.getElementById('edit-mgmt-form');
         const formData = new FormData(form);
         const body = {
+            attendees: formData.get('attendees'),
             decisions: formData.get('decisions'),
             action_items: formData.get('action_items'),
             status: formData.get('status')

@@ -5903,16 +5903,24 @@ app.put('/api/v1/management-reviews/:id', async (c) => {
   const id = c.req.param('id');
   await requireResourceAccess(c, 'management_reviews', id);
   try {
-    const { decisions, action_items, status, minutes_url } = await c.req.json();
+    const { decisions, action_items, status, minutes_url, attendees } = await c.req.json();
     await c.env.DB.prepare(`
       UPDATE management_reviews 
       SET decisions = COALESCE(?, decisions), 
           action_items = COALESCE(?, action_items), 
           status = COALESCE(?, status),
           minutes_url = COALESCE(?, minutes_url),
+          attendees = COALESCE(?, attendees),
           updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?
-    `).bind(decisions || null, action_items || null, status || null, minutes_url || null, id).run();
+    `).bind(
+      decisions !== undefined ? decisions : null,
+      action_items !== undefined ? action_items : null,
+      status !== undefined ? status : null,
+      minutes_url !== undefined ? minutes_url : null,
+      attendees !== undefined ? attendees : null,
+      id
+    ).run();
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao atualizar reunião de análise crítica', detail: e.message }, 500);
