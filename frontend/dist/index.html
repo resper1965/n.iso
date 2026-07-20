@@ -7816,14 +7816,56 @@
                         </div>
                     </div>
                     
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem" id="policy-modal-footer">
                         <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                        <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
+                        <div style="display:flex; gap:8px">
+                            <button class="btn" id="btn-edit-policy-manual" style="background:rgba(255,255,255,0.05); border-color:var(--border)">Editar Texto</button>
+                            <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
+                        </div>
                     </div>
                 </div>
             `;
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
+
+            document.getElementById('btn-edit-policy-manual').onclick = function() {
+                const textDiv = document.getElementById('policy-content-text');
+                const currentText = ctrl.description || '';
+                
+                textDiv.outerHTML = `
+                    <textarea id="policy-content-edit" class="form-input" style="width:100%; height:320px; font-family:monospace; font-size:0.75rem; line-height:1.5; color:var(--text); background:rgba(0,0,0,0.3); border-radius:8px; border:1px solid var(--border); padding:10px; resize:vertical;">${currentText}</textarea>
+                `;
+                
+                const footer = document.getElementById('policy-modal-footer');
+                footer.innerHTML = `
+                    <button class="btn" onclick="window.openGeneratePolicyModal('${projectId}', '${escapeHTML(controlId)}')">Cancelar</button>
+                    <button class="btn btn-primary" id="btn-save-policy-manual">Salvar Alterações</button>
+                `;
+                
+                document.getElementById('btn-save-policy-manual').onclick = async function() {
+                    const newText = document.getElementById('policy-content-edit').value;
+                    const saveBtn = document.getElementById('btn-save-policy-manual');
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = 'Salvando...';
+                    
+                    try {
+                        const res = await api('PUT', `/api/v1/controls/${ctrl.id}`, { description: newText });
+                        if (res.ok) {
+                            showToast('Política atualizada com sucesso!');
+                            window.openGeneratePolicyModal(projectId, controlId);
+                            render();
+                        } else {
+                            showToast(res.error || 'Erro ao salvar', 'error');
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = 'Salvar Alterações';
+                        }
+                    } catch(e) {
+                        showToast(e.message, 'error');
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Salvar Alterações';
+                    }
+                };
+            };
 
             window.activeVersionsList = versions;
             window.onPolicyVersionChange = async function(pId, cId, verId) {

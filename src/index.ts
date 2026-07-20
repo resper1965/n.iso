@@ -2245,10 +2245,37 @@ app.put('/api/v1/controls/:id', async (c) => {
       updates.push('status = ?');
       binds.push(status);
     }
+    
     if (description !== undefined) {
-      updates.push('description = ?');
-      binds.push(description);
+      // Buscar o controle atual para ver o projeto e o texto atual
+      const current = await c.env.DB.prepare('SELECT project_id, description FROM compliance_controls WHERE id = ?').bind(id).first<any>();
+      if (current && current.description !== description) {
+        updates.push('description = ?');
+        binds.push(description);
+        
+        // Também reseta assinaturas ao mudar de conteúdo
+        updates.push('ciso_approved_by = NULL');
+        updates.push('ciso_approved_at = NULL');
+        updates.push('ceo_approved_by = NULL');
+        updates.push('ceo_approved_at = NULL');
+        
+        // Gravar nova versão na tabela de versões
+        try {
+          const projectId = current.project_id;
+          const countRow = await c.env.DB.prepare(
+            'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND control_id = ?'
+          ).bind(projectId, id).first<{ count: number }>();
+          const nextVer = (countRow?.count || 0) + 1;
+          const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+          await c.env.DB.prepare(
+            'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(versionId, projectId, id, nextVer, description, c.get('user')?.email || 'system').run();
+        } catch (e) {
+          console.error("Erro ao registrar versão da política no PUT manual", e);
+        }
+      }
     }
+    
     if (owner !== undefined) {
       updates.push('owner = ?');
       binds.push(owner);
@@ -2259,7 +2286,7 @@ app.put('/api/v1/controls/:id', async (c) => {
     }
     
     if (updates.length === 0) {
-      return c.json({ error: 'Nenhum campo para atualizar' }, 400);
+      return c.json({ ok: true, message: 'Nenhuma alteração de conteúdo ou campo pendente.' });
     }
     
     binds.push(id);

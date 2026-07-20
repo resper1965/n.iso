@@ -63,7 +63,7 @@ policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
     // Save policy markdown directly to compliance_controls.description
     const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(result.content, normId, controlId, projectId).run();
 
     // Insert new version in policy_versions
@@ -368,6 +368,27 @@ policies.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
 
         if (result.success) {
           successful++;
+          const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          // Salvar markdown da política e limpar assinaturas de demonstração
+          await c.env.DB.prepare(
+            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+          ).bind(result.content, normId, controlId, projectId).run();
+
+          // Registrar histórico de versão
+          try {
+            const countRow = await c.env.DB.prepare(
+              'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
+            ).bind(projectId, normId, controlId).first<{ count: number }>();
+            const nextVer = (countRow?.count || 0) + 1;
+            const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+            await c.env.DB.prepare(
+              'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(versionId, projectId, normId, nextVer, result.content, c.get('user')?.email || 'system').run();
+          } catch (e) {
+            console.error("Erro ao registrar versão no bulk", e);
+          }
+
           await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Bulk policy generated: ${controlId}, project ${projectId}`);
           try {
             const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
@@ -779,7 +800,7 @@ policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) 
     // Save policy markdown directly to compliance_controls.description
     const normId = 'ctrl-' + control_id.toLowerCase().replace(/[^a-z0-9]/g, '');
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(markdown, normId, control_id, projectId).run();
 
     // Insert new version in policy_versions
