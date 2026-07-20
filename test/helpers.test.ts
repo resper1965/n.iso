@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { genId, escapeHtml, requireResourceAccess } from '../src/helpers';
 
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 describe('helpers', () => {
   describe('genId', () => {
     it('returns a non-empty string', () => {
@@ -38,6 +41,41 @@ describe('helpers', () => {
     it('resolves for allowed tables if user is consultor', async () => {
       await expect(requireResourceAccess({} as any, 'risks', 'id', { role: 'consultor' })).resolves.toBe(true);
       await expect(requireResourceAccess({} as any, 'vendors', 'id', { role: 'platform_admin' })).resolves.toBe(true);
+    });
+
+    it('all tables used in requireResourceAccess call sites exist in ALLOWED_TABLES', async () => {
+      const srcDir = join(__dirname, '../src');
+      const filesToScan: string[] = [];
+
+      function scanDir(dir: string) {
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDir(fullPath);
+          } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+            filesToScan.push(fullPath);
+          }
+        }
+      }
+      scanDir(srcDir);
+
+      const foundTables = new Set<string>();
+      const regex = /requireResourceAccess\s*\(\s*[^,]+,\s*['"]([^'"]+)['"]/g;
+
+      for (const filePath of filesToScan) {
+        const content = readFileSync(filePath, 'utf8');
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+          foundTables.add(match[1]);
+        }
+      }
+
+      // Each table used in requireResourceAccess must not throw "Invalid table"
+      for (const table of foundTables) {
+        const testCheck = requireResourceAccess({} as any, table, 'id', { role: 'consultor' });
+        await expect(testCheck).resolves.toBe(true);
+      }
     });
   });
 });
