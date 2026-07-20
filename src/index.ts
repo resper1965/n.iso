@@ -33,7 +33,7 @@ export type Bindings = {
   GOVBR_ENVIRONMENT?: string;
 };
 
-type Variables = {
+export type Variables = {
   user: {
     id: string;
     email: string;
@@ -54,11 +54,6 @@ type BlockQuestion = {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Gera um ULID-like único para IDs (não usar para tokens de sessão) */
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
 
 /** Gera um token criptograficamente seguro para sessões */
 function genToken(): string {
@@ -447,6 +442,9 @@ const INTERVIEW_TRACKS: Record<string, BlockQuestion[]> = {
 
 // ─── Inicialização do Hono ──────────────────────────────────────────────────
 
+import { genId, logAudit, createNotification, requireResourceAccess, requireProjectAccess } from './helpers';
+import risks from './routes/risks';
+
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // ponytail: Global error handler — safety net for unhandled errors
@@ -628,26 +626,6 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   return rehash === stored;
 }
 
-/** Verifica se o usuário tem acesso ao projeto (Consultant = total, Client = próprio) */
-function requireProjectAccess(c: any, projectId: string) {
-  const user = c.get('user');
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  if (user.client_project_id === projectId) return true;
-  throw new Error('Forbidden: No access to this project');
-}
-
-/** Verifica se o recurso pertence ao projeto do usuário */
-async function requireResourceAccess(c: any, table: string, id: string) {
-  const user = c.get('user');
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  
-  const row = await c.env.DB.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(id).first() as any;
-  if (!row || row.project_id !== user.client_project_id) {
-    throw new Error('Forbidden: No access to this resource');
-  }
-  return true;
-}
-
 /** Helper para validar URLs de webhook (SSRF guard) */
 function isValidWebhookUrl(urlStr: string): boolean {
   try {
@@ -672,42 +650,6 @@ function safeCsvCell(val: any): string {
   return `"${s}"`;
 }
 
-// ─── Helper: gravar log de auditoria ────────────────────────────────────────
-
-async function logAudit(
-  db: D1Database,
-  action: string,
-  actor: string,
-  details: string,
-  justification: string = '',
-  ip: string = ''
-) {
-  await db
-    .prepare(
-      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
-    )
-    .bind(genId(), action, actor, details, justification, ip)
-    .run();
-}
-
-// ─── Helper: criar notificação ──────────────────────────────────────────────
-
-async function createNotification(
-  db: D1Database,
-  type: string,
-  title: string,
-  message: string,
-  userId?: string,
-  link?: string,
-  actionType?: string,
-  targetId?: string
-) {
-  await db.prepare(
-    `INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'))`
-  ).bind(genId(), userId || null, type, title, message, link || null, actionType || null, targetId || null).run();
-}
 
 // ─── Helper: criar as 41 fases para um projeto ─────────────────────────────
 
@@ -2561,7 +2503,7 @@ app.get('/api/v1/dashboard/stats', async (c) => {
 app.put('/api/v1/controls/:id/maturity', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'compliance_controls', id);
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
     const { maturity } = await c.req.json<{ maturity: number }>();
     
     if (maturity < 0 || maturity > 5) {
@@ -3356,7 +3298,7 @@ app.put('/api/v1/evidence/:id/content', async (c) => {
 app.post('/api/v1/evidence/:id/evaluate', async (c) => {
   try {
     const evidenceId = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', evidenceId);
+    await requireResourceAccess(c.env.DB, 'evidence', evidenceId, c.get('user'));
     const body = await c.req.json<{ text: string }>().catch(() => ({ text: '' }));
 
     if (!body.text) {
@@ -3585,7 +3527,7 @@ app.put('/api/v1/evidence/:id/signature', async (c) => {
 app.get('/api/v1/evidence/:id/detail', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
     return c.json(evidence);
@@ -3716,7 +3658,7 @@ app.post('/api/v1/projects/:id/documents/upload', async (c) => {
 app.get('/api/v1/evidence/:id/verify', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!evidence) return c.json({ error: 'Not found' }, 404);
     
@@ -3737,7 +3679,7 @@ app.get('/api/v1/evidence/:id/verify', async (c) => {
 app.get('/api/v1/evidence/:id/detail', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!evidence) return c.json({ error: 'Not found' }, 404);
     
@@ -3761,7 +3703,7 @@ app.get('/api/v1/evidence/:id/detail', async (c) => {
 app.get('/api/v1/evidence/:id/download', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!ev || !ev.r2_key) return c.json({ error: 'Evidence not found' }, 404);
     
@@ -4047,158 +3989,11 @@ app.get('/api/v1/projects/:id/audit-pack', async (c) => {
 //  RISK ASSESSMENT MODULE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function riskLevel(score: number): string {
-  if (score <= 5) return 'Low';
-  if (score <= 12) return 'Medium';
-  if (score <= 20) return 'High';
-  return 'Critical';
-}
-
-app.get('/api/v1/projects/:id/risks', async (c) => {
-  const { results } = await c.env.DB.prepare(
-    `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
-     FROM risks r 
-     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
-     WHERE r.project_id = ? 
-     ORDER BY r.impact * r.probability DESC`
-  ).bind(c.req.param('id')).all();
-  return c.json({ ok: true, risks: results });
-});
-
-app.post('/api/v1/projects/:id/risks', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const body = await c.req.json<any>();
-    const id = genId();
-    const impact = body.impact ?? 3;
-    const probability = body.probability ?? 3;
-    const level = riskLevel(impact * probability);
-
-    await c.env.DB.prepare(
-      `INSERT INTO risks (id, project_id, asset_id, asset, threat, vulnerability, impact, probability, risk_level, treatment, treatment_plan, control_id, owner, accepted_by, accepted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      id,
-      projectId,
-      body.asset_id ?? null,
-      body.asset,
-      body.threat,
-      body.vulnerability ?? null,
-      impact,
-      probability,
-      level,
-      body.treatment ?? 'Mitigate',
-      body.treatment_plan ?? null,
-      body.control_id ?? null,
-      body.owner ?? null,
-      body.accepted_by ?? null,
-      body.accepted_at ?? null
-    ).run();
-
-    // Gravar no histórico de riscos (Cláusula 6.1.2)
-    const histId = genId();
-    await c.env.DB.prepare(
-      `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(histId, id, projectId, impact, probability, level).run();
-
-    // Trigger de Mitigação (PDCA)
-    const treatment = body.treatment ?? 'Mitigate';
-    if (treatment === 'Mitigate') {
-      const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
-      const existingTask = await c.env.DB.prepare(
-        'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
-      ).bind(projectId, taskName).first();
-      if (!existingTask) {
-        await c.env.DB.prepare(
-          `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
-           VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
-        ).bind(genId(), projectId, taskName).run();
-      }
-    }
-
-    await logAudit(c.env.DB, 'risk.created', c.get('user')?.email ?? 'system', `Risk ${id} created for project ${projectId}`);
-    return c.json({ ok: true, id, risk_level: level }, 201);
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao criar risco', detail: e.message }, 500);
-  }
-});
-
-app.put('/api/v1/risks/:id', async (c) => {
-  try {
-    const id = c.req.param('id');
-    await requireResourceAccess(c, 'risks', id);
-    const body = await c.req.json<any>();
-    const impact = body.impact ?? 3;
-    const probability = body.probability ?? 3;
-    const level = riskLevel(impact * probability);
-
-    // Buscar o project_id para registrar no histórico
-    const currentRisk = await c.env.DB.prepare('SELECT project_id FROM risks WHERE id = ?').bind(id).first() as any;
-    const projectId = currentRisk?.project_id;
-
-    await c.env.DB.prepare(
-      `UPDATE risks SET asset_id=?, asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, accepted_by=?, accepted_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-    ).bind(
-      body.asset_id ?? null,
-      body.asset,
-      body.threat,
-      body.vulnerability ?? null,
-      impact,
-      probability,
-      level,
-      body.treatment ?? 'Mitigate',
-      body.treatment_plan ?? null,
-      body.control_id ?? null,
-      body.owner ?? null,
-      body.status ?? 'Open',
-      body.accepted_by ?? null,
-      body.accepted_at ?? null,
-      id
-    ).run();
-
-    // Gravar no histórico sempre que houver atualização (Cláusula 6.1.2)
-    if (projectId) {
-      const histId = genId();
-      await c.env.DB.prepare(
-        `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(histId, id, projectId, impact, probability, level).run();
-
-      // Trigger de Mitigação (PDCA)
-      const treatment = body.treatment ?? 'Mitigate';
-      if (treatment === 'Mitigate') {
-        const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
-        const existingTask = await c.env.DB.prepare(
-          'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
-        ).bind(projectId, taskName).first();
-        if (!existingTask) {
-          await c.env.DB.prepare(
-            `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
-             VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
-          ).bind(genId(), projectId, taskName).run();
-        }
-      }
-    }
-
-    return c.json({ ok: true, id, risk_level: level });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar risco', detail: e.message }, 500);
-  }
-});
-
-app.delete('/api/v1/risks/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c, 'risks', id);
-  await c.env.DB.prepare('DELETE FROM risks WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
-});
-
 // --- ATIVOS DE INFORMAÇÃO CRUD (A.5.9) ---
 
 app.get('/api/v1/projects/:id/assets', async (c) => {
   const projectId = c.req.param('id');
-  await requireProjectAccess(c, projectId);
+  await requireProjectAccess(c.get('user'), projectId);
   const { results } = await c.env.DB.prepare(
     'SELECT * FROM assets WHERE project_id = ? ORDER BY name ASC'
   ).bind(projectId).all();
@@ -4208,7 +4003,7 @@ app.get('/api/v1/projects/:id/assets', async (c) => {
 app.post('/api/v1/projects/:id/assets', async (c) => {
   try {
     const projectId = c.req.param('id');
-    await requireProjectAccess(c, projectId);
+    await requireProjectAccess(c.get('user'), projectId);
     const body = await c.req.json<any>();
     const id = genId();
 
@@ -4240,7 +4035,7 @@ app.post('/api/v1/projects/:id/assets', async (c) => {
 app.put('/api/v1/assets/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'assets', id);
+    await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
     const body = await c.req.json<any>();
 
     await c.env.DB.prepare(
@@ -4267,16 +4062,9 @@ app.put('/api/v1/assets/:id', async (c) => {
 
 app.delete('/api/v1/assets/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'assets', id);
+  await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM assets WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
-});
-
-app.get('/api/v1/projects/:id/risks/history', async (c) => {
-  const { results } = await c.env.DB.prepare(
-    'SELECT rh.*, r.asset, r.threat FROM risk_history rh JOIN risks r ON rh.risk_id = r.id WHERE rh.project_id = ? ORDER BY rh.assessment_date DESC'
-  ).bind(c.req.param('id')).all();
-  return c.json({ ok: true, history: results });
 });
 
 // --- WORKFLOW DE APROVAÇÃO DE CONTROLE (A.5.1) ---
@@ -4434,7 +4222,7 @@ app.post('/api/v1/projects/:id/vendors', async (c) => {
 app.put('/api/v1/vendors/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'vendors', id);
+    await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
     const body = await c.req.json<any>();
     const ts = calculateTrustScore(body);
     const dl = diligenceLevel(ts);
@@ -4455,7 +4243,7 @@ app.put('/api/v1/vendors/:id', async (c) => {
 
 app.delete('/api/v1/vendors/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'vendors', id);
+  await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM vendors WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });
@@ -4492,7 +4280,7 @@ app.post('/api/v1/projects/:id/training', async (c) => {
 app.put('/api/v1/training/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'training_records', id);
+    await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
     const body = await c.req.json<any>();
 
     await c.env.DB.prepare(
@@ -4507,7 +4295,7 @@ app.put('/api/v1/training/:id', async (c) => {
 
 app.delete('/api/v1/training/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'training_records', id);
+  await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM training_records WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });
@@ -4783,7 +4571,7 @@ app.post('/api/v1/projects/:id/ropa', async (c) => {
 
 app.put('/api/v1/ropa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'ropa_records', id);
+  await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
   const body = await c.req.json();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
@@ -4801,7 +4589,7 @@ app.put('/api/v1/ropa/:id', async (c) => {
 
 app.delete('/api/v1/ropa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'ropa_records', id);
+  await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM ropa_records WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'ropa_deleted', user.email, `ROPA ${id} deleted`).run();
@@ -4835,7 +4623,7 @@ app.post('/api/v1/projects/:id/dpia', async (c) => {
 
 app.put('/api/v1/dpia/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'dpia_assessments', id);
+  await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
   const body = await c.req.json();
   await c.env.DB.prepare(
     `UPDATE dpia_assessments SET system_name=?, data_flow_description=?, data_subjects_types=?, personal_data_categories=?, necessity_proportionality=?, risks_identified=?, mitigation_measures=?, dpo_opinion=?, dpo_signature=?, ceo_signature=?, status=? WHERE id=?`
@@ -4851,7 +4639,7 @@ app.put('/api/v1/dpia/:id', async (c) => {
 
 app.delete('/api/v1/dpia/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'dpia_assessments', id);
+  await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM dpia_assessments WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await logAudit(c.env.DB, 'dpia.deleted', user.email, `DPIA ${id} deleted`);
@@ -5011,7 +4799,7 @@ app.post('/api/v1/projects/:id/audits', async (c) => {
 
 app.put('/api/v1/audits/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_schedule', id);
+  await requireResourceAccess(c.env.DB, 'audit_schedule', id, c.get('user'));
   const body = await c.req.json();
   const completedAt = body.status === 'Completed' ? new Date().toISOString() : null;
   await c.env.DB.prepare(
@@ -5024,7 +4812,7 @@ app.put('/api/v1/audits/:id', async (c) => {
 
 app.delete('/api/v1/audits/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_schedule', id);
+  await requireResourceAccess(c.env.DB, 'audit_schedule', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM audit_schedule WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'audit_deleted', user.email, `Audit ${id} deleted`).run();
@@ -5055,7 +4843,7 @@ app.post('/api/v1/projects/:id/capa', async (c) => {
 
 app.put('/api/v1/capa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'corrective_actions', id);
+  await requireResourceAccess(c.env.DB, 'corrective_actions', id, c.get('user'));
   const body = await c.req.json();
   const completedAt = body.status === 'Closed' ? new Date().toISOString() : null;
   await c.env.DB.prepare(
@@ -5068,7 +4856,7 @@ app.put('/api/v1/capa/:id', async (c) => {
 
 app.delete('/api/v1/capa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'corrective_actions', id);
+  await requireResourceAccess(c.env.DB, 'corrective_actions', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM corrective_actions WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'capa_deleted', user.email, `CAPA ${id} deleted`).run();
@@ -5102,7 +4890,7 @@ app.post('/api/v1/projects/:id/webhooks', async (c) => {
 });
 app.delete('/api/v1/webhooks/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'webhooks', id);
+  await requireResourceAccess(c.env.DB, 'webhooks', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM webhooks WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_deleted', user.email, `Webhook ${id} deleted`).run();
@@ -5111,7 +4899,7 @@ app.delete('/api/v1/webhooks/:id', async (c) => {
 
 app.post('/api/v1/webhooks/test/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'webhooks', id);
+  await requireResourceAccess(c.env.DB, 'webhooks', id, c.get('user'));
   const webhook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(id).first() as any;
   if (!webhook) return c.json({ error: 'Webhook not found' }, 404);
 
@@ -5167,7 +4955,7 @@ app.get('/api/v1/projects/:id/api-keys', async (c) => {
 
 app.delete('/api/v1/api-keys/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'api_keys', id);
+  await requireResourceAccess(c.env.DB, 'api_keys', id, c.get('user'));
   await c.env.DB.prepare("UPDATE api_keys SET status = 'Revoked' WHERE id = ?").bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_revoked', user.email, `API key ${id} revoked`).run();
@@ -5614,7 +5402,7 @@ app.post('/api/v1/projects/:id/certification', async (c) => {
 
 app.put('/api/v1/certification/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'certification_tracking', id);
+  await requireResourceAccess(c.env.DB, 'certification_tracking', id, c.get('user'));
   const user = c.get('user');
   const body = await c.req.json<any>();
   const existing = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first() as any;
@@ -6010,7 +5798,7 @@ app.post('/api/v1/projects/:id/stakeholders', async (c) => {
 
 app.put('/api/v1/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'stakeholders', id);
+  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
     const { name, type, category, requirements, influence, communication_method } = await c.req.json();
     await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
@@ -6026,7 +5814,7 @@ app.put('/api/v1/stakeholders/:id', async (c) => {
 
 app.delete('/api/v1/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'stakeholders', id);
+  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6187,7 +5975,7 @@ app.post('/api/v1/audits/:auditId/findings', async (c) => {
 
 app.put('/api/v1/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_findings', id);
+  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
     const { description, auditor_notes, status } = await c.req.json();
     await c.env.DB.prepare(`
@@ -6205,7 +5993,7 @@ app.put('/api/v1/audit-findings/:id', async (c) => {
 
 app.delete('/api/v1/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_findings', id);
+  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6266,7 +6054,7 @@ app.post('/api/v1/projects/:id/management-reviews', async (c) => {
 
 app.put('/api/v1/management-reviews/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'management_reviews', id);
+  await requireResourceAccess(c.env.DB, 'management_reviews', id, c.get('user'));
   try {
     const { decisions, action_items, status, minutes_url, attendees } = await c.req.json();
     await c.env.DB.prepare(`
@@ -6466,7 +6254,7 @@ app.post('/api/v1/projects/:id/metrics', async (c) => {
 
 app.put('/api/v1/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'performance_metrics', id);
+  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
     const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
     
@@ -6482,7 +6270,7 @@ app.put('/api/v1/metrics/:id', async (c) => {
 
 app.delete('/api/v1/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'performance_metrics', id);
+  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6748,6 +6536,11 @@ app.post('/api/v1/mcp/execute', async (c) => {
 
     return c.json({ error: 'Tool not found' }, 404);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SUB-ROUTERS (montados antes do catch-all)
+// ═══════════════════════════════════════════════════════════════════════════════
+app.route('', risks);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STATIC FILES (catch-all — deve ser a última rota)
