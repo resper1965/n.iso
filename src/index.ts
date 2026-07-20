@@ -2804,6 +2804,184 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
   }
 });
 
+// GET /api/v1/projects/:projectId/controls/:controlId/policy/report
+app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (c) => {
+  try {
+    // ponytail: query token authentication for printer-friendly reports
+    const token = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return c.text('Unauthorized', 401);
+    const session = await c.env.SESSIONS.get(token);
+    if (!session) return c.text('Unauthorized', 401);
+    const user = JSON.parse(session);
+
+    const projectId = c.req.param('projectId');
+    const controlId = c.req.param('controlId');
+    const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Busca o controle no D1
+    const ctrl = await c.env.DB.prepare(
+      'SELECT * FROM compliance_controls WHERE project_id = ? AND id = ?'
+    ).bind(projectId, normId).first<any>();
+    if (!ctrl) return c.text('Controle não encontrado', 404);
+
+    // Busca a evidência no D1
+    const evidence = await c.env.DB.prepare(
+      'SELECT * FROM evidence WHERE project_id = ? AND control_id = ?'
+    ).bind(projectId, normId).first<any>();
+
+    let content = ctrl.description || '';
+    if (evidence) {
+      try {
+        let file = await c.env.STORAGE.get(evidence.r2_key);
+        if (!file) {
+          const alternativeKeys = [
+            `cliente/${evidence.file_name}`,
+            `niso/${evidence.file_name}`,
+            `${projectId}/${evidence.file_name}`,
+            evidence.file_name,
+            `cliente/evidence/${evidence.file_name}`
+          ];
+          for (const altKey of alternativeKeys) {
+            if (altKey === evidence.r2_key) continue;
+            const altFile = await c.env.STORAGE.get(altKey);
+            if (altFile) {
+              file = altFile;
+              break;
+            }
+          }
+        }
+        if (file) {
+          content = await file.text();
+        }
+      } catch (e) {
+        console.error('R2 lookup failed:', e);
+      }
+    }
+
+    // Renderiza o HTML imprimível usando marked.js e estilos da ness.
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Relatório de Política - ${controlId}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <style>
+          :root {
+            --bg: #ffffff;
+            --text: #070b14;
+            --accent: #00ade8;
+            --border: #e2e8f0;
+          }
+          body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.6;
+          }
+          .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+          }
+          .header-block {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+          }
+          .brand {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--text);
+          }
+          .brand span {
+            color: var(--accent);
+          }
+          .doc-meta {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #64748b;
+          }
+          h1, h2, h3, h4 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 600;
+            color: var(--text);
+          }
+          .content-area {
+            font-size: 0.95rem;
+          }
+          .print-btn-bar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 2rem;
+          }
+          .btn {
+            background: var(--text);
+            color: #ffffff;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: opacity 0.2s;
+          }
+          .btn:hover {
+            opacity: 0.9;
+          }
+          @media print {
+            .print-btn-bar {
+              display: none;
+            }
+            body {
+              padding: 0;
+            }
+            .container {
+              padding: 0;
+              border-radius: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="print-btn-bar">
+            <button class="btn" onclick="window.print()">Imprimir Política (PDF)</button>
+          </div>
+          <div class="header-block">
+            <div class="brand">n<span>.</span>iso</div>
+            <div class="doc-meta">
+              <strong>Controle:</strong> ${controlId}<br>
+              <strong>Status:</strong> ${ctrl.status || 'Não Iniciado'}<br>
+              <strong>Maturidade:</strong> ${ctrl.maturity !== null && ctrl.maturity !== undefined ? ctrl.maturity : '---'}
+            </div>
+          </div>
+          <div class="content-area" id="markdown-content"></div>
+        </div>
+        <script>
+          const rawMarkdown = \`${content.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+          document.getElementById('markdown-content').innerHTML = marked.parse(rawMarkdown);
+        </script>
+      </body>
+      </html>
+    `;
+    return c.html(html);
+  } catch (err: any) {
+    return c.text('Erro interno: ' + err.message, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
