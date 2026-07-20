@@ -1,18 +1,16 @@
 import { Hono } from 'hono';
+import { PHASE_CHECKLISTS, ChecklistItem } from './checklists';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { serveStatic } from 'hono/cloudflare-workers';
 import { calculatePricing, DEFAULT_FINANCIAL_MODEL } from './services/pricing';
-import { PolicyAgent } from './agents/policy';
 import { EvidenceAgent } from './agents/evidence';
 import { AssessmentAgent } from './agents/assessment';
 import { MemoryService } from './services/memory';
 import { SoALogicEngine } from './services/soa-logic';
 import { MigrationService } from './services/migration-service';
-import { PolicyGeneratorService } from './services/policy-generator';
-import process from 'node:process';
 import { KnowledgeService } from './services/knowledge-service';
-import { BLOCK_QUESTIONS, PHASE_TITLES, POLICY_TEMPLATES } from './constants';
+import { BLOCK_QUESTIONS, PHASE_TITLES } from './constants';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +31,7 @@ export type Bindings = {
   GOVBR_ENVIRONMENT?: string;
 };
 
-type Variables = {
+export type Variables = {
   user: {
     id: string;
     email: string;
@@ -55,22 +53,11 @@ type BlockQuestion = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Gera um ULID-like único para IDs (não usar para tokens de sessão) */
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
 /** Gera um token criptograficamente seguro para sessões */
 function genToken(): string {
   const arr = new Uint8Array(32);
   crypto.getRandomValues(arr);
   return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** Escape HTML entities para prevenir XSS em templates HTML */
-function escapeHtml(s: string): string {
-  if (!s) return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
@@ -107,292 +94,6 @@ async function sendEmail(c: any, to: string, subject: string, html: string): Pro
   }
 }
 
-
-// ─── Checklists por Fase do Projeto ──────────────────────────────────────────
-
-type ChecklistItem = { id: string; text: string; category: 'task' | 'document' | 'evidence' };
-
-const PHASE_CHECKLISTS: Record<number, ChecklistItem[]> = {
-  0: [ // Mobilização e Mandato
-    { id: 'p0_1', text: 'Definir sponsor executivo', category: 'task' },
-    { id: 'p0_2', text: 'Nomear equipe do projeto', category: 'task' },
-    { id: 'p0_3', text: 'Kick-off meeting realizado', category: 'evidence' },
-    { id: 'p0_4', text: 'Cronograma aprovado', category: 'document' },
-    { id: 'p0_5', text: 'Carta de mandato assinada', category: 'document' },
-    { id: 'p0_6', text: 'Definir canais de comunicação', category: 'task' },
-    { id: 'p0_7', text: 'Avaliar recursos necessários', category: 'task' },
-  ],
-  1: [ // Entrevista Executiva
-    { id: 'p1_1', text: 'Agendar entrevista com C-Level', category: 'task' },
-    { id: 'p1_2', text: 'Conduzir entrevista executiva', category: 'task' },
-    { id: 'p1_3', text: 'Documentar respostas e expectativas', category: 'document' },
-    { id: 'p1_4', text: 'Registrar gaps identificados', category: 'evidence' },
-  ],
-  2: [ // Entrevistas por Trilha
-    { id: 'p2_1', text: 'Agendar entrevistas por trilha (TI, RH, Jurídico)', category: 'task' },
-    { id: 'p2_2', text: 'Conduzir entrevistas com cada área', category: 'task' },
-    { id: 'p2_3', text: 'Documentar achados por trilha', category: 'document' },
-    { id: 'p2_4', text: 'Consolidar relatório de entrevistas', category: 'document' },
-  ],
-  3: [ // Definição de Escopo
-    { id: 'p3_1', text: 'Declaração de escopo documentada (Cl 4.3)', category: 'document' },
-    { id: 'p3_2', text: 'Unidades organizacionais definidas', category: 'document' },
-    { id: 'p3_3', text: 'Processos incluídos listados', category: 'document' },
-    { id: 'p3_4', text: 'Exclusões justificadas', category: 'document' },
-    { id: 'p3_5', text: 'Limites geográficos definidos', category: 'document' },
-    { id: 'p3_6', text: 'Escopo aprovado pela direção', category: 'evidence' },
-  ],
-  4: [ // Gap Assessment
-    { id: 'p4_1', text: 'Questionário de gap enviado', category: 'task' },
-    { id: 'p4_2', text: 'Entrevistas realizadas', category: 'evidence' },
-    { id: 'p4_3', text: 'Gaps por controle documentados', category: 'document' },
-    { id: 'p4_4', text: 'Relatório de gap assessment gerado', category: 'document' },
-    { id: 'p4_5', text: 'Plano de tratamento definido', category: 'document' },
-    { id: 'p4_6', text: 'Gap assessment aprovado', category: 'evidence' },
-    { id: 'p4_7', text: 'Quick wins identificados', category: 'task' },
-  ],
-  5: [ // Governança e Papéis
-    { id: 'p5_1', text: 'Definir estrutura de governança', category: 'task' },
-    { id: 'p5_2', text: 'Nomear papéis e responsabilidades', category: 'document' },
-    { id: 'p5_3', text: 'Documentar organograma de SI', category: 'document' },
-    { id: 'p5_4', text: 'Aprovar estrutura de governança', category: 'evidence' },
-  ],
-  6: [ // Contexto e Partes Interessadas
-    { id: 'p6_1', text: 'Análise de contexto interno e externo (Cl 4.1)', category: 'document' },
-    { id: 'p6_2', text: 'Identificar partes interessadas (Cl 4.2)', category: 'document' },
-    { id: 'p6_3', text: 'Documentar requisitos das partes interessadas', category: 'document' },
-    { id: 'p6_4', text: 'Aprovar análise de contexto', category: 'evidence' },
-  ],
-  7: [ // Inventário de Ativos e Dados
-    { id: 'p7_1', text: 'Inventário de ativos de informação', category: 'document' },
-    { id: 'p7_2', text: 'Classificação de ativos por criticidade', category: 'document' },
-    { id: 'p7_3', text: 'Proprietários de ativos atribuídos', category: 'task' },
-    { id: 'p7_4', text: 'Mapeamento de dados pessoais (RoPA)', category: 'document' },
-    { id: 'p7_5', text: 'Inventário revisado e aprovado', category: 'evidence' },
-  ],
-  8: [ // Mapeamento de Processos
-    { id: 'p8_1', text: 'Processos de negócio mapeados', category: 'document' },
-    { id: 'p8_2', text: 'Fluxos de dados documentados', category: 'document' },
-    { id: 'p8_3', text: 'Dependências entre processos identificadas', category: 'document' },
-    { id: 'p8_4', text: 'Processos críticos priorizados', category: 'task' },
-  ],
-  9: [ // Riscos de Segurança
-    { id: 'p9_1', text: 'Metodologia de risco definida (Cl 6.1)', category: 'document' },
-    { id: 'p9_2', text: 'Ativos de informação inventariados', category: 'document' },
-    { id: 'p9_3', text: 'Ameaças e vulnerabilidades identificadas', category: 'document' },
-    { id: 'p9_4', text: 'Matriz de risco (impacto × probabilidade)', category: 'document' },
-    { id: 'p9_5', text: 'Critérios de aceitação definidos', category: 'document' },
-    { id: 'p9_6', text: 'Proprietários de risco atribuídos', category: 'task' },
-    { id: 'p9_7', text: 'Plano de tratamento de riscos (Cl 6.1.3)', category: 'document' },
-    { id: 'p9_8', text: 'Risco residual aceito formalmente', category: 'evidence' },
-  ],
-  10: [ // Riscos de Privacidade
-    { id: 'p10_1', text: 'DPIA/RIPD para operações de alto risco', category: 'document' },
-    { id: 'p10_2', text: 'Riscos de privacidade identificados', category: 'document' },
-    { id: 'p10_3', text: 'Medidas mitigatórias definidas', category: 'document' },
-    { id: 'p10_4', text: 'DPIA aprovado pelo DPO', category: 'evidence' },
-  ],
-  11: [ // Tratamento de Riscos
-    { id: 'p11_1', text: 'Plano de tratamento de riscos elaborado', category: 'document' },
-    { id: 'p11_2', text: 'Controles selecionados por risco', category: 'document' },
-    { id: 'p11_3', text: 'Responsáveis por implementação definidos', category: 'task' },
-    { id: 'p11_4', text: 'Cronograma de implementação aprovado', category: 'evidence' },
-  ],
-  12: [ // SoA do SGSI
-    { id: 'p12_1', text: 'SoA draft gerado com 93 controles', category: 'document' },
-    { id: 'p12_2', text: 'Justificativa de inclusão/exclusão por controle', category: 'document' },
-    { id: 'p12_3', text: 'Status de implementação por controle', category: 'document' },
-    { id: 'p12_4', text: 'Evidências vinculadas por controle', category: 'evidence' },
-    { id: 'p12_5', text: 'SoA revisado pela direção', category: 'task' },
-    { id: 'p12_6', text: 'SoA aprovado formalmente', category: 'evidence' },
-  ],
-  13: [ // SoA do SGPI
-    { id: 'p13_1', text: 'SoA de privacidade elaborado (ISO 27701)', category: 'document' },
-    { id: 'p13_2', text: 'Controles de privacidade mapeados', category: 'document' },
-    { id: 'p13_3', text: 'Evidências de conformidade vinculadas', category: 'evidence' },
-    { id: 'p13_4', text: 'SoA do SGPI aprovado', category: 'evidence' },
-  ],
-  14: [ // Arquitetura Documental
-    { id: 'p14_1', text: 'Estrutura de pastas definida', category: 'task' },
-    { id: 'p14_2', text: 'Nomenclatura padrão de documentos', category: 'document' },
-    { id: 'p14_3', text: 'Template de política aprovado', category: 'document' },
-    { id: 'p14_4', text: 'Template de procedimento aprovado', category: 'document' },
-    { id: 'p14_5', text: 'Controle de versão implementado', category: 'task' },
-    { id: 'p14_6', text: 'Workflow de aprovação definido', category: 'task' },
-    { id: 'p14_7', text: 'Lista mestra de documentos', category: 'document' },
-  ],
-  15: [ // Controles Organizacionais
-    { id: 'p15_1', text: 'Políticas organizacionais redigidas (Tema 5)', category: 'document' },
-    { id: 'p15_2', text: 'Procedimentos de gestão de ativos', category: 'document' },
-    { id: 'p15_3', text: 'Controles de acesso implementados', category: 'evidence' },
-    { id: 'p15_4', text: 'Políticas aprovadas pela direção', category: 'evidence' },
-  ],
-  16: [ // Controles de Pessoas
-    { id: 'p16_1', text: 'Política de segurança para RH redigida', category: 'document' },
-    { id: 'p16_2', text: 'Background check implementado', category: 'task' },
-    { id: 'p16_3', text: 'Termos de confidencialidade assinados', category: 'evidence' },
-    { id: 'p16_4', text: 'Processo de desligamento seguro documentado', category: 'document' },
-  ],
-  17: [ // Controles Físicos
-    { id: 'p17_1', text: 'Perímetros de segurança definidos', category: 'document' },
-    { id: 'p17_2', text: 'Controles de acesso físico implementados', category: 'evidence' },
-    { id: 'p17_3', text: 'Proteção de equipamentos documentada', category: 'document' },
-    { id: 'p17_4', text: 'Descarte seguro de mídias', category: 'task' },
-  ],
-  18: [ // Controles Tecnológicos
-    { id: 'p18_1', text: 'Controles tecnológicos do Tema 8 implementados', category: 'evidence' },
-    { id: 'p18_2', text: 'Gestão de vulnerabilidades operacional', category: 'evidence' },
-    { id: 'p18_3', text: 'Logs e monitoramento configurados', category: 'evidence' },
-    { id: 'p18_4', text: 'Criptografia em trânsito e repouso', category: 'evidence' },
-    { id: 'p18_5', text: 'Proteção contra malware ativa', category: 'evidence' },
-  ],
-  19: [ // Desenvolvimento Seguro
-    { id: 'p19_1', text: 'Política de desenvolvimento seguro (A.8.25)', category: 'document' },
-    { id: 'p19_2', text: 'SSDLC implementado no pipeline', category: 'evidence' },
-    { id: 'p19_3', text: 'Code review obrigatório configurado', category: 'evidence' },
-    { id: 'p19_4', text: 'Ferramentas SAST/SCA integradas', category: 'evidence' },
-  ],
-  20: [ // Cloud, DevOps e SRE
-    { id: 'p20_1', text: 'Segurança cloud provider documentada (A.5.23)', category: 'document' },
-    { id: 'p20_2', text: 'IAM e least privilege configurados', category: 'evidence' },
-    { id: 'p20_3', text: 'Pipeline CI/CD seguro', category: 'evidence' },
-    { id: 'p20_4', text: 'Monitoramento e alertas operacionais', category: 'evidence' },
-  ],
-  21: [ // Programa de Privacidade
-    { id: 'p21_1', text: 'Programa de privacidade documentado', category: 'document' },
-    { id: 'p21_2', text: 'DPO/Encarregado nomeado', category: 'evidence' },
-    { id: 'p21_3', text: 'Bases legais mapeadas por operação', category: 'document' },
-    { id: 'p21_4', text: 'RoPA completo e atualizado', category: 'document' },
-  ],
-  22: [ // Privacy by Design
-    { id: 'p22_1', text: 'Metodologia de Privacy by Design definida', category: 'document' },
-    { id: 'p22_2', text: 'Checklist PbD para novos projetos', category: 'document' },
-    { id: 'p22_3', text: 'Minimização de dados implementada', category: 'evidence' },
-    { id: 'p22_4', text: 'Privacy by Default configurado', category: 'evidence' },
-  ],
-  23: [ // Direitos dos Titulares
-    { id: 'p23_1', text: 'Canal de atendimento a titulares implementado', category: 'evidence' },
-    { id: 'p23_2', text: 'Procedimento de DSR documentado', category: 'document' },
-    { id: 'p23_3', text: 'SLA de resposta definido', category: 'document' },
-    { id: 'p23_4', text: 'Teste de exercício de direitos realizado', category: 'evidence' },
-  ],
-  24: [ // Consentimento e Bases Legais
-    { id: 'p24_1', text: 'Fluxo de consentimento implementado', category: 'evidence' },
-    { id: 'p24_2', text: 'Mecanismo de revogação funcional', category: 'evidence' },
-    { id: 'p24_3', text: 'Bases legais documentadas por operação', category: 'document' },
-    { id: 'p24_4', text: 'Cookie banner/consent manager configurado', category: 'evidence' },
-  ],
-  25: [ // Retenção e Descarte
-    { id: 'p25_1', text: 'Política de retenção documentada', category: 'document' },
-    { id: 'p25_2', text: 'Tabela de temporalidade por tipo de dado', category: 'document' },
-    { id: 'p25_3', text: 'Procedimento de descarte seguro', category: 'document' },
-    { id: 'p25_4', text: 'Jobs de exclusão automatizados ou planejados', category: 'evidence' },
-  ],
-  26: [ // Transferências e Compartilhamento
-    { id: 'p26_1', text: 'Transferências internacionais mapeadas', category: 'document' },
-    { id: 'p26_2', text: 'Cláusulas contratuais padrão (SCCs)', category: 'document' },
-    { id: 'p26_3', text: 'Avaliação de adequação de país receptor', category: 'document' },
-    { id: 'p26_4', text: 'Compartilhamentos de dados documentados', category: 'document' },
-  ],
-  27: [ // Fornecedores e Operadores
-    { id: 'p27_1', text: 'Lista de subprocessadores atualizada', category: 'document' },
-    { id: 'p27_2', text: 'DPAs assinados com fornecedores', category: 'evidence' },
-    { id: 'p27_3', text: 'Avaliação de segurança de fornecedores', category: 'document' },
-    { id: 'p27_4', text: 'Monitoramento contínuo de terceiros', category: 'task' },
-  ],
-  28: [ // Incidentes
-    { id: 'p28_1', text: 'Procedimento de resposta a incidentes (A.5.24)', category: 'document' },
-    { id: 'p28_2', text: 'Classificação de severidade definida', category: 'document' },
-    { id: 'p28_3', text: 'Canais de reporte definidos', category: 'task' },
-    { id: 'p28_4', text: 'Time de resposta nomeado (CSIRT)', category: 'task' },
-    { id: 'p28_5', text: 'Template de registro de incidente', category: 'document' },
-    { id: 'p28_6', text: 'Processo de notificação à ANPD (72h)', category: 'document' },
-    { id: 'p28_7', text: 'Lições aprendidas documentadas', category: 'document' },
-    { id: 'p28_8', text: 'Simulação de incidente realizada', category: 'evidence' },
-  ],
-  29: [ // Treinamento
-    { id: 'p29_1', text: 'Programa de conscientização definido', category: 'document' },
-    { id: 'p29_2', text: 'Material de treinamento elaborado', category: 'document' },
-    { id: 'p29_3', text: 'Treinamento inicial realizado', category: 'evidence' },
-    { id: 'p29_4', text: 'Registros de presença/conclusão', category: 'evidence' },
-  ],
-  30: [ // Monitoramento e Métricas
-    { id: 'p30_1', text: 'KPIs de segurança definidos', category: 'document' },
-    { id: 'p30_2', text: 'Dashboard de métricas implementado', category: 'evidence' },
-    { id: 'p30_3', text: 'Processo de monitoramento contínuo', category: 'document' },
-    { id: 'p30_4', text: 'Relatório periódico de métricas', category: 'document' },
-  ],
-  31: [ // Auditoria Interna
-    { id: 'p31_1', text: 'Programa de auditoria interna (Cl 9.2)', category: 'document' },
-    { id: 'p31_2', text: 'Critérios e escopo definidos', category: 'document' },
-    { id: 'p31_3', text: 'Auditor interno qualificado/independente', category: 'evidence' },
-    { id: 'p31_4', text: 'Checklist de auditoria preparado', category: 'document' },
-    { id: 'p31_5', text: 'Auditoria interna executada', category: 'evidence' },
-    { id: 'p31_6', text: 'Relatório de auditoria gerado', category: 'document' },
-    { id: 'p31_7', text: 'Não conformidades registradas', category: 'document' },
-    { id: 'p31_8', text: 'Plano de ação corretiva aprovado', category: 'evidence' },
-  ],
-  32: [ // Não Conformidades
-    { id: 'p32_1', text: 'Não conformidades identificadas e registradas', category: 'document' },
-    { id: 'p32_2', text: 'Análise de causa raiz realizada', category: 'document' },
-    { id: 'p32_3', text: 'Ações corretivas definidas', category: 'document' },
-    { id: 'p32_4', text: 'Verificação de eficácia das correções', category: 'evidence' },
-  ],
-  33: [ // Análise Crítica
-    { id: 'p33_1', text: 'Pauta da análise crítica preparada (Cl 9.3)', category: 'document' },
-    { id: 'p33_2', text: 'Análise crítica pela direção realizada', category: 'evidence' },
-    { id: 'p33_3', text: 'Ata de reunião documentada', category: 'document' },
-    { id: 'p33_4', text: 'Decisões e ações registradas', category: 'document' },
-  ],
-  34: [ // Readiness Review
-    { id: 'p34_1', text: 'Todas as políticas aprovadas', category: 'evidence' },
-    { id: 'p34_2', text: 'SoA finalizado com evidências', category: 'evidence' },
-    { id: 'p34_3', text: 'Risk treatment plan implementado', category: 'evidence' },
-    { id: 'p34_4', text: 'Auditoria interna concluída', category: 'evidence' },
-    { id: 'p34_5', text: 'Análise crítica pela direção realizada', category: 'evidence' },
-    { id: 'p34_6', text: 'Não conformidades corrigidas', category: 'evidence' },
-    { id: 'p34_7', text: 'Simulação de Stage 1 realizada', category: 'evidence' },
-    { id: 'p34_8', text: 'Readiness score ≥ 80%', category: 'evidence' },
-  ],
-  35: [ // Preparação Stage 1
-    { id: 'p35_1', text: 'Documentação Stage 1 empacotada', category: 'document' },
-    { id: 'p35_2', text: 'SoA + política SGSI + escopo enviados', category: 'document' },
-    { id: 'p35_3', text: 'Agenda com certificadora confirmada', category: 'task' },
-    { id: 'p35_4', text: 'Time de acompanhamento definido', category: 'task' },
-    { id: 'p35_5', text: 'FAQ de auditoria preparado', category: 'document' },
-  ],
-  36: [ // Correções Pós-Stage 1
-    { id: 'p36_1', text: 'Achados do Stage 1 documentados', category: 'document' },
-    { id: 'p36_2', text: 'Plano de correção elaborado', category: 'document' },
-    { id: 'p36_3', text: 'Correções implementadas', category: 'evidence' },
-    { id: 'p36_4', text: 'Evidências de correção coletadas', category: 'evidence' },
-  ],
-  37: [ // Preparação Stage 2
-    { id: 'p37_1', text: 'Evidências de implementação organizadas', category: 'evidence' },
-    { id: 'p37_2', text: 'Entrevistados informados e preparados', category: 'task' },
-    { id: 'p37_3', text: 'Sala de auditoria/logistics definidos', category: 'task' },
-    { id: 'p37_4', text: 'Não conformidades Stage 1 corrigidas', category: 'evidence' },
-    { id: 'p37_5', text: 'Evidências de eficácia operacional', category: 'evidence' },
-    { id: 'p37_6', text: 'Logs de auditoria disponíveis', category: 'evidence' },
-  ],
-  38: [ // Atendimento ao Auditor
-    { id: 'p38_1', text: 'Acompanhar auditor durante Stage 2', category: 'task' },
-    { id: 'p38_2', text: 'Evidências solicitadas fornecidas', category: 'evidence' },
-    { id: 'p38_3', text: 'Registro de observações do auditor', category: 'document' },
-    { id: 'p38_4', text: 'Encerramento formal da auditoria', category: 'evidence' },
-  ],
-  39: [ // Pós-Auditoria
-    { id: 'p39_1', text: 'Relatório de auditoria recebido e analisado', category: 'document' },
-    { id: 'p39_2', text: 'Não conformidades menores corrigidas', category: 'evidence' },
-    { id: 'p39_3', text: 'Certificado recebido', category: 'evidence' },
-    { id: 'p39_4', text: 'Comunicação interna sobre certificação', category: 'task' },
-  ],
-  40: [ // Manutenção e Supervisão
-    { id: 'p40_1', text: 'Calendário de auditorias de supervisão', category: 'document' },
-    { id: 'p40_2', text: 'Melhoria contínua operacional', category: 'task' },
-    { id: 'p40_3', text: 'Preparação para recertificação (3 anos)', category: 'task' },
-  ],
-};
 
 // ─── Perguntas de Entrevista por Trilha ─────────────────────────────────────
 
@@ -446,6 +147,11 @@ const INTERVIEW_TRACKS: Record<string, BlockQuestion[]> = {
 };
 
 // ─── Inicialização do Hono ──────────────────────────────────────────────────
+
+import { genId, logAudit, createNotification, requireResourceAccess, requireProjectAccess, escapeHtml } from './helpers';
+import risks from './routes/risks';
+import policies from './routes/policies';
+import integrations from './routes/integrations';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -628,86 +334,6 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   return rehash === stored;
 }
 
-/** Verifica se o usuário tem acesso ao projeto (Consultant = total, Client = próprio) */
-function requireProjectAccess(c: any, projectId: string) {
-  const user = c.get('user');
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  if (user.client_project_id === projectId) return true;
-  throw new Error('Forbidden: No access to this project');
-}
-
-/** Verifica se o recurso pertence ao projeto do usuário */
-async function requireResourceAccess(c: any, table: string, id: string) {
-  const user = c.get('user');
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  
-  const row = await c.env.DB.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(id).first() as any;
-  if (!row || row.project_id !== user.client_project_id) {
-    throw new Error('Forbidden: No access to this resource');
-  }
-  return true;
-}
-
-/** Helper para validar URLs de webhook (SSRF guard) */
-function isValidWebhookUrl(urlStr: string): boolean {
-  try {
-    const url = new URL(urlStr);
-    const hostname = url.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') return false;
-    if (hostname.includes('169.254.169.254')) return false;
-    return ['http:', 'https:'].includes(url.protocol);
-  } catch {
-    return false;
-  }
-}
-
-/** Previne CSV Injection (Formula Injection) e escapa aspas */
-function safeCsvCell(val: any): string {
-  let s = String(val ?? '');
-  s = s.replace(/"/g, '""');
-  // Se começar com =, +, -, @, injetar um ' na frente para evitar execução de fórmulas
-  if (s.startsWith('=') || s.startsWith('+') || s.startsWith('-') || s.startsWith('@')) {
-    s = "'" + s;
-  }
-  return `"${s}"`;
-}
-
-// ─── Helper: gravar log de auditoria ────────────────────────────────────────
-
-async function logAudit(
-  db: D1Database,
-  action: string,
-  actor: string,
-  details: string,
-  justification: string = '',
-  ip: string = ''
-) {
-  await db
-    .prepare(
-      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
-    )
-    .bind(genId(), action, actor, details, justification, ip)
-    .run();
-}
-
-// ─── Helper: criar notificação ──────────────────────────────────────────────
-
-async function createNotification(
-  db: D1Database,
-  type: string,
-  title: string,
-  message: string,
-  userId?: string,
-  link?: string,
-  actionType?: string,
-  targetId?: string
-) {
-  await db.prepare(
-    `INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'))`
-  ).bind(genId(), userId || null, type, title, message, link || null, actionType || null, targetId || null).run();
-}
 
 // ─── Helper: criar as 41 fases para um projeto ─────────────────────────────
 
@@ -2561,7 +2187,7 @@ app.get('/api/v1/dashboard/stats', async (c) => {
 app.put('/api/v1/controls/:id/maturity', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'compliance_controls', id);
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
     const { maturity } = await c.req.json<{ maturity: number }>();
     
     if (maturity < 0 || maturity > 5) {
@@ -2978,317 +2604,6 @@ app.get('/api/v1/phases/config', (c) => {
   return c.json(PHASE_CHECKLISTS);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  POLICY AGENT — Geração Automática de Políticas
-// ═══════════════════════════════════════════════════════════════════════════════
-
-app.post('/api/v1/projects/:id/generate-policy', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const body = await c.req.json<{ control_id?: string; phase_number?: number }>().catch(() => ({} as any));
-
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const controlId = body.control_id || 'A.5.1';
-
-    // Buscar respostas do assessment para memória organizacional
-    let orgMemory = '';
-    if (project.assessment_id) {
-      const { results: answers } = await c.env.DB.prepare(
-        'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ? AND answer IS NOT NULL'
-      ).bind(project.assessment_id).all<{ question_key: string; answer: string }>();
-      orgMemory = (answers || []).map(a => `${a.question_key}: ${a.answer}`).join('\n');
-    }
-
-    // ponytail: RAG memory — retrieve prior policies + client documents for context
-    let ragContext = '';
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      const policyCtx = await memory.retrieveContext(projectId, `policy ${controlId}`, 'policy', 3);
-      const clientCtx = await memory.retrieveContext(projectId, `${controlId} organograma sistemas ativos seguranca`, 'client_doc', 3);
-      ragContext = [policyCtx, clientCtx].filter(Boolean).join('\n---\n');
-    } catch(e) { /* vectorize may not be populated yet */ }
-
-    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
-    const result = await agent.run(
-      `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
-      {
-        organizationId: projectId,
-        controlId,
-        organizationalMemory: [orgMemory, ragContext].filter(Boolean).join('\n---\n') || undefined,
-      }
-    );
-
-    if (!result.success) {
-      return c.json({ error: 'Falha ao gerar política', detail: result.content }, 500);
-    }
-
-    // ponytail: store generated policy in RAG for future context
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      await memory.storeFact(projectId, `Política ${controlId}: ${result.content.substring(0, 500)}`, 'policy', { controlId });
-    } catch(e) { /* non-blocking */ }
-
-    // Save policy markdown directly to compliance_controls.description
-    const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(result.content, normId, controlId, projectId).run();
-
-    // Insert new version in policy_versions
-    try {
-      const countRow = await c.env.DB.prepare(
-        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, normId, controlId).first<{ count: number }>();
-      const nextVer = (countRow?.count || 0) + 1;
-      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-      await c.env.DB.prepare(
-        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, normId, nextVer, result.content, c.get('user')?.email || 'system').run();
-    } catch (e) {
-      console.error("Erro ao registrar versão da política", e);
-    }
-
-    await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Política gerada para controle ${controlId}, projeto ${projectId}`);
-
-    return c.json({
-      ok: true,
-      policy_markdown: result.content,
-      control: controlId,
-      confidence: result.confidence,
-      metadata: result.metadata
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar política', detail: e.message }, 500);
-  }
-});
-
-// Helper para encontrar item de checklist
-function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: number } | null {
-  for (const phaseStr in PHASE_CHECKLISTS) {
-    const phaseNumber = parseInt(phaseStr);
-    const item = PHASE_CHECKLISTS[phaseNumber].find(i => i.id === itemId);
-    if (item) return { item, phaseNumber };
-  }
-  return null;
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  DOCUMENT WIZARD — Guided Document Generation with Field Context
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// POST /api/v1/projects/:id/generate-document
-app.post('/api/v1/projects/:id/generate-document', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const body = await c.req.json<{ itemId: string; fields: Record<string, string> }>().catch(() => ({} as any));
-    const { itemId, fields } = body;
-    if (!itemId || !fields) return c.json({ error: 'itemId and fields are required' }, 400);
-
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-    const { item } = found;
-
-    // Build context from fields
-    const fieldsSummary = Object.entries(fields)
-      .filter(([_, v]) => v)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n');
-
-    // ponytail: load answers from project_interviews to feed into the prompt context for p2_3 and p2_4
-    let interviewsSummary = '';
-    if (itemId === 'p2_3' || itemId === 'p2_4') {
-      try {
-        const { results: interviews } = await c.env.DB.prepare(
-          'SELECT track, question, answer, interviewee, gap_detected FROM project_interviews WHERE project_id = ?'
-        ).bind(projectId).all<any>();
-        if (interviews && interviews.length > 0) {
-          interviewsSummary = '\nRESPOSTAS DAS ENTREVISTAS POR TRILHA:\n' + interviews.map((i: any) => 
-            `[Trilha: ${i.track}] P: ${i.question} | R: ${i.answer} (Entrevistado: ${i.interviewee || 'N/A'}) | ${i.gap_detected ? '⚠️ LACUNA DETECTADA' : '✅ CONFORME'}`
-          ).join('\n') + '\n';
-        }
-      } catch(e) { /* ignore database error */ }
-    }
-
-    // ponytail: RAG context for richer generation
-    let ragContext = '';
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      ragContext = await memory.retrieveContext(projectId, `${item.text} ${fieldsSummary.substring(0, 200)}`, 'policy', 3) || '';
-    } catch(e) { /* vectorize may not be populated yet */ }
-
-    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
-    const prompt = `Gere um documento completo em formato markdown para "${item.text}" da organização "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).
-
-DADOS FORNECIDOS PELO USUÁRIO:
-${fieldsSummary}
-
-${interviewsSummary ? '\nDADOS COLETADOS NAS ENTREVISTAS POR TRILHA:\n' + interviewsSummary + '\n' : ''}
-
-${ragContext ? 'CONTEXTO ADICIONAL DA ORGANIZAÇÃO:\n' + ragContext + '\n' : ''}
-
-REQUISITOS:
-- Documento profissional, completo e pronto para auditoria ISO 27001:2022
-- Use os dados fornecidos acima para personalizar o conteúdo
-- Incluir seções de: Objetivo, Escopo, Definições, Conteúdo Principal, Responsabilidades, Revisões
-- Formato markdown limpo, sem placeholders
-- Tom formal e executivo
-- Incluir referências às cláusulas ISO relevantes`;
-
-    const result = await agent.run(prompt, { organizationId: projectId });
-    const content = result.success ? result.content : `# ${item.text}\n\nDocumento gerado para ${project.client_name}.\n\n${fieldsSummary}`;
-
-    return c.json({ ok: true, content });
-  } catch (e: any) {
-    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
-  }
-});
-
-// POST /api/v1/projects/:id/approve-document
-app.post('/api/v1/projects/:id/approve-document', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const body = await c.req.json<{ itemId: string; content: string }>().catch(() => ({} as any));
-    const { itemId, content } = body;
-    if (!itemId || !content) return c.json({ error: 'itemId and content are required' }, 400);
-    
-    // ponytail: validate document size maximum limit (2MB) to prevent Edge memory exhaustion
-    if (content.length > 2 * 1024 * 1024) {
-      return c.json({ error: 'Document size exceeds 2MB limit' }, 400);
-    }
-
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item não encontrado' }, 404);
-    const { item, phaseNumber } = found;
-    const userEmail = c.get('user')?.email ?? 'system';
-    const userId = c.get('user')?.id ?? null;
-
-    // Save to R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, content, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Hash
-    const data = new TextEncoder().encode(content);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Create evidence record
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforme', 'Documento gerado e aprovado via wizard guiado.').run();
-
-    // Auto-check checklist item
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Aprovado via wizard guiado')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1, checked_by = EXCLUDED.checked_by, checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id, notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
-
-    // Store in RAG
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      await memory.storeFact(projectId, `Doc aprovado ${item.text}: ${content.substring(0, 500)}`, 'policy', { itemId });
-    } catch(e) { /* non-blocking */ }
-
-    await logAudit(c.env.DB, 'document.approved', userEmail, `Documento "${fileName}" aprovado via wizard para item ${itemId}`);
-
-    return c.json({ ok: true, evidence_id: evidenceId, file_name: fileName });
-  } catch (e: any) {
-    return c.json({ error: 'Erro ao aprovar documento', detail: e.message }, 500);
-  }
-});
-
-// POST /api/v1/projects/:id/checklist/:itemId/generate
-app.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const itemId = c.req.param('itemId');
-    const userEmail = c.get('user')?.email ?? 'system';
-
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-
-    const { item, phaseNumber } = found;
-
-    // Gerar conteúdo com o PolicyAgent
-    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
-    const prompt = `Gere um documento ou política detalhada em formato markdown para atender ao item de checklist "${item.text}" do projeto "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}). O documento deve ser completo, profissional, prático e pronto para auditoria, sem placeholders e com formatação markdown limpa.`;
-    
-    const result = await agent.run(prompt, { organizationId: projectId });
-    let docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
-
-    // Salvar no R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, docContent, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Calcular hash SHA-256
-    const encoder = new TextEncoder();
-    const data = encoder.encode(docContent);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Criar registro na tabela de evidence
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    const fileSize = data.byteLength;
-
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      evidenceId,
-      projectId,
-      fileName,
-      r2Key,
-      hashHex,
-      'text/markdown',
-      fileSize,
-      userEmail,
-      'conforme',
-      'Documento gerado internamente pelo assistente de IA.'
-    ).run();
-
-    // Atualizar checklist_progress (ponytail: ensure proper random UUID / PK generated for checklist_progress)
-    const userId = c.get('user')?.id ?? null;
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1,
-         checked_by = EXCLUDED.checked_by,
-         checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id,
-         notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
-
-    await logAudit(c.env.DB, 'document.generated', userEmail, `Documento ${fileName} gerado internamente para o item ${itemId}`);
-
-    return c.json({
-      ok: true,
-      evidence_id: evidenceId,
-      file_name: fileName,
-      r2_key: r2Key
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
-  }
-});
-
 // GET /api/v1/evidence/:id/content
 app.get('/api/v1/evidence/:id/content', async (c) => {
   try {
@@ -3356,7 +2671,7 @@ app.put('/api/v1/evidence/:id/content', async (c) => {
 app.post('/api/v1/evidence/:id/evaluate', async (c) => {
   try {
     const evidenceId = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', evidenceId);
+    await requireResourceAccess(c.env.DB, 'evidence', evidenceId, c.get('user'));
     const body = await c.req.json<{ text: string }>().catch(() => ({ text: '' }));
 
     if (!body.text) {
@@ -3585,7 +2900,7 @@ app.put('/api/v1/evidence/:id/signature', async (c) => {
 app.get('/api/v1/evidence/:id/detail', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
     return c.json(evidence);
@@ -3716,7 +3031,7 @@ app.post('/api/v1/projects/:id/documents/upload', async (c) => {
 app.get('/api/v1/evidence/:id/verify', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!evidence) return c.json({ error: 'Not found' }, 404);
     
@@ -3737,7 +3052,7 @@ app.get('/api/v1/evidence/:id/verify', async (c) => {
 app.get('/api/v1/evidence/:id/detail', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!evidence) return c.json({ error: 'Not found' }, 404);
     
@@ -3761,7 +3076,7 @@ app.get('/api/v1/evidence/:id/detail', async (c) => {
 app.get('/api/v1/evidence/:id/download', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'evidence', id);
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first() as any;
     if (!ev || !ev.r2_key) return c.json({ error: 'Evidence not found' }, 404);
     
@@ -4047,158 +3362,11 @@ app.get('/api/v1/projects/:id/audit-pack', async (c) => {
 //  RISK ASSESSMENT MODULE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function riskLevel(score: number): string {
-  if (score <= 5) return 'Low';
-  if (score <= 12) return 'Medium';
-  if (score <= 20) return 'High';
-  return 'Critical';
-}
-
-app.get('/api/v1/projects/:id/risks', async (c) => {
-  const { results } = await c.env.DB.prepare(
-    `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
-     FROM risks r 
-     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
-     WHERE r.project_id = ? 
-     ORDER BY r.impact * r.probability DESC`
-  ).bind(c.req.param('id')).all();
-  return c.json({ ok: true, risks: results });
-});
-
-app.post('/api/v1/projects/:id/risks', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const body = await c.req.json<any>();
-    const id = genId();
-    const impact = body.impact ?? 3;
-    const probability = body.probability ?? 3;
-    const level = riskLevel(impact * probability);
-
-    await c.env.DB.prepare(
-      `INSERT INTO risks (id, project_id, asset_id, asset, threat, vulnerability, impact, probability, risk_level, treatment, treatment_plan, control_id, owner, accepted_by, accepted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      id,
-      projectId,
-      body.asset_id ?? null,
-      body.asset,
-      body.threat,
-      body.vulnerability ?? null,
-      impact,
-      probability,
-      level,
-      body.treatment ?? 'Mitigate',
-      body.treatment_plan ?? null,
-      body.control_id ?? null,
-      body.owner ?? null,
-      body.accepted_by ?? null,
-      body.accepted_at ?? null
-    ).run();
-
-    // Gravar no histórico de riscos (Cláusula 6.1.2)
-    const histId = genId();
-    await c.env.DB.prepare(
-      `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(histId, id, projectId, impact, probability, level).run();
-
-    // Trigger de Mitigação (PDCA)
-    const treatment = body.treatment ?? 'Mitigate';
-    if (treatment === 'Mitigate') {
-      const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
-      const existingTask = await c.env.DB.prepare(
-        'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
-      ).bind(projectId, taskName).first();
-      if (!existingTask) {
-        await c.env.DB.prepare(
-          `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
-           VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
-        ).bind(genId(), projectId, taskName).run();
-      }
-    }
-
-    await logAudit(c.env.DB, 'risk.created', c.get('user')?.email ?? 'system', `Risk ${id} created for project ${projectId}`);
-    return c.json({ ok: true, id, risk_level: level }, 201);
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao criar risco', detail: e.message }, 500);
-  }
-});
-
-app.put('/api/v1/risks/:id', async (c) => {
-  try {
-    const id = c.req.param('id');
-    await requireResourceAccess(c, 'risks', id);
-    const body = await c.req.json<any>();
-    const impact = body.impact ?? 3;
-    const probability = body.probability ?? 3;
-    const level = riskLevel(impact * probability);
-
-    // Buscar o project_id para registrar no histórico
-    const currentRisk = await c.env.DB.prepare('SELECT project_id FROM risks WHERE id = ?').bind(id).first() as any;
-    const projectId = currentRisk?.project_id;
-
-    await c.env.DB.prepare(
-      `UPDATE risks SET asset_id=?, asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, accepted_by=?, accepted_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-    ).bind(
-      body.asset_id ?? null,
-      body.asset,
-      body.threat,
-      body.vulnerability ?? null,
-      impact,
-      probability,
-      level,
-      body.treatment ?? 'Mitigate',
-      body.treatment_plan ?? null,
-      body.control_id ?? null,
-      body.owner ?? null,
-      body.status ?? 'Open',
-      body.accepted_by ?? null,
-      body.accepted_at ?? null,
-      id
-    ).run();
-
-    // Gravar no histórico sempre que houver atualização (Cláusula 6.1.2)
-    if (projectId) {
-      const histId = genId();
-      await c.env.DB.prepare(
-        `INSERT INTO risk_history (id, risk_id, project_id, impact, probability, risk_level)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(histId, id, projectId, impact, probability, level).run();
-
-      // Trigger de Mitigação (PDCA)
-      const treatment = body.treatment ?? 'Mitigate';
-      if (treatment === 'Mitigate') {
-        const taskName = `[TASK] Mitigar Risco: ${body.threat} (Ativo: ${body.asset})`;
-        const existingTask = await c.env.DB.prepare(
-          'SELECT id FROM evidence WHERE project_id = ? AND file_name = ?'
-        ).bind(projectId, taskName).first();
-        if (!existingTask) {
-          await c.env.DB.prepare(
-            `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
-             VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
-          ).bind(genId(), projectId, taskName).run();
-        }
-      }
-    }
-
-    return c.json({ ok: true, id, risk_level: level });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar risco', detail: e.message }, 500);
-  }
-});
-
-app.delete('/api/v1/risks/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c, 'risks', id);
-  await c.env.DB.prepare('DELETE FROM risks WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
-});
-
 // --- ATIVOS DE INFORMAÇÃO CRUD (A.5.9) ---
 
 app.get('/api/v1/projects/:id/assets', async (c) => {
   const projectId = c.req.param('id');
-  await requireProjectAccess(c, projectId);
+  await requireProjectAccess(c.get('user'), projectId);
   const { results } = await c.env.DB.prepare(
     'SELECT * FROM assets WHERE project_id = ? ORDER BY name ASC'
   ).bind(projectId).all();
@@ -4208,7 +3376,7 @@ app.get('/api/v1/projects/:id/assets', async (c) => {
 app.post('/api/v1/projects/:id/assets', async (c) => {
   try {
     const projectId = c.req.param('id');
-    await requireProjectAccess(c, projectId);
+    await requireProjectAccess(c.get('user'), projectId);
     const body = await c.req.json<any>();
     const id = genId();
 
@@ -4240,7 +3408,7 @@ app.post('/api/v1/projects/:id/assets', async (c) => {
 app.put('/api/v1/assets/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'assets', id);
+    await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
     const body = await c.req.json<any>();
 
     await c.env.DB.prepare(
@@ -4267,16 +3435,9 @@ app.put('/api/v1/assets/:id', async (c) => {
 
 app.delete('/api/v1/assets/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'assets', id);
+  await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM assets WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
-});
-
-app.get('/api/v1/projects/:id/risks/history', async (c) => {
-  const { results } = await c.env.DB.prepare(
-    'SELECT rh.*, r.asset, r.threat FROM risk_history rh JOIN risks r ON rh.risk_id = r.id WHERE rh.project_id = ? ORDER BY rh.assessment_date DESC'
-  ).bind(c.req.param('id')).all();
-  return c.json({ ok: true, history: results });
 });
 
 // --- WORKFLOW DE APROVAÇÃO DE CONTROLE (A.5.1) ---
@@ -4434,7 +3595,7 @@ app.post('/api/v1/projects/:id/vendors', async (c) => {
 app.put('/api/v1/vendors/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'vendors', id);
+    await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
     const body = await c.req.json<any>();
     const ts = calculateTrustScore(body);
     const dl = diligenceLevel(ts);
@@ -4455,7 +3616,7 @@ app.put('/api/v1/vendors/:id', async (c) => {
 
 app.delete('/api/v1/vendors/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'vendors', id);
+  await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM vendors WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });
@@ -4492,7 +3653,7 @@ app.post('/api/v1/projects/:id/training', async (c) => {
 app.put('/api/v1/training/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await requireResourceAccess(c, 'training_records', id);
+    await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
     const body = await c.req.json<any>();
 
     await c.env.DB.prepare(
@@ -4507,7 +3668,7 @@ app.put('/api/v1/training/:id', async (c) => {
 
 app.delete('/api/v1/training/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'training_records', id);
+  await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM training_records WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });
@@ -4530,76 +3691,6 @@ app.get('/api/v1/projects/:id/training/summary', async (c) => {
     coverage_percent: coverage,
     compliance_status: coverage >= 80 ? 'Compliant' : 'Non-Compliant',
   });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  BULK POLICY GENERATION
-// ═══════════════════════════════════════════════════════════════════════════════
-
-app.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const body = await c.req.json<{ control_ids?: string[] }>();
-    const controlIds = body.control_ids?.length
-      ? body.control_ids
-      : ['A.5.1', 'A.5.2', 'A.5.3', 'A.5.4', 'A.5.8', 'A.5.9', 'A.5.10'];
-
-    // ponytail: build org memory once, reuse for all controls
-    let orgMemory = '';
-    if (project.assessment_id) {
-      const { results: answers } = await c.env.DB.prepare(
-        'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ? AND answer IS NOT NULL'
-      ).bind(project.assessment_id).all<{ question_key: string; answer: string }>();
-      orgMemory = (answers || []).map(a => `${a.question_key}: ${a.answer}`).join('\n');
-    }
-
-    const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
-    const policies: { control_id: string; success: boolean; content_preview: string }[] = [];
-    let successful = 0;
-    let failed = 0;
-
-    // ponytail: sequential to respect Cloudflare AI rate limits
-    for (const controlId of controlIds) {
-      try {
-        let ragContext = '';
-        try {
-          const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-          ragContext = await memory.retrieveContext(projectId, `policy ${controlId}`, 'policy', 3);
-        } catch (_) { /* vectorize may not be populated yet */ }
-
-        const result = await agent.run(
-          `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
-          {
-            organizationId: projectId,
-            controlId,
-            organizationalMemory: [orgMemory, ragContext].filter(Boolean).join('\n---\n') || undefined,
-          }
-        );
-
-        if (result.success) {
-          successful++;
-          await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Bulk policy generated: ${controlId}, project ${projectId}`);
-          try {
-            const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-            await memory.storeFact(projectId, `Política ${controlId}: ${result.content.substring(0, 500)}`, 'policy', { controlId });
-          } catch (_) { /* non-blocking */ }
-        } else {
-          failed++;
-        }
-        policies.push({ control_id: controlId, success: result.success, content_preview: result.content?.substring(0, 200) ?? '' });
-      } catch (e: any) {
-        failed++;
-        policies.push({ control_id: controlId, success: false, content_preview: e.message });
-      }
-    }
-
-    return c.json({ ok: true, total: controlIds.length, successful, failed, policies });
-  } catch (e: any) {
-    return c.json({ error: 'Falha na geração em lote', detail: e.message }, 500);
-  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -4700,11 +3791,12 @@ app.post('/api/v1/projects/:id/migrate-27701-2025', async (c) => {
 
 
 app.get('/api/v1/policy-templates', async (c) => {
-  return c.json({ ok: true, templates: POLICY_TEMPLATES });
+  const { results } = await c.env.DB.prepare('SELECT * FROM policy_templates ORDER BY iso_ref').all();
+  return c.json({ ok: true, templates: results });
 });
 
 app.get('/api/v1/policy-templates/:id', async (c) => {
-  const tpl = POLICY_TEMPLATES.find(t => t.id === c.req.param('id'));
+  const tpl = await c.env.DB.prepare('SELECT * FROM policy_templates WHERE id = ?').bind(c.req.param('id')).first();
   if (!tpl) return c.json({ error: 'Template not found' }, 404);
   return c.json({ ok: true, template: tpl });
 });
@@ -4783,7 +3875,7 @@ app.post('/api/v1/projects/:id/ropa', async (c) => {
 
 app.put('/api/v1/ropa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'ropa_records', id);
+  await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
   const body = await c.req.json();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
@@ -4801,7 +3893,7 @@ app.put('/api/v1/ropa/:id', async (c) => {
 
 app.delete('/api/v1/ropa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'ropa_records', id);
+  await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM ropa_records WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'ropa_deleted', user.email, `ROPA ${id} deleted`).run();
@@ -4835,7 +3927,7 @@ app.post('/api/v1/projects/:id/dpia', async (c) => {
 
 app.put('/api/v1/dpia/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'dpia_assessments', id);
+  await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
   const body = await c.req.json();
   await c.env.DB.prepare(
     `UPDATE dpia_assessments SET system_name=?, data_flow_description=?, data_subjects_types=?, personal_data_categories=?, necessity_proportionality=?, risks_identified=?, mitigation_measures=?, dpo_opinion=?, dpo_signature=?, ceo_signature=?, status=? WHERE id=?`
@@ -4851,7 +3943,7 @@ app.put('/api/v1/dpia/:id', async (c) => {
 
 app.delete('/api/v1/dpia/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'dpia_assessments', id);
+  await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM dpia_assessments WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await logAudit(c.env.DB, 'dpia.deleted', user.email, `DPIA ${id} deleted`);
@@ -5011,7 +4103,7 @@ app.post('/api/v1/projects/:id/audits', async (c) => {
 
 app.put('/api/v1/audits/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_schedule', id);
+  await requireResourceAccess(c.env.DB, 'audit_schedule', id, c.get('user'));
   const body = await c.req.json();
   const completedAt = body.status === 'Completed' ? new Date().toISOString() : null;
   await c.env.DB.prepare(
@@ -5024,7 +4116,7 @@ app.put('/api/v1/audits/:id', async (c) => {
 
 app.delete('/api/v1/audits/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_schedule', id);
+  await requireResourceAccess(c.env.DB, 'audit_schedule', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM audit_schedule WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'audit_deleted', user.email, `Audit ${id} deleted`).run();
@@ -5055,7 +4147,7 @@ app.post('/api/v1/projects/:id/capa', async (c) => {
 
 app.put('/api/v1/capa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'corrective_actions', id);
+  await requireResourceAccess(c.env.DB, 'corrective_actions', id, c.get('user'));
   const body = await c.req.json();
   const completedAt = body.status === 'Closed' ? new Date().toISOString() : null;
   await c.env.DB.prepare(
@@ -5068,507 +4160,14 @@ app.put('/api/v1/capa/:id', async (c) => {
 
 app.delete('/api/v1/capa/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'corrective_actions', id);
+  await requireResourceAccess(c.env.DB, 'corrective_actions', id, c.get('user'));
   await c.env.DB.prepare('DELETE FROM corrective_actions WHERE id = ?').bind(id).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'capa_deleted', user.email, `CAPA ${id} deleted`).run();
   return c.json({ ok: true });
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  SPRINT 7: INTEGRATION & SCALE
-// ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── 7A. Webhooks (CRUD + Test) ─────────────────────────────────────────────
-
-app.get('/api/v1/projects/:id/webhooks', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare('SELECT * FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, webhooks: result.results });
-});
-
-app.post('/api/v1/projects/:id/webhooks', async (c) => {
-  const projectId = c.req.param('id');
-  const body = await c.req.json();
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await c.env.DB.prepare(
-    `INSERT INTO webhooks (id, project_id, url, events, secret, status, failure_count, created_at)
-     VALUES (?, ?, ?, ?, ?, 'Active', 0, ?)`
-  ).bind(id, projectId, body.url, body.events, body.secret || '', now).run();
-  const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_created', user.email, `Webhook ${id} created for ${body.url}`).run();
-  return c.json({ ok: true, id }, 201);
-});
-app.delete('/api/v1/webhooks/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c, 'webhooks', id);
-  await c.env.DB.prepare('DELETE FROM webhooks WHERE id = ?').bind(id).run();
-  const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_deleted', user.email, `Webhook ${id} deleted`).run();
-  return c.json({ ok: true });
-});
-
-app.post('/api/v1/webhooks/test/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c, 'webhooks', id);
-  const webhook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(id).first() as any;
-  if (!webhook) return c.json({ error: 'Webhook not found' }, 404);
-
-  if (!isValidWebhookUrl(webhook.url)) {
-    return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);
-  }
-
-  try {
-    const resp = await fetch(webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'test', project_id: webhook.project_id, timestamp: new Date().toISOString() }),
-    });
-    await c.env.DB.prepare('UPDATE webhooks SET last_triggered_at = ? WHERE id = ?').bind(new Date().toISOString(), id).run();
-    return c.json({ ok: true, status: resp.status });
-  } catch (e: any) {
-    await c.env.DB.prepare('UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = ?').bind(id).run();
-    return c.json({ ok: false, error: e.message }, 502);
-  }
-});
-
-// ─── 7B. API Keys ───────────────────────────────────────────────────────────
-
-app.post('/api/v1/projects/:id/api-keys', async (c) => {
-  const projectId = c.req.param('id');
-  const body = await c.req.json();
-  const id = crypto.randomUUID();
-  const plainKey = crypto.randomUUID() + '-' + crypto.randomUUID();
-  const keyBytes = new TextEncoder().encode(plainKey);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', keyBytes);
-  const keyHash = [...new Uint8Array(hashBuffer)].map(b => b.toString(16).padStart(2, '0')).join('');
-  const now = new Date().toISOString();
-
-  await c.env.DB.prepare(
-    `INSERT INTO api_keys (id, project_id, key_hash, name, permissions, expires_at, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'Active', ?)`
-  ).bind(id, projectId, keyHash, body.name, body.permissions || 'read', body.expires_at || null, now).run();
-
-  const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_created', user.email, `API key ${id} created`).run();
-
-  // ponytail: plaintext key returned ONCE — never stored
-  return c.json({ ok: true, id, key: plainKey }, 201);
-});
-
-app.get('/api/v1/projects/:id/api-keys', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare(
-    'SELECT id, name, permissions, status, last_used_at, created_at FROM api_keys WHERE project_id = ? ORDER BY created_at DESC'
-  ).bind(projectId).all();
-  return c.json({ ok: true, keys: result.results });
-});
-
-app.delete('/api/v1/api-keys/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c, 'api_keys', id);
-  await c.env.DB.prepare("UPDATE api_keys SET status = 'Revoked' WHERE id = ?").bind(id).run();
-  const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_revoked', user.email, `API key ${id} revoked`).run();
-  return c.json({ ok: true });
-});
-
-// ─── 7C. Bulk Export (CSV) ──────────────────────────────────────────────────
-
-app.get('/api/v1/projects/:id/export/risks', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare('SELECT * FROM risks WHERE project_id = ?').bind(projectId).all();
-  const rows = (result.results || []) as any[];
-  const headers = 'asset,threat,vulnerability,impact,probability,risk_level,treatment,owner,status';
-  const csv = headers + '\n' + rows.map(r => 
-    `${safeCsvCell(r.asset)},${safeCsvCell(r.threat)},${safeCsvCell(r.vulnerability)},${safeCsvCell(r.impact)},${safeCsvCell(r.probability)},${safeCsvCell(r.risk_level)},${safeCsvCell(r.treatment)},${safeCsvCell(r.owner)},${safeCsvCell(r.status)}`
-  ).join('\n');
-  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="risks.csv"' } });
-});
-
-app.get('/api/v1/projects/:id/export/vendors', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare('SELECT * FROM vendors WHERE project_id = ?').bind(projectId).all();
-  const rows = (result.results || []) as any[];
-  const headers = 'name,category,trust_score,diligence_level,has_iso27001,has_soc2,dpa_signed';
-  const csv = headers + '\n' + rows.map(r => 
-    `${safeCsvCell(r.name)},${safeCsvCell(r.category)},${safeCsvCell(r.trust_score)},${safeCsvCell(r.diligence_level)},${safeCsvCell(r.has_iso27001)},${safeCsvCell(r.has_soc2)},${safeCsvCell(r.dpa_signed)}`
-  ).join('\n');
-  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="vendors.csv"' } });
-});
-
-app.get('/api/v1/projects/:id/export/training', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare('SELECT * FROM training_records WHERE project_id = ?').bind(projectId).all();
-  const rows = (result.results || []) as any[];
-  const headers = 'employee_name,training_name,status,score,completion_date';
-  const csv = headers + '\n' + rows.map(r => 
-    `${safeCsvCell(r.employee_name)},${safeCsvCell(r.training_name)},${safeCsvCell(r.status)},${safeCsvCell(r.score)},${safeCsvCell(r.completion_date)}`
-  ).join('\n');
-  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="training.csv"' } });
-});
-
-app.get('/api/v1/projects/:id/export/audit-log', async (c) => {
-  const projectId = c.req.param('id');
-  const user = c.get('user');
-  const result = await c.env.DB.prepare('SELECT * FROM audit_logs WHERE actor = ? ORDER BY created_at DESC LIMIT 500').bind(user.email).all();
-  const rows = (result.results || []) as any[];
-  const headers = 'id,action,actor,details,created_at';
-  const csv = headers + '\n' + rows.map(r => 
-    `${safeCsvCell(r.id)},${safeCsvCell(r.action)},${safeCsvCell(r.actor)},${safeCsvCell(r.details)},${safeCsvCell(r.created_at)}`
-  ).join('\n');
-  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="audit-log.csv"' } });
-});
-
-app.get('/api/v1/projects/:id/export/assets', async (c) => {
-  const projectId = c.req.param('id');
-  const result = await c.env.DB.prepare('SELECT * FROM assets WHERE project_id = ?').bind(projectId).all();
-  const rows = (result.results || []) as any[];
-  const headers = 'name,category,classification,owner,location,status,description,confidentiality_rating,integrity_rating,availability_rating';
-  const csv = headers + '\n' + rows.map(r => 
-    `${safeCsvCell(r.name)},${safeCsvCell(r.category)},${safeCsvCell(r.classification)},${safeCsvCell(r.owner)},${safeCsvCell(r.location)},${safeCsvCell(r.status)},${safeCsvCell(r.description)},${safeCsvCell(r.confidentiality_rating)},${safeCsvCell(r.integrity_rating)},${safeCsvCell(r.availability_rating)}`
-  ).join('\n');
-  return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="assets.csv"' } });
-});
-
-app.get('/api/v1/projects/:id/controls/:controlId/versions', async (c) => {
-  const projectId = c.req.param('id');
-  const controlIdRaw = c.req.param('controlId');
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const result = await c.env.DB.prepare(
-    'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
-  ).bind(projectId, normId, controlIdRaw).all();
-  
-  return c.json(result.results || []);
-});
-
-app.get('/api/v1/projects/:id/controls/:controlId/versions/:versionId', async (c) => {
-  const projectId = c.req.param('id');
-  const controlIdRaw = c.req.param('controlId');
-  const versionId = c.req.param('versionId');
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const row = await c.env.DB.prepare(
-    'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(versionId, projectId, normId, controlIdRaw).first<any>();
-  
-  if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
-  return c.json(row);
-});
-
-app.post('/api/v1/projects/:id/controls/:controlId/restore-version', async (c) => {
-  const projectId = c.req.param('id');
-  const controlIdRaw = c.req.param('controlId');
-  const { version_id } = await c.req.json<{ version_id: string }>();
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const row = await c.env.DB.prepare(
-    'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(version_id, projectId, normId, controlIdRaw).first<any>();
-  
-  if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
-  
-  // Update compliance_controls description
-  await c.env.DB.prepare(
-    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-  ).bind(row.policy_text, normId, controlIdRaw, projectId).run();
-  
-  const countRow = await c.env.DB.prepare(
-    'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(projectId, normId, controlIdRaw).first<{ count: number }>();
-  const nextVer = (countRow?.count || 0) + 1;
-  const newVerId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-  
-  await c.env.DB.prepare(
-    'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(newVerId, projectId, normId, nextVer, row.policy_text, c.get('user')?.email || 'system').run();
-  
-  await logAudit(c.env.DB, 'policy.restored', c.get('user')?.email || 'system', `Política ${controlIdRaw} restaurada para versão ${row.version}, projeto ${projectId}`);
-  
-  return c.json({ ok: true, version: nextVer, policy_markdown: row.policy_text });
-});
-
-app.get('/api/v1/projects/:id/controls/:controlId/govbr-signatures', async (c) => {
-  const projectId = c.req.param('id');
-  const controlId = c.req.param('controlId');
-  const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const result = await c.env.DB.prepare(
-    'SELECT id, signed_by_name, signed_by_cpf, signature_type, created_at FROM govbr_signatures WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(projectId, normId, controlId).all();
-  
-  return c.json(result.results || []);
-});
-
-app.get('/api/v1/projects/:id/controls/:controlId/govbr/start', async (c) => {
-  const projectId = c.req.param('id');
-  const controlId = c.req.param('controlId');
-  const type = c.req.query('type') || 'ciso';
-  
-  const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const latestVersion = await c.env.DB.prepare(
-    'SELECT * FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
-  ).bind(projectId, normId, controlId).first<any>();
-  
-  if (!latestVersion) {
-    return c.html('<h3>Erro: Nenhuma política gerada para este controle. Gere a política primeiro antes de assinar.</h3>');
-  }
-  
-  const clientId = c.env.GOVBR_CLIENT_ID;
-  const state = `${projectId}:${controlId}:${latestVersion.id}:${type}`;
-  const nonce = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-  
-  if (!clientId || c.env.GOVBR_ENVIRONMENT === 'homologation-mock' || !c.env.GOVBR_CLIENT_SECRET) {
-    const mockRedirect = `/public/govbr-mock-portal?state=${state}&nonce=${nonce}`;
-    return c.redirect(mockRedirect);
-  }
-  
-  const isProd = c.env.GOVBR_ENVIRONMENT === 'production';
-  const server = isProd ? 'cas.gov.br' : 'cas.staging.iti.br';
-  const redirectUri = c.env.GOVBR_REDIRECT_URI || `https://${c.req.header('host')}/api/v1/govbr/callback`;
-  const scope = 'sign govbr';
-  
-  const authUrl = `https://${server}/oauth2.0/authorize?response_type=code&client_id=${clientId}&scope=${scope}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&nonce=${nonce}`;
-  return c.redirect(authUrl);
-});
-
-app.get('/api/v1/govbr/callback', async (c) => {
-  const code = c.req.query('code');
-  const state = c.req.query('state') || '';
-  const error = c.req.query('error');
-  
-  if (error) {
-    return c.html(`<h3>Assinatura gov.br cancelada ou falhou: ${error}</h3>`);
-  }
-  
-  const [projectId, controlId, policyVersionId, type] = state.split(':');
-  if (!projectId || !controlId || !policyVersionId || !type) {
-    return c.html('<h3>Erro: Parâmetros de estado (state) inválidos no callback.</h3>');
-  }
-  
-  const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-  let name = 'Assinante gov.br';
-  let cpf = '***.***.***-**';
-  let signatureData = 'pkcs7-signature-payload-mock';
-  
-  const clientId = c.env.GOVBR_CLIENT_ID;
-  if (!clientId || c.env.GOVBR_ENVIRONMENT === 'homologation-mock' || !c.env.GOVBR_CLIENT_SECRET || code?.startsWith('mock-')) {
-    if (code?.startsWith('mock-')) {
-      const parts = code.split('-');
-      name = decodeURIComponent(parts[1] || 'CISO nISO');
-      cpf = parts[2] || '***.456.789-**';
-    }
-    signatureData = `MOCK-PKCS7-SIGNATURE-FOR-${policyVersionId}`;
-  } else {
-    try {
-      const isProd = c.env.GOVBR_ENVIRONMENT === 'production';
-      const server = isProd ? 'cas.gov.br' : 'cas.staging.iti.br';
-      const redirectUri = c.env.GOVBR_REDIRECT_URI || `https://${c.req.header('host')}/api/v1/govbr/callback`;
-      
-      const tokenRes = await fetch(`https://${server}/oauth2.0/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          code: code || '',
-          client_id: clientId,
-          grant_type: 'authorization_code',
-          client_secret: c.env.GOVBR_CLIENT_SECRET,
-          redirect_uri: redirectUri
-        })
-      });
-      
-      if (!tokenRes.ok) {
-        throw new Error('Falha ao obter token da API gov.br');
-      }
-      
-      const tokenData = await tokenRes.json<{ access_token: string }>();
-      
-      const apiDomain = isProd ? 'assinatura-api.iti.gov.br' : 'assinatura-api.staging.iti.br';
-      const certRes = await fetch(`https://${apiDomain}/externo/v2/certificadoPublico`, {
-        headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
-      });
-      
-      if (certRes.status === 403) {
-        return c.html(`
-          <div style="font-family:'Inter',sans-serif; text-align:center; padding:3rem; background:#070b14; color:#f5f5f7; height:100vh">
-            <h2 style="color:var(--danger)">Conta Nível Bronze Detectada</h2>
-            <p>É necessário possuir conta gov.br nível prata ou ouro para utilizar o serviço de assinatura.</p>
-            <p style="margin-top:2rem"><a href="https://confiabilidades.acesso.gov.br/" target="_blank" style="color:#00ade8; text-decoration:none; font-weight:bold; border:1px solid #00ade8; padding:8px 16px; border-radius:6px">Fazer Upgrade da Conta</a></p>
-          </div>
-        `);
-      }
-      
-      try {
-        const payloadBase64 = tokenData.access_token.split('.')[1];
-        if (payloadBase64) {
-          const payload = JSON.parse(atob(payloadBase64));
-          name = payload.nome || payload.name || name;
-          cpf = payload.cpf || cpf;
-        }
-      } catch(e) {}
-      
-      const policyVersion = await c.env.DB.prepare(
-        'SELECT policy_text FROM policy_versions WHERE id = ?'
-      ).bind(policyVersionId).first<{ policy_text: string }>();
-      
-      if (policyVersion) {
-        const textBytes = new TextEncoder().encode(policyVersion.policy_text);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', textBytes);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashBase64 = btoa(String.fromCharCode(...hashArray));
-        
-        const signRes = await fetch(`https://${apiDomain}/externo/v2/assinarPKCS7`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ hashBase64 })
-        });
-        
-        if (signRes.ok) {
-          signatureData = await signRes.text();
-        }
-      }
-    } catch(e: any) {
-      return c.html(`<h3>Erro técnico durante a assinatura: ${e.message}</h3>`);
-    }
-  }
-  
-  let maskedCpf = cpf;
-  if (cpf.length === 11) {
-    maskedCpf = `***.${cpf.substring(3,6)}.${cpf.substring(6,9)}-**`;
-  }
-  
-  const sigId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-  await c.env.DB.prepare(
-    'INSERT INTO govbr_signatures (id, project_id, control_id, policy_version_id, signed_by_name, signed_by_cpf, signature_type, signature_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(sigId, projectId, normId, policyVersionId, name, maskedCpf, type, signatureData).run();
-  
-  if (type === 'ciso') {
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET ciso_approved_by = ?, ciso_approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(name, normId, controlId, projectId).run();
-  } else {
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET ceo_approved_by = ?, ceo_approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(name, normId, controlId, projectId).run();
-  }
-  
-  await logAudit(c.env.DB, 'policy.govbr_signed', name, `Política ${controlId} assinada digitalmente via gov.br como ${type.toUpperCase()}`);
-  
-  return c.html(`
-    <script>
-      if (window.opener) {
-        window.opener.showToast('Assinatura gov.br realizada com sucesso!');
-        if (window.opener.openGeneratePolicyModal) {
-          window.opener.openGeneratePolicyModal('${projectId}', '${controlId}');
-        }
-        if (window.opener.render) {
-          window.opener.render();
-        }
-        window.close();
-      } else {
-        document.write("<h3>Assinatura realizada! Você pode fechar esta aba e atualizar a tela do nISO.</h3>");
-      }
-    </script>
-  `);
-});
-
-app.get('/public/govbr-mock-portal', (c) => {
-  const state = c.req.query('state') || '';
-  
-  const html = `
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="UTF-8">
-      <title>Portal de Assinatura Digital Simulado — gov.br</title>
-      <style>
-        body { font-family: 'Inter', sans-serif; background: #070b14; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; color: #f5f5f7; }
-        .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(24px); border-radius: 12px; width: 420px; padding: 2rem; border-top: 5px solid #00ade8; }
-        .logo { font-size: 1.8rem; font-weight: bold; color: #00ade8; text-align: center; margin-bottom: 1.5rem; font-family: 'Montserrat', sans-serif; }
-        .form-group { margin-bottom: 1.25rem; }
-        label { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.4rem; color: rgba(229,235,255,0.6); text-transform: uppercase; letter-spacing: 0.05em; }
-        input, select { width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; box-sizing: border-box; background: rgba(255,255,255,0.03); color: #f5f5f7; font-size: 0.85rem; }
-        input:focus, select:focus { outline: none; border-color: #00ade8; }
-        .btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; background: #00ade8; color: #000; font-weight: bold; cursor: pointer; text-align: center; text-decoration: none; margin-top: 1.5rem; font-size: 0.9rem; transition: background 0.2s; }
-        .btn:hover { background: #008ec2; }
-        .hint { font-size: 0.7rem; color: rgba(229,235,255,0.4); text-align: center; margin-top: 1.5rem; }
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <div class="logo">gov.br</div>
-        <h4 style="margin-top:0; text-align:center; color:#f5f5f7; font-family:'Montserrat',sans-serif">Simulador de Assinatura Avançada</h4>
-        <p style="font-size:0.8rem; color:rgba(229,235,255,0.6); text-align:center; margin-bottom:1.5rem">Ambiente de Homologação / Sandbox do nISO</p>
-        
-        <div id="step-1">
-          <div class="form-group">
-            <label>Nível da Identidade Digital</label>
-            <select id="mock-level">
-              <option value="prata">Prata / Ouro (Permite Assinatura)</option>
-              <option value="bronze">Bronze (Bloquear e Exigir Upgrade)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>CPF do Assinante</label>
-            <input type="text" id="mock-cpf" value="123.456.789-00">
-          </div>
-          <div class="form-group">
-            <label>Nome Completo do Cidadão</label>
-            <input type="text" id="mock-name" value="Dr. Carlos Silva (CISO)">
-          </div>
-          <button class="btn" onclick="nextStep()">Avançar para Assinatura</button>
-        </div>
-        
-        <div id="step-2" style="display:none">
-          <p style="font-size:0.8rem; color:rgba(229,235,255,0.8); text-align:center; margin-bottom:1.5rem">Um código de autorização foi enviado para o seu aplicativo gov.br.</p>
-          <div class="form-group">
-            <label>Código de Autorização (Digite: 12345)</label>
-            <input type="text" id="mock-sms" placeholder="Digite o código de 5 dígitos">
-          </div>
-          <button class="btn" onclick="sign()">Confirmar Assinatura Digital</button>
-        </div>
-        
-        <div class="hint">Roteiro de integração do Assinador avançada gov.br 1.0</div>
-      </div>
-      
-      <script>
-        function nextStep() {
-          const level = document.getElementById('mock-level').value;
-          if (level === 'bronze') {
-            alert('Atenção: Contas de nível Bronze não possuem permissão para assinar. Redirecionando para o portal de upgrade de confiabilidade.');
-            window.location.href = 'https://confiabilidades.acesso.gov.br/';
-            return;
-          }
-          document.getElementById('step-1').style.display = 'none';
-          document.getElementById('step-2').style.display = 'block';
-        }
-        
-        function sign() {
-          const sms = document.getElementById('mock-sms').value;
-          if (sms !== '12345') {
-            alert('Código incorreto! Digite 12345 para testes de homologação.');
-            return;
-          }
-          const name = encodeURIComponent(document.getElementById('mock-name').value);
-          const cpfRaw = document.getElementById('mock-cpf').value.replace(/\D/g, '');
-          const code = 'mock-' + name + '-' + cpfRaw;
-          
-          window.location.href = '/api/v1/govbr/callback?code=' + code + '&state=${state}';
-        }
-      </script>
-    </body>
-    </html>
-  `;
-  return c.html(html);
-});
-
-// ═══════════════════════════════════════════════
 //  SPRINT 8: MARKET READY
 // ═══════════════════════════════════════════════
 
@@ -5614,7 +4213,7 @@ app.post('/api/v1/projects/:id/certification', async (c) => {
 
 app.put('/api/v1/certification/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'certification_tracking', id);
+  await requireResourceAccess(c.env.DB, 'certification_tracking', id, c.get('user'));
   const user = c.get('user');
   const body = await c.req.json<any>();
   const existing = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first() as any;
@@ -5707,17 +4306,11 @@ app.get('/api/v1/onboarding-status', async (c) => {
 // ─── Template Marketplace ───────────────────────────────────────────────────
 
 app.get('/api/v1/marketplace/templates', async (c) => {
-  const marketplace = POLICY_TEMPLATES.map(t => {
-    const iso = t.iso_ref || '';
-    const category = iso.startsWith('5') ? 'Organizational' : iso.startsWith('6') ? 'People' : iso.startsWith('7') ? 'Physical' : 'Technological';
-    return {
-      ...t,
-      category,
-      difficulty: 'Standard',
-      estimated_time: '45 min',
-      popularity: Math.floor(Math.random() * 50 + 50)
-    };
-  });
+  const { results } = await c.env.DB.prepare('SELECT * FROM policy_templates ORDER BY iso_ref').all();
+  const marketplace = (results || []).map((t: any) => ({
+    ...t,
+    popularity: Math.floor(Math.random() * 50 + 50)
+  }));
   return c.json({ ok: true, total: marketplace.length, templates: marketplace });
 });
 
@@ -6010,7 +4603,7 @@ app.post('/api/v1/projects/:id/stakeholders', async (c) => {
 
 app.put('/api/v1/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'stakeholders', id);
+  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
     const { name, type, category, requirements, influence, communication_method } = await c.req.json();
     await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
@@ -6026,7 +4619,7 @@ app.put('/api/v1/stakeholders/:id', async (c) => {
 
 app.delete('/api/v1/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'stakeholders', id);
+  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6187,7 +4780,7 @@ app.post('/api/v1/audits/:auditId/findings', async (c) => {
 
 app.put('/api/v1/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_findings', id);
+  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
     const { description, auditor_notes, status } = await c.req.json();
     await c.env.DB.prepare(`
@@ -6205,7 +4798,7 @@ app.put('/api/v1/audit-findings/:id', async (c) => {
 
 app.delete('/api/v1/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'audit_findings', id);
+  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6266,7 +4859,7 @@ app.post('/api/v1/projects/:id/management-reviews', async (c) => {
 
 app.put('/api/v1/management-reviews/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'management_reviews', id);
+  await requireResourceAccess(c.env.DB, 'management_reviews', id, c.get('user'));
   try {
     const { decisions, action_items, status, minutes_url, attendees } = await c.req.json();
     await c.env.DB.prepare(`
@@ -6466,7 +5059,7 @@ app.post('/api/v1/projects/:id/metrics', async (c) => {
 
 app.put('/api/v1/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'performance_metrics', id);
+  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
     const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
     
@@ -6482,7 +5075,7 @@ app.put('/api/v1/metrics/:id', async (c) => {
 
 app.delete('/api/v1/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c, 'performance_metrics', id);
+  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
     await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
@@ -6566,91 +5159,6 @@ app.get('/api/v1/projects/:id/evidence/:evidenceId/download', async (c) => {
     });
   } catch (e: any) {
     return c.json({ error: 'Error downloading evidence', detail: e.message }, 500);
-  }
-});
-
-// --- TEMPLATES DE POLÍTICAS ---
-app.get('/api/v1/policies/templates', async (c) => {
-  try {
-    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
-    const templates = await generator.listAvailableTemplates('v2022');
-    return c.json({ ok: true, templates });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao listar templates', detail: e.message }, 500);
-  }
-});
-
-app.get('/api/v1/policies/templates/:templateName', async (c) => {
-  try {
-    const templateName = c.req.param('templateName');
-    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
-    const markdown = await generator.generate(templateName, {
-      organizationName: '[Nome da Organização]',
-      policyOwner: 'Consultor nISO',
-      approver: 'Direção Executiva',
-      status: 'Draft',
-      standardVersion: 'v2022'
-    });
-    return c.json({ ok: true, markdown });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao obter conteúdo do template', detail: e.message }, 500);
-  }
-});
-
-
-app.post('/api/v1/projects/:id/policies/generate-from-template', async (c) => {
-  try {
-    const projectId = c.req.param('id');
-    const { template_name, control_id } = await c.req.json<{ template_name: string; control_id: string }>();
-
-    if (!template_name || !control_id) {
-      return c.json({ error: 'template_name e control_id são obrigatórios' }, 400);
-    }
-
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
-
-    const user = c.get('user');
-    const generator = new PolicyGeneratorService('.', c.env.ASSETS);
-
-    // Gerar conteúdo a partir do template com variáveis do projeto
-    const markdown = await generator.generate(template_name, {
-      organizationName: project.client_name,
-      policyOwner: user?.name || 'Consultor nISO',
-      approver: 'Direção Executiva',
-      status: 'Draft',
-      standardVersion: 'v2022'
-    });
-
-    // Save policy markdown directly to compliance_controls.description
-    const normId = 'ctrl-' + control_id.toLowerCase().replace(/[^a-z0-9]/g, '');
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(markdown, normId, control_id, projectId).run();
-
-    // Insert new version in policy_versions
-    try {
-      const countRow = await c.env.DB.prepare(
-        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, normId, control_id).first<{ count: number }>();
-      const nextVer = (countRow?.count || 0) + 1;
-      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-      await c.env.DB.prepare(
-        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, normId, nextVer, markdown, user?.email || 'system').run();
-    } catch (e) {
-      console.error("Erro ao registrar versão da política", e);
-    }
-
-    await logAudit(c.env.DB, 'policy.generated_from_template', user?.email ?? 'system', `Política gerada via template ${template_name} para o controle ${control_id}, projeto ${projectId}`);
-
-    return c.json({
-      ok: true,
-      policy_markdown: markdown,
-      control: control_id
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar política a partir de template', detail: e.message }, 500);
   }
 });
 
@@ -6748,6 +5256,13 @@ app.post('/api/v1/mcp/execute', async (c) => {
 
     return c.json({ error: 'Tool not found' }, 404);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SUB-ROUTERS (montados antes do catch-all)
+// ═══════════════════════════════════════════════════════════════════════════════
+app.route('', risks);
+app.route('', policies);
+app.route('', integrations);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STATIC FILES (catch-all — deve ser a última rota)
