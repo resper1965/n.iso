@@ -483,4 +483,71 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(deleteSpy).toHaveBeenCalledWith('reset_token:recovery-token-123');
     });
   });
+
+  describe('Policy Templates', () => {
+    it('should return all templates from DB', async () => {
+      const request = new Request('http://localhost/api/v1/policy-templates', {
+        headers: { 'Authorization': 'Bearer admin-token' }
+      });
+      
+      const allSpy = vi.fn().mockResolvedValue({
+        results: [
+          { id: 'isp', title: 'Information Security Policy (ISP)', iso_ref: '5.1' }
+        ]
+      });
+      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ id: 'admin1', role: 'platform_admin' }));
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: getSpy
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnValue({ all: allSpy })
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data.ok).toBe(true);
+      expect(data.templates).toBeDefined();
+      expect(data.templates.length).toBe(1);
+      expect(data.templates[0].id).toBe('isp');
+    });
+
+    it('should return marketplace templates enriched from DB', async () => {
+      const request = new Request('http://localhost/api/v1/marketplace/templates', {
+        headers: { 'Authorization': 'Bearer admin-token' }
+      });
+      
+      const allSpy = vi.fn().mockResolvedValue({
+        results: [
+          { id: 'isp', title: 'Information Security Policy (ISP)', iso_ref: '5.1' }
+        ]
+      });
+      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ id: 'admin1', role: 'platform_admin' }));
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: getSpy
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnValue({ all: allSpy })
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data.ok).toBe(true);
+      expect(data.templates).toBeDefined();
+      expect(data.templates[0]).toHaveProperty('popularity');
+    });
+  });
 });

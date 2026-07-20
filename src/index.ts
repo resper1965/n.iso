@@ -10,7 +10,7 @@ import { MemoryService } from './services/memory';
 import { SoALogicEngine } from './services/soa-logic';
 import { MigrationService } from './services/migration-service';
 import { KnowledgeService } from './services/knowledge-service';
-import { BLOCK_QUESTIONS, PHASE_TITLES, POLICY_TEMPLATES } from './constants';
+import { BLOCK_QUESTIONS, PHASE_TITLES } from './constants';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -3791,11 +3791,12 @@ app.post('/api/v1/projects/:id/migrate-27701-2025', async (c) => {
 
 
 app.get('/api/v1/policy-templates', async (c) => {
-  return c.json({ ok: true, templates: POLICY_TEMPLATES });
+  const { results } = await c.env.DB.prepare('SELECT * FROM policy_templates ORDER BY iso_ref').all();
+  return c.json({ ok: true, templates: results });
 });
 
 app.get('/api/v1/policy-templates/:id', async (c) => {
-  const tpl = POLICY_TEMPLATES.find(t => t.id === c.req.param('id'));
+  const tpl = await c.env.DB.prepare('SELECT * FROM policy_templates WHERE id = ?').bind(c.req.param('id')).first();
   if (!tpl) return c.json({ error: 'Template not found' }, 404);
   return c.json({ ok: true, template: tpl });
 });
@@ -4305,17 +4306,11 @@ app.get('/api/v1/onboarding-status', async (c) => {
 // ─── Template Marketplace ───────────────────────────────────────────────────
 
 app.get('/api/v1/marketplace/templates', async (c) => {
-  const marketplace = POLICY_TEMPLATES.map(t => {
-    const iso = t.iso_ref || '';
-    const category = iso.startsWith('5') ? 'Organizational' : iso.startsWith('6') ? 'People' : iso.startsWith('7') ? 'Physical' : 'Technological';
-    return {
-      ...t,
-      category,
-      difficulty: 'Standard',
-      estimated_time: '45 min',
-      popularity: Math.floor(Math.random() * 50 + 50)
-    };
-  });
+  const { results } = await c.env.DB.prepare('SELECT * FROM policy_templates ORDER BY iso_ref').all();
+  const marketplace = (results || []).map((t: any) => ({
+    ...t,
+    popularity: Math.floor(Math.random() * 50 + 50)
+  }));
   return c.json({ ok: true, total: marketplace.length, templates: marketplace });
 });
 

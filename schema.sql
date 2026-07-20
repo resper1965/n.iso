@@ -728,3 +728,18 @@ CREATE TABLE IF NOT EXISTS govbr_signatures (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_govbr_signatures_control ON govbr_signatures(project_id, control_id);
+
+-- -----------------------------------------------
+-- POLICY TEMPLATES (Migrated from constants.ts)
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS policy_templates (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  iso_ref TEXT NOT NULL,
+  category TEXT DEFAULT 'Organizational',
+  difficulty TEXT DEFAULT 'Standard',
+  estimated_time TEXT DEFAULT '45 min',
+  description TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
