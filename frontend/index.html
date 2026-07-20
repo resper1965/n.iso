@@ -1,13 +1,296 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>n.iso | ness. Agentic GRC</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/style.css">
+
+</head>
+<body>
+    <a href="#content" class="skip-link">Pular para o conteudo</a>
+
+    <div id="login-overlay">
+        <div class="login-hero">
+            <div class="login-hero-content">
+                <h1 class="login-brand-logo">n<span>.</span>iso</h1>
+            </div>
+        </div>
+        <div class="login-form-side">
+            <!-- Standard Login Box -->
+            <div class="login-box" id="standard-login-box">
+                <h2 style="font-family:'Montserrat';margin-bottom:2rem">Acesso Corporate</h2>
+                <div style="margin-bottom:1.5rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="seu@email.com">
+                </div>
+                <div style="margin-bottom:2rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Senha</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
+                </div>
+                <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
+                <div style="margin-top:1.5rem; text-align:center;">
+                    <a href="#" onclick="showForgotPasswordForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Esqueceu sua senha?</a>
+                </div>
+                <p id="login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+            </div>
+
+            <!-- First Login Password Change Box -->
+            <div class="login-box" id="first-login-reset-box" style="display:none">
+                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha ObrigatÃ³ria</h2>
+                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este Ã© seu primeiro acesso, vocÃª deve cadastrar uma nova senha segura para prosseguir.</p>
+                <div style="margin-bottom:1.5rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                    <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura">
+                </div>
+                <div style="margin-bottom:2rem">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
+                    <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha">
+                </div>
+                <button class="btn btn-primary" style="width:100%" onclick="doFirstLoginReset()">Definir Senha e Entrar</button>
+                <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+            </div>
+
+            <!-- Forgot Password Box -->
+            <div class="login-box" id="forgot-password-box" style="display:none">
+                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
+                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um cÃ³digo numÃ©rico de 6 dÃ­gitos.</p>
+                <div style="margin-bottom:1.5rem" id="forgot-email-step">
+                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail Cadastrado</label>
+                    <input type="email" id="forgot-email" class="form-input" placeholder="seu@email.com">
+                    <button class="btn btn-primary" style="width:100%;margin-top:1.5rem" onclick="doForgotPasswordRequest()">Solicitar CÃ³digo</button>
+                </div>
+                <div style="display:none" id="forgot-code-step">
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">CÃ³digo de 6 dÃ­gitos</label>
+                        <input type="text" id="forgot-code" class="form-input" placeholder="123456" maxlength="6" style="text-align:center;letter-spacing:4px;font-weight:bold;">
+                    </div>
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                        <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha">
+                    </div>
+                    <button class="btn btn-primary" style="width:100%" onclick="doForgotPasswordReset()">Alterar Senha e Entrar</button>
+                </div>
+                <div style="margin-top:1.5rem; text-align:center;">
+                    <a href="#" onclick="showStandardLoginForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Voltar para o Login</a>
+                </div>
+                <p id="forgot-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                <p id="forgot-success" style="color:var(--accent);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+            </div>
+        </div>
+    </div>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-logo">n<span style="color:var(--accent)">.</span>iso</div>
+        <div style="padding: 0 1rem 1.2rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0.8rem;" id="sidebar-project-selector-container">
+            <label style="font-size: 0.65rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 1px; display: block; margin-bottom: 0.4rem; font-family:'Montserrat',sans-serif; font-weight:500;">Projeto Ativo</label>
+            <select class="form-input" id="sidebar-project-select" onchange="window.changeActiveProject(this.value)" style="background: rgba(7, 11, 20, 0.6); border: 1px solid rgba(0, 173, 232, 0.2); color: var(--text); padding: 0.4rem 0.6rem; font-size: 0.8rem; height: auto; cursor: pointer; width: 100%; border-radius: 8px; backdrop-filter: blur(8px);">
+                <option value="">Selecione um projeto...</option>
+            </select>
+            <a href="#" onclick="navigate('projects'); return false;" style="font-size:0.7rem; color:var(--accent); text-decoration:none; display:inline-block; margin-top:6px; font-weight:500;">Gerenciar Projetos</a>
+        </div>
+        <div class="sidebar-nav-list">
+            <div class="sidebar-nav active" id="nav-dashboard" onclick="navigate('dashboard')">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <span class="sidebar-nav-text">Dashboard</span>
+            </div>
+
+            <div class="sidebar-nav" id="nav-projects" onclick="navigate('projects')">
+                <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span class="sidebar-nav-text">Projetos</span>
+            </div>
+
+            <div class="sidebar-label" onclick="toggleGroup('group-sales')">Comercial</div>
+            <div class="sidebar-group expanded" id="group-sales">
+                <div class="sidebar-nav" id="nav-leads" onclick="navigate('leads')">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">Leads</span>
+                </div>
+                <div class="sidebar-nav" id="nav-assessments" onclick="navigate('assessments')">
+                    <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span class="sidebar-nav-text">Assessments</span>
+                </div>
+                <div class="sidebar-nav" id="nav-proposals" onclick="navigate('proposals')">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span class="sidebar-nav-text">Propostas</span>
+                </div>
+            </div>
+
+            <div class="sidebar-label collapsed" onclick="toggleGroup('group-impl')">Implementacao</div>
+            <div class="sidebar-group" id="group-impl">
+                <div class="sidebar-nav" id="nav-project" onclick="navigate('project-detail')">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                    <span class="sidebar-nav-text">Jornada</span>
+                </div>
+                <div class="sidebar-nav" id="nav-monitor" onclick="navigate('monitor')">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="sidebar-nav-text">Monitor</span>
+                </div>
+                <div class="sidebar-nav" id="nav-soa" onclick="navigate('soa')">
+                    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    <span class="sidebar-nav-text">SoA</span>
+                </div>
+                <div class="sidebar-nav" id="nav-governance" onclick="navigate('governance')">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">GovernanÃ§a</span>
+                </div>
+            </div>
+
+            <div class="sidebar-label collapsed group-project-only" onclick="toggleGroup('group-ops')" style="display:none">Operacional</div>
+            <div class="sidebar-group group-project-only" id="group-ops" style="display:none">
+                <div class="sidebar-nav" id="nav-stakeholders" onclick="navigate('stakeholders')">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">Partes Interessadas</span>
+                </div>
+                <div class="sidebar-nav" id="nav-context" onclick="navigate('context')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span class="sidebar-nav-text">Contexto</span>
+                </div>
+                <div class="sidebar-nav" id="nav-assets" onclick="navigate('assets')">
+                    <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l-7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <span class="sidebar-nav-text">Ativos</span>
+                </div>
+                <div class="sidebar-nav" id="nav-risks" onclick="navigate('risks')">
+                    <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span class="sidebar-nav-text">Riscos</span>
+                </div>
+                <div class="sidebar-nav" id="nav-vendors" onclick="navigate('vendors')">
+                    <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                    <span class="sidebar-nav-text">Fornecedores</span>
+                </div>
+                <div class="sidebar-nav" id="nav-training" onclick="navigate('training')">
+                    <svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                    <span class="sidebar-nav-text">Treinamento</span>
+                </div>
+                <div class="sidebar-nav" id="nav-acknowledgments" onclick="navigate('acknowledgments')">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+                    <span class="sidebar-nav-text">CiÃªncia de PolÃ­ticas</span>
+                </div>
+                <div class="sidebar-nav" id="nav-policies" onclick="navigate('policies-dashboard')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 11l2 2 4-4"/></svg>
+                    <span class="sidebar-nav-text">GestÃ£o de PolÃ­ticas</span>
+                </div>
+                <div class="sidebar-nav" id="nav-audits" onclick="navigate('audits')">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span class="sidebar-nav-text">Auditorias</span>
+                </div>
+                <div class="sidebar-nav" id="nav-capa" onclick="navigate('capa')">
+                    <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                    <span class="sidebar-nav-text">CAPA</span>
+                </div>
+                <div class="sidebar-nav" id="nav-mgmt" onclick="navigate('management-review')">
+                    <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+                    <span class="sidebar-nav-text">AnÃ¡lise CrÃ­tica</span>
+                </div>
+                <div class="sidebar-nav" id="nav-evidence" onclick="navigate('evidence')">
+                    <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    <span class="sidebar-nav-text">Evidencias</span>
+                </div>
+            </div>
+            
+            <div class="sidebar-label collapsed group-project-only" onclick="toggleGroup('group-privacy')" style="display:none">Privacidade</div>
+            <div class="sidebar-group group-project-only" id="group-privacy" style="display:none">
+                <div class="sidebar-nav" id="nav-ropa" onclick="navigate('ropa')">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span class="sidebar-nav-text">ROPA</span>
+                </div>
+                <div class="sidebar-nav" id="nav-dpia" onclick="navigate('dpia')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span class="sidebar-nav-text">DPIA / RIPD</span>
+                </div>
+            </div>
+
+            <div class="sidebar-label collapsed" onclick="toggleGroup('group-intel')">Inteligencia</div>
+            <div class="sidebar-group" id="group-intel">
+                <div class="sidebar-nav" id="nav-ai" onclick="navigate('ai-chat')">
+                    <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                    <span class="sidebar-nav-text">AI Assistant</span>
+                </div>
+                <div class="sidebar-nav" id="nav-knowledge" onclick="navigate('knowledge')">
+                    <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <span class="sidebar-nav-text">Knowledge Base</span>
+                </div>
+            </div>
+
+            <div class="sidebar-label collapsed" onclick="toggleGroup('group-system-config')">Sistema</div>
+            <div class="sidebar-group" id="group-system-config">
+                <div class="sidebar-nav" id="nav-audit-trail" onclick="navigate('audit-trail')">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
+                    <span class="sidebar-nav-text">Trilha de Logs</span>
+                </div>
+                <div class="sidebar-nav" id="nav-users" onclick="navigate('users')" style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="sidebar-nav-text">UsuÃ¡rios</span>
+                </div>
+                <div class="sidebar-nav" id="nav-settings" onclick="navigate('settings')">
+                    <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span class="sidebar-nav-text">ConfiguraÃ§Ãµes</span>
+                </div>
+                <div class="sidebar-nav" onclick="toggleTheme()" id="theme-toggle-btn">
+                    <svg viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+                    <span class="sidebar-nav-text">Mudar Tema</span>
+                </div>
+            </div>
+        </div>
+        <div class="sidebar-bottom">
+            <!-- Perfil de UsuÃ¡rio no Sidebar -->
+            <div class="sidebar-user-card" id="sidebar-user-card" onclick="openProfileModal()">
+                <div class="sidebar-user-avatar" id="sidebar-user-avatar">C</div>
+                <div class="sidebar-user-info">
+                    <div class="sidebar-user-name" id="sidebar-user-name">Consultor</div>
+                    <div class="sidebar-user-role" id="sidebar-user-role">Administrador</div>
+                </div>
+                <div class="sidebar-user-logout" onclick="doLogout(); event.stopPropagation()" title="Sair">
+                    <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </div>
+            </div>
+            <div class="sidebar-brand">n<span>.</span>iso</div>
+            <div class="sidebar-status"></div>
+        </div>
+    </nav>
+
+    <main class="main">
+        <header class="header">
+            <div class="header-left">
+                <h1 class="header-title" id="header-title">Dashboard</h1>
+                <div id="header-project-badge" style="display:none;cursor:pointer;font-size:0.55rem;padding:0.2rem 0.6rem;border-radius:6px;background:rgba(0,173,232,0.12);color:var(--accent);border:1px solid rgba(0,173,232,0.25);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis" onclick="openActiveProjectModal()"></div>
+            </div>
+            <div class="header-right">
+                <div class="header-actions" id="header-actions"></div>
+                <div style="position:relative">
+                    <div class="notif-badge" id="notif-badge" onclick="toggleNotifications()"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="notif-count" id="notif-count" style="display:none">0</span></div>
+                    <div class="notif-dropdown" id="notif-dropdown"></div>
+                </div>
+            </div>
+        </header>
+        <div style="display:flex;flex:1;overflow:hidden">
+            <div class="content" id="content" style="flex:1;overflow-y:auto;padding:2rem" aria-live="polite"></div>
+            <div class="context-panel collapsed" id="context-panel">
+                <button class="toggle-context" onclick="toggleContext()">x</button>
+                <div class="ctx-inner" id="ctx-content"></div>
+            </div>
+            <button class="toggle-context-open" id="toggle-context-btn" onclick="toggleContext()" style="display:none">...</button>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)" role="dialog" aria-modal="true">
+        <div class="modal" id="modal" onclick="event.stopPropagation()">
+            <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <!-- DoD Drawer -->
+    <div class="dod-drawer-overlay" id="dod-drawer-overlay" onclick="window.closeDoDDrawerEl(event)" role="dialog" aria-modal="true">
+        <div class="dod-drawer" id="dod-drawer" onclick="event.stopPropagation()">
+            <button class="btn-ghost" style="position: absolute; top: 1.5rem; right: 1.5rem; font-size: 1rem; color: var(--text-dim);" onclick="window.cancelDoDCompletion()">&times;</button>
+            <div id="dod-drawer-content"></div>
+        </div>
+    </div>
+
+
+    <script type="module" src="/src/main.js"></script>
+</body>
 </html>
