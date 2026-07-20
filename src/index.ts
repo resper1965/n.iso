@@ -2840,20 +2840,29 @@ app.put('/api/v1/evidence/:id/approve', async (c) => {
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
 
     const user = c.get('user');
-    const email = user?.email || '';
-    const body = await c.req.json<{ role?: 'ciso' | 'ceo'; approved_by?: string }>().catch(() => ({} as any));
-    
+    if (!user) return c.json({ error: 'Não autorizado' }, 401);
+
+    const body = await c.req.json<{ role?: 'ciso' | 'ceo'; password?: string }>().catch(() => ({} as any));
+    const password = body.password;
+    if (!password) return c.json({ error: 'Senha é obrigatória para assinatura eletrônica' }, 400);
+
+    const dbUser = await c.env.DB.prepare('SELECT password_hash, name FROM users WHERE id = ?').bind(user.id).first<any>();
+    if (!dbUser || !(await verifyPassword(password, dbUser.password_hash))) {
+      return c.json({ error: 'Senha incorreta para assinatura eletrônica' }, 401);
+    }
+
+    const email = user.email || '';
     let targetRole = body.role;
-    let approvedBy = body.approved_by || user?.name || '';
+    let approvedBy = dbUser.name;
 
     // Validação rígida com base em sessão para segurança da cliente
-    if (user?.role !== 'platform_admin' && user?.email !== 'admin@ness.io') {
+    if (user.role !== 'platform_admin' && user.email !== 'admin@ness.io') {
       if (email.includes('resper') || email === '44273656+resper1965@users.noreply.github.com') {
         targetRole = 'ciso';
-        approvedBy = user?.name || 'Ricardo Esper';
+        approvedBy = dbUser.name || 'Ricardo Esper';
       } else if (email.includes('pessoa') || email === 'pessoa@exemplo.com.br') {
         targetRole = 'ceo';
-        approvedBy = user?.name || 'Executivo do Cliente';
+        approvedBy = dbUser.name || 'Executivo do Cliente';
       } else {
         return c.json({ error: 'Acesso negado: Apenas o DPO (Ricardo Esper) ou o CEO (Executivo do Cliente) podem assinar evidências.' }, 403);
       }
@@ -3447,9 +3456,19 @@ app.post('/api/v1/controls/:id/approve', async (c) => {
     const ctrl = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE id = ?').bind(id).first<any>();
     if (!ctrl) return c.json({ error: 'Controle nao encontrado' }, 404);
     
-    const { role, approved_by } = await c.req.json<{ role: 'ciso' | 'ceo'; approved_by: string }>();
-    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: 'Papel invalido' }, 400);
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Não autorizado' }, 401);
 
+    const { role, password } = await c.req.json<{ role: 'ciso' | 'ceo'; password?: string }>();
+    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: 'Papel invalido' }, 400);
+    if (!password) return c.json({ error: 'Senha é obrigatória para assinatura eletrônica' }, 400);
+
+    const dbUser = await c.env.DB.prepare('SELECT password_hash, name FROM users WHERE id = ?').bind(user.id).first<any>();
+    if (!dbUser || !(await verifyPassword(password, dbUser.password_hash))) {
+      return c.json({ error: 'Senha incorreta para assinatura eletrônica' }, 401);
+    }
+
+    const approved_by = dbUser.name;
     const dateStr = new Date().toISOString();
     if (role === 'ciso') {
       await c.env.DB.prepare(
@@ -3466,6 +3485,8 @@ app.post('/api/v1/controls/:id/approve', async (c) => {
          WHERE id = ?`
       ).bind(approved_by, dateStr, id).run();
     }
+
+    await logAudit(c.env.DB, 'policy.signed', user.email, `Política ${id} assinada eletronicamente como ${role.toUpperCase()} por ${approved_by}`);
 
     return c.json({ ok: true });
   } catch (e: any) {
