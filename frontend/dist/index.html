@@ -7449,13 +7449,96 @@
                 versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
             } catch(e) {}
 
+            // Buscar assinaturas do gov.br
+            let govbrSigs = [];
+            try {
+                govbrSigs = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/govbr-signatures`) || [];
+            } catch(e) {}
+
+            const cisoSig = govbrSigs.find(s => s.signature_type === 'ciso');
+            const ceoSig = govbrSigs.find(s => s.signature_type === 'ceo');
+
+            let cisoStatusHtml = '';
+            if (cisoSig) {
+                cisoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CISO:</strong> 
+                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:6px">
+                                <span style="background:#00ade8; color:#000; font-size:0.55rem; padding:2px 6px; border-radius:4px; font-weight:900; line-height:1">gov.br</span>
+                                Assinado digitalmente por ${escapeHTML(cisoSig.signed_by_name)} (CPF: ${escapeHTML(cisoSig.signed_by_cpf)}) em ${new Date(cisoSig.created_at).toLocaleDateString()}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            } else if (ctrl.ciso_approved_by) {
+                cisoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CISO:</strong> 
+                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                cisoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CISO:</strong> 
+                            <span style="color:var(--text-dim)">Aguardando assinatura</span>
+                        </div>
+                        <div style="display:flex; gap:8px">
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ciso')">Assinar com gov.br</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar com senha</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            let ceoStatusHtml = '';
+            if (ceoSig) {
+                ceoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CEO (Direção):</strong> 
+                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:6px">
+                                <span style="background:#00ade8; color:#000; font-size:0.55rem; padding:2px 6px; border-radius:4px; font-weight:900; line-height:1">gov.br</span>
+                                Assinado digitalmente por ${escapeHTML(ceoSig.signed_by_name)} (CPF: ${escapeHTML(ceoSig.signed_by_cpf)}) em ${new Date(ceoSig.created_at).toLocaleDateString()}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            } else if (ctrl.ceo_approved_by) {
+                ceoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CEO (Direção):</strong> 
+                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                ceoStatusHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                        <div>
+                            <strong>CEO (Direção):</strong> 
+                            <span style="color:var(--text-dim)">Aguardando assinatura</span>
+                        </div>
+                        <div style="display:flex; gap:8px">
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ceo')">Assinar com gov.br</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar com senha</button>
+                        </div>
+                    </div>
+                `;
+            }
+
             let versionsSelectHtml = '';
             if (versions.length > 0) {
                 versionsSelectHtml = `
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
                         <label style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; min-width:120px">Histórico de Versões:</label>
                         <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" onchange="window.onPolicyVersionChange('${projectId}', '${controlId}', this.value)">
-                            ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? `v${v.version} (Atual)` : `v${v.version}`} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
+                            ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? 'v' + v.version + ' (Atual)' : 'v' + v.version} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
                         </select>
                         <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" onclick="window.doRestorePolicyVersion('${projectId}', '${controlId}')">Restaurar vX</button>
                     </div>
@@ -7482,18 +7565,10 @@
                         <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
                         <div style="display:flex; flex-direction:column; gap:0.75rem">
                             <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
-                                <div>
-                                    <strong>CISO:</strong> 
-                                    <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
-                                </div>
-                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como CISO</button>` : ''}
+                                ${cisoStatusHtml}
                             </div>
                             <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
-                                <div>
-                                    <strong>CEO (Direção):</strong> 
-                                    <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
-                                </div>
-                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como CEO</button>` : ''}
+                                ${ceoStatusHtml}
                             </div>
                         </div>
                     </div>
@@ -7506,6 +7581,14 @@
             `;
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
+            
+            window.startGovBrSignature = function(pId, cId, type) {
+                const width = 500;
+                const height = 650;
+                const left = (window.screen.width / 2) - (width / 2);
+                const top = (window.screen.height / 2) - (height / 2);
+                window.open(`/api/v1/projects/${pId}/controls/${cId}/govbr/start?type=${type}`, 'govbr_signature_popup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`);
+            };
 
             window.activeVersionsList = versions;
             window.onPolicyVersionChange = async function(pId, cId, verId) {
