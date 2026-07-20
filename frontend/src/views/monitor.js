@@ -583,15 +583,20 @@ import { navigate } from '../router.js';
                     <span style="font-size:0.7rem; color:var(--accent)">- ${escapeHTML(m.job_title)} (${escapeHTML(m.role_category)})</span>
                     ${m.email ? `<div style="font-size:0.65rem; color:var(--text-dim)">${escapeHTML(m.email)}</div>` : ''}
                 </div>
-                <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.65rem; color:#ef4444; border-color:rgba(239,68,68,0.2)" onclick="window.deleteGovernanceMember('${projectId}', '${m.id}')">
-                    Excluir
-                </button>
+                <div style="display:flex; gap:8px">
+                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.65rem; color:var(--accent); border-color:rgba(0,173,232,0.2)" onclick="window.editGovernanceMember('${m.id}')">
+                        Editar
+                    </button>
+                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.65rem; color:#ef4444; border-color:rgba(239,68,68,0.2)" onclick="window.deleteGovernanceMember('${projectId}', '${m.id}')">
+                        Excluir
+                    </button>
+                </div>
             </div>
         `).join('') || `<div style="font-size:0.75rem; color:var(--text-dim); text-align:center; padding:12px; border:1px dashed var(--border); border-radius:8px; margin-bottom:12px">Nenhum membro cadastrado.</div>`;
 
         const formHtml = `
             <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:16px">
-                <h4 style="font-family:'Montserrat',sans-serif; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px">Adicionar Novo Membro</h4>
+                <h4 style="font-family:'Montserrat',sans-serif; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px" id="gov-form-title">Adicionar Novo Membro</h4>
                 <form id="add-gov-member-form" onsubmit="window.saveGovernanceMember(event, '${projectId}')" style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
                     <div class="form-group" style="grid-column: span 2">
                         <label class="form-label">Nome Completo</label>
@@ -618,8 +623,9 @@ import { navigate } from '../router.js';
                         <input type="checkbox" id="gov-primary" style="cursor:pointer">
                         <label for="gov-primary" class="form-label" style="margin-bottom:0; cursor:pointer">Contato Principal / DPO Líder</label>
                     </div>
-                    <div style="grid-column: span 2; text-align:right; margin-top:8px">
-                        <button class="btn btn-primary" type="submit">Adicionar Membro</button>
+                    <div style="grid-column: span 2; display:flex; justify-content:flex-end; gap:8px; margin-top:8px">
+                        <button class="btn btn-secondary" type="button" id="btn-cancel-gov-edit" style="display:none" onclick="window.cancelGovernanceEdit()">Cancelar</button>
+                        <button class="btn btn-primary" type="submit" id="btn-submit-gov">Adicionar Membro</button>
                     </div>
                 </form>
             </div>
@@ -636,6 +642,33 @@ import { navigate } from '../router.js';
         `;
     };
 
+    window.editingMemberId = null;
+
+    window.editGovernanceMember = function(memberId) {
+        const member = (S.currentGovernance || []).find(m => m.id === memberId);
+        if (!member) return;
+
+        window.editingMemberId = memberId;
+        
+        document.getElementById('gov-name').value = member.name || '';
+        document.getElementById('gov-email').value = member.email || '';
+        document.getElementById('gov-role').value = member.role_category || 'consultor';
+        document.getElementById('gov-title').value = member.job_title || '';
+        document.getElementById('gov-primary').checked = member.is_primary === 1;
+
+        document.getElementById('gov-form-title').textContent = 'Editar Membro da Governança';
+        document.getElementById('btn-submit-gov').textContent = 'Salvar Alterações';
+        document.getElementById('btn-cancel-gov-edit').style.display = 'inline-block';
+    };
+
+    window.cancelGovernanceEdit = function() {
+        window.editingMemberId = null;
+        document.getElementById('add-gov-member-form').reset();
+        document.getElementById('gov-form-title').textContent = 'Adicionar Novo Membro';
+        document.getElementById('btn-submit-gov').textContent = 'Adicionar Membro';
+        document.getElementById('btn-cancel-gov-edit').style.display = 'none';
+    };
+
     window.saveGovernanceMember = async function(event, projectId) {
         event.preventDefault();
         const name = document.getElementById('gov-name').value;
@@ -644,13 +677,22 @@ import { navigate } from '../router.js';
         const job_title = document.getElementById('gov-title').value;
         const is_primary = document.getElementById('gov-primary').checked ? 1 : 0;
 
-        const btn = event.target.querySelector('button[type="submit"]');
+        const btn = document.getElementById('btn-submit-gov');
         btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
         try {
-            await api('POST', `/api/v1/projects/${projectId}/governance`, {
+            const payload = {
                 name, email, role_category, job_title, is_primary
-            });
-            showToast('Membro da governança adicionado com sucesso!');
+            };
+            if (window.editingMemberId) {
+                payload.id = window.editingMemberId;
+            }
+
+            await api('POST', `/api/v1/projects/${projectId}/governance`, payload);
+            showToast(window.editingMemberId ? 'Membro da governança atualizado!' : 'Membro da governança adicionado com sucesso!');
+            
+            window.editingMemberId = null;
             
             const [members, newProgress] = await Promise.all([
                 api('GET', `/api/v1/projects/${projectId}/governance`),
@@ -670,6 +712,7 @@ import { navigate } from '../router.js';
             showToast('Erro ao salvar membro: ' + e.message, 'danger');
         } finally {
             btn.disabled = false;
+            btn.textContent = 'Adicionar Membro';
         }
     };
 
@@ -679,6 +722,10 @@ import { navigate } from '../router.js';
         try {
             await api('DELETE', `/api/v1/projects/${projectId}/governance/${memberId}`);
             showToast('Membro da governança removido.');
+            
+            if (window.editingMemberId === memberId) {
+                window.cancelGovernanceEdit();
+            }
             
             const [members, newProgress] = await Promise.all([
                 api('GET', `/api/v1/projects/${projectId}/governance`),
