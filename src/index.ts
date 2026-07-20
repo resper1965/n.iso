@@ -2572,6 +2572,55 @@ app.get('/api/v1/controls', async (c) => {
   }
 });
 
+// Obter conteúdo da política/evidência de um controle
+app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
+  try {
+    const projectId = c.req.param('projectId');
+    const controlId = c.req.param('controlId');
+    const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Busca o controle no D1
+    const ctrl = await c.env.DB.prepare(
+      'SELECT * FROM compliance_controls WHERE project_id = ? AND id = ?'
+    ).bind(projectId, normId).first<any>();
+
+    if (!ctrl) {
+      return c.json({ error: 'Controle não encontrado' }, 404);
+    }
+
+    // 2. Busca se há alguma evidência associada no D1
+    const evidence = await c.env.DB.prepare(
+      'SELECT * FROM evidence WHERE project_id = ? AND control_id = ?'
+    ).bind(projectId, normId).first<any>();
+
+    let content = ctrl.description || '';
+    let evidenceId = null;
+
+    if (evidence) {
+      evidenceId = evidence.id;
+      // Tenta ler o conteúdo do R2
+      try {
+        const file = await c.env.STORAGE.get(evidence.r2_key);
+        if (file) {
+          content = await file.text();
+        } else if (evidence.evaluation_notes) {
+          content = evidence.evaluation_notes;
+        }
+      } catch (err: any) {
+        console.error('Erro ao ler do R2, usando fallback:', err);
+      }
+    }
+
+    return c.json({
+      content,
+      evidence_id: evidenceId,
+      control: ctrl
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao buscar política do controle', detail: e.message }, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════

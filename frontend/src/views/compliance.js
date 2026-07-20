@@ -781,12 +781,31 @@ import { navigate } from '../router.js';
 
         const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
         let ctrl = {};
+        let policyText = '';
+        let evidenceId = null;
+
+        // 1. Busca a política no endpoint dedicado
         try {
-            const controls = await api('GET', '/api/v1/controls');
-            if (Array.isArray(controls)) {
-                ctrl = controls.find(c => c.id === normId) || {};
+            const policyRes = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/policy`);
+            if (policyRes) {
+                policyText = policyRes.content || '';
+                evidenceId = policyRes.evidence_id || null;
+                ctrl = policyRes.control || {};
             }
-        } catch(e) {}
+        } catch(e) {
+            console.error("Erro ao carregar politica do R2:", e);
+        }
+
+        // 2. Fallback caso a requisição falhe ou retorne vazio
+        if (!ctrl.id) {
+            try {
+                const controls = await api('GET', '/api/v1/controls');
+                if (Array.isArray(controls)) {
+                    ctrl = controls.find(c => c.id === normId) || {};
+                    if (!policyText) policyText = ctrl.description || '';
+                }
+            } catch(e) {}
+        }
 
         let templates = [];
         let options = '';
@@ -798,30 +817,6 @@ import { navigate } from '../router.js';
             }
         } catch(e) {
             console.error("Erro ao carregar templates:", e);
-        }
-
-        // --- CARREGAR POLITICA DO R2 (EVIDENCIA CORRESPONDENTE) ---
-        let policyText = ctrl.description || '';
-        let evidenceId = null;
-        try {
-            const evidences = await api('GET', `/api/v1/projects/${projectId}/evidence`) || [];
-            const suffix = normId.replace('ctrl-', '');
-            const matchingEvidence = evidences.find(ev => ev.id && ev.id.endsWith('-' + suffix));
-            if (matchingEvidence) {
-                evidenceId = matchingEvidence.id;
-                try {
-                    const contentRes = await api('GET', `/api/v1/evidence/${matchingEvidence.id}/content`);
-                    if (contentRes && contentRes.content) {
-                        policyText = contentRes.content;
-                    } else if (contentRes && typeof contentRes === 'string' && contentRes.trim()) {
-                        policyText = contentRes;
-                    }
-                } catch(e) {
-                    console.log("Erro ao carregar conteudo da evidencia, usando descricao padrao:", e);
-                }
-            }
-        } catch(e) {
-            console.error("Erro ao buscar evidencias:", e);
         }
 
         const isDefaultDescription = !policyText || 
