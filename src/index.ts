@@ -2601,11 +2601,41 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
       evidenceId = evidence.id;
       // Tenta ler o conteúdo do R2
       try {
-        const file = await c.env.STORAGE.get(evidence.r2_key);
+        let file = await c.env.STORAGE.get(evidence.r2_key);
+        let foundKey = evidence.r2_key;
+
+        if (!file) {
+          // Busca secundária com chaves alternativas herdadas do seed/migração
+          const alternativeKeys = [
+            `cliente/${evidence.file_name}`,
+            `niso/${evidence.file_name}`,
+            `${projectId}/${evidence.file_name}`,
+            evidence.file_name,
+            `cliente/evidence/${evidence.file_name}`
+          ];
+
+          for (const altKey of alternativeKeys) {
+            if (altKey === evidence.r2_key) continue;
+            try {
+              const altFile = await c.env.STORAGE.get(altKey);
+              if (altFile) {
+                file = altFile;
+                foundKey = altKey;
+                // Atualiza de forma silenciosa a chave correta no D1
+                c.env.DB.prepare('UPDATE evidence SET r2_key = ? WHERE id = ?')
+                  .bind(altKey, evidence.id)
+                  .run()
+                  .catch((updateErr: any) => console.error('Erro ao atualizar r2_key:', updateErr));
+                break;
+              }
+            } catch(e) {}
+          }
+        }
+
         if (file) {
           content = await file.text();
         } else {
-          // O registro existe no D1 mas o arquivo físico no R2 está ausente.
+          // O registro existe no D1 mas o arquivo físico no R2 está ausente em todas as chaves alternativas.
           // Vamos gerar a partir do template correspondente dinamicamente!
           const cleanId = controlId.toUpperCase();
           const templateName = CONTROL_TO_TEMPLATE[cleanId] || 'isms-policy';
