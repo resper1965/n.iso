@@ -53,5 +53,10 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 export function requireProjectAccess(user: any, projectId: string) {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
-  throw new Error('Forbidden: No access to this project');
+}
+
+/** Escape HTML entities para prevenir XSS em templates HTML */
+export function escapeHtml(s: string): string {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
