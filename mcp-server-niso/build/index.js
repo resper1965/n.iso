@@ -310,7 +310,10 @@ const TOOLS = [
 ];
 async function nisoGet(path) {
     const response = await fetch(`${NISO_BASE_URL}${path}`, {
-        headers: { Authorization: `Bearer ${NISO_API_KEY}` },
+        headers: {
+            Authorization: `Bearer ${NISO_API_KEY}`,
+            "x-api-key": NISO_API_KEY || ""
+        },
     });
     const data = await response.json();
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -320,6 +323,7 @@ async function nisoPost(path, body) {
         method: "POST",
         headers: {
             Authorization: `Bearer ${NISO_API_KEY}`,
+            "x-api-key": NISO_API_KEY || "",
             "Content-Type": "application/json",
         },
         body: body === undefined ? undefined : JSON.stringify(body),
