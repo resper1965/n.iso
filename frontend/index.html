@@ -21,63 +21,69 @@
         <div class="login-form-side">
             <!-- Standard Login Box -->
             <div class="login-box" id="standard-login-box">
-                <h2 style="font-family:'Montserrat';margin-bottom:2rem">Acesso Corporate</h2>
-                <div style="margin-bottom:1.5rem">
-                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
-                    <input type="email" id="login-email" class="form-input" placeholder="seu@email.com">
-                </div>
-                <div style="margin-bottom:2rem">
-                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Senha</label>
-                    <input type="password" id="login-password" class="form-input" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
-                </div>
-                <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
-                <div style="margin-top:1.5rem; text-align:center;">
-                    <a href="#" onclick="showForgotPasswordForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Esqueceu sua senha?</a>
-                </div>
-                <p id="login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                <form onsubmit="doLogin(); return false;">
+                    <h2 style="font-family:'Montserrat';margin-bottom:2rem">Acesso Corporate</h2>
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
+                        <input type="email" id="login-email" class="form-input" placeholder="seu@email.com" required>
+                    </div>
+                    <div style="margin-bottom:2rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Senha</label>
+                        <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
+                    <div style="margin-top:1.5rem; text-align:center;">
+                        <a href="#" onclick="showForgotPasswordForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Esqueceu sua senha?</a>
+                    </div>
+                    <p id="login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                </form>
             </div>
 
             <!-- First Login Password Change Box -->
             <div class="login-box" id="first-login-reset-box" style="display:none">
-                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha ObrigatÃ³ria</h2>
-                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este Ã© seu primeiro acesso, vocÃª deve cadastrar uma nova senha segura para prosseguir.</p>
-                <div style="margin-bottom:1.5rem">
-                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
-                    <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura">
-                </div>
-                <div style="margin-bottom:2rem">
-                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
-                    <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha">
-                </div>
-                <button class="btn btn-primary" style="width:100%" onclick="doFirstLoginReset()">Definir Senha e Entrar</button>
-                <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                <form onsubmit="doFirstLoginReset(); return false;">
+                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha Obrigatória</h2>
+                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este é seu primeiro acesso, você deve cadastrar uma nova senha segura para prosseguir.</p>
+                    <div style="margin-bottom:1.5rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                        <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura" required>
+                    </div>
+                    <div style="margin-bottom:2rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
+                        <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%">Definir Senha e Entrar</button>
+                    <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                </form>
             </div>
 
             <!-- Forgot Password Box -->
             <div class="login-box" id="forgot-password-box" style="display:none">
-                <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
-                <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um cÃ³digo numÃ©rico de 6 dÃ­gitos.</p>
-                <div style="margin-bottom:1.5rem" id="forgot-email-step">
-                    <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail Cadastrado</label>
-                    <input type="email" id="forgot-email" class="form-input" placeholder="seu@email.com">
-                    <button class="btn btn-primary" style="width:100%;margin-top:1.5rem" onclick="doForgotPasswordRequest()">Solicitar CÃ³digo</button>
-                </div>
-                <div style="display:none" id="forgot-code-step">
-                    <div style="margin-bottom:1.5rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">CÃ³digo de 6 dÃ­gitos</label>
-                        <input type="text" id="forgot-code" class="form-input" placeholder="123456" maxlength="6" style="text-align:center;letter-spacing:4px;font-weight:bold;">
+                <form onsubmit="return false;">
+                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
+                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um código numérico de 6 dígitos.</p>
+                    <div style="margin-bottom:1.5rem" id="forgot-email-step">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail Cadastrado</label>
+                        <input type="email" id="forgot-email" class="form-input" placeholder="seu@email.com">
+                        <button type="button" class="btn btn-primary" style="width:100%;margin-top:1.5rem" onclick="doForgotPasswordRequest()">Solicitar Código</button>
                     </div>
-                    <div style="margin-bottom:1.5rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
-                        <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha">
+                    <div style="display:none" id="forgot-code-step">
+                        <div style="margin-bottom:1.5rem">
+                            <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Código de 6 dígitos</label>
+                            <input type="text" id="forgot-code" class="form-input" placeholder="123456" maxlength="6" style="text-align:center;letter-spacing:4px;font-weight:bold;">
+                        </div>
+                        <div style="margin-bottom:1.5rem">
+                            <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                            <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha">
+                        </div>
+                        <button type="button" class="btn btn-primary" style="width:100%" onclick="doForgotPasswordReset()">Alterar Senha e Entrar</button>
                     </div>
-                    <button class="btn btn-primary" style="width:100%" onclick="doForgotPasswordReset()">Alterar Senha e Entrar</button>
-                </div>
-                <div style="margin-top:1.5rem; text-align:center;">
-                    <a href="#" onclick="showStandardLoginForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Voltar para o Login</a>
-                </div>
-                <p id="forgot-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
-                <p id="forgot-success" style="color:var(--accent);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                    <div style="margin-top:1.5rem; text-align:center;">
+                        <a href="#" onclick="showStandardLoginForm(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Voltar para o Login</a>
+                    </div>
+                    <p id="forgot-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                    <p id="forgot-success" style="color:var(--accent);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                </form>
             </div>
         </div>
     </div>

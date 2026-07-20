@@ -1,6 +1,6 @@
 import { S } from './state.js';
 
-export const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? 'http://127.0.0.1:8787' : 'https://api.niso.ness.com.br';
+export const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? 'http://127.0.0.1:8787' : window.location.origin;
 
 async function api(m, p, b) {
     const headers = { 'Content-Type': 'application/json' };
