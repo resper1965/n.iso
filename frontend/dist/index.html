@@ -4655,12 +4655,12 @@
                                                         }
 
                                                         return `
-                                                            <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-left: 3px solid ${borderLeftColor}; border-radius: 10px; padding: 0.75rem;">
+                                                            <div class="checklist-item-wrapper" style="margin-bottom: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-left: 3px solid ${borderLeftColor}; border-radius: 10px; padding: 0.75rem; cursor: pointer;" onclick="toggleChecklistDetails('${item.id}')">
                                                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
                                                                     <div class="checklist-left" style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
                                                                         <input type="checkbox" class="checklist-item-checkbox" 
                                                                             ${isChecked ? 'checked' : ''} 
-                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this)"
+                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this); event.stopPropagation()"
                                                                             ${(!isChecked && item.id === 'p2_2') ? 'disabled' : ''}>
                                                                         <span class="badge-cat ${item.category}">${item.category}</span>
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
@@ -4674,7 +4674,7 @@
                                                                             <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent);" onclick="openInternalDocumentEditor('${itemEvidenceId}'); event.stopPropagation()">Editar Doc</button>
                                                                         ` : ''}
                                                                         ${(item.category === 'evidence' || item.category === 'document') ? `
-                                                                            <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
+                                                                            <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}'); event.stopPropagation()">Upload</button>
                                                                         ` : ''}
                                                                         ${(!isChecked && (item.category === 'document' || DOC_WIZARDS[item.id])) ? `
                                                                             <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
