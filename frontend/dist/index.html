@@ -2228,7 +2228,7 @@
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 16px;">
                                 <input type="checkbox" id="gap-${q.key}" ${gap ? 'checked' : ''} style="cursor: pointer;">
                                 <label for="gap-${q.key}" style="font-size: 0.75rem; color: #ff4d4d; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                                    ⚠️ Lacuna Detectada
+                                    Lacuna Detectada
                                 </label>
                             </div>
                         </div>
@@ -2530,7 +2530,7 @@
 
         openModal(`
             <div class="modal-header">
-                <span class="modal-title">📋 ${config.title}</span>
+                <span class="modal-title">${config.title}</span>
                 <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
             </div>
             <div style="padding:1.5rem 0; text-align:left;">
@@ -2569,7 +2569,7 @@
             return `
                 <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(255,255,255,0.01); border: 1px dashed var(--border); border-radius: 8px; text-align: left; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 0.72rem; color: var(--text-dim);">
-                        💡 <strong>Diagnóstico Pendente:</strong> Responda ao questionário desta jornada para receber recomendações e adequação automática dos controles do SGSI.
+                        <strong>Diagnóstico Pendente:</strong> Responda ao questionário desta jornada para receber recomendações e adequação automática dos controles do SGSI.
                     </div>
                     <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}'); event.stopPropagation();">Iniciar Diagnóstico</button>
                 </div>
@@ -2587,13 +2587,13 @@
             summaryHtml = `<strong>Sponsor:</strong> ${sponsorText} | <strong>Orçamento:</strong> ${budgetText} | <strong>Escopo:</strong> ${scopeText}`;
 
             if (answers.sponsor !== 'sim') {
-                suggestionsList += `<li>⚠️ <strong>Sem sponsor executivo ativo:</strong> Risco crítico para a certificação (Requisito Cl 5.1). Recomendamos formalizar a nomeação do comitê com ata assinada.</li>`;
+                suggestionsList += `<li><strong>Sem sponsor executivo ativo:</strong> Risco crítico para a certificação (Requisito Cl 5.1). Recomendamos formalizar a nomeação do comitê com ata assinada.</li>`;
             }
             if (answers.budget === 'nao') {
-                suggestionsList += `<li>⚠️ <strong>Sem orçamento de segurança:</strong> Risco ao cronograma de contratação da certificadora. Recomenda-se reservar verba de auditoria externa preventiva.</li>`;
+                suggestionsList += `<li><strong>Sem orçamento de segurança:</strong> Risco ao cronograma de contratação da certificadora. Recomenda-se reservar verba de auditoria externa preventiva.</li>`;
             }
             if (answers.scope === 'ti' || answers.scope === 'prod') {
-                suggestionsList += `<li>💡 <strong>Escopo restrito:</strong> Garanta que as fronteiras físicas e de redes estejam claramente delimitadas no documento de Escopo do SGSI (Requisito Cl 4.3).</li>`;
+                suggestionsList += `<li><strong>Escopo restrito:</strong> Garanta que as fronteiras físicas e de redes estejam claramente delimitadas no documento de Escopo do SGSI (Requisito Cl 4.3).</li>`;
             }
         } 
         else if (jIdx === 1) {
@@ -2605,16 +2605,16 @@
             summaryHtml = `<strong>Infra:</strong> ${cloudLabel} | <strong>Banco:</strong> ${dbLabel} | <strong>Dev:</strong> ${devLabel} | <strong>IDP:</strong> ${authLabel}`;
 
             if (answers.cloud !== 'local') {
-                suggestionsList += `<li>💡 <strong>Cloud (${cloudLabel}):</strong> Revisar políticas do controle A.5.23 (Segurança de Serviços em Nuvem) e exigir MFA em todos os consoles.</li>`;
+                suggestionsList += `<li><strong>Cloud (${cloudLabel}):</strong> Revisar políticas do controle A.5.23 (Segurança de Serviços em Nuvem) e exigir MFA em todos os consoles.</li>`;
             }
             if (answers.db === 'local') {
-                suggestionsList += `<li>💡 <strong>Servidor de Banco de Dados Próprio:</strong> Implementar política rigorosa de backup criptografado fora do ambiente de execução (A.8.13 e A.8.24).</li>`;
+                suggestionsList += `<li><strong>Servidor de Banco de Dados Próprio:</strong> Implementar política rigorosa de backup criptografado fora do ambiente de execução (A.8.13 e A.8.24).</li>`;
             }
             if (answers.dev === 'sim') {
-                suggestionsList += `<li>💡 <strong>Desenvolvimento Interno:</strong> Ativar testes estáticos de segurança (SAST) e diretrizes para o controle A.8.28 (Segurança em Desenvolvimento).</li>`;
+                suggestionsList += `<li><strong>Desenvolvimento Interno:</strong> Ativar testes estáticos de segurança (SAST) e diretrizes para o controle A.8.28 (Segurança em Desenvolvimento).</li>`;
             }
             if (answers.auth === 'sim') {
-                suggestionsList += `<li>💡 <strong>IDP Centralizado:</strong> Habilitar provisionamento automatizado de credenciais e MFA em todos os endpoints de colaboração (A.5.15).</li>`;
+                suggestionsList += `<li><strong>IDP Centralizado:</strong> Habilitar provisionamento automatizado de credenciais e MFA em todos os endpoints de colaboração (A.5.15).</li>`;
             }
         }
         else if (jIdx === 2) {
@@ -2625,13 +2625,13 @@
             summaryHtml = `<strong>Cripto:</strong> ${encText} | <strong>Testes de Backup:</strong> ${backupText} | <strong>MFA:</strong> ${mfaText}`;
 
             if (answers.encryption !== 'sim') {
-                suggestionsList += `<li>⚠️ <strong>Criptografia em repouso pendente:</strong> Essencial para proteger dados contra quebra física (A.8.24). Habilitar criptografia transparente no banco de dados.</li>`;
+                suggestionsList += `<li><strong>Criptografia em repouso pendente:</strong> Essencial para proteger dados contra quebra física (A.8.24). Habilitar criptografia transparente no banco de dados.</li>`;
             }
             if (answers.backup === 'nunca') {
-                suggestionsList += `<li>⚠️ <strong>Sem testes de restauração:</strong> O auditor irá solicitar registros dos testes dos últimos 12 meses. Configure teste de simulação mensal (A.8.13).</li>`;
+                suggestionsList += `<li><strong>Sem testes de restauração:</strong> O auditor irá solicitar registros dos testes dos últimos 12 meses. Configure teste de simulação mensal (A.8.13).</li>`;
             }
             if (answers.mfa !== 'todos') {
-                suggestionsList += `<li>⚠️ <strong>MFA parcial ou inativo:</strong> Vulnerabilidade de controle de acesso (A.5.15). Ativar MFA obrigatório para toda equipe e e-mail corporativo.</li>`;
+                suggestionsList += `<li><strong>MFA parcial ou inativo:</strong> Vulnerabilidade de controle de acesso (A.5.15). Ativar MFA obrigatório para toda equipe e e-mail corporativo.</li>`;
             }
         }
         else if (jIdx === 3) {
@@ -2642,13 +2642,13 @@
             summaryHtml = `<strong>DPO:</strong> ${dpoText} | <strong>ROPA:</strong> ${ropaText} | <strong>Direitos Titulares:</strong> ${dsrText}`;
 
             if (answers.dpo === 'nao') {
-                suggestionsList += `<li>💡 <strong>Sem DPO nomeado:</strong> Para ISO 27701 (Cl 7.2.1) e LGPD, nomeie formalmente o encarregado de dados e publique o contato de e-mail no site.</li>`;
+                suggestionsList += `<li><strong>Sem DPO nomeado:</strong> Para ISO 27701 (Cl 7.2.1) e LGPD, nomeie formalmente o encarregado de dados e publique o contato de e-mail no site.</li>`;
             }
             if (answers.ropa !== 'completo') {
-                suggestionsList += `<li>💡 <strong>ROPA pendente ou parcial:</strong> Utilize o módulo ROPA do nISO para mapear o fluxo de tratamento de cada dado pessoal coletado (Cl 7.3.2).</li>`;
+                suggestionsList += `<li><strong>ROPA pendente ou parcial:</strong> Utilize o módulo ROPA do nISO para mapear o fluxo de tratamento de cada dado pessoal coletado (Cl 7.3.2).</li>`;
             }
             if (answers.dsr === 'nao') {
-                suggestionsList += `<li>⚠️ <strong>Sem canal para titulares:</strong> OBRIGATÓRIO implementar canal de requisição DSR e registrar tempos de resposta no relatório de privacidade (Cl 7.3.1).</li>`;
+                suggestionsList += `<li><strong>Sem canal para titulares:</strong> OBRIGATÓRIO implementar canal de requisição DSR e registrar tempos de resposta no relatório de privacidade (Cl 7.3.1).</li>`;
             }
         }
         else if (jIdx === 4) {
@@ -2659,13 +2659,13 @@
             summaryHtml = `<strong>Treinamento:</strong> ${trText} | <strong>Auditoria Interna:</strong> ${audText} | <strong>Revisão Direção:</strong> ${revText}`;
 
             if (answers.training !== 'sim') {
-                suggestionsList += `<li>💡 <strong>Conscientização pendente:</strong> Implementar programa contínuo de conscientização (phishing simulado e segurança) além da integração (Cl 7.3).</li>`;
+                suggestionsList += `<li><strong>Conscientização pendente:</strong> Implementar programa contínuo de conscientização (phishing simulado e segurança) além da integração (Cl 7.3).</li>`;
             }
             if (answers.audit !== 'sim') {
-                suggestionsList += `<li>⚠️ <strong>Auditoria Interna pendente:</strong> Requisito obrigatório para o Estágio 1 da certificação. Agende a auditoria antes da auditoria externa (Cl 9.2).</li>`;
+                suggestionsList += `<li><strong>Auditoria Interna pendente:</strong> Requisito obrigatório para o Estágio 1 da certificação. Agende a auditoria antes da auditoria externa (Cl 9.2).</li>`;
             }
             if (answers.review === 'nao') {
-                suggestionsList += `<li>⚠️ <strong>Ata de Revisão pela Direção pendente:</strong> Documento chave exigido pelo auditor no Estágio 2. Agende reunião e registre a ata (Cl 9.3).</li>`;
+                suggestionsList += `<li><strong>Ata de Revisão pela Direção pendente:</strong> Documento chave exigido pelo auditor no Estágio 2. Agende reunião e registre a ata (Cl 9.3).</li>`;
             }
         }
         else if (jIdx === 5) {
@@ -2675,22 +2675,22 @@
             summaryHtml = `<strong>Certificadora:</strong> ${certText} | <strong>Processo CAPA:</strong> ${capaText}`;
 
             if (answers.certifier !== 'sim') {
-                suggestionsList += `<li>💡 <strong>Contratação da Certificadora:</strong> Solicitar propostas de organismos acreditados (INMETRO / UKAS) para agendar datas de estágio 1 e 2.</li>`;
+                suggestionsList += `<li><strong>Contratação da Certificadora:</strong> Solicitar propostas de organismos acreditados (INMETRO / UKAS) para agendar datas de estágio 1 e 2.</li>`;
             }
             if (answers.capa === 'nao') {
-                suggestionsList += `<li>⚠️ <strong>Sem processo CAPA estruturado:</strong> Essencial para comprovar melhoria contínua (Cl 10.1). Registre qualquer desvio na aba Ações Corretivas.</li>`;
+                suggestionsList += `<li><strong>Sem processo CAPA estruturado:</strong> Essencial para comprovar melhoria contínua (Cl 10.1). Registre qualquer desvio na aba Ações Corretivas.</li>`;
             }
         }
 
         if (!suggestionsList) {
-            suggestionsList = `<li>✅ <strong>Todos os controles da jornada mapeados:</strong> Ambiente com maturidade adequada de conformidade! Próximo para auditoria.</li>`;
+            suggestionsList = `<li><strong>Todos os controles da jornada mapeados:</strong> Ambiente com maturidade adequada de conformidade! Próximo para auditoria.</li>`;
         }
 
         return `
             <div style="margin: 0 1rem 1rem 1rem; padding: 12px; background: rgba(0, 173, 232, 0.04); border: 1px dashed rgba(0, 173, 232, 0.2); border-radius: 8px;">
                 <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 6px; text-align: left; display: flex; justify-content: space-between;">
-                    <span>⚙️ Diagnóstico de Conformidade (nISO Consultor)</span>
-                    <a href="javascript:void(0)" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}')" style="color:var(--accent); text-decoration:none; font-size:0.65rem;">Refazer Diagnóstico 🔄</a>
+                    <span>Diagnóstico de Conformidade (nISO Consultor)</span>
+                    <a href="javascript:void(0)" onclick="openJornadaQuestionnaire(${jIdx}, '${projectId}')" style="color:var(--accent); text-decoration:none; font-size:0.65rem;">Refazer Diagnóstico</a>
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text); margin-bottom: 8px; text-align: left;">
                     ${summaryHtml}
@@ -4666,7 +4666,7 @@
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
                                                                         ${badgeHtml}
                                                                         ${hasTip ? `
-                                                                            <button class="btn-ghost" onclick="toggleAuditorTip('${item.id}'); event.stopPropagation()" style="font-size:0.85rem; padding:2px 6px; color:var(--accent); line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">💡</button>
+                                                                            <button class="btn-ghost" onclick="toggleAuditorTip('${item.id}'); event.stopPropagation()" style="font-size:0.65rem; padding:2px 6px; color:var(--accent); border:1px solid rgba(0,173,232,0.2); border-radius:4px; line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">Dica</button>
                                                                         ` : ''}
                                                                     </div>
                                                                     <div class="checklist-actions" style="display: flex; align-items: center; gap: 0.5rem;">
@@ -4682,19 +4682,19 @@
                                                                         ${(item.id === 'p2_2') ? `
                                                                             <button class="btn-inline-action primary" onclick="openInterviewWizard('${p.id}'); event.stopPropagation()">${isChecked ? 'Ver Entrevistas' : 'Conduzir Entrevistas'}</button>
                                                                         ` : ''}
-                                                                        <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">⚙️</button>
+                                                                        <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.65rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; border:1px solid var(--border); border-radius:4px; padding:2px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">Anotações</button>
                                                                     </div>
                                                                 </div>
                                                                 ${(hasTip && isTipExpanded) ? `
                                                                     <div style="margin-top:0.6rem; background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.1); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
-                                                                        <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">💡 Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
+                                                                        <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
                                                                         <div style="color:var(--text); margin-bottom:6px;"><strong style="color:var(--text-dim);">Dica:</strong> ${escapeHTML(tipInfo.advice)}</div>
                                                                         <div style="color:var(--text-dim);"><strong style="color:var(--text-dim);">Evidência Recomendada:</strong> ${escapeHTML(tipInfo.evidence)}</div>
                                                                     </div>
                                                                 ` : ''}
                                                                 ${(isChecked && itemStatus && itemStatus !== 'conforme' && itemEvalNotes) ? `
                                                                     <div style="margin-top:0.6rem; background:rgba(255,77,77,0.03); border:1px solid rgba(255,77,77,0.15); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
-                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">⚠️ Gaps Identificados [AI]</div>
+                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">Gaps Identificados [AI]</div>
                                                                         <div style="color:var(--text);">${escapeHTML(itemEvalNotes)}</div>
                                                                     </div>
                                                                 ` : ''}
