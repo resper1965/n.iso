@@ -788,6 +788,18 @@ import { navigate } from '../router.js';
             }
         } catch(e) {}
 
+        let templates = [];
+        let options = '';
+        try {
+            const res = await api('GET', '/api/v1/policies/templates');
+            if (res && res.templates) {
+                templates = res.templates || [];
+                options = templates.map(t => `<option value="${t}">${t}</option>`).join('');
+            }
+        } catch(e) {
+            console.error("Erro ao carregar templates:", e);
+        }
+
         // --- CARREGAR POLITICA DO R2 (EVIDENCIA CORRESPONDENTE) ---
         let policyText = ctrl.description || '';
         let evidenceId = null;
