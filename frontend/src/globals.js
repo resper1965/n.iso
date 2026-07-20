@@ -791,9 +791,11 @@ window.signEvidence = async function(evidenceId, role) {
         }
         const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
         if (!name) return;
+        const password = prompt(`Digite sua senha de login para confirmar a assinatura eletrônica como ${role.toUpperCase()}:`);
+        if (!password) return;
         
         try {
-            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name });
+            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name, password });
             showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
             const c = document.getElementById('main-content');
             const h = document.getElementById('header-title');
