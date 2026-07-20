@@ -170,8 +170,8 @@ import { navigate } from '../router.js';
 
             let journeysHtml = '';
             
-            JOURNEYS.forEach((j, jIdx) => {
-                const jPhases = Array.isArray(phases) ? phases.filter(ph => ph.phase_number >= j.range[0] && ph.phase_number <= j.range[1]) : [];
+            JOURNEYS.forEach((journeyItem, journeyIdx) => {
+                const jPhases = Array.isArray(phases) ? phases.filter(ph => ph.phase_number >= journeyItem.range[0] && ph.phase_number <= journeyItem.range[1]) : [];
                 
                 // Filter phases inside this journey
                 let filteredPhases = jPhases.filter(ph => {
@@ -203,15 +203,15 @@ import { navigate } from '../router.js';
                 const totalCount = jPhases.length;
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                 
-                const isJExpanded = S.expandedJourneys[jIdx] === true;
-                const isJ2 = jIdx === 1;
+                const isJExpanded = S.expandedJourneys[journeyIdx] === true;
+                const isJ2 = journeyIdx === 1;
                 
                 journeysHtml += `
                     <div class="journey-card fade-in">
-                        <div class="journey-header" onclick="toggleJourney(${jIdx})">
+                        <div class="journey-header" onclick="toggleJourney(${journeyIdx})">
                             <div class="journey-title-container">
-                                <div class="journey-title">${escapeHTML(j.name)}</div>
-                                <div class="journey-meta">${escapeHTML(j.desc)}</div>
+                                <div class="journey-title">${escapeHTML(journeyItem.name)}</div>
+                                <div class="journey-meta">${escapeHTML(journeyItem.desc)}</div>
                             </div>
                             <div class="journey-prog-wrapper">
                                 <div class="journey-meta">${completedCount}/${totalCount} Fases</div>
@@ -220,11 +220,11 @@ import { navigate } from '../router.js';
                                 </div>
                                 <div class="journey-meta" style="font-weight:500; min-width:35px">${percent}%</div>
                             </div>
-                            <button class="btn-inline-action" style="margin-right:15px; border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornadaQuestionnaire(${jIdx}, '${p.id}'); event.stopPropagation();">📋 Diagnóstico J${jIdx + 1}</button>
+                            <button class="btn-inline-action" style="margin-right:15px; border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="openJornadaQuestionnaire(${journeyIdx}, '${p.id}'); event.stopPropagation();">📋 Diagnóstico J${journeyIdx + 1}</button>
                             <div class="journey-toggle-icon ${isJExpanded ? 'expanded' : ''}">&darr;</div>
                         </div>
-                        <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${jIdx}">
-                            ${window.renderJourneyDiagnosticPanel(jIdx, p.id)}
+                        <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${journeyIdx}">
+                            ${window.renderJourneyDiagnosticPanel(journeyIdx, p.id)}
                             ${filteredPhases.map(ph => {
                                 const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
                                 const phChecklist = S.checklistsConfig[ph.phase_number] || [];

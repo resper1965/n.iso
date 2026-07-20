@@ -927,6 +927,7 @@ import { navigate } from '../router.js';
                 `;
             }
 
+            const renderedHtml = window.marked ? window.marked.parse(policyText) : escapeHTML(policyText);
             const html = `
                 <div class="modal-header">
                     <span class="modal-title">Política Ativa — ${escapeHTML(controlId)}</span>
@@ -941,9 +942,11 @@ import { navigate } from '../router.js';
                     ${versionsSelectHtml}
 
                     <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
-                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.75rem; line-height:1.6; white-space:pre-wrap; font-family:'Inter',sans-serif;" id="policy-content-text">${escapeHTML(policyText)}</div>
+                    <div id="policy-content-container">
+                        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.8rem; line-height:1.6; font-family:'Inter',sans-serif;" id="policy-content-text" class="markdown-body">${renderedHtml}</div>
+                    </div>
                     
-                    <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:8px">
+                    <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:8px" id="signature-workflow-container">
                         <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
                         <div style="display:flex; flex-direction:column; gap:0.75rem">
                             <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
@@ -956,13 +959,78 @@ import { navigate } from '../router.js';
                     </div>
                     
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
-                        <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                        <div style="display:flex; gap:8px">
+                            <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                            <button class="btn btn-secondary" id="btn-edit-policy">Editar Documento</button>
+                            <button class="btn btn-secondary" onclick="window.openPolicyReport('${projectId}', '${controlId}')">Imprimir PDF</button>
+                        </div>
                         <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
                     </div>
                 </div>
             `;
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
+
+            let isEditing = false;
+            const originalMarkdown = policyText;
+
+            document.getElementById('btn-edit-policy').onclick = function() {
+                const container = document.getElementById('policy-content-container');
+                const sigContainer = document.getElementById('signature-workflow-container');
+                const editBtn = document.getElementById('btn-edit-policy');
+                
+                if (!isEditing) {
+                    // Entrar no modo Editor (Split-screen)
+                    isEditing = true;
+                    editBtn.textContent = 'Salvar Alterações';
+                    editBtn.className = 'btn btn-primary';
+                    sigContainer.style.display = 'none'; // Esconde assinaturas durante a edição
+
+                    container.innerHTML = `
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; height:400px; margin-top:10px">
+                            <div style="display:flex; flex-direction:column; gap:8px; height:100%">
+                                <label class="form-label" style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Editor Markdown</label>
+                                <textarea id="policy-editor-textarea" style="flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:12px; color:#fff; font-family:monospace; font-size:0.75rem; resize:none; outline:none; line-height:1.4;" placeholder="Digite o conteúdo da política em Markdown...">${escapeHTML(originalMarkdown)}</textarea>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:8px; height:100%">
+                                <label class="form-label" style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Preview Renderizado (VSCode Mode)</label>
+                                <div id="policy-editor-preview" style="flex:1; overflow-y:auto; background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px; font-size:0.8rem; line-height:1.6;" class="markdown-body">${renderedHtml}</div>
+                            </div>
+                        </div>
+                    `;
+
+                    // Lógica de preview em tempo real
+                    const textarea = document.getElementById('policy-editor-textarea');
+                    const preview = document.getElementById('policy-editor-preview');
+                    textarea.oninput = function() {
+                        preview.innerHTML = window.marked ? window.marked.parse(this.value) : escapeHTML(this.value);
+                    };
+                } else {
+                    // Salvar as alterações
+                    const newContent = document.getElementById('policy-editor-textarea').value;
+                    if (!evidenceId) {
+                        showToast('Erro: Não há evidência vinculada a este controle para salvar.', 'error');
+                        return;
+                    }
+                    
+                    editBtn.disabled = true;
+                    editBtn.textContent = 'Salvando...';
+
+                    api('PUT', `/api/v1/evidence/${evidenceId}/content`, { content: newContent })
+                        .then(res => {
+                            showToast('Política atualizada com sucesso!');
+                            forceCloseModal();
+                            setTimeout(() => {
+                                window.openGeneratePolicyModal(projectId, controlId);
+                            }, 300);
+                        })
+                        .catch(err => {
+                            showToast('Erro ao salvar política', 'error');
+                            editBtn.disabled = false;
+                            editBtn.textContent = 'Salvar Alterações';
+                        });
+                }
+            };
             
             
 
@@ -1376,3 +1444,7 @@ window.renderAcknowledgments = renderAcknowledgments;
 window.bulkGeneratePolicies = bulkGeneratePolicies;
 window.migrate27701 = migrate27701;
 window.generateSoA = generateSoA;
+
+window.openPolicyReport = function(projectId, controlId) {
+    window.open(`/api/v1/projects/${projectId}/controls/${controlId}/policy/report?token=${S.token}`, '_blank');
+};

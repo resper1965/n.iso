@@ -188,9 +188,16 @@ app.use('/api/v1/*', async (c, next) => {
   let user: any = null;
   const authHeader = c.req.header('Authorization');
   const apiKeyHeader = c.req.header('x-api-key');
+  const tokenQuery = c.req.query('token');
 
+  let token = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+    token = authHeader.split(' ')[1];
+  } else if (tokenQuery) {
+    token = tokenQuery;
+  }
+
+  if (token) {
     const userJson = await c.env.SESSIONS.get(token);
     if (userJson) {
       user = JSON.parse(userJson);
@@ -4241,6 +4248,24 @@ app.post('/api/v1/projects/:id/ropa/:recordId/approve', async (c) => {
       return c.json({ error: 'Papel de aprovação inválido' }, 400);
     }
 
+    // Segregação de Funções (SoD) & Validação de Cargo
+    if (user.email === '44273656+resper1965@users.noreply.github.com' && role === 'ceo') {
+      return c.json({ error: 'Operação proibida: O Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).' }, 403);
+    }
+
+    const userGov = await c.env.DB.prepare(
+      'SELECT * FROM project_governance WHERE project_id = ? AND email = ?'
+    ).bind(projectId, user.email).first<any>();
+
+    if (userGov) {
+      if (role === 'ciso' && !userGov.job_title.toLowerCase().includes('sgsi') && !userGov.job_title.toLowerCase().includes('dpo') && user.email !== '44273656+resper1965@users.noreply.github.com') {
+        return c.json({ error: 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura.' }, 403);
+      }
+      if (role === 'ceo' && !userGov.job_title.toLowerCase().includes('ceo') && !userGov.job_title.toLowerCase().includes('diret') && !userGov.job_title.toLowerCase().includes('execut')) {
+        return c.json({ error: 'Apenas a Direção Executiva designada pode realizar esta assinatura.' }, 403);
+      }
+    }
+
     const dbUser = await c.env.DB.prepare(
       'SELECT * FROM users WHERE email = ?'
     ).bind(user.email).first<any>();
@@ -4463,6 +4488,24 @@ app.post('/api/v1/projects/:id/dpia/:assessmentId/approve', async (c) => {
 
     if (role !== 'ciso' && role !== 'ceo') {
       return c.json({ error: 'Papel de aprovação inválido' }, 400);
+    }
+
+    // Segregação de Funções (SoD) & Validação de Cargo
+    if (user.email === '44273656+resper1965@users.noreply.github.com' && role === 'ceo') {
+      return c.json({ error: 'Operação proibida: O Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).' }, 403);
+    }
+
+    const userGov = await c.env.DB.prepare(
+      'SELECT * FROM project_governance WHERE project_id = ? AND email = ?'
+    ).bind(projectId, user.email).first<any>();
+
+    if (userGov) {
+      if (role === 'ciso' && !userGov.job_title.toLowerCase().includes('sgsi') && !userGov.job_title.toLowerCase().includes('dpo') && user.email !== '44273656+resper1965@users.noreply.github.com') {
+        return c.json({ error: 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura.' }, 403);
+      }
+      if (role === 'ceo' && !userGov.job_title.toLowerCase().includes('ceo') && !userGov.job_title.toLowerCase().includes('diret') && !userGov.job_title.toLowerCase().includes('execut')) {
+        return c.json({ error: 'Apenas a Direção Executiva designada pode realizar esta assinatura.' }, 403);
+      }
     }
 
     const dbUser = await c.env.DB.prepare(
