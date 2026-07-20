@@ -67,8 +67,8 @@ import { navigate } from '../router.js';
 
             let roadmapCardsHtml = '';
             
-            JOURNEYS.forEach(j => {
-                const jPhases = phases.filter(ph => ph.phase_number >= j.range[0] && ph.phase_number <= j.range[1]);
+            JOURNEYS.forEach(journeyItem => {
+                const jPhases = phases.filter(ph => ph.phase_number >= journeyItem.range[0] && ph.phase_number <= journeyItem.range[1]);
                 const completedCount = jPhases.filter(ph => ph.status === 'completed').length;
                 const totalCount = jPhases.length;
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -77,8 +77,8 @@ import { navigate } from '../router.js';
                     <div class="roadmap-j-card">
                         <div class="roadmap-j-header">
                             <div>
-                                <div class="roadmap-j-name">${escapeHTML(j.name)}</div>
-                                <div class="roadmap-j-desc">${escapeHTML(j.subtitle)}</div>
+                                <div class="roadmap-j-name">${escapeHTML(journeyItem.name)}</div>
+                                <div class="roadmap-j-desc">${escapeHTML(journeyItem.subtitle)}</div>
                             </div>
                             <div class="roadmap-j-pct">${percent}%</div>
                         </div>

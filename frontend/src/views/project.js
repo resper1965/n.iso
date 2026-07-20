@@ -70,6 +70,9 @@ import { navigate } from '../router.js';
                 api('GET', `/api/v1/projects/${p.id}/checklist-progress`).catch(() => []),
                 api('GET', `/api/v1/projects/${p.id}/governance`).catch(() => [])
             ]);
+            console.log("[nISO Debug] phases:", phases);
+            console.log("[nISO Debug] config:", config);
+            console.log("[nISO Debug] checklistProgress:", checklistProgress);
             
             S.checklistsConfig = config;
             S.currentGovernance = governanceMembers || [];
@@ -406,6 +409,7 @@ import { navigate } from '../router.js';
             `;
             if (window.refreshDoDDrawer) window.refreshDoDDrawer();
         } catch (e) {
+            console.error("[nISO Debug] Erro ao carregar fases do projeto:", e);
             c.innerHTML = `<div class="error">Erro ao carregar fases do projeto: ${e.message}</div>`;
         }
     }
