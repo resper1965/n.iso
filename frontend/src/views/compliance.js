@@ -76,12 +76,20 @@ import { navigate } from '../router.js';
         } catch(e) { alert(e.message); }
     }
 
-    async function updateControlMaturity(id, maturity) {
+    window.updateControlMaturity = async function(id, maturity) {
         try {
             await api('PUT', `/api/v1/controls/${id}/maturity`, { maturity: parseInt(maturity) });
-            await loadControls();
+            showToast('Maturidade atualizada com sucesso!');
+            const c = document.getElementById('main-content');
+            const h = document.getElementById('header-title');
+            const a = document.getElementById('header-actions');
+            if (S.view === 'soa') {
+                renderSoA(c, h, a);
+            } else {
+                await loadControls();
+            }
         } catch(e) { alert(e.message); }
-    }
+    };
 
     async function loadControlEvidence(controlId) {
         const listEl = document.getElementById('control-evidence-list');
@@ -178,17 +186,17 @@ import { navigate } from '../router.js';
             
             let html = `
                 <div style="display:flex;gap:24px;margin-bottom:2rem">
-                    <div class="stat-card" style="flex:1">
-                        <div class="stat-value" style="font-size:1.8rem">${totalApplicable} / ${controls.length}</div>
-                        <div class="stat-label">Controles Aplicáveis</div>
+                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid var(--accent); border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
+                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalApplicable} <span style="font-size:1rem;color:var(--text-dim)">/ ${controls.length}</span></div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Controles Aplicáveis</div>
                     </div>
-                    <div class="stat-card" style="flex:1">
-                        <div class="stat-value" style="font-size:1.8rem">${totalNA}</div>
-                        <div class="stat-label">Controles Não Aplicáveis</div>
+                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid #64748b; border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
+                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalNA}</div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Controles Não Aplicáveis</div>
                     </div>
-                    <div class="stat-card" style="flex:1">
-                        <div class="stat-value" style="font-size:1.8rem">${totalJustified} / ${totalNA}</div>
-                        <div class="stat-label">Justificativas de Exclusão</div>
+                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid #10b981; border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
+                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalJustified} <span style="font-size:1rem;color:var(--text-dim)">/ ${totalNA}</span></div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Justificativas de Exclusão</div>
                     </div>
                 </div>
 
@@ -266,12 +274,15 @@ import { navigate } from '../router.js';
                             </td>
                             <td>
                                 <input type="text" value="${escapeHTML(ctrl.description || '')}" 
-                                    onblur="window.saveSoAJustification('${ctrl.id}', this.value)" 
                                     placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
-                                    style="width:100%;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:0.85rem" />
+                                    style="width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;color:var(--text);font-size:0.85rem;transition:border-color 0.2s" 
+                                    onfocus="this.style.borderColor='var(--accent)';"
+                                    onblur="this.style.borderColor='rgba(255,255,255,0.08)'; window.saveSoAJustification('${ctrl.id}', this.value)" />
                             </td>
                             <td>
-                                <span style="font-weight:600">${ctrl.maturity || 0} / 5</span>
+                                <select onchange="window.updateControlMaturity('${ctrl.id}', this.value)" class="custom-select" style="padding:6px 10px;width:100%;background:rgba(7,11,20,0.8);color:var(--text);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-weight:600;font-size:0.8rem;cursor:pointer">
+                                    ${[0, 1, 2, 3, 4, 5].map(val => `<option value="${val}" ${ctrl.maturity === val ? 'selected' : ''}>CMM ${val}</option>`).join('')}
+                                </select>
                             </td>
                         </tr>
                     `;
