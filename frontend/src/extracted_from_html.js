@@ -2404,7 +2404,49 @@
                 document.getElementById('first-reset-error').style.display = 'none';
             } else {
                 document.getElementById('login-overlay').classList.add('hidden');
-                initApp();
+                window.openROPAReport = function(projectId) {
+        window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveROPA = async function(projectId, recordId, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/ropa/${recordId}/approve`, { role });
+            showToast('ROPA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let records = [];
+                try { records = await api('GET', `/api/v1/projects/${projectId}/ropa`); } catch(e) {}
+                S.ropa = records;
+                window.openROPADetailsModal(recordId);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar ROPA: ' + e.message, 'error');
+        }
+    };
+
+    window.openDPIAReport = function(projectId, id) {
+        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveDPIA = async function(projectId, id, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/dpia/${id}/approve`, { role });
+            showToast('DPIA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let assessments = [];
+                try { assessments = await api('GET', `/api/v1/projects/${projectId}/dpia`); } catch(e) {}
+                S.dpia = assessments;
+                window.openDPIADetailsModal(id);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar DPIA: ' + e.message, 'error');
+        }
+    };
+
+    initApp();
             }
         } catch(e) {
             err.style.display = 'block';
@@ -2432,7 +2474,49 @@
         try {
             await api('POST', '/api/v1/auth/reset-password-first', { newPassword: newPass });
             document.getElementById('login-overlay').classList.add('hidden');
-            initApp();
+            window.openROPAReport = function(projectId) {
+        window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveROPA = async function(projectId, recordId, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/ropa/${recordId}/approve`, { role });
+            showToast('ROPA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let records = [];
+                try { records = await api('GET', `/api/v1/projects/${projectId}/ropa`); } catch(e) {}
+                S.ropa = records;
+                window.openROPADetailsModal(recordId);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar ROPA: ' + e.message, 'error');
+        }
+    };
+
+    window.openDPIAReport = function(projectId, id) {
+        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveDPIA = async function(projectId, id, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/dpia/${id}/approve`, { role });
+            showToast('DPIA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let assessments = [];
+                try { assessments = await api('GET', `/api/v1/projects/${projectId}/dpia`); } catch(e) {}
+                S.dpia = assessments;
+                window.openDPIADetailsModal(id);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar DPIA: ' + e.message, 'error');
+        }
+    };
+
+    initApp();
         } catch (e) {
             err.textContent = e.message || 'Falha ao redefinir senha';
             err.style.display = 'block';
@@ -2490,7 +2574,49 @@
             localStorage.setItem('niso_user', JSON.stringify(res.user));
             
             document.getElementById('login-overlay').classList.add('hidden');
-            initApp();
+            window.openROPAReport = function(projectId) {
+        window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveROPA = async function(projectId, recordId, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/ropa/${recordId}/approve`, { role });
+            showToast('ROPA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let records = [];
+                try { records = await api('GET', `/api/v1/projects/${projectId}/ropa`); } catch(e) {}
+                S.ropa = records;
+                window.openROPADetailsModal(recordId);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar ROPA: ' + e.message, 'error');
+        }
+    };
+
+    window.openDPIAReport = function(projectId, id) {
+        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveDPIA = async function(projectId, id, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/dpia/${id}/approve`, { role });
+            showToast('DPIA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let assessments = [];
+                try { assessments = await api('GET', `/api/v1/projects/${projectId}/dpia`); } catch(e) {}
+                S.dpia = assessments;
+                window.openDPIADetailsModal(id);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar DPIA: ' + e.message, 'error');
+        }
+    };
+
+    initApp();
         } catch (e) {
             err.textContent = e.message || 'Falha ao redefinir senha';
             err.style.display = 'block';
@@ -8489,6 +8615,7 @@
                     ${r.international_transfers ? '<span class="ctx-tag" style="color:var(--danger)">Transfer. Internacional</span>' : ''}
                     ${r.dpia_required ? '<span class="ctx-tag" style="color:#feca57">DPIA Requerido</span>' : ''}
                     <span class="ctx-tag ctx-tag-green">${r.status}</span>
+                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openROPAReport('${proj.id}')">Imprimir PDF</button>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro ROPA</h3><p>Registre atividades de tratamento de dados pessoais.</p></div>'}</div>`;
     }
@@ -8550,9 +8677,32 @@
                     </div>` : ''}
                 </div>
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px">
-                <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditROPAModal('${id}')">Editar Atividade</button>` : ''}
+            <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:16px">
+                <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Workflow de Assinatura (ROPA)</h4>
+                <div style="display:flex; flex-direction:column; gap:0.75rem">
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
+                        <div>
+                            <strong>Líder SGSI:</strong> 
+                            ${r.ciso_approved_by ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                        </div>
+                        ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ciso')">Assinar</button>` : ''}
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
+                        <div>
+                            <strong>Direção Executiva:</strong> 
+                            ${r.ceo_approved_by ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                        </div>
+                        ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ceo')">Assinar</button>` : ''}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px">
+                <button class="btn btn-secondary" onclick="window.openROPAReport('${projectId}')">Gerar Relatório ROPA</button>
+                <div>
+                    <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                    ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditROPAModal('${id}')">Editar Atividade</button>` : ''}
+                </div>
             </div>
         `);
     };
@@ -8692,12 +8842,14 @@
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
                     <span class="ctx-tag" style="color:${statusColor(dp.status)}; border-color:${statusColor(dp.status)}">${dp.status}</span>
+                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openDPIAReport('${proj.id}', '${dp.id}')">Imprimir PDF</button>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum relatório DPIA / RIPD</h3><p>Crie avaliações de impacto à proteção de dados para sistemas críticos.</p></div>'}</div>`;
     }
 
     window.openDPIADetailsModal = function(id) {
         const dp = S.dpia.find(x => x.id === id) || {};
+        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const statusColor = s => s === 'Approved' ? 'var(--success)' : s === 'Under Review' ? '#feca57' : 'var(--muted)';
         
@@ -8746,9 +8898,32 @@
                     </div>
                 </div>
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px">
-                <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditDPIAModal('${id}')">Editar Relatório</button>` : ''}
+            <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:16px">
+                <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Workflow de Assinatura (DPIA)</h4>
+                <div style="display:flex; flex-direction:column; gap:0.75rem">
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
+                        <div>
+                            <strong>Líder SGSI:</strong> 
+                            ${dp.dpo_signature ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(dp.dpo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                        </div>
+                        ${!dp.dpo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ciso')">Assinar</button>` : ''}
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
+                        <div>
+                            <strong>Direção Executiva:</strong> 
+                            ${dp.ceo_signature ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(dp.ceo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                        </div>
+                        ${!dp.ceo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ceo')">Assinar</button>` : ''}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px">
+                <button class="btn btn-secondary" onclick="window.openDPIAReport('${projectId}', '${dp.id}')">Gerar Relatório DPIA</button>
+                <div>
+                    <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                    ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditDPIAModal('${id}')">Editar Relatório</button>` : ''}
+                </div>
             </div>
         `);
     };
@@ -10152,6 +10327,48 @@
         S.phaseChecksDueDate[projectId + '_' + itemId] = value;
         localStorage.setItem('niso_phaseChecksDueDate', JSON.stringify(S.phaseChecksDueDate));
         window.saveChecklistItemMetadata(projectId, phaseNum, itemId);
+    };
+
+    window.openROPAReport = function(projectId) {
+        window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveROPA = async function(projectId, recordId, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/ropa/${recordId}/approve`, { role });
+            showToast('ROPA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let records = [];
+                try { records = await api('GET', `/api/v1/projects/${projectId}/ropa`); } catch(e) {}
+                S.ropa = records;
+                window.openROPADetailsModal(recordId);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar ROPA: ' + e.message, 'error');
+        }
+    };
+
+    window.openDPIAReport = function(projectId, id) {
+        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report?token=${S.token}`, '_blank');
+    };
+
+    window.approveDPIA = async function(projectId, id, role) {
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/dpia/${id}/approve`, { role });
+            showToast('DPIA assinado com sucesso!');
+            forceCloseModal();
+            setTimeout(async () => {
+                let assessments = [];
+                try { assessments = await api('GET', `/api/v1/projects/${projectId}/dpia`); } catch(e) {}
+                S.dpia = assessments;
+                window.openDPIADetailsModal(id);
+                render();
+            }, 300);
+        } catch(e) {
+            showToast('Erro ao assinar DPIA: ' + e.message, 'error');
+        }
     };
 
     initApp();

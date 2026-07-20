@@ -23,6 +23,7 @@ import { navigate, render } from '../router.js';
                     ${r.international_transfers ? '<span class="ctx-tag" style="color:var(--danger)">Transfer. Internacional</span>' : ''}
                     ${r.dpia_required ? '<span class="ctx-tag" style="color:#feca57">DPIA Requerido</span>' : ''}
                     <span class="ctx-tag ctx-tag-green">${r.status}</span>
+                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openROPAReport('${proj.id}')">Imprimir PDF</button>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro ROPA</h3><p>Registre atividades de tratamento de dados pessoais.</p></div>'}</div>`;
     }
@@ -248,12 +249,14 @@ import { navigate, render } from '../router.js';
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
                     <span class="ctx-tag" style="color:${statusColor(dp.status)}; border-color:${statusColor(dp.status)}">${dp.status}</span>
+                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openDPIAReport('${proj.id}', '${dp.id}')">Imprimir PDF</button>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum relatório DPIA / RIPD</h3><p>Crie avaliações de impacto à proteção de dados para sistemas críticos.</p></div>'}</div>`;
     }
 
     window.openDPIADetailsModal = function(id) {
         const dp = S.dpia.find(x => x.id === id) || {};
+        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const statusColor = s => s === 'Approved' ? 'var(--success)' : s === 'Under Review' ? '#feca57' : 'var(--muted)';
         
@@ -421,7 +424,7 @@ import { navigate, render } from '../router.js';
 
 
     window.openROPAReport = function(projectId) {
-        window.open(`/api/v1/projects/${projectId}/ropa/report`, '_blank');
+        window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
     };
 
     window.approveROPA = async function(projectId, recordId, role) {
@@ -442,7 +445,7 @@ import { navigate, render } from '../router.js';
     };
 
     window.openDPIAReport = function(projectId, id) {
-        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report`, '_blank');
+        window.open(`/api/v1/projects/${projectId}/dpia/${id}/report?token=${S.token}`, '_blank');
     };
 
     window.approveDPIA = async function(projectId, id, role) {
