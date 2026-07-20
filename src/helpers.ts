@@ -35,7 +35,12 @@ export async function createNotification(
   ).bind(genId(), userId || null, type, title, message, link || null, actionType || null, targetId || null).run();
 }
 
-const ALLOWED_TABLES = ['risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions', 'compliance_controls', 'evidence', 'assets'];
+const ALLOWED_TABLES = [
+  'risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions',
+  'compliance_controls', 'evidence', 'assets', 'stakeholders', 'dpia_assessments',
+  'audit_schedule', 'certification_tracking', 'audit_findings', 'management_reviews',
+  'performance_metrics', 'webhooks', 'api_keys'
+];
 
 export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: any) {
   if (!ALLOWED_TABLES.includes(table)) {
