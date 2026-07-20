@@ -22,3 +22,4 @@ import './views/privacy.js';
 // The rest of the app code will be migrated in subsequent phases
 // For now, import remaining inline code below
 console.log('[nISO] Modules loaded:', { S, api, navigate });
+import './globals.js';

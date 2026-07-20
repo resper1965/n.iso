@@ -332,6 +332,8 @@ import { navigate } from '../router.js';
                     </table>
                 </div>
             ` : '<div class="empty-state"><h3>Nenhuma métrica registrada</h3><p>Defina KPIs de segurança para avaliar o desempenho do SGSI (Cláusula 9.1).</p></div>'}
+        </div>`;
+    }
 
     function openNewMetricModal(projectId) {
         openModal(`
