@@ -6409,8 +6409,36 @@
                 `;
                 return;
             }
+
+            // Compute dynamic stats
+            let internalCount = 0;
+            let externalCount = 0;
+            let highCount = 0;
             
+            list.forEach(s => {
+                if (s.type === 'internal') internalCount++;
+                else externalCount++;
+                if (s.influence === 'High') highCount++;
+            });
+
             let html = `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                    <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                        <div class="card-label" style="margin-bottom:6px">Total de Stakeholders</div>
+                        <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${list.length}</div>
+                    </div>
+                    <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                        <div class="card-label" style="margin-bottom:6px">Internos / Externos</div>
+                        <div style="font-size:1.5rem; font-weight:500; font-family:'Montserrat',sans-serif; color:var(--text)">
+                            ${internalCount} <span style="font-size:0.9rem; color:var(--text-dim)">/</span> ${externalCount}
+                        </div>
+                    </div>
+                    <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                        <div class="card-label" style="margin-bottom:6px">Alta Influência (Cl. 4.2)</div>
+                        <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--accent)">${highCount}</div>
+                    </div>
+                </div>
+
                 <div class="data-table">
                     <table>
                         <thead>
