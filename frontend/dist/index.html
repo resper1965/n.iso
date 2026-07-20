@@ -7093,19 +7093,66 @@
         try { assets = await api('GET', `/api/v1/projects/${proj.id}/assets`); } catch(e) {}
         if (!Array.isArray(assets)) assets = [];
         S.assets = assets;
- 
-        const classColor = cl => cl === 'Confidential' ? 'var(--danger)' : cl === 'Restricted' ? 'var(--warning)' : cl === 'Internal' ? 'var(--info)' : 'var(--accent)';
-        c.innerHTML = `<div class="fade-in">${assets.length ? assets.map(ast => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openAssetDetailsModal('${ast.id}')">
-                <div style="flex:1">
-                    <div class="item-name">${escapeHTML(ast.name)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">Categoria: ${ast.category || 'Geral'} | Local: ${escapeHTML(ast.location || 'N/A')} | Dono: ${escapeHTML(ast.owner || 'N/A')}</div>
+
+        // Compute dynamic stats
+        let confidentialCount = 0;
+        let restrictedCount = 0;
+        let internalPublicCount = 0;
+        
+        assets.forEach(ast => {
+            if (ast.classification === 'Confidential') confidentialCount++;
+            else if (ast.classification === 'Restricted') restrictedCount++;
+            else internalPublicCount++;
+        });
+
+        const getClassificationClass = cl => {
+            if (cl === 'Confidential') return 'badge-critical';
+            if (cl === 'Restricted') return 'badge-warning';
+            if (cl === 'Internal') return 'badge-info';
+            return 'badge-implemented';
+        };
+
+        const getClassificationLabel = cl => {
+            const map = {
+                Confidential: 'Confidencial',
+                Restricted: 'Restrito',
+                Internal: 'Interno',
+                Public: 'Público'
+            };
+            return map[cl] || cl;
+        };
+
+        const statsHtml = `
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Total de Ativos Mapeados</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${assets.length}</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="background:${classColor(ast.classification)}20;color:${classColor(ast.classification)}">${ast.classification}</span>
-                    <span class="ctx-tag" style="background:rgba(255,255,255,0.05);color:var(--text-dim)">${ast.status || 'Active'}</span>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Ativos Confidenciais</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--danger)">${confidentialCount}</div>
                 </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum ativo</h3><p>Registre ativos para governança de segurança.</p></div>'}</div>`;
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Ativos Restritos</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--warning)">${restrictedCount}</div>
+                </div>
+            </div>
+        `;
+
+        c.innerHTML = `<div class="fade-in">
+            ${statsHtml}
+            ${assets.length ? assets.map(ast => `
+                <div class="list-item" style="cursor:pointer" onclick="window.openAssetDetailsModal('${ast.id}')">
+                    <div style="flex:1">
+                        <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(ast.name)}</div>
+                        <div class="item-meta" style="margin-top:0.25rem">Categoria: ${ast.category || 'Geral'} | Local: ${escapeHTML(ast.location || 'N/A')} | Dono: ${escapeHTML(ast.owner || 'N/A')}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <span class="badge ${getClassificationClass(ast.classification)}">${getClassificationLabel(ast.classification)}</span>
+                        <span class="badge badge-default">${ast.status || 'Ativo'}</span>
+                    </div>
+                </div>`).join('') : '<div class="empty-state"><h3>Nenhum ativo</h3><p>Registre ativos para governança de segurança.</p></div>'}
+        </div>`;
     }
 
     window.openAssetDetailsModal = function(id) {
@@ -9518,16 +9565,47 @@
         try { records = await api('GET', `/api/v1/projects/${proj.id}/ropa`); } catch(e) {}
         if (!Array.isArray(records)) records = [];
         S.ropa = records;
-        c.innerHTML = `<div class="fade-in">${records.length ? records.map(r => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openROPADetailsModal('${r.id}')">
-                <div style="flex:1"><div class="item-name">${escapeHTML(r.processing_purpose)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(r.legal_basis || 'N/A')} | Sujeitos: ${escapeHTML(r.data_subjects || 'N/A')} | Retencao: ${escapeHTML(r.retention_period || 'N/A')}</div></div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${r.international_transfers ? '<span class="ctx-tag" style="color:var(--danger)">Transfer. Internacional</span>' : ''}
-                    ${r.dpia_required ? '<span class="ctx-tag" style="color:#feca57">DPIA Requerido</span>' : ''}
-                    <span class="ctx-tag ctx-tag-green">${r.status}</span>
+
+        // Compute ROPA stats
+        let totalRecords = records.length;
+        let intTransfers = 0;
+        let dpiaRequired = 0;
+        
+        records.forEach(r => {
+            if (r.international_transfers) intTransfers++;
+            if (r.dpia_required) dpiaRequired++;
+        });
+
+        const statsHtml = `
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Atividades ROPA Registradas</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${totalRecords}</div>
                 </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro ROPA</h3><p>Registre atividades de tratamento de dados pessoais.</p></div>'}</div>`;
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Transferências Internacionais</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--danger)">${intTransfers}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">DPIAs Requeridos</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--warning)">${dpiaRequired}</div>
+                </div>
+            </div>
+        `;
+
+        c.innerHTML = `<div class="fade-in">
+            ${statsHtml}
+            ${records.length ? records.map(r => `
+                <div class="list-item" style="cursor:pointer" onclick="window.openROPADetailsModal('${r.id}')">
+                    <div style="flex:1"><div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(r.processing_purpose)}</div>
+                    <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(r.legal_basis || 'N/A')} | Sujeitos: ${escapeHTML(r.data_subjects || 'N/A')} | Retencao: ${escapeHTML(r.retention_period || 'N/A')}</div></div>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        ${r.international_transfers ? '<span class="badge badge-critical">Transf. Internacional</span>' : ''}
+                        ${r.dpia_required ? '<span class="badge badge-warning">DPIA Requerido</span>' : ''}
+                        <span class="badge ${r.status === 'Active' ? 'badge-implemented' : 'badge-default'}">${r.status === 'Active' ? 'Ativo' : 'Inativo'}</span>
+                    </div>
+                </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro ROPA</h3><p>Registre atividades de tratamento de dados pessoais.</p></div>'}
+        </div>`;
     }
 
     window.openROPADetailsModal = function(id) {
@@ -9716,21 +9794,52 @@
         try { assessments = await api('GET', `/api/v1/projects/${proj.id}/dpia`); } catch(e) {}
         if (!Array.isArray(assessments)) assessments = [];
         S.dpia = assessments;
+
+        // Compute DPIA stats
+        let totalDpias = assessments.length;
+        let approvedDpias = 0;
+        let reviewDpias = 0;
         
-        const statusColor = s => s === 'Approved' ? 'var(--success)' : s === 'Under Review' ? '#feca57' : 'var(--muted)';
+        assessments.forEach(dp => {
+            if (dp.status === 'Approved') approvedDpias++;
+            if (dp.status === 'Under Review') reviewDpias++;
+        });
+
+        const statsHtml = `
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Relatórios DPIA Totais</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${totalDpias}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Aprovados / Concluídos</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--success)">${approvedDpias}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Sob Revisão</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--warning)">${reviewDpias}</div>
+                </div>
+            </div>
+        `;
         
-        c.innerHTML = `<div class="fade-in">${assessments.length ? assessments.map(dp => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openDPIADetailsModal('${dp.id}')">
-                <div style="flex:1">
-                    <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(dp.system_name)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">
-                        <strong>Titulares:</strong> ${escapeHTML(dp.data_subjects_types || 'N/A')} | <strong>Categorias:</strong> ${escapeHTML(dp.personal_data_categories || 'N/A')}
+        const statusClass = s => s === 'Approved' ? 'badge-implemented' : s === 'Under Review' ? 'badge-warning' : 'badge-default';
+        const statusLabel = s => s === 'Approved' ? 'Aprovado' : s === 'Under Review' ? 'Sob Revisão' : 'Rascunho';
+        
+        c.innerHTML = `<div class="fade-in">
+            ${statsHtml}
+            ${assessments.length ? assessments.map(dp => `
+                <div class="list-item" style="cursor:pointer" onclick="window.openDPIADetailsModal('${dp.id}')">
+                    <div style="flex:1">
+                        <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(dp.system_name)}</div>
+                        <div class="item-meta" style="margin-top:0.25rem">
+                            <strong>Titulares:</strong> ${escapeHTML(dp.data_subjects_types || 'N/A')} | <strong>Categorias:</strong> ${escapeHTML(dp.personal_data_categories || 'N/A')}
+                        </div>
                     </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="color:${statusColor(dp.status)}; border-color:${statusColor(dp.status)}">${dp.status}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum relatório DPIA / RIPD</h3><p>Crie avaliações de impacto à proteção de dados para sistemas críticos.</p></div>'}</div>`;
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <span class="badge ${statusClass(dp.status)}">${statusLabel(dp.status)}</span>
+                    </div>
+                </div>`).join('') : '<div class="empty-state"><h3>Nenhum relatório DPIA / RIPD</h3><p>Crie avaliações de impacto à proteção de dados para sistemas críticos.</p></div>'}
+        </div>`;
     }
 
     window.openDPIADetailsModal = function(id) {
@@ -9879,7 +9988,7 @@
 
     // ——— AUDIT CALENDAR (Sprint 6) ——————————————————————
     async function renderAudits(c, h, a) {
-        h.textContent = 'Calendario de Auditorias';
+        h.textContent = 'Calendário de Auditorias';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         
@@ -9890,24 +9999,53 @@
         try { audits = await api('GET', `/api/v1/projects/${proj.id}/audits`); } catch(e) {}
         if (!Array.isArray(audits)) audits = [];
         S.audits = audits;
-        const statusClass = s => s === 'Completed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-partial' : 'badge-default';
-        c.innerHTML = `<div class="fade-in">${audits.length ? audits.map(au => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openAuditDetailsModal('${au.id}')">
-                <div style="flex:1"><div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(au.title)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(au.audit_type)} | ${escapeHTML(au.auditor_name || 'TBD')} | ${au.scheduled_date}</div></div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${au.findings_count ? `<span style="font-size:0.7rem;color:var(--danger);margin-right:0.5rem">${au.findings_count} achados</span>` : ''}
-                    ${au.status !== 'Completed' ? `<button class="btn" style="padding:4px 8px;font-size:0.75rem;margin-right:0.5rem;border-color:var(--accent);color:var(--accent)" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>` : ''}
-                    <span class="badge ${statusClass(au.status)}">${au.status === 'Completed' ? 'Concluída' : au.status === 'In Progress' ? 'Em progresso' : 'Planejada'}</span>
+
+        // Compute stats
+        let totalAudits = audits.length;
+        let completedAudits = audits.filter(au => au.status === 'Completed').length;
+        let totalFindings = audits.reduce((acc, au) => acc + (au.findings_count || 0), 0);
+
+        const statsHtml = `
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Auditorias Agendadas</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${totalAudits}</div>
                 </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhuma auditoria agendada</h3></div>'}</div>`;
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Auditorias Concluídas</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--success)">${completedAudits}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Total de Achados</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--danger)">${totalFindings}</div>
+                </div>
+            </div>
+        `;
+
+        const statusClass = s => s === 'Completed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-partial' : 'badge-default';
+        const statusLabel = s => s === 'Completed' ? 'Concluída' : s === 'In Progress' ? 'Em progresso' : 'Planejada';
+
+        c.innerHTML = `<div class="fade-in">
+            ${statsHtml}
+            ${audits.length ? audits.map(au => `
+                <div class="list-item" style="cursor:pointer" onclick="window.openAuditDetailsModal('${au.id}')">
+                    <div style="flex:1"><div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(au.title)}</div>
+                    <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(au.audit_type)} | ${escapeHTML(au.auditor_name || 'TBD')} | ${au.scheduled_date}</div></div>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        ${au.findings_count ? `<span class="badge badge-critical" style="font-size:0.7rem; padding: 2px 6px;">${au.findings_count} achados</span>` : ''}
+                        ${au.status !== 'Completed' ? `<button class="btn" style="padding:4px 8px;font-size:0.75rem;margin-right:0.5rem;border-color:var(--accent);color:var(--accent)" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>` : ''}
+                        <span class="badge ${statusClass(au.status)}">${statusLabel(au.status)}</span>
+                    </div>
+                </div>`).join('') : '<div class="empty-state"><h3>Nenhuma auditoria agendada</h3></div>'}
+        </div>`;
     }
 
     window.openAuditDetailsModal = function(id) {
         const au = S.audits.find(x => x.id === id) || {};
         const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
+        const statusClass = s => s === 'Completed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-partial' : 'badge-default';
+        const statusLabel = s => s === 'Completed' ? 'Concluída' : s === 'In Progress' ? 'Em progresso' : 'Planejada';
         
         openModal(`
             <div class="modal-header">
@@ -9926,7 +10064,7 @@
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Status</div>
-                        <span class="ctx-tag" style="color:${statusColor(au.status)}; font-weight:600">${au.status || 'Planned'}</span>
+                        <span class="badge ${statusClass(au.status)}">${statusLabel(au.status)}</span>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Auditor / Organismo</div>
@@ -10046,42 +10184,72 @@
     // ——— CAPA MODULE (Sprint 6) —————————————————————————
     // ——— CAPA MODULE (Sprint 6) —————————————————————————
     async function renderCAPA(c, h, a) {
-        h.textContent = 'Acoes Corretivas (CAPA)';
+        h.textContent = 'Ações Corretivas (CAPA)';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewCAPAModal('${proj.id}')">+ Nova Acao</button>` : '';
+        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewCAPAModal('${proj.id}')">+ Nova Ação</button>` : '';
         
         let items = [];
         try { items = await api('GET', `/api/v1/projects/${proj.id}/capa`); } catch(e) {}
         if (!Array.isArray(items)) items = [];
         S.capa = items;
+
+        // Compute CAPA stats
+        let totalCapa = items.length;
+        let openCapa = items.filter(ca => ca.status !== 'Closed').length;
+        let criticalCapa = items.filter(ca => ca.severity === 'Critical' || ca.severity === 'High').length;
+
+        const statsHtml = `
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Planos de Ação Totais</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--text)">${totalCapa}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Ações Pendentes / Em Aberto</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--warning)">${openCapa}</div>
+                </div>
+                <div class="card" style="padding:1.25rem; margin-bottom:0; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-label" style="margin-bottom:6px">Severidade Alta / Crítica</div>
+                    <div style="font-size:1.8rem; font-weight:700; font-family:'Montserrat',sans-serif; color:var(--danger)">${criticalCapa}</div>
+                </div>
+            </div>
+        `;
         
         const sevClass = s => s === 'Critical' ? 'badge-critical' : s === 'High' ? 'badge-warning' : s === 'Medium' ? 'badge-partial' : 'badge-low';
+        const sevLabel = s => s === 'Critical' ? 'Crítica' : s === 'High' ? 'Alta' : s === 'Medium' ? 'Média' : 'Baixa';
         const statusClass = s => s === 'Closed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-warning' : 'badge-default';
+        const statusLabel = s => s === 'Closed' ? 'Fechada' : s === 'In Progress' ? 'Em progresso' : 'Aberta';
         
-        c.innerHTML = `<div class="fade-in">${items.length ? items.map(ca => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openCAPADetailsModal('${ca.id}')">
-                <div style="flex:1">
-                    <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(ca.title)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">
-                        <strong>Responsavel:</strong> ${escapeHTML(ca.assigned_to || 'Sem responsavel')} | <strong>Prazo:</strong> ${ca.due_date || 'N/A'}
+        c.innerHTML = `<div class="fade-in">
+            ${statsHtml}
+            ${items.length ? items.map(ca => `
+                <div class="list-item" style="cursor:pointer" onclick="window.openCAPADetailsModal('${ca.id}')">
+                    <div style="flex:1">
+                        <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(ca.title)}</div>
+                        <div class="item-meta" style="margin-top:0.25rem">
+                            <strong>Responsável:</strong> ${escapeHTML(ca.assigned_to || 'Sem responsável')} | <strong>Prazo:</strong> ${ca.due_date || 'N/A'}
+                        </div>
                     </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="badge ${sevClass(ca.severity)}">${ca.severity}</span>
-                    <span class="badge ${statusClass(ca.status)}">${ca.status === 'Closed' ? 'Fechada' : ca.status === 'In Progress' ? 'Em progresso' : 'Aberta'}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhuma acao corretiva</h3></div>'}</div>`;
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <span class="badge ${sevClass(ca.severity)}">${sevLabel(ca.severity)}</span>
+                        <span class="badge ${statusClass(ca.status)}">${statusLabel(ca.status)}</span>
+                    </div>
+                </div>`).join('') : '<div class="empty-state"><h3>Nenhuma ação corretiva agendada</h3></div>'}
+        </div>`;
     }
 
     window.openCAPADetailsModal = async function(id) {
         const ca = S.capa.find(x => x.id === id) || {};
         const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        const sevColor = s => s === 'Critical' ? 'var(--danger)' : s === 'High' ? '#ff9f43' : s === 'Medium' ? '#feca57' : 'var(--accent)';
-        const statusColor = s => s === 'Closed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
+        
+        const sevClass = s => s === 'Critical' ? 'badge-critical' : s === 'High' ? 'badge-warning' : s === 'Medium' ? 'badge-partial' : 'badge-low';
+        const sevLabel = s => s === 'Critical' ? 'Crítica' : s === 'High' ? 'Alta' : s === 'Medium' ? 'Média' : 'Baixa';
+        const statusClass = s => s === 'Closed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-warning' : 'badge-default';
+        const statusLabel = s => s === 'Closed' ? 'Fechada' : s === 'In Progress' ? 'Em progresso' : 'Aberta';
         
         let risks = [];
         let audits = [];
@@ -10093,10 +10261,10 @@
         const ctrlObj = S.controls.find(c => c.id === ca.control_id);
 
         let associationHtml = '';
-        if (audObj) associationHtml += `<div style="margin-top:0.25rem"><span class="ctx-tag" style="color:var(--accent); border-color:var(--accent-glow)">Auditoria: ${escapeHTML(audObj.title)}</span></div>`;
-        if (riskObj) associationHtml += `<div style="margin-top:0.25rem"><span class="ctx-tag" style="color:var(--danger); border-color:var(--danger)">Risco: ${escapeHTML(riskObj.title || riskObj.description)}</span></div>`;
-        if (ctrlObj) associationHtml += `<div style="margin-top:0.25rem"><span class="ctx-tag" style="color:var(--success); border-color:var(--success)">Controle: ${ctrlObj.id} - ${escapeHTML(ctrlObj.title)}</span></div>`;
-        if (!associationHtml) associationHtml = '<span style="color:var(--text-dim); font-size:0.8rem">Nenhuma associacao</span>';
+        if (audObj) associationHtml += `<div style="margin-top:0.25rem"><span class="badge badge-info">Auditoria: ${escapeHTML(audObj.title)}</span></div>`;
+        if (riskObj) associationHtml += `<div style="margin-top:0.25rem"><span class="badge badge-critical">Risco: ${escapeHTML(riskObj.title || riskObj.description)}</span></div>`;
+        if (ctrlObj) associationHtml += `<div style="margin-top:0.25rem"><span class="badge badge-implemented">Controle: ${ctrlObj.id} - ${escapeHTML(ctrlObj.title)}</span></div>`;
+        if (!associationHtml) associationHtml = '<span style="color:var(--text-dim); font-size:0.8rem">Nenhuma associação</span>';
 
         openModal(`
             <div class="modal-header">
@@ -10110,20 +10278,20 @@
                 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
                     <div style="grid-column:span 2">
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descricao</div>
-                        <div style="font-size:0.85rem; color:var(--text)">${escapeHTML(ca.description || 'Sem descricao')}</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descrição</div>
+                        <div style="font-size:0.85rem; color:var(--text)">${escapeHTML(ca.description || 'Sem descrição')}</div>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Severidade</div>
-                        <span class="ctx-tag" style="color:${sevColor(ca.severity)}; font-weight:600">${ca.severity || 'Low'}</span>
+                        <span class="badge ${sevClass(ca.severity)}">${sevLabel(ca.severity)}</span>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Status</div>
-                        <span class="ctx-tag" style="color:${statusColor(ca.status)}; font-weight:600">${ca.status || 'Open'}</span>
+                        <span class="badge ${statusClass(ca.status)}">${statusLabel(ca.status)}</span>
                     </div>
                     <div>
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsavel</div>
-                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(ca.assigned_to || 'Sem responsavel')}</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsável</div>
+                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(ca.assigned_to || 'Sem responsável')}</div>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Prazo de Conclusao</div>
