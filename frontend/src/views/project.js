@@ -60,6 +60,7 @@ import { navigate } from '../router.js';
         const p = S.currentProject || S.activeProject;
         if (!p) { navigate('projects'); return; }
         h.textContent = 'Jornada';
+        if (!S.expandedJourneys) S.expandedJourneys = {};
         a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
@@ -206,7 +207,7 @@ import { navigate } from '../router.js';
                 const totalCount = jPhases.length;
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                 
-                const isJExpanded = S.expandedJourneys[journeyIdx] === true;
+                const isJExpanded = (S.expandedJourneys && S.expandedJourneys[journeyIdx]) === true;
                 const isJ2 = journeyIdx === 1;
                 
                 journeysHtml += `
