@@ -3522,87 +3522,126 @@
         window.refreshDoDDrawer();
     };
 
-    window.refreshDoDDrawer = function() {
+    window.refreshDoDDrawer = async function() {
         if (!S.activeDoD) return;
         const { projectId, phaseNum, selectEl } = S.activeDoD;
-        
-        // Re-evaluate pending items based on current S.phaseChecks
-        const phChecklist = S.checklistsConfig[phaseNum] || [];
-        const pendingItens = phChecklist.filter(item => {
-            const checkKey = `${projectId}_${item.id}`;
-            return S.phaseChecks[checkKey] !== true;
-        });
         
         const drawerContent = document.getElementById('dod-drawer-content');
         if (!drawerContent) return;
         
-        if (pendingItens.length === 0) {
+        drawerContent.innerHTML = `
+            <div style="display:flex; justify-content:center; align-items:center; height:200px;">
+                <div class="loading" style="border: 2px solid var(--accent); border-top: 2px solid transparent; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite;"></div>
+            </div>
+        `;
+        
+        try {
+            // Buscando os controles do projeto e a lista de evidências em paralelo no banco de dados
+            const [projectControls, projectEvidence] = await Promise.all([
+                api('GET', `/api/v1/projects/${projectId}/controls`).catch(() => []),
+                api('GET', `/api/v1/projects/${projectId}/evidence`).catch(() => [])
+            ]);
+            
+            const phChecklist = S.checklistsConfig[phaseNum] || [];
+            const pendingItens = [];
+            
+            for (const item of phChecklist) {
+                const checkKey = `${projectId}_${item.id}`;
+                // 1. Se o checklist manual não estiver checado, já é pendente
+                if (S.phaseChecks[checkKey] !== true) {
+                    pendingItens.push(item);
+                    continue;
+                }
+                
+                // 2. Se estiver checado mas for do tipo document/evidence, validamos o status real no banco
+                if (item.category === 'document' || item.category === 'evidence') {
+                    const match = item.text.match(/(A\.\d+\.\d+|Cl\s+\d+\.\d+|A\.\d+|Cl\s+\d+)/i);
+                    if (match) {
+                        const cleanId = match[0].toLowerCase().replace(/\s/g, '').replace(/\./g, '');
+                        const dbCtrlId = `ctrl-${cleanId}`;
+                        
+                        const dbCtrl = projectControls.find(c => c.id === dbCtrlId || c.standard === match[0]);
+                        
+                        if (!dbCtrl || dbCtrl.status === 'Missing' || dbCtrl.status === 'Missing/Not Started' || dbCtrl.status === 'Not Started') {
+                            pendingItens.push(item);
+                        } else if (item.category === 'evidence') {
+                            const hasEv = projectEvidence.some(ev => ev.control_id === dbCtrlId);
+                            if (!hasEv) {
+                                pendingItens.push(item);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (pendingItens.length === 0) {
+                drawerContent.innerHTML = `
+                    <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
+                        <div>
+                            <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Definition of Done (DoD)</h2>
+                            <p style="font-family: 'Inter', sans-serif; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 1.5rem; line-height: 1.5;">
+                                Todos os itens obrigatórios da fase foram concluídos! A fase está pronta para ser finalizada em conformidade com as diretrizes ISO 27001/27701.
+                            </p>
+                            <div style="text-align: center; padding: 2rem 0;">
+                                <div style="font-size:3rem; color:var(--success); line-height:1;">✓</div>
+                                <p style="font-size: 0.85rem; color: var(--success); margin-top: 1rem; font-weight: 500;">Pronto para conformidade</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
+                            <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase</button>
+                            <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Fechar</button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
             drawerContent.innerHTML = `
                 <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
                     <div>
                         <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Definition of Done (DoD)</h2>
                         <p style="font-family: 'Inter', sans-serif; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 1.5rem; line-height: 1.5;">
-                            Todos os itens obrigatórios da fase foram concluídos! A fase está pronta para ser finalizada em conformidade com as diretrizes ISO 27001/27701.
+                            Existem itens pendentes de conformidade no banco de dados para esta fase. Resolva as pendências abaixo gerando a política ou anexando evidência ativa.
                         </p>
-                        <div style="text-align: center; padding: 2rem 0;">
-                            <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; stroke: var(--success); fill: none; stroke-width: 1.5; margin: 0 auto;">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                            <p style="font-size: 0.85rem; color: var(--success); margin-top: 1rem; font-weight: 500;">Pronto para conformidade</p>
+                        
+                        <div style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem;">Pendências de Auditoria (${pendingItens.length})</div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 55vh; overflow-y: auto; padding-right: 0.5rem;">
+                            ${pendingItens.map(item => {
+                                const match = item.text.match(/(A\.\d+\.\d+|Cl\s+\d+\.\d+|A\.\d+|Cl\s+\d+)/i);
+                                const controlId = match ? match[0] : 'A.5.1';
+                                
+                                return `
+                                    <div class="list-item" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border);">
+                                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; width: 100%;">
+                                            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                                <span class="badge-cat ${item.category}" style="align-self: flex-start; font-size: 0.6rem; font-weight: 500;">${item.category.toUpperCase()}</span>
+                                                <span class="item-name" style="font-size: 0.8rem; color: var(--text); font-weight: 400;">${escapeHTML(item.text)}</span>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem; width: 100%;">
+                                            ${(item.category === 'evidence' || item.category === 'document') ? `
+                                                <button class="btn" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="wsUploadEvidence('${item.id}')">Upload Evidência</button>
+                                            ` : ''}
+                                            ${item.category === 'document' ? `
+                                                <button class="btn btn-primary" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="openGeneratePolicyModal('${projectId}', '${controlId}')">Gerar Política com IA</button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
+                    
                     <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
-                        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase</button>
-                        <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Fechar</button>
+                        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase mesmo assim</button>
+                        <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Cancelar</button>
                     </div>
                 </div>
             `;
-            return;
+        } catch (err) {
+            drawerContent.innerHTML = `<div class="error" style="font-size:0.8rem; color:var(--danger)">Erro ao verificar DoD no banco: ${escapeHTML(err.message)}</div>`;
         }
-        
-        drawerContent.innerHTML = `
-            <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
-                <div>
-                    <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Definition of Done (DoD)</h2>
-                    <p style="font-family: 'Inter', sans-serif; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 1.5rem; line-height: 1.5;">
-                        Existem itens pendentes no checklist de conformidade desta fase. Para garantir a aderência às normas ISO 27001/27701, resolva as pendências abaixo ou escolha prosseguir mesmo assim.
-                    </p>
-                    
-                    <div style="font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem;">Pendências (${pendingItens.length})</div>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 55vh; overflow-y: auto; padding-right: 0.5rem;">
-                        ${pendingItens.map(item => {
-                            const match = item.text.match(/(A\.\d+\.\d+|Cl\s+\d+\.\d+|A\.\d+|Cl\s+\d+)/i);
-                            const controlId = match ? match[0] : 'A.5.1';
-                            
-                            return `
-                                <div class="list-item" style="display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border);">
-                                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; width: 100%;">
-                                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                                            <span class="badge-cat ${item.category}" style="align-self: flex-start; font-size: 0.6rem; font-weight: 500;">${item.category.toUpperCase()}</span>
-                                            <span class="item-name" style="font-size: 0.8rem; color: var(--text); font-weight: 400;">${escapeHTML(item.text)}</span>
-                                        </div>
-                                    </div>
-                                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem; width: 100%;">
-                                        ${(item.category === 'evidence' || item.category === 'document') ? `
-                                            <button class="btn" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="wsUploadEvidence('${item.id}')">Upload</button>
-                                        ` : ''}
-                                        ${item.category === 'document' ? `
-                                            <button class="btn btn-primary" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="openGeneratePolicyModal('${projectId}', '${controlId}')">Gerar Política</button>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-                
-                <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
-                    <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase mesmo assim</button>
-                    <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Cancelar</button>
-                </div>
-            </div>
-        `;
     };
 
     window.confirmDoDCompletion = async function() {
@@ -5417,12 +5456,24 @@
                             ${cisoBtn}
                             ${ceoBtn}
                             <button class="btn btn-ghost" onclick="viewEvidence('${e.id}')">Ver</button>
+                            ${(!e.ciso_approved_by && !e.ceo_approved_by) ? `<button class="btn btn-ghost" style="color:var(--danger); border-color:var(--danger);" onclick="window.deleteEvidence('${e.id}')">Excluir</button>` : ''}
                         </div>
                     </div>`;
                 }).join('')}
             </div>
         </div>`;
     }
+
+    window.deleteEvidence = async function(id) {
+        if (!confirm('Deseja realmente excluir esta evidência permanentemente?')) return;
+        try {
+            await api('DELETE', `/api/v1/evidence/${id}`);
+            showToast('Evidência excluída com sucesso');
+            render();
+        } catch(e) {
+            showToast('Erro ao excluir evidência: ' + e.message, 'danger');
+        }
+    };
 
     async function viewPricing(id) {
         try {
@@ -5851,7 +5902,7 @@
             const targetId = n.target_id;
             const projectId = S.activeProject ? S.activeProject.id : (S.projects && S.projects[0] ? S.projects[0].id : '');
 
-            if (actionType === 'open_finding') {
+            if (actionType === 'open_finding' || actionType === 'corrective_action') {
                 navigate('capa');
                 if (projectId) {
                     try {
@@ -5865,7 +5916,7 @@
                     } catch (e) {}
                 }
                 return;
-            } else if (actionType === 'open_soa') {
+            } else if (actionType === 'open_soa' || actionType === 'auditor_notes') {
                 navigate('soa');
                 setTimeout(() => {
                     const row = document.getElementById(`soa-row-${targetId}`);
@@ -6093,11 +6144,11 @@
                             </td>
                             <td>
                                 <div style="display:flex;gap:6px">
-                                    <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.15)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.25)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
-                                        R: ${risksCount}
+                                    <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:rgba(255,255,255,0.05);color:var(--text-dim);border:1px solid var(--border);padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:inline-block;white-space:nowrap" title="${risksCount} risco(s) vinculado(s)">
+                                        Riscos: ${risksCount}
                                     </span>
-                                    <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
-                                        E: ${evidenceCount}
+                                    <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:rgba(255,255,255,0.05);color:var(--text-dim);border:1px solid var(--border);padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:inline-block;white-space:nowrap" title="${evidenceCount} evidência(s) vinculada(s)">
+                                        Evidências: ${evidenceCount}
                                     </span>
                                 </div>
                                 <div style="display:flex;gap:4px;margin-top:4px">
@@ -8104,47 +8155,6 @@
 
         const averageScore = risks.length ? (totalScore / risks.length).toFixed(1) : '0.0';
 
-        // Helper to check cell color
-        const getCellLevel = (p, i) => {
-            const score = p * i;
-            if (score >= 25) return 'Critical';
-            if (score >= 15) return 'High';
-            if (score >= 6) return 'Medium';
-            if (score >= 4) return 'Low';
-            return 'Very Low';
-        };
-
-        const getCellColor = (level) => {
-            switch(level) {
-                case 'Critical': return { bg: 'rgba(165, 29, 29, 0.65)', border: 'rgba(239, 68, 68, 0.45)' };
-                case 'High':     return { bg: 'rgba(180, 80, 25, 0.55)', border: 'rgba(249, 115, 22, 0.4)' };
-                case 'Medium':   return { bg: 'rgba(145, 110, 25, 0.45)', border: 'rgba(234, 179, 8, 0.45)' };
-                case 'Low':      return { bg: 'rgba(20, 60, 100, 0.65)', border: 'rgba(0, 173, 232, 0.35)' };
-                case 'Very Low': default: return { bg: 'rgba(10, 25, 55, 0.75)', border: 'rgba(255, 255, 255, 0.08)' };
-            }
-        };
-
-        // Render cells
-        let cellsHTML = '';
-        for (let p = 5; p >= 1; p--) {
-            for (let i = 1; i <= 5; i++) {
-                const cellRisks = risks.filter(r => r.probability === p && r.impact === i);
-                const count = cellRisks.length;
-                const level = getCellLevel(p, i);
-                const colors = getCellColor(level);
-                const isSelected = S.riskFilter && S.riskFilter.probability === p && S.riskFilter.impact === i;
-                
-                cellsHTML += `
-                    <div class="matrix-cell ${isSelected ? 'selected' : ''}" 
-                         style="background: ${colors.bg}; border: 1px solid ${isSelected ? 'var(--accent)' : colors.border};" 
-                         onclick="toggleRiskFilter(${p}, ${i})"
-                         title="Probabilidade: ${p}, Impacto: ${i} (${count} risco${count !== 1 ? 's' : ''})">
-                        ${count > 0 ? `<span class="cell-counter">${count}</span>` : ''}
-                    </div>
-                `;
-            }
-        }
-
         // Apply filter if active
         let filteredRisks = risks;
         let filterIndicatorBar = '';
@@ -8166,7 +8176,7 @@
                 <div class="matrix-container">
                     <!-- Matrix Card -->
                     <div class="card" style="flex: 1.2; min-width: 320px; padding: 1.5rem; margin-bottom: 0;">
-                        <div class="card-label">Matriz de Riscos (Impacto vs Probabilidade)</div>
+                           <div class="card-label">Matriz de Riscos (Impacto vs Probabilidade)</div>
                         <div class="matrix-layout">
                             <!-- Vertical label -->
                             <div class="matrix-y-title">PROBABILIDADE</div>
@@ -8180,7 +8190,7 @@
                             </div>
                             <!-- 5x5 Grid cells -->
                             <div class="matrix-grid-5x5">
-                                ${cellsHTML}
+                                ${window.renderRiskMatrixGrid(risks)}
                             </div>
                             <!-- Spacers -->
                             <div></div>
@@ -8278,6 +8288,48 @@
             </div>
         `;
     }
+
+    window.renderRiskMatrixGrid = function(risks) {
+        const getCellLevel = (p, i) => {
+            const score = p * i;
+            if (score >= 25) return 'Critical';
+            if (score >= 15) return 'High';
+            if (score >= 6) return 'Medium';
+            if (score >= 4) return 'Low';
+            return 'Very Low';
+        };
+
+        const getCellColor = (level) => {
+            switch(level) {
+                case 'Critical': return { bg: 'rgba(165, 29, 29, 0.65)', border: 'rgba(239, 68, 68, 0.45)' };
+                case 'High':     return { bg: 'rgba(180, 80, 25, 0.55)', border: 'rgba(249, 115, 22, 0.4)' };
+                case 'Medium':   return { bg: 'rgba(145, 110, 25, 0.45)', border: 'rgba(234, 179, 8, 0.45)' };
+                case 'Low':      return { bg: 'rgba(20, 60, 100, 0.65)', border: 'rgba(0, 173, 232, 0.35)' };
+                case 'Very Low': default: return { bg: 'rgba(10, 25, 55, 0.75)', border: 'rgba(255, 255, 255, 0.08)' };
+            }
+        };
+
+        let cellsHTML = '';
+        for (let p = 5; p >= 1; p--) {
+            for (let i = 1; i <= 5; i++) {
+                const cellRisks = risks.filter(r => r.probability === p && r.impact === i);
+                const count = cellRisks.length;
+                const level = getCellLevel(p, i);
+                const colors = getCellColor(level);
+                const isSelected = S.riskFilter && S.riskFilter.probability === p && S.riskFilter.impact === i;
+                
+                cellsHTML += `
+                    <div class="matrix-cell ${isSelected ? 'selected' : ''}" 
+                         style="background: ${colors.bg}; border: 1px solid ${isSelected ? 'var(--accent)' : colors.border};" 
+                         onclick="toggleRiskFilter(${p}, ${i})"
+                         title="Probabilidade: ${p}, Impacto: ${i} (${count} risco${count !== 1 ? 's' : ''})">
+                        ${count > 0 ? `<span class="cell-counter">${count}</span>` : ''}
+                    </div>
+                `;
+            }
+        }
+        return cellsHTML;
+    };
 
     window.toggleRiskFilter = function(p, i) {
         if (S.riskFilter && S.riskFilter.probability === p && S.riskFilter.impact === i) {

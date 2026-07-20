@@ -2671,6 +2671,30 @@ app.put('/api/v1/evidence/:id/content', async (c) => {
   }
 });
 
+app.delete('/api/v1/evidence/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    if (ev.ciso_approved_by || ev.ceo_approved_by) {
+      return c.json({ error: 'Não é possível excluir evidências que já foram assinadas eletronicamente.' }, 400);
+    }
+
+    if (ev.r2_key) {
+      await c.env.STORAGE.delete(ev.r2_key).catch(() => {});
+    }
+
+    await c.env.DB.prepare('DELETE FROM evidence WHERE id = ?').bind(id).run();
+
+    await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`);
+
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao excluir evidência', detail: e.message }, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  EVIDENCE AGENT — Avaliação Automática de Evidências
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2908,7 +2932,16 @@ app.put('/api/v1/evidence/:id/signature', async (c) => {
   return app.fetch(new Request(c.req.url.replace('/signature', '/approve'), {
     method: 'PUT',
     headers: c.req.raw.headers,
-    body: JSON.stringify(await c.req.json())
+    body: JSON.stringify(await c.req.json().catch(() => ({})))
+  }), c.env, c.executionCtx);
+});
+
+app.put('/api/v1/evidence/:id/sign', async (c) => {
+  // Aliasing sign route to approve route logic
+  return app.fetch(new Request(c.req.url.replace('/sign', '/approve'), {
+    method: 'PUT',
+    headers: c.req.raw.headers,
+    body: JSON.stringify(await c.req.json().catch(() => ({})))
   }), c.env, c.executionCtx);
 });
 
