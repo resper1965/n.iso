@@ -11,6 +11,7 @@ import { SoALogicEngine } from './services/soa-logic';
 import { MigrationService } from './services/migration-service';
 import { KnowledgeService } from './services/knowledge-service';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from './constants';
+import { PolicyGeneratorService } from './services/policy-generator';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -2603,11 +2604,35 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
         const file = await c.env.STORAGE.get(evidence.r2_key);
         if (file) {
           content = await file.text();
-        } else if (evidence.evaluation_notes) {
-          content = evidence.evaluation_notes;
+        } else {
+          // O registro existe no D1 mas o arquivo físico no R2 está ausente.
+          // Vamos gerar a partir do template correspondente dinamicamente!
+          const cleanId = controlId.toUpperCase();
+          const templateName = CONTROL_TO_TEMPLATE[cleanId] || 'isms-policy';
+          try {
+            const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+            const generator = new PolicyGeneratorService('.', c.env.ASSETS);
+            const generatedMarkdown = await generator.generate(templateName, {
+              organizationName: project?.client_name || 'Organização',
+              policyOwner: 'Líder SGSI',
+              approver: 'Direção Executiva',
+              status: 'Approved',
+              standardVersion: 'v2022'
+            });
+            if (generatedMarkdown) {
+              content = generatedMarkdown;
+              // Grava no R2 para persistência
+              const arrayBuffer = new TextEncoder().encode(generatedMarkdown);
+              await c.env.STORAGE.put(evidence.r2_key, arrayBuffer, {
+                httpMetadata: { contentType: 'text/markdown' }
+              });
+            }
+          } catch(genErr) {
+            console.error('Erro ao gerar template de fallback:', genErr);
+          }
         }
       } catch (err: any) {
-        console.error('Erro ao ler do R2, usando fallback:', err);
+        console.error('Erro ao ler do R2:', err);
       }
     }
 
