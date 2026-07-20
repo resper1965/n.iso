@@ -7449,34 +7449,13 @@
                 versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
             } catch(e) {}
 
-            // Buscar assinaturas do gov.br
-            let govbrSigs = [];
-            try {
-                govbrSigs = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/govbr-signatures`) || [];
-            } catch(e) {}
-
-            const cisoSig = govbrSigs.find(s => s.signature_type === 'ciso');
-            const ceoSig = govbrSigs.find(s => s.signature_type === 'ceo');
-
             let cisoStatusHtml = '';
-            if (cisoSig) {
+            if (ctrl.ciso_approved_by) {
                 cisoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
                             <strong>CISO:</strong> 
-                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:8px; background:rgba(0,173,232,0.05); border:1px solid rgba(0,173,232,0.2); padding:3px 8px; border-radius:6px">
-                                <img src="https://www.gov.br/tpl-ds/img/govbr-logo-sem-fundo.png" style="height:12px; width:auto; filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(170deg);" alt="gov.br">
-                                Assinado digitalmente por ${escapeHTML(cisoSig.signed_by_name)} (CPF: ${escapeHTML(cisoSig.signed_by_cpf)}) em ${new Date(cisoSig.created_at).toLocaleDateString()}
-                            </span>
-                        </div>
-                    </div>
-                `;
-            } else if (ctrl.ciso_approved_by) {
-                cisoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
-                        <div>
-                            <strong>CISO:</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}</span>
+                            <span style="color:var(--success)">✓ Assinado eletronicamente por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}</span>
                         </div>
                     </div>
                 `;
@@ -7488,7 +7467,6 @@
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ciso')">Assinar com gov.br</button>
                             <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar com senha</button>
                         </div>
                     </div>
@@ -7496,24 +7474,12 @@
             }
 
             let ceoStatusHtml = '';
-            if (ceoSig) {
+            if (ctrl.ceo_approved_by) {
                 ceoStatusHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
                         <div>
                             <strong>CEO (Direção):</strong> 
-                            <span style="color:#00ade8; font-weight:600; display:inline-flex; align-items:center; gap:8px; background:rgba(0,173,232,0.05); border:1px solid rgba(0,173,232,0.2); padding:3px 8px; border-radius:6px">
-                                <img src="https://www.gov.br/tpl-ds/img/govbr-logo-sem-fundo.png" style="height:12px; width:auto; filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(170deg);" alt="gov.br">
-                                Assinado digitalmente por ${escapeHTML(ceoSig.signed_by_name)} (CPF: ${escapeHTML(ceoSig.signed_by_cpf)}) em ${new Date(ceoSig.created_at).toLocaleDateString()}
-                            </span>
-                        </div>
-                    </div>
-                `;
-            } else if (ctrl.ceo_approved_by) {
-                ceoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
-                        <div>
-                            <strong>CEO (Direção):</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}</span>
+                            <span style="color:var(--success)">✓ Assinado eletronicamente por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}</span>
                         </div>
                     </div>
                 `;
@@ -7525,7 +7491,6 @@
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem; border-color:#00ade8; color:#00ade8; background:transparent" onclick="window.startGovBrSignature('${projectId}', '${controlId}', 'ceo')">Assinar com gov.br</button>
                             <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar com senha</button>
                         </div>
                     </div>
@@ -7581,14 +7546,6 @@
             `;
             openModal(html, 'modal-large');
             document.getElementById('btn-regen-trigger').onclick = showGenerationFormHtml;
-            
-            window.startGovBrSignature = function(pId, cId, type) {
-                const width = 500;
-                const height = 650;
-                const left = (window.screen.width / 2) - (width / 2);
-                const top = (window.screen.height / 2) - (height / 2);
-                window.open(`/api/v1/projects/${pId}/controls/${cId}/govbr/start?type=${type}`, 'govbr_signature_popup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`);
-            };
 
             window.activeVersionsList = versions;
             window.onPolicyVersionChange = async function(pId, cId, verId) {
@@ -7720,41 +7677,109 @@
         }
     }
 
-    window.signPolicy = async function(controlId, role) {
+    window.signPolicy = function(controlId, role) {
         if (!controlId) {
             alert('Não é possível assinar: ID do controle não mapeado.');
             return;
         }
-        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
-        if (!name) return;
         
-        try {
-            await api('POST', `/api/v1/controls/${controlId}/approve`, { role, approved_by: name });
-            showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
-            const statusSpan = document.getElementById(`${role}-sign-status`);
-            if (statusSpan) {
-                statusSpan.textContent = `Aprovado por ${escapeHTML(name)} em ${new Date().toLocaleDateString()}`;
-                statusSpan.style.color = 'var(--accent)';
-            }
-            const btnClicked = event.target;
-            if (btnClicked) btnClicked.style.display = 'none';
-            render();
-        } catch(e) {
-            alert('Erro ao registrar assinatura: ' + e.message);
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">Assinatura Eletrônica Privada — ${role.toUpperCase()}</span>
+                <button class="btn-ghost" onclick="window.backToPolicyModal('${controlId}')">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px; padding-top: 1rem;">
+                <p style="font-size:0.8rem; color:var(--text-dim)">
+                    Para confirmar a sua assinatura eletrônica de política, digite a sua senha do nISO abaixo.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Sua Senha do nISO</label>
+                    <input type="password" id="policy-sign-password" class="form-input" placeholder="Digite sua senha">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+                    <button class="btn" onclick="window.backToPolicyModal('${controlId}')" style="background:rgba(255,255,255,0.05); border-color:var(--border)">Voltar</button>
+                    <button class="btn btn-primary" onclick="window.submitSignPolicy('${controlId}', '${role}')">Confirmar Assinatura</button>
+                </div>
+                <p id="policy-sign-error" style="color:var(--danger); font-size:0.75rem; margin-top:0.5rem; display:none; text-align:center"></p>
+            </div>
+        `);
+    };
+
+    window.backToPolicyModal = function(controlId) {
+        forceCloseModal();
+        if (window.openGeneratePolicyModal) {
+            window.openGeneratePolicyModal(S.selectedProjectId, controlId);
         }
     };
 
-    window.signEvidence = async function(evidenceId, role) {
+    window.submitSignPolicy = async function(controlId, role) {
+        const passwordInput = document.getElementById('policy-sign-password');
+        const errorMsg = document.getElementById('policy-sign-error');
+        const password = passwordInput?.value;
+        
+        if (!password) {
+            errorMsg.textContent = 'A senha é obrigatória.';
+            errorMsg.style.display = 'block';
+            return;
+        }
+        
+        try {
+            await api('POST', `/api/v1/controls/${controlId}/approve`, { role, password });
+            showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
+            forceCloseModal();
+            if (window.openGeneratePolicyModal) {
+                window.openGeneratePolicyModal(S.selectedProjectId, controlId);
+            }
+            render();
+        } catch(e) {
+            errorMsg.textContent = e.message || 'Erro ao validar senha.';
+            errorMsg.style.display = 'block';
+        }
+    };
+
+    window.signEvidence = function(evidenceId, role) {
         if (!evidenceId) {
             alert('Não é possível assinar: ID da evidência inválido.');
             return;
         }
-        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${role.toUpperCase()}:`);
-        if (!name) return;
+        
+        openModal(`
+            <div class="modal-header">
+                <span class="modal-title">Assinatura Eletrônica de Evidência — ${role.toUpperCase()}</span>
+                <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px; padding-top: 1rem;">
+                <p style="font-size:0.8rem; color:var(--text-dim)">
+                    Para confirmar a sua assinatura eletrônica de evidência, digite a sua senha do nISO abaixo.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Sua Senha do nISO</label>
+                    <input type="password" id="evidence-sign-password" class="form-input" placeholder="Digite sua senha">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:var(--border)">Cancelar</button>
+                    <button class="btn btn-primary" onclick="window.submitSignEvidence('${evidenceId}', '${role}')">Confirmar Assinatura</button>
+                </div>
+                <p id="evidence-sign-error" style="color:var(--danger); font-size:0.75rem; margin-top:0.5rem; display:none; text-align:center"></p>
+            </div>
+        `);
+    };
+
+    window.submitSignEvidence = async function(evidenceId, role) {
+        const passwordInput = document.getElementById('evidence-sign-password');
+        const errorMsg = document.getElementById('evidence-sign-error');
+        const password = passwordInput?.value;
+        
+        if (!password) {
+            errorMsg.textContent = 'A senha é obrigatória.';
+            errorMsg.style.display = 'block';
+            return;
+        }
         
         try {
-            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name });
+            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, password });
             showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
+            forceCloseModal();
             const c = document.getElementById('main-content');
             const h = document.getElementById('header-title');
             const a = document.getElementById('header-actions');
@@ -7762,7 +7787,8 @@
                 await renderEvidence(c, h, a);
             }
         } catch(e) {
-            alert('Erro ao registrar assinatura: ' + e.message);
+            errorMsg.textContent = e.message || 'Erro ao validar senha.';
+            errorMsg.style.display = 'block';
         }
     };
 
