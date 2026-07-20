@@ -209,37 +209,51 @@
         /* ——— FORMS ———————————————————————————————————————— */
         .form-group { margin-bottom: 1.25rem; }
         .form-label { display: block; font-size: 0.7rem; font-weight: 400; color: var(--text-dim); margin-bottom: 0.4rem; }
-        .form-input { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; transition: 0.2s; }
-        .form-input:focus { border-color: var(--accent); background: rgba(255,255,255,0.05); }
-        .form-select { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; appearance: none; cursor: pointer; }
+        .form-input { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; transition: all 0.25s ease; }
+        .form-input:focus { border-color: var(--accent); background: rgba(255,255,255,0.04); box-shadow: 0 0 12px var(--accent-glow); }
+        .form-select { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; appearance: none; cursor: pointer; transition: all 0.25s ease; }
+        .form-select:focus { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
         textarea.form-input { resize: vertical; min-height: 80px; }
         select.form-input, select.form-select, select { color-scheme: dark; }
         select option, select optgroup { background-color: #070b14 !important; color: #f5f5f7 !important; }
         select optgroup { color: var(--accent) !important; font-style: normal; font-weight: 600; }
 
         /* ——— DATA TABLES —————————————————————————————————— */
-        .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-        .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
-        .data-table td { padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
-        .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border); }
+        .data-table th { text-align: left; padding: 0.8rem 1rem; color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); background: rgba(7, 11, 20, 0.4); }
+        .data-table td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; transition: background 0.2s ease; }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table tr:hover td { background: rgba(0, 173, 232, 0.02); }
 
         /* ——— MODALS ——————————————————————————————————————— */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 1000; display: none; align-items: center; justify-content: center; }
         .modal-overlay.open { display: flex; }
-        .modal { background: rgba(12,16,28,0.98); backdrop-filter: var(--glass-blur); border: 1px solid var(--border); border-radius: 20px; max-width: 560px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 2rem; animation: modalIn 0.3s ease-out; }
+        .modal { background: rgba(12,16,28,0.98); backdrop-filter: var(--glass-blur); border: 1px solid var(--border); border-radius: 20px; max-width: 560px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 2rem; animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
         .modal-large { max-width: 900px; }
         .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
         .modal-title { font-family: 'Montserrat', sans-serif; font-size: 1.1rem; font-weight: 500; }
-        @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(12px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
         /* ——— BADGES ——————————————————————————————————————— */
-        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
-        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; }
+        .status-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); color: var(--text-dim); }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.02em; border: 1px solid transparent; }
+        .badge-implemented { background: rgba(34, 197, 94, 0.08); color: var(--success); border-color: rgba(34, 197, 94, 0.2); }
+        .badge-partial { background: rgba(245, 158, 11, 0.08); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+        .badge-pending { background: rgba(245, 158, 11, 0.08); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+        .badge-missing { background: rgba(239, 68, 68, 0.08); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+        .badge-not-applicable { background: rgba(255, 255, 255, 0.04); color: var(--text-dim); border-color: var(--border); }
+        .badge-critical { background: rgba(239, 68, 68, 0.12); color: var(--danger); border-color: rgba(239, 68, 68, 0.25); }
+        .badge-warning { background: rgba(245, 158, 11, 0.08); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+        .badge-info { background: rgba(0, 173, 232, 0.08); color: var(--accent); border-color: rgba(0, 173, 232, 0.2); }
+        .badge-default { background: rgba(255, 255, 255, 0.04); color: var(--text-dim); border-color: var(--border); }
+        .badge-low { background: rgba(0, 173, 232, 0.08); color: var(--accent); border-color: rgba(0, 173, 232, 0.2); }
+        .badge-medium { background: rgba(245, 158, 11, 0.08); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+        .badge-high { background: rgba(239, 68, 68, 0.08); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
 
         /* ——— LISTS ———————————————————————————————————————— */
-        .list-item { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: 0.2s; background: var(--surface); }
-        .list-item:hover { border-color: rgba(255,255,255,0.12); background: var(--surface-hover); }
-        .item-name { font-size: 0.85rem; font-weight: 400; }
+        .list-item { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); background: var(--surface); }
+        .list-item:hover { border-color: rgba(0, 173, 232, 0.2); background: var(--surface-hover); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0, 173, 232, 0.02); }
+        .item-name { font-size: 0.85rem; font-weight: 400; color: var(--text); }
         .item-meta { font-size: 0.7rem; color: var(--text-dim); }
 
         /* ——— PROGRESS ————————————————————————————————————— */
@@ -6281,43 +6295,43 @@
             
             c.innerHTML = `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
-                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
-                        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</p>
+                    <div class="card" style="grid-column:span 2;background:rgba(255,255,255,0.01);margin-bottom:0">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:6px;color:var(--accent)">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
+                        <p style="color:var(--text-dim);font-size:0.75rem;margin-bottom:20px">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</p>
                         
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Forças Internas (Strengths)</label>
-                                <textarea id="ctx-strengths" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label" style="font-weight:500;color:var(--success)">Forças Internas (Strengths)</label>
+                                <textarea id="ctx-strengths" class="form-input" style="height:120px" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Fraquezas Internas (Weaknesses)</label>
-                                <textarea id="ctx-weaknesses" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label" style="font-weight:500;color:var(--danger)">Fraquezas Internas (Weaknesses)</label>
+                                <textarea id="ctx-weaknesses" class="form-input" style="height:120px" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Oportunidades Externas (Opportunities)</label>
-                                <textarea id="ctx-opportunities" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label" style="font-weight:500;color:var(--accent)">Oportunidades Externas (Opportunities)</label>
+                                <textarea id="ctx-opportunities" class="form-input" style="height:120px" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Ameaças Externas (Threats)</label>
-                                <textarea id="ctx-threats" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label" style="font-weight:500;color:var(--warning)">Ameaças Externas (Threats)</label>
+                                <textarea id="ctx-threats" class="form-input" style="height:120px" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">2. Requisitos Legais / Regulatórios</div>
-                        <textarea id="ctx-legal" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+                    <div class="card" style="background:rgba(255,255,255,0.01);margin-bottom:0">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:12px;color:var(--accent)">2. Requisitos Legais / Regulatórios</div>
+                        <textarea id="ctx-legal" class="form-input" style="height:120px" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
                     </div>
                     
-                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">3. Requisitos Contratuais</div>
-                        <textarea id="ctx-contractual" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
+                    <div class="card" style="background:rgba(255,255,255,0.01);margin-bottom:0">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:12px;color:var(--accent)">3. Requisitos Contratuais</div>
+                        <textarea id="ctx-contractual" class="form-input" style="height:120px" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
                     </div>
                     
-                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--text)">Notas Gerais</div>
-                        <textarea id="ctx-notes" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
+                    <div class="card" style="grid-column:span 2;background:rgba(255,255,255,0.01);margin-bottom:0">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:12px;color:var(--text)">Notas Gerais</div>
+                        <textarea id="ctx-notes" class="form-input" style="height:80px" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
                     </div>
                 </div>
                 
@@ -8327,15 +8341,15 @@
         try { vendors = await api('GET', `/api/v1/projects/${proj.id}/vendors`); } catch(e) {}
         if (!Array.isArray(vendors)) vendors = [];
         S.vendors = vendors;
-        const dilColor = d => d === 'Low' ? 'var(--accent)' : d === 'Medium' ? 'var(--info)' : 'var(--danger)';
+        const dilClass = d => d === 'Low' ? 'badge-info' : d === 'Medium' ? 'badge-warning' : 'badge-critical';
         c.innerHTML = `<div class="fade-in">${vendors.length ? vendors.map(v => `
             <div class="list-item" style="cursor:pointer" onclick="window.openVendorDetailsModal('${v.id}')">
                 <div style="flex:1"><div class="item-name">${escapeHTML(v.name)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${v.category || 'Geral'} | Score: ${v.trust_score} | DPA: ${v.dpa_signed ? 'Sim' : 'Nao'}</div></div>
+                <div class="item-meta" style="margin-top:0.25rem">${v.category || 'Geral'} | Score: ${v.trust_score} | DPA: ${v.dpa_signed ? 'Sim' : 'Não'}</div></div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
                     ${v.has_iso27001 ? '<span class="ctx-tag ctx-tag-green">27001</span>' : ''}
                     ${v.has_soc2 ? '<span class="ctx-tag ctx-tag-green">SOC2</span>' : ''}
-                    <span class="ctx-tag" style="color:${dilColor(v.diligence_level)}">${v.diligence_level}</span>
+                    <span class="badge ${dilClass(v.diligence_level)}">${v.diligence_level === 'Low' ? 'Baixa Diligência' : v.diligence_level === 'Medium' ? 'Média Diligência' : 'Alta Diligência'}</span>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum fornecedor</h3><p>Registre fornecedores para gestao de terceiros.</p></div>'}</div>`;
     }
@@ -8637,11 +8651,11 @@
         if (!Array.isArray(records)) records = [];
         S.training = records;
 
-        const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'Expired' ? 'var(--danger)' : 'var(--warning)';
+        const statusClass = s => s === 'Completed' ? 'badge-implemented' : s === 'Expired' ? 'badge-critical' : 'badge-warning';
         const summaryHtml = summary.total ? `<div class="card" style="margin-bottom:1.5rem;display:flex;gap:2rem;align-items:center">
             <div><div class="card-label">Cobertura</div><div style="font-size:1.5rem;font-weight:600;color:var(--accent)">${summary.coverage_percent || 0}%</div></div>
             <div><div class="card-label">Completos</div><div style="font-size:1.1rem;font-weight:500">${summary.completed || 0}/${summary.total || 0}</div></div>
-            <div><div class="card-label">Status</div><div style="font-size:0.8rem;color:${summary.compliance_status === 'Compliant' ? 'var(--accent)' : 'var(--danger)'}">${summary.compliance_status || 'N/A'}</div></div>
+            <div><div class="card-label">Status</div><div style="margin-top: 0.25rem;"><span class="badge ${summary.compliance_status === 'Compliant' ? 'badge-implemented' : 'badge-critical'}">${summary.compliance_status || 'N/A'}</span></div></div>
         </div>` : '';
 
         c.innerHTML = `<div class="fade-in">${summaryHtml}${records.length ? records.map(r => `
@@ -8651,11 +8665,11 @@
                     <div class="item-meta" style="margin-top:0.25rem">
                         <strong>Colaborador:</strong> ${escapeHTML(r.employee_name)}
                         ${r.score ? `| <strong>Score:</strong> ${r.score}%` : ''}
-                        ${r.evidence_file ? ` | <span style="color:var(--success)">● Com Evidência</span>` : ' | <span style="color:var(--text-dim)">○ Sem Evidência</span>'}
+                        ${r.evidence_file ? ` | <span class="badge badge-implemented" style="font-size: 0.6rem; padding: 1px 4px; display: inline-flex; vertical-align: middle;">Com Evidência</span>` : ' | <span class="badge badge-default" style="font-size: 0.6rem; padding: 1px 4px; display: inline-flex; vertical-align: middle;">Sem Evidência</span>'}
                     </div>
                 </div>
                 <div style="text-align:right">
-                    <span class="ctx-tag" style="color:${statusColor(r.status)}">${r.status}</span>
+                    <span class="badge ${statusClass(r.status)}">${r.status === 'Completed' ? 'Completo' : r.status === 'Expired' ? 'Expirado' : 'Pendente'}</span>
                     ${r.completion_date ? `<div style="font-size:0.6rem;color:var(--muted);margin-top:0.25rem">${r.completion_date}</div>` : ''}
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro de treinamento</h3></div>'}</div>`;
@@ -9821,7 +9835,7 @@
         try { audits = await api('GET', `/api/v1/projects/${proj.id}/audits`); } catch(e) {}
         if (!Array.isArray(audits)) audits = [];
         S.audits = audits;
-        const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
+        const statusClass = s => s === 'Completed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-partial' : 'badge-default';
         c.innerHTML = `<div class="fade-in">${audits.length ? audits.map(au => `
             <div class="list-item" style="cursor:pointer" onclick="window.openAuditDetailsModal('${au.id}')">
                 <div style="flex:1"><div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(au.title)}</div>
@@ -9829,7 +9843,7 @@
                 <div style="display:flex;align-items:center;gap:0.5rem">
                     ${au.findings_count ? `<span style="font-size:0.7rem;color:var(--danger);margin-right:0.5rem">${au.findings_count} achados</span>` : ''}
                     ${au.status !== 'Completed' ? `<button class="btn" style="padding:4px 8px;font-size:0.75rem;margin-right:0.5rem;border-color:var(--accent);color:var(--accent)" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>` : ''}
-                    <span class="ctx-tag" style="color:${statusColor(au.status)}">${au.status}</span>
+                    <span class="badge ${statusClass(au.status)}">${au.status === 'Completed' ? 'Concluída' : au.status === 'In Progress' ? 'Em progresso' : 'Planejada'}</span>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhuma auditoria agendada</h3></div>'}</div>`;
     }
@@ -9989,8 +10003,8 @@
         if (!Array.isArray(items)) items = [];
         S.capa = items;
         
-        const sevColor = s => s === 'Critical' ? 'var(--danger)' : s === 'High' ? '#ff9f43' : s === 'Medium' ? '#feca57' : 'var(--accent)';
-        const statusColor = s => s === 'Closed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
+        const sevClass = s => s === 'Critical' ? 'badge-critical' : s === 'High' ? 'badge-warning' : s === 'Medium' ? 'badge-partial' : 'badge-low';
+        const statusClass = s => s === 'Closed' ? 'badge-implemented' : s === 'In Progress' ? 'badge-warning' : 'badge-default';
         
         c.innerHTML = `<div class="fade-in">${items.length ? items.map(ca => `
             <div class="list-item" style="cursor:pointer" onclick="window.openCAPADetailsModal('${ca.id}')">
@@ -10001,8 +10015,8 @@
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="color:${sevColor(ca.severity)}">${ca.severity}</span>
-                    <span class="ctx-tag" style="color:${statusColor(ca.status)}">${ca.status}</span>
+                    <span class="badge ${sevClass(ca.severity)}">${ca.severity}</span>
+                    <span class="badge ${statusClass(ca.status)}">${ca.status === 'Closed' ? 'Fechada' : ca.status === 'In Progress' ? 'Em progresso' : 'Aberta'}</span>
                 </div>
             </div>`).join('') : '<div class="empty-state"><h3>Nenhuma acao corretiva</h3></div>'}</div>`;
     }
