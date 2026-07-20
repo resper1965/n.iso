@@ -824,10 +824,10 @@ import { navigate } from '../router.js';
             console.error("Erro ao buscar evidencias:", e);
         }
 
-        const isDefaultDescription = !ctrl.description || 
-                                     ctrl.description === 'Universal ISMS requirement.' || 
-                                     ctrl.description.startsWith('SGSI-POLICY-') && ctrl.description.includes('aguardando assinatura');
-        const hasPolicy = ctrl.description && ctrl.description.length > 100 && !isDefaultDescription;
+        const isDefaultDescription = !policyText || 
+                                     policyText === 'Universal ISMS requirement.' || 
+                                     policyText.startsWith('SGSI-POLICY-') && policyText.includes('aguardando assinatura');
+        const hasPolicy = (policyText && policyText.length > 100 && !isDefaultDescription) || (evidenceId !== null);
 
         const showGenerationFormHtml = () => {
             const formHtml = `
