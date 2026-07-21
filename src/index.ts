@@ -2872,6 +2872,10 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
     const controlId = c.req.param('controlId');
     const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    // Busca o projeto no D1 para obter o nome do cliente
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    const clientName = project ? (project.client_name || 'Cliente') : 'Cliente';
+
     // Busca o controle no D1
     const ctrl = await c.env.DB.prepare(
       'SELECT * FROM compliance_controls WHERE project_id = ? AND id = ?'
@@ -2918,7 +2922,7 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Relatório de Política - ${controlId}</title>
+        <title>Política de Segurança - ${controlId} - ${clientName}</title>
         <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <style>
@@ -2929,7 +2933,7 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
             --border: #e2e8f0;
           }
           body {
-            background: var(--bg);
+            background: #f1f5f9;
             color: var(--text);
             font-family: 'Inter', sans-serif;
             font-weight: 400;
@@ -2941,13 +2945,15 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
             max-width: 800px;
             margin: 0 auto;
             background: #ffffff;
-            padding: 2rem;
-            border-radius: 12px;
+            padding: 3rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
           }
           .header-block {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             border-bottom: 2px solid var(--accent);
             padding-bottom: 1.5rem;
             margin-bottom: 2rem;
@@ -2955,16 +2961,16 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
           .brand {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
-            font-size: 1.8rem;
+            font-size: 1.4rem;
             color: var(--text);
-          }
-          .brand span {
-            color: var(--accent);
+            max-width: 60%;
+            word-wrap: break-word;
           }
           .doc-meta {
             text-align: right;
             font-size: 0.8rem;
             color: #64748b;
+            line-height: 1.4;
           }
           h1, h2, h3, h4 {
             font-family: 'Montserrat', sans-serif;
@@ -2977,16 +2983,19 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
           .print-btn-bar {
             display: flex;
             justify-content: flex-end;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
           }
           .btn {
-            background: var(--text);
+            background: var(--accent);
             color: #ffffff;
             border: none;
             padding: 0.6rem 1.2rem;
-            border-radius: 8px;
+            border-radius: 6px;
             font-family: 'Inter', sans-serif;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             font-size: 0.85rem;
             transition: opacity 0.2s;
@@ -2994,28 +3003,50 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (
           .btn:hover {
             opacity: 0.9;
           }
+          @page {
+            size: A4;
+            margin: 20mm;
+          }
           @media print {
-            .print-btn-bar {
-              display: none;
-            }
             body {
-              padding: 0;
+              background: #ffffff !important;
+              padding: 0 !important;
+              font-size: 11pt !important;
             }
             .container {
-              padding: 0;
-              border-radius: 0;
+              max-width: 100% !important;
+              padding: 0 !important;
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+            .print-btn-bar {
+              display: none !important;
+            }
+            h1, h2, h3, h4, h5, h6 {
+              page-break-after: avoid;
+              break-after: avoid;
+            }
+            ul, ol, table, pre, code {
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
           }
         </style>
       </head>
       <body>
+        <div class="print-btn-bar">
+          <button class="btn" onclick="window.print()">Imprimir Política (PDF)</button>
+        </div>
         <div class="container">
-          <div class="print-btn-bar">
-            <button class="btn" onclick="window.print()">Imprimir Política (PDF)</button>
-          </div>
           <div class="header-block">
-            <div class="brand">n<span>.</span>iso</div>
+            <div class="brand">${escapeHTML(clientName)}</div>
             <div class="doc-meta">
+              <strong>Sistema:</strong> nISO / ness. GRC<br>
               <strong>Controle:</strong> ${controlId}<br>
               <strong>Status:</strong> ${ctrl.status || 'Não Iniciado'}<br>
               <strong>Maturidade:</strong> ${ctrl.maturity !== null && ctrl.maturity !== undefined ? ctrl.maturity : '---'}
@@ -4544,22 +4575,42 @@ app.get('/api/v1/projects/:id/ropa/report', async (c) => {
 
     let rowsHtml = '';
     for (const r of (records || [])) {
-      const cisoSig = r.ciso_approved_by ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${r.ciso_approved_by} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#ffaa00">Aguardando Líder SGSI</span>';
-      const ceoSig = r.ceo_approved_by ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${r.ceo_approved_by} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#ffaa00">Aguardando Direção</span>';
+      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${r.ciso_approved_by} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
+      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${r.ceo_approved_by} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
       
       rowsHtml += `
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
-          <td style="padding: 12px; font-weight: 500;">${r.processing_purpose}</td>
-          <td style="padding: 12px; color: #a5b4fc;">${r.data_categories || '-'}</td>
-          <td style="padding: 12px;">${r.data_subjects || '-'}</td>
-          <td style="padding: 12px; font-weight: 300;">${r.legal_basis}</td>
-          <td style="padding: 12px;">${r.retention_period || '-'}</td>
-          <td style="padding: 12px;">${r.recipients || '-'}</td>
-          <td style="padding: 12px; font-size: 0.8rem;">
+        <div class="ropa-card">
+          <div class="ropa-card-header">
+            <h3>${r.processing_purpose}</h3>
+            <span class="ropa-status status-${r.status}">${r.status}</span>
+          </div>
+          <div class="ropa-card-body">
+            <div class="ropa-field">
+              <div class="ropa-label">Categorias de Dados</div>
+              <div class="ropa-value">${r.data_categories || '-'}</div>
+            </div>
+            <div class="ropa-field">
+              <div class="ropa-label">Titulares</div>
+              <div class="ropa-value">${r.data_subjects || '-'}</div>
+            </div>
+            <div class="ropa-field">
+              <div class="ropa-label">Base Legal</div>
+              <div class="ropa-value">${r.legal_basis}</div>
+            </div>
+            <div class="ropa-field">
+              <div class="ropa-label">Tempo de Retenção</div>
+              <div class="ropa-value">${r.retention_period || '-'}</div>
+            </div>
+            <div class="ropa-field full-width">
+              <div class="ropa-label">Destinatários / Compartilhamento</div>
+              <div class="ropa-value">${r.recipients || '-'}</div>
+            </div>
+          </div>
+          <div class="ropa-card-footer">
             <div><strong>Líder SGSI:</strong> ${cisoSig}</div>
             <div style="margin-top: 4px;"><strong>Direção Executiva:</strong> ${ceoSig}</div>
-          </td>
-        </tr>
+          </div>
+        </div>
       `;
     }
 
@@ -4572,100 +4623,182 @@ app.get('/api/v1/projects/:id/ropa/report', async (c) => {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
         <style>
           body {
-            background-color: #070b14;
-            color: #f5f5f7;
+            background-color: #f1f5f9;
+            color: #070b14;
             font-family: 'Inter', sans-serif;
             margin: 0;
-            padding: 3rem;
+            padding: 2rem;
             line-height: 1.6;
           }
           .container {
-            max-width: 1200px;
+            max-width: 900px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.01);
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 2.5rem;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            padding: 3rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
           }
-          h1, h2, h3 {
+          .header-block {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #00ade8;
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+          }
+          .brand {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
-            color: #00ade8;
-            margin-top: 0;
+            font-size: 1.4rem;
+            color: #070b14;
+            max-width: 60%;
+            word-wrap: break-word;
           }
-          .header-meta {
-            font-size: 0.85rem;
-            color: rgba(229,235,255,0.6);
-            margin-bottom: 2rem;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            padding-bottom: 1rem;
+          .doc-meta {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #64748b;
+            line-height: 1.4;
           }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1.5rem;
-            font-size: 0.85rem;
-          }
-          th {
-            background: rgba(0, 173, 232, 0.05);
-            color: #00ade8;
-            text-align: left;
-            padding: 12px;
+          h2 {
             font-family: 'Montserrat', sans-serif;
-            font-size: 0.75rem;
+            font-weight: 700;
+            color: #070b14;
+            margin-top: 0;
+            font-size: 1.25rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            border-bottom: 2px solid rgba(0, 173, 232, 0.2);
+            margin-bottom: 1.5rem;
           }
           .btn-print {
             background: #00ade8;
-            color: #070b14;
+            color: #ffffff;
             border: none;
             padding: 8px 16px;
             font-size: 0.85rem;
             font-weight: 600;
             border-radius: 6px;
             cursor: pointer;
-            float: right;
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Inter', sans-serif;
+            transition: opacity 0.2s;
+          }
+          .btn-print:hover {
+            opacity: 0.9;
+          }
+          .print-btn-bar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 1.5rem;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .ropa-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .ropa-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 0.75rem;
+            margin-bottom: 1rem;
+          }
+          .ropa-card-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #070b14;
+            font-weight: 600;
+          }
+          .ropa-status {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+          }
+          .status-Approved {
+            background: #e2fbf0;
+            color: #10b981;
+            border: 1px solid #a7f3d0;
+          }
+          .status-Pending {
+            background: #fffbeb;
+            color: #d97706;
+            border: 1px solid #fef3c7;
+          }
+          .ropa-card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+          }
+          .ropa-field {
+            display: flex;
+            flex-direction: column;
+          }
+          .ropa-field.full-width {
+            grid-column: span 2;
+          }
+          .ropa-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 2px;
+          }
+          .ropa-value {
+            font-size: 0.85rem;
+            color: #0f172a;
+          }
+          .ropa-card-footer {
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 0.75rem;
+            font-size: 0.75rem;
+            color: #475569;
+          }
+          @page {
+            size: A4;
+            margin: 20mm;
           }
           @media print {
-            body { background-color: #fff; color: #000; padding: 0; }
+            body { background-color: #fff; padding: 0; }
             .container { border: none; box-shadow: none; padding: 0; }
-            .btn-print { display: none; }
-            th { background: #eee; color: #000; border-bottom: 2px solid #000; }
-            tr { page-break-inside: avoid; }
+            .print-btn-bar { display: none; }
+            h2 { page-break-after: avoid; break-after: avoid; }
+            .ropa-card { border: 1px solid #ccc; }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="container">
+        <div class="print-btn-bar">
           <button class="btn-print" onclick="window.print()">Imprimir / PDF</button>
-          <h1>ness<span>.</span> GRC - nISO</h1>
-          <h2>Registro de Operações de Tratamento (ROPA)</h2>
-          <div class="header-meta">
-            <div><strong>Cliente:</strong> ${project.client_name || 'Não especificado'}</div>
-            <div><strong>Projeto ID:</strong> ${project.id}</div>
-            <div><strong>Norma Referência:</strong> ISO 27701:2022 / LGPD</div>
-            <div><strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</div>
+        </div>
+        <div class="container">
+          <div class="header-block">
+            <div class="brand">${escapeHTML(project.client_name || 'Não especificado')}</div>
+            <div class="doc-meta">
+              <strong>Sistema:</strong> nISO / ness. GRC<br>
+              <strong>Projeto ID:</strong> ${project.id}<br>
+              <strong>Norma Referência:</strong> ISO 27701:2022 / LGPD<br>
+              <strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}
+            </div>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Atividade / Finalidade</th>
-                <th>Categorias de Dados</th>
-                <th>Titulares</th>
-                <th>Base Legal</th>
-                <th>Retenção</th>
-                <th>Destinatários</th>
-                <th>Status / Assinaturas</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || '<tr><td colspan="7" style="padding: 24px; text-align: center; color: rgba(229,235,255,0.4);">Nenhuma atividade de tratamento cadastrada neste projeto.</td></tr>'}
-            </tbody>
-          </table>
+          <h2>Registro de Operações de Tratamento (ROPA)</h2>
+          <div class="ropa-activities">
+            ${rowsHtml || '<div style="padding: 24px; text-align: center; color: #64748b;">Nenhuma atividade de tratamento cadastrada neste projeto.</div>'}
+          </div>
         </div>
       </body>
       </html>
@@ -4797,56 +4930,81 @@ app.get('/api/v1/projects/:id/dpia/:assessmentId/report', async (c) => {
     ).bind(assessmentId, projectId).first<any>();
     if (!dpia) return c.html('<h3>Avaliação DPIA não encontrada</h3>', 404);
 
-    const dpoSigHtml = dpia.dpo_signature ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${dpia.dpo_signature}</span>` : '<span style="color:#ffaa00">Aguardando Assinatura do Líder SGSI</span>';
-    const ceoSigHtml = dpia.ceo_signature ? `<span style="color:#00ade8; font-weight:600">✓ Assinado por ${dpia.ceo_signature}</span>` : '<span style="color:#ffaa00">Aguardando Assinatura da Direção Executiva</span>';
+    const dpoSigHtml = dpia.dpo_signature ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${dpia.dpo_signature}</span>` : '<span style="color:#d97706">Aguardando Assinatura do Líder SGSI</span>';
+    const ceoSigHtml = dpia.ceo_signature ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${dpia.ceo_signature}</span>` : '<span style="color:#d97706">Aguardando Assinatura da Direção Executiva</span>';
 
     const html = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Relatório DPIA - ${dpia.system_name}</title>
+        <title>Relatório DPIA - ${dpia.system_name} - ${project.client_name || 'Projeto GRC'}</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
         <style>
           body {
-            background-color: #070b14;
-            color: #f5f5f7;
+            background-color: #f1f5f9;
+            color: #070b14;
             font-family: 'Inter', sans-serif;
             margin: 0;
-            padding: 3rem;
+            padding: 2rem;
             line-height: 1.6;
           }
           .container {
             max-width: 900px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.01);
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 2.5rem;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            padding: 3rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
           }
-          h1, h2, h3, h4 {
+          .header-block {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #00ade8;
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+          }
+          .brand {
             font-family: 'Montserrat', sans-serif;
             font-weight: 700;
-            color: #00ade8;
-            margin-top: 0;
+            font-size: 1.4rem;
+            color: #070b14;
+            max-width: 60%;
+            word-wrap: break-word;
           }
-          .header-meta {
-            font-size: 0.85rem;
-            color: rgba(229,235,255,0.6);
+          .doc-meta {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #64748b;
+            line-height: 1.4;
+          }
+          h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            color: #070b14;
+            margin-top: 0;
+            font-size: 1.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+          }
+          .system-name-bar {
+            font-size: 0.9rem;
             margin-bottom: 2rem;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            padding-bottom: 1rem;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            color: #475569;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.75rem;
           }
           .section-block {
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.04);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            padding: 1.25rem;
+            padding: 1.5rem;
             margin-bottom: 1.5rem;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
           .section-title {
             font-size: 0.75rem;
@@ -4861,51 +5019,74 @@ app.get('/api/v1/projects/:id/dpia/:assessmentId/report', async (c) => {
             grid-template-columns: 1fr 1fr;
             gap: 20px;
             margin-top: 2.5rem;
-            border-top: 1px solid rgba(255,255,255,0.08);
+            border-top: 1px solid #e2e8f0;
             padding-top: 1.5rem;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
           .sig-card {
-            background: rgba(255,255,255,0.01);
-            border: 1px dashed rgba(255,255,255,0.1);
-            padding: 12px;
-            border-radius: 6px;
+            background: #ffffff;
+            border: 1px dashed #cbd5e1;
+            padding: 16px;
+            border-radius: 8px;
             font-size: 0.8rem;
           }
           .btn-print {
             background: #00ade8;
-            color: #070b14;
+            color: #ffffff;
             border: none;
             padding: 8px 16px;
             font-size: 0.85rem;
             font-weight: 600;
             border-radius: 6px;
             cursor: pointer;
-            float: right;
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Inter', sans-serif;
+            transition: opacity 0.2s;
+          }
+          .btn-print:hover {
+            opacity: 0.9;
+          }
+          .print-btn-bar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 1.5rem;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          @page {
+            size: A4;
+            margin: 20mm;
           }
           @media print {
-            body { background-color: #fff; color: #000; padding: 0; }
+            body { background-color: #fff; padding: 0; }
             .container { border: none; box-shadow: none; padding: 0; }
-            .btn-print { display: none; }
-            .section-block { background: #fff; border: 1px solid #ccc; page-break-inside: avoid; }
-            .sig-card { border: 1px dashed #000; background: #fff; }
+            .print-btn-bar { display: none; }
+            .section-block { border: 1px solid #ccc; }
+            .sig-card { border: 1px dashed #000; }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="container">
+        <div class="print-btn-bar">
           <button class="btn-print" onclick="window.print()">Imprimir / PDF</button>
-          <h1>ness<span>.</span> GRC - nISO</h1>
-          <h2>Relatório de Impacto à Proteção de Dados (DPIA/RIPD)</h2>
-          <div class="header-meta">
-            <div>
-              <div><strong>Sistema / Fluxo:</strong> ${dpia.system_name}</div>
-              <div><strong>Cliente:</strong> ${project.client_name || 'Não especificado'}</div>
+        </div>
+        <div class="container">
+          <div class="header-block">
+            <div class="brand">${escapeHTML(project.client_name || 'Não especificado')}</div>
+            <div class="doc-meta">
+              <strong>Sistema:</strong> nISO / ness. GRC<br>
+              <strong>Status:</strong> ${dpia.status}<br>
+              <strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}
             </div>
-            <div>
-              <div><strong>Status:</strong> ${dpia.status}</div>
-              <div><strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')}</div>
-            </div>
+          </div>
+          <h2>Relatório de Impacto à Privacidade e Proteção de Dados (DPIA/RIPD)</h2>
+          <div class="system-name-bar">
+            <strong>Sistema / Fluxo sob Avaliação:</strong> ${dpia.system_name}
           </div>
 
           <div class="section-block">
