@@ -739,3 +739,323 @@
             color: #fff;
             font-weight: 600;
         }
+
+        /* ==========================================================================
+           ness. Statement of Applicability (SoA) Premium UI Enhancements
+           ========================================================================== */
+        
+        .soa-stat-grid {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 2rem;
+        }
+        @media (max-width: 768px) {
+            .soa-stat-grid {
+                flex-direction: column;
+            }
+        }
+        .soa-stat-card {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(24px);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .soa-stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: transparent;
+        }
+        .soa-stat-card.applicable::after {
+            background: var(--accent); /* #00ade8 */
+        }
+        .soa-stat-card.not-applicable::after {
+            background: rgba(229, 235, 255, 0.3);
+        }
+        .soa-stat-card.justified::after {
+            background: #10b981;
+        }
+        .soa-stat-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(0, 173, 232, 0.25);
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Collapsible Accordion Panels */
+        .soa-accordion {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            margin-bottom: 1.25rem;
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+            transition: all 0.25s ease;
+        }
+        .soa-accordion:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+        .soa-accordion.active {
+            border-color: rgba(0, 173, 232, 0.25);
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.4);
+        }
+        .soa-accordion-header {
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s ease;
+        }
+        .soa-accordion-header:hover {
+            background: rgba(255, 255, 255, 0.015);
+        }
+        .soa-accordion-title {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .soa-accordion-title .code {
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 0.85rem;
+            background: rgba(0, 173, 232, 0.08);
+            padding: 2px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(0, 173, 232, 0.15);
+        }
+        .soa-accordion-meta {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .soa-accordion-chevron {
+            width: 18px;
+            height: 18px;
+            fill: none;
+            stroke: var(--text-dim);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .soa-accordion.active .soa-accordion-chevron {
+            transform: rotate(180deg);
+            stroke: var(--accent);
+        }
+        .soa-accordion-content {
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: none;
+            animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .soa-accordion.active .soa-accordion-content {
+            display: block;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mini Progress Indicators inside Section Header */
+        .soa-section-progress-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        .soa-mini-progress {
+            width: 80px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .soa-mini-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0088cc, #00ade8);
+            border-radius: 10px;
+            transition: width 0.4s ease;
+        }
+
+        /* Segmented Toggles for Applicability */
+        .segmented-control {
+            display: inline-flex;
+            background: rgba(7, 11, 20, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 3px;
+            position: relative;
+            width: 110px;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .seg-btn {
+            flex: 1;
+            border: 0;
+            background: transparent;
+            color: var(--text-dim);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 4px 0;
+            cursor: pointer;
+            border-radius: 7px;
+            z-index: 1;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .seg-btn:hover {
+            color: var(--text);
+        }
+        .seg-btn.active {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .segmented-control.applicable .seg-btn.active {
+            background: rgba(0, 173, 232, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(0, 173, 232, 0.25);
+            margin: -1px;
+            padding: 5px 0;
+        }
+        .segmented-control.not-applicable .seg-btn.active {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-dim);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: -1px;
+            padding: 5px 0;
+        }
+
+        /* Premium Input Focus States */
+        .soa-justification-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: var(--text);
+            font-size: 0.8rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .soa-justification-input:focus {
+            border-color: var(--accent);
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: 0 0 0 1px rgba(0, 173, 232, 0.2);
+        }
+        .soa-justification-input.required-missing {
+            border-color: rgba(245, 158, 11, 0.4);
+            background: rgba(245, 158, 11, 0.02);
+        }
+        .soa-justification-input.required-missing:focus {
+            border-color: var(--warning);
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+        }
+
+        /* ————— GOVERNANCE & TEAM OVERHAUL ————— */
+        .gov-section-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 150px;
+            text-align: left;
+        }
+        .gov-member-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 10px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .gov-member-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(0, 173, 232, 0.2);
+            transform: translateY(-1px);
+        }
+        .gov-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(0, 173, 232, 0.08);
+            border: 1px solid rgba(0, 173, 232, 0.15);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 600;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+            text-align: center;
+            user-select: none;
+        }
+        .gov-member-info {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+        }
+        .gov-member-name {
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            font-size: 0.8rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            line-height: 1.2;
+        }
+        .gov-member-title {
+            font-size: 0.7rem;
+            color: rgba(229, 235, 255, 0.65);
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+        .gov-member-email {
+            font-size: 0.65rem;
+            color: rgba(229, 235, 255, 0.4);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+        .gov-empty-list {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            font-style: italic;
+            text-align: center;
+            padding: 20px 10px;
+            border: 1px dashed rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.1);
+        }

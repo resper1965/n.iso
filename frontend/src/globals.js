@@ -56,7 +56,12 @@ window.viewEvidence = async function viewEvidence(id) {
             } else if (fileType === 'application/pdf' || ext === 'pdf') {
                 isLarge = true;
                 previewHtml = `<iframe src="${objectUrl}" style="width: 100%; height: 550px; border: none; border-radius: 8px; margin-top: 1rem;"></iframe>`;
-            } else if (fileType.startsWith('text/') || ['txt', 'csv', 'json', 'xml', 'log', 'md'].includes(ext)) {
+            } else if (ext === 'md') {
+                isLarge = true;
+                const text = await blob.text();
+                const rendered = window.marked ? window.marked.parse(text) : escapeHTML(text);
+                previewHtml = `<div style="max-height: 450px; overflow: auto; background: rgba(255,255,255,0.03); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border); font-family: 'Inter', sans-serif; font-size: 0.8rem; line-height: 1.6; color: var(--text); text-align: left; margin-top: 1rem;" class="markdown-body">${rendered}</div>`;
+            } else if (fileType.startsWith('text/') || ['txt', 'csv', 'json', 'xml', 'log'].includes(ext)) {
                 const text = await blob.text();
                 previewHtml = `<pre style="max-height: 400px; overflow: auto; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; border: 1px solid var(--border); font-family: monospace; font-size: 0.75rem; margin-top: 1rem; white-space: pre-wrap; word-break: break-all; color: var(--text); text-align: left;">${escapeHTML(text)}</pre>`;
             } else {
