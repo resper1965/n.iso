@@ -39,6 +39,13 @@ export type Variables = {
   };
 };
 
+/**
+ * Mapeia um ID de controle ISO (ex.: "A.5.1") para o nome do template de
+ * política usado pelo PolicyGeneratorService. Controles sem entrada explícita
+ * recaem no template padrão ('isms-policy'), conforme o fallback nos usos.
+ */
+const CONTROL_TO_TEMPLATE: Record<string, string> = {};
+
 type BlockQuestion = {
   key: string;
   question: string;

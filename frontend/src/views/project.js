@@ -61,6 +61,7 @@ import { navigate } from '../router.js';
         if (!p) { navigate('projects'); return; }
         h.textContent = 'Jornada';
         if (!S.expandedJourneys) S.expandedJourneys = {};
+        if (!S.expandedPhases) S.expandedPhases = {};
         a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
@@ -230,7 +231,7 @@ import { navigate } from '../router.js';
                         <div class="journey-content ${isJExpanded ? 'expanded' : ''}" id="j-content-${journeyIdx}">
                             ${window.renderJourneyDiagnosticPanel(journeyIdx, p.id)}
                             ${filteredPhases.map(ph => {
-                                const isPhExpanded = S.expandedPhases[ph.phase_number] === true;
+                                const isPhExpanded = (S.expandedPhases && S.expandedPhases[ph.phase_number]) === true;
                                 const phChecklist = (S.checklistsConfig && S.checklistsConfig[ph.phase_number]) || [];
                                 const filteredItems = phChecklist.filter(item => {
                                     if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
@@ -1116,6 +1117,7 @@ import { navigate } from '../router.js';
     };
 
     window.togglePhase = function(phaseNum) {
+        if (!S.expandedPhases) S.expandedPhases = {};
         const targetVal = !S.expandedPhases[phaseNum];
         if (targetVal) {
             S.expandedPhases = {};
