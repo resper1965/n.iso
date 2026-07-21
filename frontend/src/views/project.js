@@ -3,6 +3,27 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
+const ISO_GUIDELINES = {
+    'p0_1': { control: 'Cl 5.1', tip: 'Definir sponsor executivo', advice: 'O auditor vai buscar atas de reuniões ou nomeações formais assinadas pela diretoria definindo a liderança do SGSI.', evidence: 'Termo de Compromisso assinado ou Ata de Reunião Executiva.' },
+    'p0_3': { control: 'Cl 7.4', tip: 'Ata do Kick-off', advice: 'A ata deve conter a pauta, lista de participantes assinada e a formalização das responsabilidades de segurança.', evidence: 'Ata de reunião em PDF ou Documento Interno com participantes.' },
+    'p0_5': { control: 'Cl 5.2', tip: 'Carta de Mandato', advice: 'A política geral de segurança da informação (mandato) deve estar assinada e aprovada pela alta administração.', evidence: 'Carta de Mandato assinada digitalmente.' },
+    'p3_1': { control: 'Cl 4.3', tip: 'Escopo do SGSI', advice: 'A definição de escopo deve ser clara, justificar exclusões e delimitar perfeitamente o perímetro de infraestrutura/serviços.', evidence: 'Documento de Escopo (Cláusula 4.3).' },
+    'p5_5': { control: 'A.5.15', tip: 'Controle de Acesso', advice: 'O auditor quer ver as regras de concessão, revisão periódica e revogação de acessos de usuários e administradores.', evidence: 'Política de Controle de Acesso.' },
+    'p7_2': { control: 'A.5.9', tip: 'Inventário de Ativos', advice: 'O auditor deve listar proprietários de ativos, localização física/em nuvem e nível de classificação da informação.', evidence: 'Inventário de Ativos de Informação.' },
+    'p11_1': { control: 'A.5.7', tip: 'Intel de Ameaças', advice: 'Mapeamento de fontes de inteligência de ameaças externas utilizadas para mitigar vulnerabilidades ativamente.', evidence: 'Procedimento de Threat Intelligence.' },
+    'p14_1': { control: 'A.5.1', tip: 'Políticas de Segurança', advice: 'Conjunto formalizado de diretrizes de segurança da informação revisadas anualmente.', evidence: 'Manual de Políticas do SGSI.' },
+    'p14_2': { control: 'A.7.7', tip: 'Mesa Limpa / Tela Limpa', advice: 'Definição de bloqueio automático de tela (máx 5min) e política de mesa limpa nos escritórios.', evidence: 'Política de Mesa Limpa e Tela Limpa.' },
+    'p14_3': { control: 'A.5.10', tip: 'Uso Aceitável', advice: 'Os termos de uso aceitável de ativos devem ser assinados por todos os funcionários na contratação.', evidence: 'Política de Uso Aceitável (AUP).' },
+    'p14_4': { control: 'A.8.24', tip: 'Criptografia', advice: 'Regras para uso de chaves criptográficas, SSH, algoritmos permitidos (mínimo AES-256) e SSL/TLS.', evidence: 'Política de Criptografia.' },
+    'p14_5': { control: 'A.5.24', tip: 'Gestão de Incidentes', advice: 'Fluxo claro de reporte de incidentes, canais de denúncia e registro cronológico dos eventos de segurança.', evidence: 'Plano de Resposta a Incidentes.' },
+    'p14_6': { control: 'A.5.29', tip: 'Continuidade de Negócios', advice: 'Procedimentos de recuperação de desastres (DRP) e testes de backup anuais documentados.', evidence: 'Plano de Continuidade de Negócios (BCP).' },
+    'p14_7': { control: 'A.8.11', tip: 'Mascaramento de Dados', advice: 'Regras de anonimização e minimização de dados sensíveis em ambientes de testes e produção.', evidence: 'Política de Privacidade e Mascaramento.' },
+    'p14_8': { control: 'A.8.28', tip: 'Desenvolvimento Seguro', advice: 'Políticas de ciclo de vida seguro (SDLC), testes de vulnerabilidade SAST/DAST e revisão de código.', evidence: 'Política de Desenvolvimento Seguro (SDLC).' },
+    'p14_9': { control: 'A.8.9', tip: 'Gerenciamento de Configuração', advice: 'Padrões de hardening de servidores e auditoria de alterações de infraestrutura.', evidence: 'Política de Configuração e Hardening.' },
+    'p14_10': { control: 'A.5.19', tip: 'Segurança de Fornecedores', advice: 'Processo de avaliação de fornecedores críticos de nuvem/software e cláusulas de segurança padrão.', evidence: 'Política de Segurança de Fornecedores.' },
+    'p21_1': { control: 'Cl 6.1.3', tip: 'Declaração de Aplicabilidade (SoA)', advice: 'O SoA deve conter todos os 93 controles da Annex A com justificativa explícita de inclusão ou exclusão.', evidence: 'Statement of Applicability (SoA) gerado.' }
+};
+
     async function renderProjects(c, h, a) {
         h.textContent = 'Projetos';
         a.innerHTML = '';
