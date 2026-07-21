@@ -142,6 +142,52 @@ import { navigate } from '../router.js';
         updateContextPanel();
     }
 
+    function getControlSubSection(ctrl) {
+        const title = ctrl.title || '';
+        const id = ctrl.id || '';
+        const standard = ctrl.standard || '';
+        
+        if (standard.includes('27001')) {
+            if (id.includes('-a5') || title.includes('A.5.')) {
+                return { code: 'A.5', name: 'Controles Organizacionais', label: 'A.5' };
+            }
+            if (id.includes('-a6') || title.includes('A.6.')) {
+                return { code: 'A.6', name: 'Controles de Pessoas', label: 'A.6' };
+            }
+            if (id.includes('-a7') || title.includes('A.7.')) {
+                return { code: 'A.7', name: 'Controles Físicos', label: 'A.7' };
+            }
+            if (id.includes('-a8') || title.includes('A.8.')) {
+                return { code: 'A.8', name: 'Controles Tecnológicos', label: 'A.8' };
+            }
+        } else if (standard.includes('27701')) {
+            if (id.includes('-a') || title.includes('A.') || ctrl.role === 'Controller') {
+                return { code: 'P.C', name: 'Diretrizes para Controladores', label: 'PIMS Controller' };
+            }
+            if (id.includes('-b') || title.includes('B.') || ctrl.role === 'Processor') {
+                return { code: 'P.P', name: 'Diretrizes para Operadores', label: 'PIMS Processor' };
+            }
+            return { code: 'P.G', name: 'Diretrizes Gerais de Privacidade', label: 'PIMS Geral' };
+        }
+        return { code: 'Other', name: 'Outros Controles', label: 'Geral' };
+    }
+
+    function parseControlTitle(ctrl) {
+        const titleStr = ctrl.title || '';
+        let controlCode = ctrl.id || '';
+        let controlTitleText = titleStr;
+        
+        const match = titleStr.match(/^([A-Za-z0-9\.\-\s]+?)\s+(.*)$/);
+        if (match) {
+            const potentialCode = match[1].trim();
+            if (potentialCode.match(/^(A\.\d+|B\.\d+|Cl\s\d+|[0-9\.]+)/)) {
+                controlCode = potentialCode;
+                controlTitleText = match[2].trim();
+            }
+        }
+        return { code: controlCode, title: controlTitleText };
+    }
+
     async function renderSoA(c, h, a) {
         h.textContent = 'Statement of Applicability (SoA)';
         a.innerHTML = '';
@@ -163,16 +209,11 @@ import { navigate } from '../router.js';
             }
             window.currentSoATraceMap = traceMap;
             window.currentSoAFilter = 'all';
+            window.soaAccordionStates = window.soaAccordionStates || {};
 
-            // Agrupar por tema/seção
-            const groups = {};
             let totalApplicable = 0, totalNA = 0, totalJustified = 0;
             
             controls.forEach(ctrl => {
-                const group = (ctrl.standard || 'Other').split('.').slice(0, 2).join('.');
-                if (!groups[group]) groups[group] = [];
-                groups[group].push(ctrl);
-                
                 const isNA = ctrl.status === 'Not Applicable';
                 if (isNA) {
                     totalNA++;
@@ -183,20 +224,45 @@ import { navigate } from '../router.js';
                     totalApplicable++;
                 }
             });
-            
+
+            const stdGroups = {};
+            controls.forEach(ctrl => {
+                const std = ctrl.standard || 'ISO 27001:2022';
+                if (!stdGroups[std]) stdGroups[std] = {};
+                
+                const sub = getControlSubSection(ctrl);
+                if (!stdGroups[std][sub.code]) {
+                    stdGroups[std][sub.code] = {
+                        meta: sub,
+                        controls: []
+                    };
+                }
+                stdGroups[std][sub.code].controls.push(ctrl);
+            });
+
             let html = `
-                <div style="display:flex;gap:24px;margin-bottom:2rem">
-                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid var(--accent); border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
-                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalApplicable} <span style="font-size:1rem;color:var(--text-dim)">/ ${controls.length}</span></div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Controles Aplicáveis</div>
+                <div class="soa-stat-grid">
+                    <div class="soa-stat-card applicable">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalApplicable} <span style="font-size:0.95rem;color:var(--text-dim)">/ ${controls.length}</span></div>
+                            <div style="font-size: 0.65rem; background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2); padding:2px 8px; border-radius:10px; font-weight:600;">
+                                ${controls.length > 0 ? ((totalApplicable / controls.length) * 100).toFixed(0) : 0}%
+                            </div>
+                        </div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Controles Aplicáveis</div>
                     </div>
-                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid #64748b; border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
+                    <div class="soa-stat-card not-applicable">
                         <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalNA}</div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Controles Não Aplicáveis</div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Controles Não Aplicáveis</div>
                     </div>
-                    <div class="stat-card" style="flex:1; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-top: 3px solid #10b981; border-radius:12px; padding:20px; backdrop-filter:blur(20px);">
-                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalJustified} <span style="font-size:1rem;color:var(--text-dim)">/ ${totalNA}</span></div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Justificativas de Exclusão</div>
+                    <div class="soa-stat-card justified">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalJustified} <span style="font-size:0.95rem;color:var(--text-dim)">/ ${totalNA || 1}</span></div>
+                            <div class="badge" style="font-size:0.65rem; background:${totalNA > 0 && totalJustified === totalNA ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'}; color:${totalNA > 0 && totalJustified === totalNA ? '#10b981' : '#f59e0b'}; border:1px solid ${totalNA > 0 && totalJustified === totalNA ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}; padding:2px 8px; border-radius:10px; font-weight:600;">
+                                ${totalNA > 0 && totalJustified === totalNA ? 'Conforme' : 'Pendente'}
+                            </div>
+                        </div>
+                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Justificativas de Exclusão</div>
                     </div>
                 </div>
 
@@ -214,92 +280,142 @@ import { navigate } from '../router.js';
                     </div>
                 </div>
             `;
-            
-            for (const [group, ctrls] of Object.entries(groups).sort()) {
-                html += `
-                    <div class="soa-section" style="margin-bottom:2rem">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.2rem;margin-bottom:1rem;color:var(--accent)">
-                            Seção ${group}
-                        </div>
-                        <div class="data-table">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:100px">ID</th>
-                                        <th style="width:220px">Controle</th>
-                                        <th style="width:140px">Aplicável?</th>
-                                        <th style="width:120px">Status</th>
-                                        <th style="width:150px">Rastreabilidade</th>
-                                        <th>Justificativa / Notas</th>
-                                        <th style="width:100px">Maturidade</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                `;
-                
-                ctrls.forEach(ctrl => {
-                    const isNA = ctrl.status === 'Not Applicable';
-                    const trace = traceMap[ctrl.id] || { risks: [], evidence: [] };
-                    const risksCount = (trace.risks || []).length;
-                    const evidenceCount = (trace.evidence || []).length;
 
-                    html += `
-                        <tr id="soa-row-${ctrl.id}" class="soa-row" data-standard="${escapeHTML(ctrl.standard || '')}" data-title="${escapeHTML(ctrl.title || '')}" data-status="${escapeHTML(ctrl.status || 'Missing')}">
-                            <td style="font-weight:600;color:var(--accent)">${escapeHTML(ctrl.standard)}</td>
-                            <td style="font-weight:500">${escapeHTML(ctrl.title)}</td>
-                            <td>
-                                <select onchange="window.toggleSoAApplicability('${ctrl.id}', this.value)" class="custom-select" style="padding:4px 8px;width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px">
-                                    <option value="Applicable" ${!isNA ? 'selected' : ''}>Sim</option>
-                                    <option value="Not Applicable" ${isNA ? 'selected' : ''}>Não</option>
-                                </select>
-                            </td>
-                            <td>
-                                <span class="badge ${isNA ? 'badge-not-applicable' : 'badge-' + (ctrl.status || 'missing').toLowerCase().replace(/\s/g,'-')}">
-                                    ${escapeHTML(ctrl.status || 'Missing')}
-                                </span>
-                            </td>
-                            <td>
-                                <div style="display:flex;gap:6px">
-                                    <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.15)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.25)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
-                                        R: ${risksCount}
-                                    </span>
-                                    <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(ctrl.standard)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
-                                        E: ${evidenceCount}
-                                    </span>
-                                </div>
-                                <div style="display:flex;gap:4px;margin-top:4px">
-                                    ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO ✓</span>` : ''}
-                                    ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO ✓</span>` : ''}
-                                </div>
-                            </td>
-                            <td>
-                                <input type="text" value="${escapeHTML(ctrl.description || '')}" 
-                                    placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
-                                    style="width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;color:var(--text);font-size:0.85rem;transition:border-color 0.2s" 
-                                    onfocus="this.style.borderColor='var(--accent)';"
-                                    onblur="this.style.borderColor='rgba(255,255,255,0.08)'; window.saveSoAJustification('${ctrl.id}', this.value)" />
-                            </td>
-                            <td>
-                                <select onchange="window.updateControlMaturity('${ctrl.id}', this.value)" class="custom-select" style="padding:6px 10px;width:100%;background:rgba(7,11,20,0.8);color:var(--text);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-weight:600;font-size:0.8rem;cursor:pointer">
-                                    ${[0, 1, 2, 3, 4, 5].map(val => `<option value="${val}" ${ctrl.maturity === val ? 'selected' : ''}>CMM ${val}</option>`).join('')}
-                                </select>
-                            </td>
-                        </tr>
-                    `;
-                });
-                
+            for (const [stdName, subGroups] of Object.entries(stdGroups).sort()) {
                 html += `
-                                </tbody>
-                            </table>
-                        </div>
+                    <div style="margin-top:2.5rem; margin-bottom:1.25rem; font-family:'Montserrat',sans-serif; font-weight:500; font-size:1.1rem; color:var(--text); letter-spacing:0.5px; display:flex; align-items:center; gap:8px">
+                        <span style="width:4px; height:18px; background:var(--accent); border-radius:2px; display:inline-block"></span>
+                        Norma ${escapeHTML(stdName)}
                     </div>
                 `;
+
+                for (const [subCode, subData] of Object.entries(subGroups).sort()) {
+                    const sectionId = `${stdName}-${subCode}`.replace(/\s+/g, '_');
+                    
+                    const totalSec = subData.controls.length;
+                    let compliantSec = 0;
+                    subData.controls.forEach(c => {
+                        if (c.status === 'Implemented' || c.status === 'Compliant' || c.status === 'Approved') {
+                            compliantSec++;
+                        }
+                    });
+                    const pctSec = totalSec > 0 ? Math.round((compliantSec / totalSec) * 100) : 0;
+                    
+                    if (window.soaAccordionStates[sectionId] === undefined) {
+                        window.soaAccordionStates[sectionId] = (stdName.includes('27001') && subCode === 'A.5');
+                    }
+                    const isOpen = window.soaAccordionStates[sectionId];
+
+                    html += `
+                        <div class="soa-section soa-accordion ${isOpen ? 'active' : ''}" id="soa-acc-${sectionId}">
+                            <div class="soa-accordion-header" onclick="window.toggleSoAAccordion('${sectionId}')">
+                                <div class="soa-accordion-title">
+                                    <span class="code">${escapeHTML(subData.meta.label)}</span>
+                                    <span>${escapeHTML(subData.meta.name)}</span>
+                                </div>
+                                <div class="soa-accordion-meta">
+                                    <div class="soa-section-progress-container">
+                                        <span>${compliantSec} / ${totalSec} Conformes</span>
+                                        <div class="soa-mini-progress">
+                                            <div class="soa-mini-progress-fill" style="width: ${pctSec}%"></div>
+                                        </div>
+                                    </div>
+                                    <svg class="soa-accordion-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </div>
+                            </div>
+                            <div class="soa-accordion-content">
+                                <div class="data-table" style="overflow-x:auto">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th style="width:90px">ID</th>
+                                                <th style="width:240px">Controle</th>
+                                                <th style="width:130px">Aplicável?</th>
+                                                <th style="width:125px">Status</th>
+                                                <th style="width:145px">Rastreabilidade</th>
+                                                <th>Justificativa / Notas</th>
+                                                <th style="width:115px">Maturidade</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                    `;
+
+                    subData.controls.forEach(ctrl => {
+                        const isNA = ctrl.status === 'Not Applicable';
+                        const trace = traceMap[ctrl.id] || { risks: [], evidence: [] };
+                        const risksCount = (trace.risks || []).length;
+                        const evidenceCount = (trace.evidence || []).length;
+
+                        const parsed = parseControlTitle(ctrl);
+                        const isJustificationMissing = isNA && (!ctrl.description || ctrl.description.trim() === '');
+
+                        html += `
+                            <tr id="soa-row-${ctrl.id}" class="soa-row" data-standard="${escapeHTML(ctrl.standard || '')}" data-title="${escapeHTML(ctrl.title || '')}" data-status="${escapeHTML(ctrl.status || 'Missing')}">
+                                <td style="font-weight:700;color:var(--accent);font-size:0.8rem;white-space:nowrap">${escapeHTML(parsed.code)}</td>
+                                <td style="font-weight:400;font-size:0.8rem;line-height:1.45">${escapeHTML(parsed.title)}</td>
+                                <td>
+                                    <div class="segmented-control ${isNA ? 'not-applicable' : 'applicable'}" id="seg-toggle-${ctrl.id}">
+                                        <button type="button" class="seg-btn ${!isNA ? 'active' : ''}" onclick="${!isNA ? '' : `window.toggleSoAApplicability('${ctrl.id}', 'Applicable')`}">Sim</button>
+                                        <button type="button" class="seg-btn ${isNA ? 'active' : ''}" onclick="${isNA ? '' : `window.toggleSoAApplicability('${ctrl.id}', 'Not Applicable')`}">Não</button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge ${isNA ? 'badge-not-applicable' : 'badge-' + (ctrl.status || 'missing').toLowerCase().replace(/\s/g,'-')}">
+                                        ${escapeHTML(ctrl.status || 'Missing')}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div style="display:flex;gap:6px">
+                                        <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.12)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
+                                            R: ${risksCount}
+                                        </span>
+                                        <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.15)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
+                                            E: ${evidenceCount}
+                                        </span>
+                                    </div>
+                                    <div style="display:flex;gap:4px;margin-top:4px">
+                                        ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO ✓</span>` : ''}
+                                        ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO ✓</span>` : ''}
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" value="${escapeHTML(ctrl.description || '')}" 
+                                        placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
+                                        class="soa-justification-input ${isJustificationMissing ? 'required-missing' : ''}" 
+                                        onblur="window.saveSoAJustification('${ctrl.id}', this.value); if (this.value.trim() !== '') { this.classList.remove('required-missing'); } else if (${isNA}) { this.classList.add('required-missing'); }" />
+                                </td>
+                                <td>
+                                    <select onchange="window.updateControlMaturity('${ctrl.id}', this.value)" class="custom-select" style="padding:6px 10px;width:100%;background:rgba(7,11,20,0.8);color:var(--text);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-weight:600;font-size:0.8rem;cursor:pointer">
+                                        ${[0, 1, 2, 3, 4, 5].map(val => `<option value="${val}" ${ctrl.maturity === val ? 'selected' : ''}>CMM ${val}</option>`).join('')}
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
             }
             c.innerHTML = html;
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar SoA: ${escapeHTML(e.message)}</div>`;
         }
     }
+
+    window.toggleSoAAccordion = function(sectionId) {
+        const el = document.getElementById(`soa-acc-${sectionId}`);
+        if (el) {
+            const isActive = el.classList.toggle('active');
+            window.soaAccordionStates = window.soaAccordionStates || {};
+            window.soaAccordionStates[sectionId] = isActive;
+        }
+    };
 
     window.setSoAFilter = function(filter) {
         window.currentSoAFilter = filter;
@@ -563,12 +679,18 @@ import { navigate } from '../router.js';
                     const date = e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : '';
                     const sizeKB = e.file_size ? `${(e.file_size / 1024).toFixed(1)} KB` : '';
                     
+                    const cisoDetails = e.ciso_approved_ip 
+                      ? `<br><span style="font-size:0.6rem; color:var(--text-dim); margin-left:10px; font-family:monospace">IP: ${escapeHTML(e.ciso_approved_ip)}</span>` 
+                      : '';
                     const cisoSign = e.ciso_approved_by 
-                      ? `<span style="color:var(--success)">DPO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>` 
+                      ? `<span style="color:var(--success)">DPO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>${cisoDetails}` 
                       : `<span style="color:var(--text-dim)">DPO: Pendente de assinatura</span>`;
                       
+                    const ceoDetails = e.ceo_approved_ip 
+                      ? `<br><span style="font-size:0.6rem; color:var(--text-dim); margin-left:10px; font-family:monospace">IP: ${escapeHTML(e.ceo_approved_ip)}</span>` 
+                      : '';
                     const ceoSign = e.ceo_approved_by 
-                      ? `<span style="color:var(--success)">CEO: Assinado por ${escapeHTML(e.ceo_approved_by)} (${new Date(e.ceo_approved_at).toLocaleDateString('pt-BR')})</span>` 
+                      ? `<span style="color:var(--success)">CEO: Assinado por ${escapeHTML(e.ceo_approved_by)} (${new Date(e.ceo_approved_at).toLocaleDateString('pt-BR')})</span>${ceoDetails}` 
                       : `<span style="color:var(--text-dim)">CEO: Pendente de assinatura</span>`;
 
                     const isOrgUser = S.user && S.user.role === 'org_user';
@@ -878,11 +1000,12 @@ import { navigate } from '../router.js';
             let cisoStatusHtml = '';
             if (ctrl.ciso_approved_by) {
                 cisoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                    <div style="width:100%">
                         <div>
                             <strong>Líder SGSI:</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}</span>
+                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleString()}</span>
                         </div>
+                        ${ctrl.ciso_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ciso_approved_ip)} | UA: ${escapeHTML(ctrl.ciso_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -893,7 +1016,6 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            
                             <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar</button>
                         </div>
                     </div>
@@ -903,11 +1025,12 @@ import { navigate } from '../router.js';
             let ceoStatusHtml = '';
             if (ctrl.ceo_approved_by) {
                 ceoStatusHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+                    <div style="width:100%">
                         <div>
                             <strong>Direção Executiva:</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}</span>
+                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleString()}</span>
                         </div>
+                        ${ctrl.ceo_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ceo_approved_ip)} | UA: ${escapeHTML(ctrl.ceo_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -918,7 +1041,6 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            
                             <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar</button>
                         </div>
                     </div>
@@ -938,6 +1060,59 @@ import { navigate } from '../router.js';
                 `;
             }
 
+            let signatureSealHtml = '';
+            const evidenceHash = (typeof policyRes !== 'undefined' && policyRes) ? policyRes.evidence_hash : null;
+            if (ctrl.ciso_approved_by || ctrl.ceo_approved_by) {
+                signatureSealHtml = `
+                    <div style="background: rgba(0, 173, 232, 0.03); border: 1px solid rgba(0, 173, 232, 0.15); border-radius: 12px; padding: 1rem 1.25rem; backdrop-filter: blur(12px);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.5rem; margin-bottom: 0.6rem;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 8px; height: 8px; border-radius: 50%; background: #00ade8; box-shadow: 0 0 10px #00ade8;"></div>
+                                <span style="font-family: 'Montserrat', sans-serif; font-size: 0.65rem; font-weight: 700; color: #f5f5f7; text-transform: uppercase; letter-spacing: 0.1em;">Selo de Homologação Digital</span>
+                            </div>
+                            <span style="font-family: 'Montserrat', sans-serif; font-size: 0.55rem; font-weight: 700; color: #00ade8; background: rgba(0, 173, 232, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 173, 232, 0.2);">ISO 27001 CONFORME</span>
+                        </div>
+                        <div style="font-size: 0.7rem; font-family: monospace; display: flex; flex-direction: column; gap: 4px; color: rgba(229, 235, 255, 0.75);">
+                            <div><span style="color: var(--text-dim);">INTEGRIDADE (SHA-256):</span> <span style="color: #00ade8; word-break: break-all;">${evidenceHash || 'Calculando...'}</span></div>
+                            <div><span style="color: var(--text-dim);">MÉTODO:</span> Assinatura Eletrônica Simples (Senha & Autenticação de Sessão via HTTPS)</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            let versionsTableHtml = '';
+            if (versions.length > 0) {
+                versionsTableHtml = `
+                    <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem; margin-top:8px">
+                        <h4 style="font-family:'Montserrat',sans-serif; font-size:0.7rem; color:var(--accent); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em">Histórico de Alterações & Revisões</h4>
+                        <div style="overflow-x:auto">
+                            <table style="width:100%; font-size:0.7rem; border-collapse:collapse; background:rgba(255,255,255,0.01); border-radius:8px; border:1px solid rgba(255,255,255,0.05)">
+                                <thead>
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; color:var(--text-dim)">
+                                        <th style="padding:6px 12px">Versão</th>
+                                        <th style="padding:6px 12px">Data</th>
+                                        <th style="padding:6px 12px">Modificado por</th>
+                                        <th style="padding:6px 12px">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${versions.map((v, i) => `
+                                        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                                            <td style="padding:6px 12px; font-weight:600; color:var(--accent)">v${v.version}</td>
+                                            <td style="padding:6px 12px">${new Date(v.created_at).toLocaleDateString()}</td>
+                                            <td style="padding:6px 12px">${escapeHTML(v.created_by)}</td>
+                                            <td style="padding:6px 12px">
+                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.6rem; margin:0;" onclick="window.onPolicyVersionChange('${projectId}', '${controlId}', '${v.id}'); document.getElementById('policy-version-selector').value = '${v.id}'; document.getElementById('btn-restore-version').style.display = 'inline-block';">Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+
             const renderedHtml = window.marked ? window.marked.parse(policyText) : escapeHTML(policyText);
             const html = `
                 <div class="modal-header">
@@ -951,6 +1126,7 @@ import { navigate } from '../router.js';
                     </div>
                     
                     ${versionsSelectHtml}
+                    ${signatureSealHtml}
 
                     <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
                     <div id="policy-content-container">
@@ -968,6 +1144,8 @@ import { navigate } from '../router.js';
                             </div>
                         </div>
                     </div>
+                    
+                    ${versionsTableHtml}
                     
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
                         <div style="display:flex; gap:8px">

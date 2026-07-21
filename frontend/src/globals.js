@@ -63,6 +63,25 @@ window.viewEvidence = async function viewEvidence(id) {
                 previewHtml = `<div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed var(--border); margin-top: 1rem; color: var(--text-dim); font-size: 0.8rem;">Visualização direta não suportada para o formato (.${ext}). Use o botão abaixo para baixar.</div>`;
             }
             
+            let sealHtml = '';
+            if (ev.ciso_approved_by || ev.ceo_approved_by) {
+                const cisoText = ev.ciso_approved_by ? `Assinado por ${escapeHTML(ev.ciso_approved_by)} em ${new Date(ev.ciso_approved_at).toLocaleString()} ${ev.ciso_approved_ip ? `(IP: ${escapeHTML(ev.ciso_approved_ip)})` : ''}` : 'Pendente';
+                const ceoText = ev.ceo_approved_by ? `Assinado por ${escapeHTML(ev.ceo_approved_by)} em ${new Date(ev.ceo_approved_at).toLocaleString()} ${ev.ceo_approved_ip ? `(IP: ${escapeHTML(ev.ceo_approved_ip)})` : ''}` : 'Pendente';
+                
+                sealHtml = `
+                    <div style="background: rgba(0, 173, 232, 0.02); border: 1px solid rgba(0, 173, 232, 0.15); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: #00ade8;"></div>
+                            <span style="font-family: 'Montserrat', sans-serif; font-size: 0.65rem; font-weight: 700; color: #f5f5f7; text-transform: uppercase; letter-spacing: 0.05em;">Selo de Assinatura da Evidência</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px;">
+                            <div><strong>DPO:</strong> <span style="color: ${ev.ciso_approved_by ? '#10b981' : 'var(--text-dim)'}">${cisoText}</span></div>
+                            <div><strong>CEO:</strong> <span style="color: ${ev.ceo_approved_by ? '#10b981' : 'var(--text-dim)'}">${ceoText}</span></div>
+                        </div>
+                    </div>
+                `;
+            }
+
             const html = `
                 <div style="padding: 1.5rem">
                     <h2 style="font-family:'Montserrat',sans-serif; font-weight:700; color:var(--accent); font-size:1.2rem; margin-bottom:0.5rem">Detalhes da Evidência</h2>
@@ -71,6 +90,7 @@ window.viewEvidence = async function viewEvidence(id) {
                     <p style="font-size:0.85rem; margin:0.25rem 0;"><strong>Data de Envio:</strong> ${new Date(ev.created_at).toLocaleString()}</p>
                     
                     ${previewHtml}
+                    ${sealHtml}
                     
                     <div style="margin-top: 1.5rem; display:flex; gap:0.5rem; justify-content: flex-end;">
                         <button class="btn" onclick="forceCloseModal()">Fechar</button>

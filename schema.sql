@@ -196,8 +196,12 @@ CREATE TABLE IF NOT EXISTS compliance_controls (
     owner TEXT,
     ciso_approved_by TEXT,
     ciso_approved_at TEXT,
+    ciso_approved_ip TEXT,
+    ciso_approved_ua TEXT,
     ceo_approved_by TEXT,
     ceo_approved_at TEXT,
+    ceo_approved_ip TEXT,
+    ceo_approved_ua TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -217,8 +221,12 @@ CREATE TABLE IF NOT EXISTS evidence (
     evaluation_notes TEXT,
     ciso_approved_by TEXT,
     ciso_approved_at TEXT,
+    ciso_approved_ip TEXT,
+    ciso_approved_ua TEXT,
     ceo_approved_by TEXT,
     ceo_approved_at TEXT,
+    ceo_approved_ip TEXT,
+    ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -380,8 +388,12 @@ CREATE TABLE IF NOT EXISTS ropa_records (
     owner TEXT,
     ciso_approved_by TEXT,
     ciso_approved_at TEXT,
+    ciso_approved_ip TEXT,
+    ciso_approved_ua TEXT,
     ceo_approved_by TEXT,
     ceo_approved_at TEXT,
+    ceo_approved_ip TEXT,
+    ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

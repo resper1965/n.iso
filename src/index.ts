@@ -2801,9 +2801,22 @@ app.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
       }
     }
 
+    let fileHash = evidence?.file_hash || null;
+    if (!fileHash && content) {
+      try {
+        const encoder = new TextEncoder();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(content));
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (hashErr) {
+        console.error('Erro ao calcular hash em runtime:', hashErr);
+      }
+    }
+
     return c.json({
       content,
       evidence_id: evidenceId,
+      evidence_hash: fileHash,
       control: ctrl
     });
   } catch (e: any) {
@@ -3366,18 +3379,21 @@ app.put('/api/v1/evidence/:id/approve', async (c) => {
     if (targetRole !== 'ciso' && targetRole !== 'ceo') return c.json({ error: 'Papel inválido' }, 400);
 
     const dateStr = new Date().toISOString();
+    const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
+    const ua = c.req.header('User-Agent') || 'Unknown';
+
     if (targetRole === 'ciso') {
       await c.env.DB.prepare(
         `UPDATE evidence 
-         SET ciso_approved_by = ?, ciso_approved_at = ?, updated_at = datetime('now')
+         SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?, updated_at = datetime('now')
          WHERE id = ?`
-      ).bind(approvedBy, dateStr, id).run();
+      ).bind(approvedBy, dateStr, ip, ua, id).run();
     } else {
       await c.env.DB.prepare(
         `UPDATE evidence 
-         SET ceo_approved_by = ?, ceo_approved_at = ?, updated_at = datetime('now')
+         SET ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?, updated_at = datetime('now')
          WHERE id = ?`
-      ).bind(approvedBy, dateStr, id).run();
+      ).bind(approvedBy, dateStr, ip, ua, id).run();
     }
 
     await logAudit(c.env.DB, 'evidence.signed', email || 'system', `Evidência ${id} assinada como ${targetRole} por ${approvedBy}`);
@@ -3970,20 +3986,23 @@ app.post('/api/v1/controls/:id/approve', async (c) => {
 
     const approved_by = dbUser.name;
     const dateStr = new Date().toISOString();
+    const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
+    const ua = c.req.header('User-Agent') || 'Unknown';
+
     if (role === 'ciso') {
       await c.env.DB.prepare(
         `UPDATE compliance_controls 
-         SET ciso_approved_by = ?, ciso_approved_at = ?, 
+         SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?,
              status = CASE WHEN ceo_approved_by IS NOT NULL THEN 'Approved' ELSE status END 
          WHERE id = ?`
-      ).bind(approved_by, dateStr, id).run();
+      ).bind(approved_by, dateStr, ip, ua, id).run();
     } else {
       await c.env.DB.prepare(
         `UPDATE compliance_controls 
-         SET ceo_approved_by = ?, ceo_approved_at = ?, 
+         SET ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?,
              status = CASE WHEN ciso_approved_by IS NOT NULL THEN 'Approved' ELSE status END 
          WHERE id = ?`
-      ).bind(approved_by, dateStr, id).run();
+      ).bind(approved_by, dateStr, ip, ua, id).run();
     }
 
     await logAudit(c.env.DB, 'policy.signed', user.email, `Política ${id} assinada eletronicamente como ${role.toUpperCase()} por ${approved_by}`);
@@ -4457,16 +4476,18 @@ app.post('/api/v1/projects/:id/ropa/:recordId/approve', async (c) => {
 
     let approvedBy = dbUser?.name || user.email;
     const now = new Date().toISOString();
+    const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
+    const ua = c.req.header('User-Agent') || 'Unknown';
 
     if (role === 'ciso') {
       await c.env.DB.prepare(
-        'UPDATE ropa_records SET ciso_approved_by = ?, ciso_approved_at = ?, status = ? WHERE id = ? AND project_id = ?'
-      ).bind(approvedBy, now, 'Approved', recordId, projectId).run();
+        'UPDATE ropa_records SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?, status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, now, ip, ua, 'Approved', recordId, projectId).run();
       await logAudit(c.env.DB, 'ropa.approved_ciso', user.email, `ROPA ${recordId} aprovado pelo Líder SGSI (${approvedBy})`);
     } else {
       await c.env.DB.prepare(
-        'UPDATE ropa_records SET ceo_approved_by = ?, ceo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?'
-      ).bind(approvedBy, now, 'Approved', recordId, projectId).run();
+        'UPDATE ropa_records SET ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?, status = ? WHERE id = ? AND project_id = ?'
+      ).bind(approvedBy, now, ip, ua, 'Approved', recordId, projectId).run();
       await logAudit(c.env.DB, 'ropa.approved_ceo', user.email, `ROPA ${recordId} aprovado pela Direção Executiva (${approvedBy})`);
     }
 

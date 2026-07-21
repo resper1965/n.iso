@@ -481,6 +481,13 @@ import { navigate } from '../router.js';
             }
         });
         
+        const getInitials = name => {
+            if (!name) return '??';
+            const parts = name.trim().split(/\s+/);
+            if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        };
+
         let colsHtml = '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const manageBtn = canCrud ? `
@@ -492,33 +499,41 @@ import { navigate } from '../router.js';
         for (const key in categories) {
             const cat = categories[key];
             let membersHtml = cat.list.map(m => {
-                const primaryBadge = m.is_primary ? ` <span style="font-weight:700; font-size:0.6rem; color:#00ade8; background:rgba(0,173,232,0.15); padding:1px 4px; border-radius:3px; margin-left:4px">DPO / Líder</span>` : '';
+                const primaryBadge = m.is_primary ? `<span style="font-weight:700; font-size:0.55rem; color:#00ade8; background:rgba(0,173,232,0.12); border:1px solid rgba(0,173,232,0.2); padding:1px 4px; border-radius:4px; margin-left:6px; text-transform:uppercase; font-family:'Montserrat',sans-serif; letter-spacing:0.5px">DPO / Líder</span>` : '';
+                const initials = getInitials(m.name);
                 return `
-                    <div style="font-size:0.75rem; font-weight:600; color:var(--text); margin-bottom:6px">
-                        ${escapeHTML(m.name)} 
-                        <span style="font-weight:300; font-size:0.65rem; color:var(--accent)">- ${escapeHTML(m.job_title)}</span>
-                        ${primaryBadge}
-                        ${m.email ? `<div style="font-size:0.6rem; color:var(--text-dim); font-weight:300">${escapeHTML(m.email)}</div>` : ''}
+                    <div class="gov-member-item">
+                        <div class="gov-avatar">${escapeHTML(initials)}</div>
+                        <div class="gov-member-info">
+                            <div class="gov-member-name">
+                                <span>${escapeHTML(m.name)}</span>
+                                ${primaryBadge}
+                            </div>
+                            <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
+                            ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
+                        </div>
                     </div>
                 `;
-            }).join('') || `<div style="font-size:0.7rem; color:var(--text-dim); font-style:italic">Nenhum cadastrado</div>`;
+            }).join('') || `<div class="gov-empty-list">Nenhum cadastrado</div>`;
             
             colsHtml += `
-                <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                    <div style="font-size:0.65rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">${cat.label}</div>
-                    ${membersHtml}
+                <div class="gov-section-card">
+                    <div style="font-size:0.65rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px; margin-bottom:8px">${cat.label}</div>
+                    <div style="display:flex; flex-direction:column; gap:8px">
+                        ${membersHtml}
+                    </div>
                 </div>
             `;
         }
         
         return `
             <!-- Painel de Governança/Organograma do Projeto -->
-            <div class="stat-card" style="margin-bottom:1.5rem; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <div style="margin-bottom:1.5rem; padding:20px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:16px; backdrop-filter:blur(24px)">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
                     <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.85rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px">Governança & Organograma do SGSI</div>
                     ${manageBtn}
                 </div>
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px;">
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;">
                     ${colsHtml}
                 </div>
             </div>
@@ -701,6 +716,7 @@ import { navigate } from '../router.js';
             S.currentGovernance = members;
             
             if (Array.isArray(newProgress)) {
+                if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
                 newProgress.forEach(row => {
                     S.phaseChecksAssigned[projectId + '_' + row.item_id] = row.assigned_to || '';
                 });
@@ -734,6 +750,7 @@ import { navigate } from '../router.js';
             S.currentGovernance = members;
             
             if (Array.isArray(newProgress)) {
+                if (!S.phaseChecksAssigned) S.phaseChecksAssigned = {};
                 newProgress.forEach(row => {
                     S.phaseChecksAssigned[projectId + '_' + row.item_id] = row.assigned_to || '';
                 });
@@ -759,49 +776,67 @@ import { navigate } from '../router.js';
             const ctx = await api('GET', `/api/v1/projects/${S.activeProject.id}/context`) || {};
             
             c.innerHTML = `
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
-                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
-                        <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px" class="fade-in">
+                    <div class="card" style="grid-column:span 2; padding:24px">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:6px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
+                        <div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:20px;line-height:1.4">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</div>
                         
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Forças Internas (Strengths)</label>
-                                <textarea id="ctx-strengths" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                            <div class="form-group">
+                                <label class="form-label" style="color:#00ade8;font-weight:600;display:flex;align-items:center;gap:6px">
+                                    <span style="width:6px;height:6px;background:#00ade8;border-radius:50%"></span>
+                                    Forças Internas (Strengths)
+                                </label>
+                                <textarea id="ctx-strengths" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Fraquezas Internas (Weaknesses)</label>
-                                <textarea id="ctx-weaknesses" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
+                            <div class="form-group">
+                                <label class="form-label" style="color:#f59e0b;font-weight:600;display:flex;align-items:center;gap:6px">
+                                    <span style="width:6px;height:6px;background:#f59e0b;border-radius:50%"></span>
+                                    Fraquezas Internas (Weaknesses)
+                                </label>
+                                <textarea id="ctx-weaknesses" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Oportunidades Externas (Opportunities)</label>
-                                <textarea id="ctx-opportunities" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
+                            <div class="form-group">
+                                <label class="form-label" style="color:#10b981;font-weight:600;display:flex;align-items:center;gap:6px">
+                                    <span style="width:6px;height:6px;background:#10b981;border-radius:50%"></span>
+                                    Oportunidades Externas (Opportunities)
+                                </label>
+                                <textarea id="ctx-opportunities" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
                             </div>
-                            <div>
-                                <label style="display:block;margin-bottom:6px;font-size:0.85rem;font-weight:600">Ameaças Externas (Threats)</label>
-                                <textarea id="ctx-threats" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
+                            <div class="form-group">
+                                <label class="form-label" style="color:#ef4444;font-weight:600;display:flex;align-items:center;gap:6px">
+                                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%"></span>
+                                    Ameaças Externas (Threats)
+                                </label>
+                                <textarea id="ctx-threats" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">2. Requisitos Legais / Regulatórios</div>
-                        <textarea id="ctx-legal" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+                    <div class="card" style="padding:24px">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">2. Requisitos Legais / Regulatórios</div>
+                        <div class="form-group">
+                            <textarea id="ctx-legal" class="form-input" style="width:100%;height:130px;resize:vertical;font-family:inherit" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+                        </div>
                     </div>
                     
-                    <div class="stat-card" style="background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--accent)">3. Requisitos Contratuais</div>
-                        <textarea id="ctx-contractual" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
+                    <div class="card" style="padding:24px">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">3. Requisitos Contratuais</div>
+                        <div class="form-group">
+                            <textarea id="ctx-contractual" class="form-input" style="width:100%;height:130px;resize:vertical;font-family:inherit" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
+                        </div>
                     </div>
                     
-                    <div class="stat-card" style="grid-column:span 2;background:rgba(229,235,255,0.03);border:1px solid var(--border)">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:12px;color:var(--text)">Notas Gerais</div>
-                        <textarea id="ctx-notes" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:0.9rem" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
+                    <div class="card" style="grid-column:span 2; padding:24px">
+                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Notas Gerais</div>
+                        <div class="form-group">
+                            <textarea id="ctx-notes" class="form-input" style="width:100%;height:90px;resize:vertical;font-family:inherit" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
+                        </div>
                     </div>
                 </div>
                 
-                <div style="text-align:right">
-                    <button onclick="window.saveContext()" class="btn-primary" style="padding:10px 24px">Salvar Contexto</button>
+                <div style="display:flex; justify-content:flex-end">
+                    <button onclick="window.saveContext()" class="btn btn-primary" style="padding:10px 24px; font-weight:600">Salvar Contexto</button>
                 </div>
             `;
         } catch(e) {
@@ -829,7 +864,7 @@ import { navigate } from '../router.js';
 
     async function renderStakeholders(c, h, a) {
         h.textContent = 'Partes Interessadas (Cláusula 4.2)';
-        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn-primary">Novo Stakeholder</button>`;
+        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn btn-primary">Novo Stakeholder</button>`;
         if (!S.activeProject) {
             c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
             return;
@@ -844,49 +879,79 @@ import { navigate } from '../router.js';
                 c.innerHTML = `
                     <div style="padding:3rem;text-align:center;color:var(--muted)">
                         Nenhum stakeholder cadastrado ainda.<br><br>
-                        <button onclick="window.openStakeholderModal()" class="btn-primary">Adicionar Primeira Parte Interessada</button>
+                        <button onclick="window.openStakeholderModal()" class="btn btn-primary">Adicionar Primeira Parte Interessada</button>
                     </div>
                 `;
                 return;
             }
             
+            const catLabels = {
+                client: 'Cliente',
+                regulator: 'Regulador / Auditor',
+                shareholder: 'Diretoria / Acionista',
+                employee: 'Colaborador',
+                supplier: 'Fornecedor / Operador',
+                partner: 'Parceiro',
+                consultant: 'Consultor'
+            };
+
             let html = `
-                <div class="data-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Parte Interessada</th>
-                                <th>Tipo</th>
-                                <th>Categoria</th>
-                                <th>Expectativas / Requisitos de SI</th>
-                                <th>Influência</th>
-                                <th>Método de Comunicação</th>
-                                <th style="width:120px;text-align:center">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                <div class="card fade-in">
+                    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem">Identifique, catalogue e gerencie os requisitos de segurança e privacidade das partes interessadas em conformidade com a Cláusula 4.2 da ISO 27001.</div>
+                    <div class="data-table" style="overflow-x:auto">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Parte Interessada</th>
+                                    <th style="width:110px">Tipo</th>
+                                    <th style="width:160px">Categoria</th>
+                                    <th>Expectativas / Requisitos de SI</th>
+                                    <th style="width:110px">Influência</th>
+                                    <th>Método de Comunicação</th>
+                                    <th style="width:150px; text-align:center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
             `;
             
             list.forEach(s => {
+                const catLabel = catLabels[s.category] || s.category || 'N/A';
+                
+                const typeBadge = s.type === 'internal'
+                    ? `<span class="badge" style="background:rgba(0, 173, 232, 0.08); color:var(--accent); border:1px solid rgba(0, 173, 232, 0.15)">Interno</span>`
+                    : `<span class="badge" style="background:rgba(255, 255, 255, 0.04); color:var(--text-dim); border:1px solid rgba(255, 255, 255, 0.08)">Externo</span>`;
+                
+                const influenceLvl = (s.influence || 'Medium').toLowerCase();
+                let influenceStyle = 'background:rgba(255, 255, 255, 0.04); color:var(--text-dim); border:1px solid rgba(255, 255, 255, 0.08)';
+                if (influenceLvl === 'high') {
+                    influenceStyle = 'background:rgba(239, 68, 68, 0.08); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.15)';
+                } else if (influenceLvl === 'medium') {
+                    influenceStyle = 'background:rgba(245, 158, 11, 0.08); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.15)';
+                }
+                const influenceBadge = `<span class="badge" style="${influenceStyle}">${escapeHTML(s.influence || 'Medium')}</span>`;
+
                 html += `
                     <tr>
-                        <td style="font-weight:600">${escapeHTML(s.name)}</td>
-                        <td><span class="badge ${s.type === 'internal' ? 'badge-implemented' : 'badge-partial'}">${s.type === 'internal' ? 'Interno' : 'Externo'}</span></td>
-                        <td>${escapeHTML(s.category || 'N/A')}</td>
-                        <td style="font-size:0.85rem">${escapeHTML(s.requirements || '')}</td>
-                        <td><span class="badge badge-${(s.influence || 'Medium').toLowerCase()}">${escapeHTML(s.influence || 'Medium')}</span></td>
-                        <td style="font-size:0.85rem">${escapeHTML(s.communication_method || '')}</td>
-                        <td style="text-align:center">
-                            <button onclick="window.openStakeholderModal('${s.id}')" class="btn-secondary" style="padding:4px 8px;margin-right:4px">Editar</button>
-                            <button onclick="window.deleteStakeholder('${s.id}')" class="btn-secondary" style="padding:4px 8px;color:red;border-color:rgba(255,0,0,0.2)">Deletar</button>
+                        <td style="font-weight:600; color:var(--text)">${escapeHTML(s.name)}</td>
+                        <td>${typeBadge}</td>
+                        <td style="font-weight:500">${escapeHTML(catLabel)}</td>
+                        <td style="font-size:0.8rem; line-height:1.45">${escapeHTML(s.requirements || '')}</td>
+                        <td>${influenceBadge}</td>
+                        <td style="font-size:0.8rem; line-height:1.45">${escapeHTML(s.communication_method || '')}</td>
+                        <td>
+                            <div style="display:flex; gap:6px; justify-content:center; white-space:nowrap">
+                                <button onclick="window.openStakeholderModal('${s.id}')" class="btn" style="padding:4px 8px; font-size:0.7rem; height:26px">Editar</button>
+                                <button onclick="window.deleteStakeholder('${s.id}')" class="btn btn-ghost" style="padding:4px 8px; font-size:0.7rem; height:26px; color:#ef4444; border:1px solid rgba(239,68,68,0.15)">Deletar</button>
+                            </div>
                         </td>
                     </tr>
                 `;
             });
             
             html += `
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
             c.innerHTML = html;
@@ -899,25 +964,28 @@ import { navigate } from '../router.js';
         const s = id ? S.stakeholders.find(x => x.id === id) : null;
         const isEdit = !!s;
         const html = `
-            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
-                ${isEdit ? 'Editar Parte Interessada' : 'Nova Parte Interessada'}
+            <div class="modal-header">
+                <span class="modal-title" style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--accent)">
+                    ${isEdit ? 'Editar Parte Interessada' : 'Nova Parte Interessada'}
+                </span>
+                <button class="btn-ghost" onclick="closeModal()">&times;</button>
             </div>
-            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})">
-                <div class="form-group" style="margin-bottom:12px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nome / Identificação</label>
-                    <input type="text" name="name" value="${s ? escapeHTML(s.name) : ''}" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})" style="margin-top:1rem">
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label">Nome / Identificação</label>
+                    <input type="text" name="name" class="form-input" value="${s ? escapeHTML(s.name) : ''}" required style="width:100%" />
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Tipo</label>
-                        <select name="type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Tipo</label>
+                        <select name="type" class="form-input" style="width:100%">
                             <option value="external" ${s && s.type === 'external' ? 'selected' : ''}>Externo</option>
                             <option value="internal" ${s && s.type === 'internal' ? 'selected' : ''}>Interno</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Categoria</label>
-                        <select name="category" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Categoria</label>
+                        <select name="category" class="form-input" style="width:100%">
                             <option value="client" ${s && s.category === 'client' ? 'selected' : ''}>Cliente</option>
                             <option value="regulator" ${s && s.category === 'regulator' ? 'selected' : ''}>Regulador / Auditor</option>
                             <option value="shareholder" ${s && s.category === 'shareholder' ? 'selected' : ''}>Diretoria / Acionista</option>
@@ -928,27 +996,27 @@ import { navigate } from '../router.js';
                         </select>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Nível de Influência</label>
-                        <select name="influence" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
+                        <label class="form-label">Nível de Influência</label>
+                        <select name="influence" class="form-input" style="width:100%">
                             <option value="Low" ${s && s.influence === 'Low' ? 'selected' : ''}>Baixo</option>
                             <option value="Medium" ${s && s.influence === 'Medium' ? 'selected' : ''}>Médio</option>
                             <option value="High" ${s && s.influence === 'High' ? 'selected' : ''}>Alto</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label style="display:block;margin-bottom:4px;font-size:0.85rem">Método de Comunicação</label>
-                        <input type="text" name="communication_method" value="${s ? escapeHTML(s.communication_method || '') : ''}" placeholder="Ex: Email trimestral, Reunião" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
+                        <label class="form-label">Método de Comunicação</label>
+                        <input type="text" name="communication_method" class="form-input" value="${s ? escapeHTML(s.communication_method || '') : ''}" placeholder="Ex: Email trimestral, Reunião" style="width:100%" />
                     </div>
                 </div>
-                <div class="form-group" style="margin-bottom:20px">
-                    <label style="display:block;margin-bottom:4px;font-size:0.85rem">Expectativas e Requisitos de SI</label>
-                    <textarea name="requirements" style="width:100%;height:80px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit">${s ? escapeHTML(s.requirements || '') : ''}</textarea>
+                <div class="form-group" style="margin-bottom:24px">
+                    <label class="form-label">Expectativas e Requisitos de SI</label>
+                    <textarea name="requirements" class="form-input" style="width:100%;height:80px;font-family:inherit">${s ? escapeHTML(s.requirements || '') : ''}</textarea>
                 </div>
-                <div style="text-align:right">
-                    <button type="button" onclick="closeModal()" class="btn-secondary" style="margin-right:8px">Cancelar</button>
-                    <button type="submit" class="btn-primary">${isEdit ? 'Salvar Alterações' : 'Criar'}</button>
+                <div style="display:flex; justify-content:flex-end; gap:8px">
+                    <button type="button" onclick="closeModal()" class="btn">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">${isEdit ? 'Salvar Alterações' : 'Criar'}</button>
                 </div>
             </form>
         `;
