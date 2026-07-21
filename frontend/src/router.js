@@ -1,12 +1,18 @@
 import { S } from './state.js';
 
 export     function navigate(view, data) {
-        S.view = view;
+        let targetView = view;
+        const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
+        if (isClient && (view === 'dashboard' || view === 'projects')) {
+            targetView = 'project-detail';
+        }
+        
+        S.view = targetView;
         if (data) Object.assign(S, data);
         
         // Update active states in sidebar
         document.querySelectorAll('.sidebar-nav').forEach(el => el.classList.remove('active'));
-        const navId = `nav-${view.split('-')[0]}`;
+        const navId = `nav-${targetView.split('-')[0]}`;
         const el = document.getElementById(navId);
         if (el) el.classList.add('active');
 

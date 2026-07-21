@@ -261,17 +261,76 @@ window.updateHeaderUser = function updateHeaderUser() {
                 let roleText = 'Usuário';
                 if (S.user.role === 'platform_admin' || S.user.role === 'admin') roleText = 'Administrador';
                 else if (S.user.role === 'consultor' || S.user.role === 'consultant') roleText = 'Consultor';
-                else if (S.user.role === 'org_admin') roleText = 'Adm. Organização';
+                else if (S.user.role === 'org_admin') roleText = 'Gestor do Cliente';
+                else if (S.user.role === 'org_user') roleText = 'Colaborador do Cliente';
                 else if (S.user.role === 'client') roleText = 'Cliente';
                 roleEl.textContent = roleText;
             }
         }
+        
+        const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
+        
+        // Ocultar Dashboard e Projetos para clientes
+        const navDashboard = document.getElementById('nav-dashboard');
+        const navProjects = document.getElementById('nav-projects');
+        const selectorContainer = document.getElementById('sidebar-project-selector-container');
+        const projectSelect = document.getElementById('sidebar-project-select');
+        
+        if (navDashboard) navDashboard.style.display = isClient ? 'none' : '';
+        if (navProjects) navProjects.style.display = isClient ? 'none' : '';
+        if (selectorContainer) {
+            const manageLink = selectorContainer.querySelector('a');
+            if (manageLink) manageLink.style.display = isClient ? 'none' : '';
+        }
+        if (projectSelect) {
+            projectSelect.disabled = isClient;
+        }
+
+        // Ocultar grupo comercial para clientes
+        const labelSales = document.getElementById('label-group-sales');
+        const groupSales = document.getElementById('group-sales');
+        if (labelSales) labelSales.style.display = isClient ? 'none' : '';
+        if (groupSales) groupSales.style.display = isClient ? 'none' : '';
+
+        // Configurações do grupo de sistema
+        const labelSystem = document.getElementById('label-group-system');
+        const groupSystem = document.getElementById('group-system-config');
+        const navAuditTrail = document.getElementById('nav-audit-trail');
+        const navSettings = document.getElementById('nav-settings');
         const navUsers = document.getElementById('nav-users');
-        if (navUsers) {
-            if (S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant')) {
-                navUsers.style.display = '';
+
+        if (isClient) {
+            if (labelSystem) labelSystem.style.display = 'none';
+            if (navAuditTrail) navAuditTrail.style.display = 'none';
+            if (navSettings) navSettings.style.display = 'none';
+            
+            if (S.user.role === 'org_admin') {
+                if (groupSystem) {
+                    groupSystem.style.display = 'block';
+                    groupSystem.style.maxHeight = 'none';
+                }
+                if (navUsers) {
+                    navUsers.style.display = '';
+                    const navUsersText = navUsers.querySelector('.sidebar-nav-text');
+                    if (navUsersText) navUsersText.textContent = 'Gestão de Equipe';
+                }
             } else {
-                navUsers.style.display = 'none';
+                if (groupSystem) groupSystem.style.display = 'none';
+                if (navUsers) navUsers.style.display = 'none';
+            }
+        } else {
+            if (labelSystem) labelSystem.style.display = '';
+            if (groupSystem) {
+                groupSystem.style.display = '';
+                groupSystem.style.maxHeight = '';
+            }
+            if (navAuditTrail) navAuditTrail.style.display = '';
+            if (navSettings) navSettings.style.display = '';
+            if (navUsers) {
+                const canSeeUsers = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+                navUsers.style.display = canSeeUsers ? '' : 'none';
+                const navUsersText = navUsers.querySelector('.sidebar-nav-text');
+                if (navUsersText) navUsersText.textContent = 'Usuários';
             }
         }
     }
@@ -567,10 +626,27 @@ window.initApp = async function initApp() {
         }
         document.getElementById('login-overlay').classList.add('hidden');
         await loadAll();
+        
+        const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
+        if (isClient && S.user.client_project_id) {
+            if (S.projects && S.projects.length > 0) {
+                const myProj = S.projects.find(p => p.id === S.user.client_project_id);
+                if (myProj) {
+                    S.activeProject = myProj;
+                    localStorage.setItem('niso_activeProjectId', myProj.id);
+                }
+            }
+        }
+
         updateHeaderUser();
         updateActiveProjectWidget();
         setLang(S.lang);
-        navigate('dashboard');
+
+        if (isClient && S.user.client_project_id) {
+            navigate('project-detail');
+        } else {
+            navigate('dashboard');
+        }
         // ponytail: poll notifications every 60s
         setInterval(loadNotifications, 60000);
         // Close dropdowns on outside click

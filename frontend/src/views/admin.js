@@ -190,7 +190,73 @@ import { navigate, render } from '../router.js';
             </option>
         `).join('');
 
+        const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+        
+        let roleOptions = '';
+        if (isSystemAdmin) {
+            roleOptions = `
+                <option value="">Selecione um papel</option>
+                <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma</option>
+                <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor</option>
+                <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente</option>
+                <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
+            `;
+        } else {
+            roleOptions = `
+                <option value="">Selecione um papel</option>
+                <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente</option>
+                <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
+            `;
+        }
+
+        const activeProjId = S.activeProject ? S.activeProject.id : (S.user ? S.user.client_project_id : null);
+        let govMembers = [];
+        if (activeProjId) {
+            try {
+                govMembers = await api('GET', `/api/v1/projects/${activeProjId}/governance`);
+            } catch(e) {
+                govMembers = [];
+            }
+        }
+        
+        let govImportHtml = '';
+        if (!user && govMembers.length > 0) {
+            govImportHtml = `
+                <div class="form-group" style="margin-bottom: 1.25rem; border-bottom: 1px dashed var(--border); padding-bottom: 1.25rem;">
+                    <label class="form-label" style="color:var(--accent)">Importar da Governança do Projeto</label>
+                    <select id="user-m-gov-import" class="form-input" onchange="window.importFromGovernance(this.value)">
+                        <option value="">Selecione um membro para importar...</option>
+                        ${govMembers.map((m, idx) => `<option value="${idx}">${escapeHTML(m.name)} (${escapeHTML(m.job_title)})</option>`).join('')}
+                    </select>
+                </div>
+            `;
+        }
+        
+        window.govMembersList = govMembers;
+        window.importFromGovernance = function(idx) {
+            if (idx === '') return;
+            const member = window.govMembersList[parseInt(idx, 10)];
+            if (!member) return;
+            
+            const nameInput = document.getElementById('user-m-name');
+            const emailInput = document.getElementById('user-m-email');
+            const roleSelect = document.getElementById('user-m-role');
+            
+            if (nameInput) nameInput.value = member.name || '';
+            if (emailInput) emailInput.value = member.email || '';
+            
+            if (roleSelect) {
+                const title = (member.job_title || '').toLowerCase();
+                if (title.includes('ceo') || title.includes('ciso') || title.includes('sgsi') || title.includes('diret') || title.includes('execut')) {
+                    roleSelect.value = 'org_admin';
+                } else {
+                    roleSelect.value = 'org_user';
+                }
+            }
+        };
+
         const isClientRole = user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client');
+        const showProjectSelect = isSystemAdmin && (!user || isClientRole);
 
         const html = `
             <div class="modal-header">
@@ -198,6 +264,7 @@ import { navigate, render } from '../router.js';
                 <button class="btn-ghost" onclick="closeModal()">&times;</button>
             </div>
             <div style="display:flex; flex-direction:column; gap:1.25rem">
+                ${govImportHtml}
                 <div class="form-group">
                     <label class="form-label">Nome Completo</label>
                     <input type="text" id="user-m-name" class="form-input" value="${user ? escapeHTML(user.name) : ''}" placeholder="Ex: Roberto Silva">
@@ -213,15 +280,11 @@ import { navigate, render } from '../router.js';
                 <div class="form-group">
                     <label class="form-label">Papel (Role)</label>
                     <select id="user-m-role" class="form-input" onchange="toggleUserProjectSelect(this.value)">
-                        <option value="">Selecione um papel</option>
-                        <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma</option>
-                        <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor</option>
-                        <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente (CISO/CEO)</option>
-                        <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
+                        ${roleOptions}
                     </select>
                 </div>
                 
-                <div class="form-group" id="user-m-project-group" style="display: ${isClientRole ? 'block' : 'none'}">
+                <div class="form-group" id="user-m-project-group" style="display: ${showProjectSelect ? 'block' : 'none'}">
                     <label class="form-label">Projeto Associado</label>
                     <select id="user-m-project" class="form-input">
                         <option value="">Nenhum projeto selecionado</option>
@@ -241,7 +304,8 @@ import { navigate, render } from '../router.js';
     window.toggleUserProjectSelect = function(role) {
         const group = document.getElementById('user-m-project-group');
         if (group) {
-            if (role === 'org_admin' || role === 'org_user' || role === 'client') {
+            const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+            if (isSystemAdmin && (role === 'org_admin' || role === 'org_user' || role === 'client')) {
                 group.style.display = 'block';
             } else {
                 group.style.display = 'none';
@@ -256,7 +320,8 @@ import { navigate, render } from '../router.js';
         const email = document.getElementById('user-m-email').value.trim();
         const password = document.getElementById('user-m-password').value;
         const role = document.getElementById('user-m-role').value;
-        const client_project_id = document.getElementById('user-m-project').value || null;
+        const projectEl = document.getElementById('user-m-project');
+        const client_project_id = projectEl ? (projectEl.value || null) : null;
 
         if (!name || !email || !role) {
             showToast('Preencha os campos obrigatórios (Nome, E-mail e Papel).', 'error');

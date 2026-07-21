@@ -266,9 +266,9 @@ app.use('/api/v1/*', async (c, next) => {
   // Block platform-wide endpoints for non-consultor/non-platform_admin
   const consultantOnly = ['/api/v1/leads', '/api/v1/assessments', '/api/v1/proposals', '/api/v1/contracts', '/api/v1/portfolio', '/api/v1/users', '/api/v1/dashboard'];
   if (consultantOnly.some(p => path.startsWith(p)) && user.role !== 'consultor') {
-    // ponytail: allow client access to their own assessment/proposal/contract
-    let isOwnResource = false;
-    if (user.client_lead_id) {
+    // permitir org_admin de gerenciar usuários de sua própria organização
+    let isOwnResource = (user.role === 'org_admin' && path.startsWith('/api/v1/users'));
+    if (!isOwnResource && user.client_lead_id) {
       const assessmentMatch = path.match(/\/api\/v1\/assessments\/([^\/]+)/);
       const proposalMatch = path.match(/\/api\/v1\/proposals\/([^\/]+)/);
       const contractMatch = path.match(/\/api\/v1\/contracts\/([^\/]+)/);
@@ -574,10 +574,16 @@ app.post('/api/v1/auth/change-password', async (c) => {
 
 app.get('/api/v1/users', async (c) => {
   const user = c.get('user');
-  if (user.role !== 'consultor' && user.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+  if (user.role !== 'consultor' && user.role !== 'platform_admin' && user.role !== 'org_admin') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
   
   try {
-    const { results } = await c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC').all();
+    let stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC');
+    if (user.role === 'org_admin') {
+      stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users WHERE client_project_id = ? ORDER BY created_at DESC').bind(user.client_project_id || '');
+    }
+    const { results } = await stmt.all();
     const mapped = (results || []).map((u: any) => {
       let r = u.role;
       if (r === 'admin') r = 'platform_admin';
@@ -592,7 +598,9 @@ app.get('/api/v1/users', async (c) => {
 
 app.post('/api/v1/users', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
 
   try {
     const { email, password, name, role, client_project_id } = await c.req.json();
@@ -600,14 +608,23 @@ app.post('/api/v1/users', async (c) => {
       return c.json({ error: 'Campos obrigatórios: email, password, name, role' }, 400);
     }
 
+    let targetProject = client_project_id;
+    let targetRole = role;
+    if (admin.role === 'org_admin') {
+      targetProject = admin.client_project_id || null;
+      if (role !== 'org_admin' && role !== 'org_user' && role !== 'client') {
+        return c.json({ error: 'Forbidden: Cannot create users with this role' }, 403);
+      }
+    }
+
     const id = genId();
     const hash = await hashPassword(password);
     
     await c.env.DB.prepare(
       `INSERT INTO users (id, email, password_hash, name, role, client_project_id, requires_password_change) VALUES (?, ?, ?, ?, ?, ?, 1)`
-    ).bind(id, email, hash, name, role, client_project_id || null).run();
+    ).bind(id, email, hash, name, targetRole, targetProject || null).run();
 
-    await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${role}`);
+    await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${targetRole}`);
 
     // Disparar e-mail de convite
     const emailHtml = `
@@ -628,7 +645,7 @@ app.post('/api/v1/users', async (c) => {
     `;
     await sendEmail(c, email, 'Seu acesso ao nISO', emailHtml);
 
-    return c.json({ id, email, name, role, client_project_id }, 201);
+    return c.json({ id, email, name, role: targetRole, client_project_id: targetProject }, 201);
   } catch (e: any) {
     if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
     return c.json({ error: 'Falha ao criar usuário', detail: e.message }, 500);
@@ -637,15 +654,26 @@ app.post('/api/v1/users', async (c) => {
 
 app.put('/api/v1/users/:id', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
 
   const id = c.req.param('id');
   try {
     const { name, email, role, client_project_id, password } = await c.req.json();
     
-    const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first() as any;
+    const user = await c.env.DB.prepare('SELECT id, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+
+    if (admin.role === 'org_admin') {
+      if (user.client_project_id !== admin.client_project_id) {
+        return c.json({ error: 'Forbidden: Access denied to this user' }, 403);
+      }
+      if (role !== undefined && role !== 'org_admin' && role !== 'org_user' && role !== 'client') {
+        return c.json({ error: 'Forbidden: Cannot assign this role' }, 403);
+      }
     }
 
     const updates = [];
@@ -665,7 +693,7 @@ app.put('/api/v1/users/:id', async (c) => {
     }
     if (client_project_id !== undefined) {
       updates.push('client_project_id = ?');
-      values.push(client_project_id || null);
+      values.push(admin.role === 'org_admin' ? (admin.client_project_id || null) : (client_project_id || null));
     }
     if (password !== undefined && password !== '') {
       const hash = await hashPassword(password);
@@ -688,13 +716,19 @@ app.put('/api/v1/users/:id', async (c) => {
 
 app.delete('/api/v1/users/:id', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin') return c.json({ error: 'Unauthorized' }, 403);
+  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
 
   const id = c.req.param('id');
   try {
-    const user = await c.env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first() as any;
+    const user = await c.env.DB.prepare('SELECT id, email, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+
+    if (admin.role === 'org_admin' && user.client_project_id !== admin.client_project_id) {
+      return c.json({ error: 'Forbidden: Access denied to this user' }, 403);
     }
 
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();

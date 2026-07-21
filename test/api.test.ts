@@ -177,6 +177,61 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(data.role).toBe('org_admin');
     });
 
+    it('should allow org_admin to create users for their own project and restrict roles', async () => {
+      const request = new Request('http://localhost/api/v1/users', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer org-admin-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'orguser@example.com', password: 'password123', name: 'Org User', role: 'org_user', client_project_id: 'diff-project-123' })
+      });
+
+      const envWithSession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: 'my-project-123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, envWithSession);
+      expect(response.status).toBe(201);
+      const data = await response.json() as any;
+      expect(data.client_project_id).toBe('my-project-123'); // project_id coerced
+      expect(data.role).toBe('org_user');
+    });
+
+    it('should prevent org_admin from creating platform_admin users', async () => {
+      const request = new Request('http://localhost/api/v1/users', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer org-admin-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'badadmin@example.com', password: 'password123', name: 'Bad Admin', role: 'platform_admin' })
+      });
+
+      const envWithSession = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: 'my-project-123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, envWithSession);
+      expect(response.status).toBe(403);
+    });
+
     it('should enforce read-only role (org_user) to block write but allow checklist-progress and evidence upload', async () => {
       const blockRequest = new Request('http://localhost/api/v1/projects/123/risks', {
         method: 'POST',
