@@ -111,11 +111,12 @@ import { navigate, render } from '../router.js';
     }
 
     async function renderUsers(c, h, a) {
-        h.textContent = 'Gestão de Usuários';
-        a.innerHTML = `<button class="btn btn-primary" onclick="openUserModal()">+ Novo Usuário</button>`;
+        h.innerHTML = '';
+        a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
-            const users = await api('GET', '/api/v1/users');
+            const users = await api('GET', '/api/v1/users').catch(() => []);
+            const userArr = Array.isArray(users) ? users : [];
             if (!S.projects || S.projects.length === 0) {
                 await loadProjects();
             }
@@ -124,44 +125,93 @@ import { navigate, render } from '../router.js';
                 projMap[p.id] = p.project_name || p.client_name;
             });
 
+            const totalUsers = userArr.length;
+            const admins = userArr.filter(u => u.role === 'platform_admin' || u.role === 'admin' || u.role === 'consultor').length;
+            const clientUsers = totalUsers - admins;
+
+            const headerHtml = window.renderPageHeader(
+                'Gestão de Usuários & RBAC',
+                'Controle de acesso baseado em papéis, governança de privilégios e permissões por organização',
+                '<button class="btn btn-primary" onclick="openUserModal()">+ Novo Usuário</button>'
+            );
+
+            const statsHtml = window.renderStatCards([
+                { label: 'Total de Usuários', value: totalUsers, color: 'var(--accent)', subtext: 'Contas ativas' },
+                { label: 'Administradores & Consultores', value: admins, color: '#34c759', subtext: 'Equipe ness.' },
+                { label: 'Usuários de Clientes', value: clientUsers, color: '#ffcc00', subtext: 'Acesso às orgs' }
+            ]);
+
+            const tableHtml = window.renderDataTable(
+                ['Nome', 'E-mail', 'Papel (Role)', 'Projeto / Organização', 'Ações'],
+                userArr.map(u => {
+                    const projectName = u.client_project_id ? (projMap[u.client_project_id] || u.client_project_id) : '—';
+                    const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
+                                      u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
+                                      u.role === 'org_admin' ? 'Gestor Cliente' : 
+                                      u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
+                    return [
+                        `<strong>${escapeHTML(u.name)}</strong>`,
+                        escapeHTML(u.email),
+                        window.renderStatusBadge(roleLabel, u.role === 'platform_admin' ? 'info' : 'success'),
+                        escapeHTML(projectName),
+                        `<button class="btn btn-ghost btn-sm" onclick="openUserModal('${u.id}')">Editar</button>
+                         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteUser('${u.id}')">Excluir</button>`
+                    ];
+                }),
+                { emptyState: 'Nenhum usuário cadastrado.' }
+            );
+
             c.innerHTML = `
-                <div class="card fade-in">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th>E-mail</th>
-                                <th>Papel</th>
-                                <th>Projeto Associado</th>
-                                <th style="text-align:right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Array.isArray(users) ? users.map(u => {
-                                const projectName = u.client_project_id ? (projMap[u.client_project_id] || u.client_project_id) : '—';
-                                const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
-                                                  u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
-                                                  u.role === 'org_admin' ? 'Gestor Cliente' : 
-                                                  u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
-                                return `
-                                <tr>
-                                    <td style="font-weight:500">${escapeHTML(u.name)}</td>
-                                    <td>${escapeHTML(u.email)}</td>
-                                    <td><span class="status-badge" style="text-transform: capitalize">${escapeHTML(roleLabel)}</span></td>
-                                    <td>${escapeHTML(projectName)}</td>
-                                    <td style="text-align:right">
-                                        <button class="btn" style="padding:0.25rem 0.6rem; font-size:0.7rem; margin-right: 0.25rem" onclick="openUserModal('${u.id}')">Editar</button>
-                                        <button class="btn" style="padding:0.25rem 0.6rem; font-size:0.7rem; color:var(--danger)" onclick="deleteUser('${u.id}')">Excluir</button>
-                                    </td>
-                                </tr>`;
-                            }).join('') : '<tr><td colspan="5">Nenhum usuário encontrado</td></tr>'}
-                        </tbody>
-                    </table>
-                </div>
+                ${headerHtml}
+                ${statsHtml}
+                ${tableHtml}
             `;
         } catch (e) {
             c.innerHTML = '<div class="error">Erro ao carregar usuários: ' + escapeHTML(e.message) + '</div>';
         }
+    }
+
+    async function renderAuditTrail(c, h, a) {
+        h.innerHTML = '';
+        a.innerHTML = '';
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) { 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto primeiro.</p></div>'; 
+            return; 
+        }
+
+        c.innerHTML = '<div class="loading"></div>';
+        let logs = [];
+        try { logs = await api('GET', `/api/v1/projects/${proj.id}/audit-trail`); } catch(e) {}
+        if (!Array.isArray(logs)) logs = [];
+
+        const headerHtml = window.renderPageHeader(
+            'Trilha de Auditoria e Logs Imutáveis',
+            `Registro cronológico de todas as ações de conformidade e auditoria do projeto ${escapeHTML(proj.client_name || proj.project_name)}`,
+            ''
+        );
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Eventos', value: logs.length, color: 'var(--accent)', subtext: 'Registros na trilha' },
+            { label: 'Projeto Ativo', value: escapeHTML(proj.client_name || 'Sem nome'), color: '#34c759', subtext: `ID: ${proj.id}` }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Data / Hora', 'Usuário / Ator', 'Ação Realizada', 'Detalhes'],
+            logs.map(l => [
+                `<span style="white-space:nowrap;color:var(--text-dim);font-size:0.75rem">${new Date(l.created_at || l.timestamp).toLocaleString()}</span>`,
+                `<strong>${escapeHTML(l.actor || l.user_email || 'System')}</strong>`,
+                window.renderStatusBadge(l.action, 'info'),
+                `<span style="font-size:0.75rem;color:var(--text-dim)">${escapeHTML(l.details || '—')}</span>`
+            ]),
+            { emptyState: 'Nenhum log registrado para este projeto até o momento.' }
+        );
+
+        c.innerHTML = `
+            ${headerHtml}
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     async function deleteUser(id) {
@@ -361,44 +411,6 @@ import { navigate, render } from '../router.js';
             showToast('Erro ao salvar usuário: ' + e.message, 'error');
         }
     };
-
-    async function renderAuditTrail(c, h, a) {
-        h.textContent = 'Trilha de Auditoria (Audit Trail)';
-        const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p></div>'; return; }
-        a.innerHTML = '';
-
-        let logs = [];
-        try { logs = await api('GET', `/api/v1/projects/${proj.id}/audit-trail`); } catch(e) {}
-        if (!Array.isArray(logs)) logs = [];
-
-        c.innerHTML = `<div class="fade-in">
-            ${logs.length ? `
-                <div class="data-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Usuário</th>
-                                <th>Ação</th>
-                                <th>Detalhes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${logs.map(l => `
-                                <tr>
-                                    <td style="white-space:nowrap; color:var(--text-dim); font-size:0.75rem">${new Date(l.created_at || l.timestamp).toLocaleString()}</td>
-                                    <td><strong>${escapeHTML(l.actor || l.user_email || 'System')}</strong></td>
-                                    <td><span class="badge" style="background:rgba(0,173,232,0.1); color:var(--accent)">${escapeHTML(l.action)}</span></td>
-                                    <td style="font-size:0.75rem; color:var(--text-dim); max-width:400px; overflow:hidden; text-overflow:ellipsis">${escapeHTML(l.details || '—')}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            ` : '<div class="empty-state"><h3>Nenhum log encontrado</h3><p>Nenhuma atividade registrada na trilha deste projeto ainda.</p></div>'}
-        </div>`;
-    }
 
 export { renderSettings, renderUsers, renderAuditTrail };
 window.renderSettings = renderSettings;

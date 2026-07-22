@@ -4,37 +4,48 @@ import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
     async function renderLeads(c, h, a) {
-        h.textContent = 'Leads';
-        a.innerHTML = '<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>';
+        h.innerHTML = '';
+        a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
-            const leads = await api('GET', '/api/v1/leads');
+            const leads = await api('GET', '/api/v1/leads').catch(() => []);
+            const leadsArr = Array.isArray(leads) ? leads : [];
+            
+            const totalLeads = leadsArr.length;
+            const newLeads = leadsArr.filter(l => l.status === 'new' || l.status === 'qualificado').length;
+            const proposalLeads = leadsArr.filter(l => l.status === 'proposta_enviada' || l.status === 'ganho').length;
+
+            const headerHtml = window.renderPageHeader(
+                'Pipeline de Leads & Oportunidades',
+                'Gestão comercial de contatos, qualificação de empresas e propostas em pré-vendas',
+                '<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>'
+            );
+
+            const statsHtml = window.renderStatCards([
+                { label: 'Total de Oportunidades', value: totalLeads, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
+                { label: 'Leads Qualificados', value: newLeads, color: '#34c759', subtext: 'Prontos para assessment' },
+                { label: 'Propostas em Negociação', value: proposalLeads, color: '#ffcc00', subtext: 'Contratos em pré-vendas' }
+            ]);
+
+            const tableHtml = window.renderDataTable(
+                ['Empresa / Razão Social', 'Contato Principal', 'CNPJ / Porte', 'Status', 'Ações'],
+                leadsArr.map(l => [
+                    `<strong>${escapeHTML(l.company_name || l.razao_social || 'Sem nome')}</strong>`,
+                    escapeHTML(l.contact_name || l.email || '---'),
+                    escapeHTML(l.cnpj || l.porte || '---'),
+                    window.renderStatusBadge(l.status || 'new', l.status === 'ganho' ? 'success' : 'info'),
+                    `<button class="btn btn-ghost btn-sm" onclick="openLeadDetail('${l.id}')">Ver Detalhes &rarr;</button>`
+                ]),
+                { emptyState: 'Nenhum lead comercial cadastrado no momento.' }
+            );
+
             c.innerHTML = `
-                <div class="card fade-in">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Empresa</th>
-                                <th>Contato</th>
-                                <th>Status</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Array.isArray(leads) ? leads.map(l => `
-                                <tr>
-                                    <td>${escapeHTML(l.company_name)}</td>
-                                    <td>${escapeHTML(l.contact_name)}</td>
-                                    <td><span class="status-badge status-${l.status}">${l.status}</span></td>
-                                    <td><button class="btn" onclick="openLeadDetail('${l.id}')">Ver</button></td>
-                                </tr>
-                            `).join('') : '<tr><td colspan="4">Nenhum lead encontrado</td></tr>'}
-                        </tbody>
-                    </table>
-                </div>
+                ${headerHtml}
+                ${statsHtml}
+                ${tableHtml}
             `;
         } catch (e) {
-            c.innerHTML = '<div class="error">Erro ao carregar leads</div>';
+            c.innerHTML = '<div class="error">Erro ao carregar leads: ' + escapeHTML(e.message) + '</div>';
         }
     }
 

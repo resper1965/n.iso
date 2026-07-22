@@ -25,37 +25,48 @@ const ISO_GUIDELINES = {
 };
 
     async function renderProjects(c, h, a) {
-        h.textContent = 'Projetos';
+        h.innerHTML = '';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
-            const projects = await api('GET', '/api/v1/projects');
+            const projects = await api('GET', '/api/v1/projects').catch(() => []);
+            const projs = Array.isArray(projects) ? projects : [];
+            
+            const totalProjects = projs.length;
+            const activeProjects = projs.filter(p => p.status === 'active' || !p.status).length;
+            const completedProjects = projs.filter(p => p.status === 'completed').length;
+            
+            const headerHtml = window.renderPageHeader(
+                'Gestão de Projetos ISO',
+                'Visualização e gerenciamento dos projetos ativos de implementação SGSI (ISO 27001/27701)',
+                ''
+            );
+            
+            const statsHtml = window.renderStatCards([
+                { label: 'Total de Projetos', value: totalProjects, color: 'var(--accent)', subtext: 'Cadastrados no sistema' },
+                { label: 'Projetos Em Andamento', value: activeProjects, color: '#34c759', subtext: 'Implementação ativa' },
+                { label: 'Projetos Concluídos', value: completedProjects, color: '#ffcc00', subtext: 'Prontos para auditoria' }
+            ]);
+
+            const tableHtml = window.renderDataTable(
+                ['Cliente / Projeto', 'Setor / Ramo', 'Status', 'Fase / Escopo', 'Ações'],
+                projs.map(p => [
+                    `<strong>${escapeHTML(p.client_name || p.project_name || 'Sem nome')}</strong>`,
+                    escapeHTML(p.sector || 'Geral'),
+                    window.renderStatusBadge(p.status || 'active', p.status === 'completed' ? 'success' : 'info'),
+                    escapeHTML(p.standard || 'ISO 27001:2022'),
+                    `<button class="btn btn-primary btn-sm" onclick="openProjectDetail('${p.id}')">Gerenciar Jornada &rarr;</button>`
+                ]),
+                { emptyState: 'Nenhum projeto de implementação ativo no momento.' }
+            );
+
             c.innerHTML = `
-                <div class="card fade-in">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Setor</th>
-                                <th>Status</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Array.isArray(projects) ? projects.map(p => `
-                                <tr>
-                                    <td>${escapeHTML(p.client_name)}</td>
-                                    <td>${escapeHTML(p.sector)}</td>
-                                    <td><span class="status-badge status-${p.status}">${p.status}</span></td>
-                                    <td><button class="btn btn-primary" onclick="openProjectDetail('${p.id}')">Gerenciar</button></td>
-                                </tr>
-                            `).join('') : '<tr><td colspan="4">Nenhum projeto encontrado</td></tr>'}
-                        </tbody>
-                    </table>
-                </div>
+                ${headerHtml}
+                ${statsHtml}
+                ${tableHtml}
             `;
         } catch (e) {
-            c.innerHTML = '<div class="error">Erro ao carregar projetos</div>';
+            c.innerHTML = '<div class="error">Erro ao carregar projetos: ' + escapeHTML(e.message) + '</div>';
         }
     }
 
