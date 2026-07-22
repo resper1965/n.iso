@@ -7,7 +7,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     return c.json({ error: 'Unauthorized: Missing session token' }, 401);
   }
 
-  const sessionData = await c.env.SESSIONS.get(`session_${sessionId}`);
+  const sessionData = (await c.env.SESSIONS.get(`session_${sessionId}`)) || (await c.env.SESSIONS.get(sessionId));
   if (!sessionData) {
     return c.json({ error: 'Unauthorized: Invalid or expired session' }, 401);
   }

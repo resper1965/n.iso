@@ -62,6 +62,7 @@ authApp.post('/login', async (c) => {
     }
     
     const token = genToken();
+    await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(user), { expirationTtl: 86400 });
     await c.env.SESSIONS.put(token, JSON.stringify(user), { expirationTtl: 86400 });
     
     return c.json({ token, user, requiresPasswordChange: requiresChange });
@@ -161,7 +162,10 @@ authApp.post('/reset-password', async (c) => {
 
 authApp.post('/logout', async (c) => {
   const token = c.req.header('Authorization')?.split(' ')[1];
-  if (token) await c.env.SESSIONS.delete(token);
+  if (token) {
+    await c.env.SESSIONS.delete(`session_${token}`);
+    await c.env.SESSIONS.delete(token);
+  }
   return c.json({ ok: true });
 });
 

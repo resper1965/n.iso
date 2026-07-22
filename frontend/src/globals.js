@@ -624,6 +624,18 @@ window.initApp = async function initApp() {
             document.getElementById('login-overlay').classList.remove('hidden');
             return;
         }
+
+        try {
+            const me = await api('GET', '/api/v1/auth/me');
+            if (me && me.user) {
+                S.user = me.user;
+                localStorage.setItem('niso_user', JSON.stringify(me.user));
+            }
+        } catch (e) {
+            doLogout();
+            return;
+        }
+
         document.getElementById('login-overlay').classList.add('hidden');
         await loadAll();
         

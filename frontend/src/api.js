@@ -8,9 +8,12 @@ async function api(m, p, b) {
     const o = { method: m, headers };
     if (b) o.body = JSON.stringify(b);
     const r = await fetch(API_BASE + p, o);
-    if (r.status === 401) { doLogout(); throw new Error('Unauthorized'); }
+    if (r.status === 401 && p !== '/api/v1/auth/login') { 
+        if (window.doLogout) window.doLogout(); 
+        throw new Error('Unauthorized'); 
+    }
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'API Error');
+    if (!r.ok) throw new Error(data.error || (data.details ? data.details.map(i => i.message).join(', ') : 'API Error'));
     // ponytail: auto-unwrap enveloped arrays from backend (e.g. { ok: true, risks: [...] })
     if (data && data.ok === true) {
         for (const key in data) {
