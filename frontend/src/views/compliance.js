@@ -300,6 +300,133 @@ import { navigate } from '../router.js';
         'documented operating procedures': 'Procedimentos operacionais documentados'
     };
 
+    const JUSTIFICATION_TRANSLATIONS = {
+        'universal isms requirement.': 'Requisito universal do SGSI (ISO 27001).',
+        'required for clear accountability.': 'Necessário para atribuição clara de responsabilidades.',
+        'prevents fraud and error through duty separation.': 'Previne fraudes e erros mediante segregação de funções.',
+        'management commitment is foundational to isms.': 'O comprometimento da direção é fundamental para o SGSI.',
+        'required for incident reporting and compliance.': 'Necessário para notificação de incidentes e conformidade legal.',
+        'threat intelligence and best practice sharing.': 'Compartilhamento de inteligência sobre ameaças e boas práticas.',
+        'proactive threat awareness is universally beneficial.': 'Conscientização proativa sobre ameaças é universalmente aplicável.',
+        'security must be embedded in all projects.': 'A segurança deve estar embutida em todos os projetos.',
+        'asset inventory is foundational to risk management.': 'Inventário de ativos é a base da gestão de riscos.',
+        'defines acceptable behavior for all personnel.': 'Define o uso aceitável de recursos para todos os colaboradores.',
+        'required for personnel offboarding.': 'Obrigatório no processo de desligamento de colaboradores.',
+        'data classification drives proportional protection.': 'A classificação orienta a proteção proporcional dos dados.',
+        'labelling supports classification enforcement.': 'A rotulagem garante a aplicação prática da classificação.',
+        'all organizations transfer information externally.': 'A organização realiza transferência externa de informações.',
+        'logical access control is universally required.': 'Controle de acesso lógico é um requisito universal.',
+        'unique identity for accountability.': 'Identificação única para rastreabilidade de ações.',
+        'credential management is universally required.': 'Gestão de credenciais de autenticação é obrigatória.',
+        'provisioning and review of access rights.': 'Concessão e revisão periódica de direitos de acesso.',
+        'third-party/vendor relationships identified.': 'Relacionamento com terceiros e fornecedores identificado.',
+        'no supplier or third-party relationships identified.': 'Nenhum relacionamento com fornecedores identificado.',
+        'contractual security clauses needed for suppliers.': 'Cláusulas contratuais de segurança necessárias em contratos.',
+        'no supplier agreements to address.': 'Sem acordos com fornecedores a tratar.',
+        'ict supply chain risks identified.': 'Riscos identificados na cadeia de suprimentos de TIC.',
+        'no ict supply chain dependencies.': 'Sem dependências na cadeia de suprimentos de TIC.',
+        'ongoing supplier oversight required.': 'Monitoramento contínuo dos serviços de fornecedores.',
+        'no supplier services to monitor.': 'Sem serviços de fornecedores a monitorar.',
+        'cloud infrastructure in use.': 'Infraestrutura e serviços em nuvem em uso.',
+        'no cloud services identified.': 'Sem utilização de serviços em nuvem.',
+        'incident preparedness is universal.': 'Preparação para resposta a incidentes é obrigatória.',
+        'event triage process required.': 'Processo de triagem e avaliação de eventos de segurança.',
+        'incident response capability required.': 'Capacidade de resposta e contenção de incidentes.',
+        'continuous improvement from incidents.': 'Melhoria contínua a partir de lições aprendidas em incidentes.',
+        'evidence preservation for investigations.': 'Coleta e preservação de evidências para investigações.',
+        'security continuity during disruptions.': 'Continuidade da segurança da informação durante interrupções.',
+        'ict continuity planning is universally needed.': 'Planejamento de continuidade de TIC é necessário.',
+        'compliance obligations exist for all organizations.': 'Obrigação de conformidade legal, regulatória e contratual.',
+        'ip protection applies to all organizations.': 'Proteção de direitos de propriedade intelectual da organização.',
+        'record retention and protection required.': 'Retenção e proteção de registros corporativos obrigatória.',
+        'pii processing identified — privacy controls mandatory.': 'Tratamento de dados pessoais identificado — controles LGPD obrigatórios.',
+        'no pii processing identified.': 'Sem tratamento de dados pessoais identificado.',
+        'independent assurance is an isms requirement.': 'Avaliação independente é requisito para garantia do SGSI.',
+        'compliance verification is universal.': 'Verificação contínua de conformidade com políticas.',
+        'operational procedures must be documented.': 'Procedimentos operacionais devem ser documentados.',
+        'background verification for all personnel.': 'Verificação de antecedentes para todo o pessoal.',
+        'security responsibilities in employment contracts.': 'Responsabilidades de segurança em contratos de trabalho.',
+        'security awareness is universal.': 'Conscientização em segurança da informação é universal.',
+        'consequences for policy violations.': 'Consequências e penalidades para violação de políticas.',
+        'post-employment obligations required.': 'Obrigações e responsabilidades após o desligamento.',
+        'ndas protect sensitive information.': 'Acordos de confidencialidade (NDA) para proteção de dados.',
+        'remote work arrangements identified.': 'Modalidades de trabalho remoto/teletrabalho identificadas.',
+        'no remote working arrangements.': 'Sem modalidades de trabalho remoto.',
+        'all personnel must be able to report events.': 'Mecanismo de relato de eventos disponível a todos.',
+        'physical office/facility identified.': 'Instalação física ou escritório corporativo identificado.',
+        'fully remote/cloud — no physical perimeter.': 'Operação 100% remota/nuvem — sem perímetro físico.',
+        'physical access control needed for premises.': 'Controle de acesso físico às instalações necessário.',
+        'no physical premises requiring entry control.': 'Sem instalações físicas exigindo controle de entrada.',
+        'physical spaces require securing.': 'Salas e instalações físicas exigem proteção.',
+        'no offices or facilities to secure.': 'Sem escritórios ou instalações físicas a proteger.',
+        'monitoring of physical premises required.': 'Monitoramento de segurança física das instalações necessário.',
+        'no physical premises to monitor.': 'Sem instalações físicas para monitorar.',
+        'environmental protection for facilities.': 'Proteção contra ameaças físicas e ambientais.',
+        'no facilities exposed to physical threats.': 'Sem instalações expostas a ameaças físicas.',
+        'secure area procedures for sensitive operations.': 'Procedimentos de áreas seguras para operações sensíveis.',
+        'no secure areas defined.': 'Sem áreas seguras definidas.',
+        'applies to all workstations including remote.': 'Aplica-se a todas as estações de trabalho, incluindo remotas.',
+        'equipment in physical premises needs protection.': 'Equipamentos em instalações físicas necessitam de proteção.',
+        'no on-premise equipment to protect.': 'Sem equipamentos locais a proteger.',
+        'assets used outside premises require protection.': 'Ativos utilizados fora das instalações exigem proteção.',
+        'no off-premises asset usage identified.': 'Sem uso de ativos fora das instalações.',
+        'media handling applies to all organizations.': 'Manuseio de mídias de armazenamento aplica-se universalmente.',
+        'power/cooling for on-premise infrastructure.': 'Energia e utilidades para infraestrutura local.',
+        'no on-premise infrastructure requiring utilities.': 'Sem infraestrutura local exigindo utilidades físicas.',
+        'physical cabling in premises.': 'Cabeamento físico em instalações corporativas.',
+        'no physical cabling to protect.': 'Sem cabeamento físico a proteger.',
+        'all equipment requires maintenance.': 'Todo equipamento exige manutenção periódica.',
+        'secure disposal applies universally.': 'Descarte e reutilização segura aplicam-se universalmente.',
+        'endpoint security is universally required.': 'Segurança de dispositivos finais é requisito universal.',
+        'privileged access management is universal.': 'Gestão de acessos privilegiados é obrigatória.',
+        'need-to-know access restriction.': 'Restrição de acesso baseada na necessidade de conhecer.',
+        'source code access control for development teams.': 'Controle de acesso ao código-fonte para desenvolvedores.',
+        'no software development — no source code to protect.': 'Sem desenvolvimento de software — sem código-fonte a proteger.',
+        'secure authentication is universal.': 'Mecanismos de autenticação segura são obrigatórios.',
+        'resource capacity planning is universal.': 'Planejamento de capacidade de recursos é necessário.',
+        'malware protection is universally required.': 'Proteção contra malware é obrigatória.',
+        'vulnerability management is universal.': 'Gestão de vulnerabilidades técnicas é necessária.',
+        'secure configuration baselines required.': 'Baselines de configuração segura (Hardening) obrigatórios.',
+        'data lifecycle management is universal.': 'Gestão do ciclo de vida dos dados é necessária.',
+        'sensitive/pii data requires masking in non-production.': 'Dados sensíveis/PII exigem mascaramento em homologação.',
+        'no sensitive data requiring masking.': 'Sem dados sensíveis exigindo mascaramento.',
+        'dlp needed for sensitive/regulated data.': 'DLP necessário para proteção de dados sensíveis/regulados.',
+        'no high-risk data leakage scenarios identified.': 'Sem cenários de alto risco de vazamento identificados.',
+        'backup is universally required.': 'Cópia de segurança (Backup) é obrigatória.',
+        'critical/regulated operations require redundancy.': 'Operações críticas exigem instalações redundantes.',
+        'no critical systems requiring redundancy.': 'Sem sistemas críticos exigindo redundância.',
+        'activity logging is universal.': 'Registro de atividades e auditoria (Logging) é obrigatório.',
+        'security monitoring is universal.': 'Monitoramento de segurança da informação é obrigatório.',
+        'time synchronization for log correlation.': 'Sincronização de relógio (NTP) para correlação de logs.',
+        'restricting privileged utilities is universal.': 'Restrição de utilitários privilegiados é obrigatória.',
+        'software installation controls are universal.': 'Controle de instalação de softwares é obrigatório.',
+        'network security is universally required.': 'Segurança em redes de computadores é obrigatória.',
+        'network service security is universal.': 'Segurança dos serviços de rede é obrigatória.',
+        'network segmentation for sensitive environments.': 'Segregação de rede para ambientes sensíveis.',
+        'no requirement for network segregation identified.': 'Sem requisito de segregação de rede identificado.',
+        'web filtering for managed environments.': 'Filtragem de conteúdo web para ambientes gerenciados.',
+        'fully remote workforce — web filtering deferred to endpoint controls.': 'Equipe 100% remota — filtragem tratada no dispositivo final.',
+        'cryptography for data protection is universal.': 'Uso de criptografia para proteção de dados é obrigatório.',
+        'sdlc security for in-house development.': 'Segurança no ciclo de desenvolvimento interno de software.',
+        'no software development activities.': 'Sem atividades de desenvolvimento de software.',
+        'application security requirements for dev/web apps.': 'Requisitos de segurança em aplicações web/desenvolvidas.',
+        'no applications developed or operated.': 'Sem aplicações desenvolvidas ou operadas.',
+        'secure architecture for systems in scope.': 'Arquitetura e engenharia de sistemas seguros.',
+        'no system engineering activities.': 'Sem atividades de engenharia de sistemas.',
+        'secure coding standards for development teams.': 'Padrões de codificação segura para desenvolvimento.',
+        'no coding activities identified.': 'Sem atividades de programação identificadas.',
+        'security testing in sdlc.': 'Testes de segurança no ciclo de vida de desenvolvimento.',
+        'no development requiring security testing.': 'Sem desenvolvimento exigindo testes de segurança.',
+        'outsourced development relationships identified.': 'Desenvolvimento terceirizado de software identificado.',
+        'no outsourced development.': 'Sem desenvolvimento terceirizado de software.',
+        'environment separation for development teams.': 'Separação de ambientes de dev, teste e produção.',
+        'no development environments to separate.': 'Sem ambientes de desenvolvimento a separar.',
+        'change management is universal.': 'Gestão de mudanças nos sistemas é obrigatória.',
+        'test data protection for development activities.': 'Proteção de dados de teste em ambientes de homologação.',
+        'no test environments requiring data protection.': 'Sem ambientes de teste exigindo proteção de dados.',
+        'audit testing safeguards are universal.': 'Salvaguardas em testes de auditoria são obrigatórias.'
+    };
+
     function parseControlTitle(ctrl) {
         const titleStr = ctrl.title || '';
         let controlCode = ctrl.id || '';
@@ -471,8 +598,14 @@ import { navigate } from '../router.js';
                         const risksCount = (trace.risks || []).length;
                         const evidenceCount = (trace.evidence || []).length;
 
-                        const parsed = parseControlTitle(ctrl);
-                        const isJustificationMissing = isNA && (!ctrl.description || ctrl.description.trim() === '');
+                        let justVal = ctrl.description || '';
+                        if (justVal) {
+                            const justKey = justVal.toLowerCase().trim();
+                            if (JUSTIFICATION_TRANSLATIONS[justKey]) {
+                                justVal = JUSTIFICATION_TRANSLATIONS[justKey];
+                            }
+                        }
+                        const isJustificationMissing = isNA && (!justVal || justVal.trim() === '');
 
                         html += `
                             <tr id="soa-row-${ctrl.id}" class="soa-row" data-standard="${escapeHTML(ctrl.standard || '')}" data-title="${escapeHTML(ctrl.title || '')}" data-status="${escapeHTML(ctrl.status || 'Missing')}">
@@ -502,7 +635,7 @@ import { navigate } from '../router.js';
                                     </div>
                                 </td>
                                 <td>
-                                    <input type="text" value="${escapeHTML(ctrl.description || '')}" 
+                                    <input type="text" value="${escapeHTML(justVal)}" 
                                         placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
                                         class="soa-justification-input ${isJustificationMissing ? 'required-missing' : ''}" 
                                         style="width:100%; box-sizing:border-box; background:rgba(7,11,20,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 10px; color:var(--text); font-size:0.8rem;"
