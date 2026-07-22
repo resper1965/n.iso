@@ -4,8 +4,9 @@ import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '.
 import { navigate, render } from '../router.js';
 
     async function renderDashboard(c, h, a) {
-        h.textContent = 'Dashboard';
-        a.innerHTML = '';
+        h.textContent = 'Dashboard Executivo';
+        a.innerHTML = `<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>
+                       <button class="btn btn-ghost" onclick="navigate('monitor')">Monitor</button>`;
         if (S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client') && !S.user.client_project_id) {
             let assessmentStatus = 'Pending';
             let proposalStatus = 'Pending';
@@ -73,22 +74,18 @@ import { navigate, render } from '../router.js';
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
             ]);
-            const activeProjects = Array.isArray(projects) ? projects.filter(p => p && (p.status === 'active' || !p.status)) : [];
+            const activeProjectsList = Array.isArray(projects) ? projects : [];
             const leadsCount = Array.isArray(leads) ? leads.length : 0;
             const assessmentsCount = Array.isArray(assessments) ? assessments.length : 0;
-            const projectsCount = activeProjects.length;
+            const projectsCount = activeProjectsList.length;
 
-            const totalControls = Array.isArray(controls) ? controls.length : 0;
-            const approvedControls = Array.isArray(controls) ? controls.filter(ctrl => ctrl.status === 'Approved' || ctrl.status === 'Implemented').length : 0;
-            const gapsControls = totalControls - approvedControls;
+            const totalControls = (Array.isArray(controls) && controls.length > 0) ? controls.length : 93;
+            const approvedControls = Array.isArray(controls) ? controls.filter(ctrl => {
+                const s = String(ctrl.status || '').toUpperCase();
+                return s === 'APPROVED' || s === 'IMPLEMENTED' || s === 'COMPLETED' || s === 'CONFORME';
+            }).length : 0;
+            const gapsControls = Math.max(0, totalControls - approvedControls);
             const complianceRate = totalControls > 0 ? Math.round((approvedControls / totalControls) * 100) : 0;
-
-            const headerHtml = window.renderPageHeader(
-                'Dashboard Executivo',
-                'Visão geral da governança, conformidade e projetos ativos no nISO',
-                `<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>
-                 <button class="btn btn-ghost" onclick="navigate('monitor')">Monitor</button>`
-            );
 
             const statsHtml = window.renderStatCards([
                 { label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' },
@@ -116,22 +113,24 @@ import { navigate, render } from '../router.js';
                 [
                     { label: 'Projeto', render: (row) => escapeHTML(row.project_name || row.client_name || 'Sem nome') },
                     {
-                        label: 'Progresso', render: (row) => `
+                        label: 'Progresso', render: (row) => {
+                            const progVal = (row.progress !== undefined && row.progress !== null && row.progress > 0) ? row.progress : complianceRate;
+                            return `
                             <div style="display:flex; align-items:center; gap:0.75rem; width:100%;">
-                                <div class="progress-bar" style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden;"><div class="progress-fill" style="width:${row.progress || 0}%; background:var(--accent); height:100%;"></div></div>
-                                <span style="font-size:0.75rem; font-weight:600; color:var(--accent);">${row.progress || 0}%</span>
+                                <div class="progress-bar" style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden;"><div class="progress-fill" style="width:${progVal}%; background:var(--accent); height:100%;"></div></div>
+                                <span style="font-size:0.75rem; font-weight:600; color:var(--accent);">${progVal}%</span>
                             </div>
-                        `
+                            `;
+                        }
                     },
                     { label: 'Ação', align: 'right', render: (row) => `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="openProjectDetail('${row.id}')">Gerenciar</button>` }
                 ],
-                projects.slice(0, 5),
+                activeProjectsList.slice(0, 5),
                 { emptyMessage: 'Nenhum projeto ativo.' }
             );
 
             c.innerHTML = `
                 <div class="fade-in">
-                    ${headerHtml}
                     ${statsHtml}
 
                     <div class="card fade-in" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.65); border:1px solid rgba(229,235,255,0.08); border-radius:12px; padding:1.5rem; backdrop-filter:blur(24px);">
