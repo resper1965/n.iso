@@ -114,6 +114,9 @@ app.route('', integrations);
 // 7. Static Files Fallback (catch-all — deve ser a última rota)
 app.get('/*', async (c) => {
   const path = new URL(c.req.url).pathname;
+  if (path.startsWith('/api/')) {
+    return c.json({ error: `API route not found: ${path}` }, 404);
+  }
   if (path.includes('.') && !path.endsWith('.html')) {
     if (c.env.ASSETS) {
       return await c.env.ASSETS.fetch(c.req.raw);

@@ -290,6 +290,10 @@ platformApp.get('/portfolio', async (c) => {
   }
 });
 
+platformApp.get('/phases/config', (c) => {
+  return c.json({ ok: true, titles: PHASE_TITLES, checklists: PHASE_CHECKLISTS });
+});
+
 // Phase config & Auditor token
 platformApp.get('/pricing-config', async (c) => {
   try {
