@@ -25,7 +25,7 @@ const ISO_GUIDELINES = {
 };
 
     async function renderProjects(c, h, a) {
-        h.innerHTML = '';
+        h.textContent = 'Gestão de Projetos ISO';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
@@ -35,12 +35,6 @@ const ISO_GUIDELINES = {
             const totalProjects = projs.length;
             const activeProjects = projs.filter(p => p.status === 'active' || !p.status).length;
             const completedProjects = projs.filter(p => p.status === 'completed').length;
-            
-            const headerHtml = window.renderPageHeader(
-                'Gestão de Projetos ISO',
-                'Visualização e gerenciamento dos projetos ativos de implementação SGSI (ISO 27001/27701)',
-                ''
-            );
             
             const statsHtml = window.renderStatCards([
                 { label: 'Total de Projetos', value: totalProjects, color: 'var(--accent)', subtext: 'Cadastrados no sistema' },
@@ -61,7 +55,6 @@ const ISO_GUIDELINES = {
             );
 
             c.innerHTML = `
-                ${headerHtml}
                 ${statsHtml}
                 ${tableHtml}
             `;

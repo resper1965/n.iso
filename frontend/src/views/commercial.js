@@ -4,8 +4,8 @@ import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
     async function renderLeads(c, h, a) {
-        h.innerHTML = '';
-        a.innerHTML = '';
+        h.textContent = 'Pipeline de Leads & Oportunidades';
+        a.innerHTML = '<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const leads = await api('GET', '/api/v1/leads').catch(() => []);
@@ -14,12 +14,6 @@ import { navigate } from '../router.js';
             const totalLeads = leadsArr.length;
             const newLeads = leadsArr.filter(l => l.status === 'new' || l.status === 'qualificado').length;
             const proposalLeads = leadsArr.filter(l => l.status === 'proposta_enviada' || l.status === 'ganho').length;
-
-            const headerHtml = window.renderPageHeader(
-                'Pipeline de Leads & Oportunidades',
-                'Gestão comercial de contatos, qualificação de empresas e propostas em pré-vendas',
-                '<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>'
-            );
 
             const statsHtml = window.renderStatCards([
                 { label: 'Total de Oportunidades', value: totalLeads, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
@@ -40,7 +34,6 @@ import { navigate } from '../router.js';
             );
 
             c.innerHTML = `
-                ${headerHtml}
                 ${statsHtml}
                 ${tableHtml}
             `;

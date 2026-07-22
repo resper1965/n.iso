@@ -111,8 +111,8 @@ import { navigate, render } from '../router.js';
     }
 
     async function renderUsers(c, h, a) {
-        h.innerHTML = '';
-        a.innerHTML = '';
+        h.textContent = 'Gestão de Usuários & RBAC';
+        a.innerHTML = '<button class="btn btn-primary" onclick="openUserModal()">+ Novo Usuário</button>';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const users = await api('GET', '/api/v1/users').catch(() => []);
@@ -128,12 +128,6 @@ import { navigate, render } from '../router.js';
             const totalUsers = userArr.length;
             const admins = userArr.filter(u => u.role === 'platform_admin' || u.role === 'admin' || u.role === 'consultor').length;
             const clientUsers = totalUsers - admins;
-
-            const headerHtml = window.renderPageHeader(
-                'Gestão de Usuários & RBAC',
-                'Controle de acesso baseado em papéis, governança de privilégios e permissões por organização',
-                '<button class="btn btn-primary" onclick="openUserModal()">+ Novo Usuário</button>'
-            );
 
             const statsHtml = window.renderStatCards([
                 { label: 'Total de Usuários', value: totalUsers, color: 'var(--accent)', subtext: 'Contas ativas' },
@@ -162,7 +156,6 @@ import { navigate, render } from '../router.js';
             );
 
             c.innerHTML = `
-                ${headerHtml}
                 ${statsHtml}
                 ${tableHtml}
             `;
@@ -172,7 +165,7 @@ import { navigate, render } from '../router.js';
     }
 
     async function renderAuditTrail(c, h, a) {
-        h.innerHTML = '';
+        h.textContent = 'Trilha de Auditoria & Logs Imutáveis';
         a.innerHTML = '';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
@@ -184,12 +177,6 @@ import { navigate, render } from '../router.js';
         let logs = [];
         try { logs = await api('GET', `/api/v1/projects/${proj.id}/audit-trail`); } catch(e) {}
         if (!Array.isArray(logs)) logs = [];
-
-        const headerHtml = window.renderPageHeader(
-            'Trilha de Auditoria e Logs Imutáveis',
-            `Registro cronológico de todas as ações de conformidade e auditoria do projeto ${escapeHTML(proj.client_name || proj.project_name)}`,
-            ''
-        );
 
         const statsHtml = window.renderStatCards([
             { label: 'Total de Eventos', value: logs.length, color: 'var(--accent)', subtext: 'Registros na trilha' },
@@ -208,7 +195,6 @@ import { navigate, render } from '../router.js';
         );
 
         c.innerHTML = `
-            ${headerHtml}
             ${statsHtml}
             ${tableHtml}
         `;
