@@ -89,7 +89,22 @@ export function renderStatCards(statsArray) {
     return `<div class="stat-strip" style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">${cardsHtml}</div>`;
 }
 
-export function renderStatusBadge(type, text) {
+export function renderStatusBadge(arg1, arg2) {
+    const knownTypes = ['success', 'warning', 'danger', 'info', 'neutral'];
+    let type = 'neutral';
+    let text = '';
+
+    if (knownTypes.includes(arg1)) {
+        type = arg1;
+        text = arg2 || '';
+    } else if (knownTypes.includes(arg2)) {
+        type = arg2;
+        text = arg1 || '';
+    } else {
+        type = 'neutral';
+        text = arg1 || arg2 || '';
+    }
+
     const styles = {
         success: 'background:rgba(52,199,89,0.12); color:#34c759; border:1px solid rgba(52,199,89,0.3);',
         warning: 'background:rgba(255,204,0,0.12); color:#ffcc00; border:1px solid rgba(255,204,0,0.3);',
@@ -102,7 +117,7 @@ export function renderStatusBadge(type, text) {
 }
 
 export function renderDataTable(columns, rows, options = {}) {
-    const emptyMessage = options.emptyMessage || 'Nenhum registro encontrado.';
+    const emptyMessage = options.emptyState || options.emptyMessage || 'Nenhum registro encontrado.';
     if (!rows || rows.length === 0) {
         return `
             <div class="empty-state" style="background:rgba(15,23,42,0.5); border:1px dashed rgba(229,235,255,0.15); border-radius:12px; padding:3rem 1.5rem; text-align:center; color:var(--text-dim);">
@@ -111,13 +126,31 @@ export function renderDataTable(columns, rows, options = {}) {
         `;
     }
 
-    const ths = columns.map(c => `<th style="text-align:${c.align || 'left'}; padding:0.85rem 1rem; color:var(--text-dim); font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(229,235,255,0.08);">${escapeHTML(c.label)}</th>`).join('');
+    // Normalize column headers
+    const cols = columns.map(c => {
+        if (typeof c === 'string') return { label: c, align: 'left' };
+        return { label: c.label || '', align: c.align || 'left', key: c.key, render: c.render };
+    });
+
+    const ths = cols.map(c => 
+        `<th style="text-align:${c.align}; padding:0.85rem 1rem; color:var(--text-dim); font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(229,235,255,0.08);">${escapeHTML(c.label)}</th>`
+    ).join('');
 
     const trs = rows.map(r => {
-        const tds = columns.map(c => {
-            const val = c.render ? c.render(r) : escapeHTML(String(r[c.key] ?? ''));
-            return `<td style="text-align:${c.align || 'left'}; padding:0.9rem 1rem; border-bottom:1px solid rgba(229,235,255,0.05); font-size:0.85rem; color:var(--text);">${val}</td>`;
-        }).join('');
+        let tds = '';
+        if (Array.isArray(r)) {
+            // Row is an array of cell HTML strings
+            tds = r.map((cellVal, idx) => {
+                const align = cols[idx] ? cols[idx].align : 'left';
+                return `<td style="text-align:${align}; padding:0.9rem 1rem; border-bottom:1px solid rgba(229,235,255,0.05); font-size:0.85rem; color:var(--text);">${cellVal ?? ''}</td>`;
+            }).join('');
+        } else {
+            // Row is an object
+            tds = cols.map(c => {
+                const val = c.render ? c.render(r) : escapeHTML(String(r[c.key] ?? ''));
+                return `<td style="text-align:${c.align}; padding:0.9rem 1rem; border-bottom:1px solid rgba(229,235,255,0.05); font-size:0.85rem; color:var(--text);">${val}</td>`;
+            }).join('');
+        }
         return `<tr style="transition:background 0.15s ease;" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">${tds}</tr>`;
     }).join('');
 
