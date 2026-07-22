@@ -1095,64 +1095,52 @@ import { navigate } from '../router.js';
 
     async function renderManagementReview(c, h, a) {
         h.textContent = 'Análise Crítica pela Direção (Cláusula 9.3)';
-        const isOrgUser = S.user && S.user.role === 'org_user';
-        a.innerHTML = isOrgUser ? '' : `<button onclick="window.openNewMgmtReviewModal()" class="btn-primary">Nova Análise Crítica</button>`;
-        if (!S.activeProject) {
-            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
-            return;
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
         }
         
-        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando reuniões de análise crítica...</div>';
+        const isOrgUser = S.user && S.user.role === 'org_user';
+        a.innerHTML = isOrgUser ? '' : `<button onclick="window.openNewMgmtReviewModal()" class="btn btn-primary">+ Nova Análise Crítica</button>`;
+        
+        let list = [];
         try {
-            const list = await api('GET', `/api/v1/projects/${S.activeProject.id}/management-reviews`) || [];
-            S.managementReviews = list;
-            
-            if (list.length === 0) {
-                c.innerHTML = `
-                    <div style="padding:3rem;text-align:center;color:var(--muted)">
-                        Nenhuma reunião de análise crítica cadastrada ainda.<br><br>
-                        ${isOrgUser ? '' : '<button onclick="window.openNewMgmtReviewModal()" class="btn-primary">Registrar Primeira Reunião</button>'}
-                    </div>
-                `;
-                return;
-            }
-            
-            let html = `
-                <div class="data-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Data da Análise</th>
-                                <th>Participantes</th>
-                                <th>Status</th>
-                                <th style="width:150px;text-align:center">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-            
-            list.forEach(m => {
-                html += `
-                    <tr>
-                        <td style="font-weight:600;color:var(--accent);font-family:monospace;font-size:0.85rem">${m.review_date}</td>
-                        <td>${formatAttendees(m.attendees)}</td>
-                        <td><span class="badge ${m.status === 'Completed' ? 'badge-implemented' : 'badge-pending'}">${m.status === 'Completed' ? 'Concluída' : 'Planejada'}</span></td>
-                        <td style="text-align:center">
-                            <button onclick="window.openEditMgmtReviewModal('${m.id}')" class="btn-secondary" style="padding:6px 12px; font-size: 0.75rem;">Abrir Pauta / Editar</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            c.innerHTML = html;
-        } catch(e) {
-            c.innerHTML = `<div class="error">Erro ao carregar análises críticas: ${escapeHTML(e.message)}</div>`;
-        }
+            const res = await api('GET', `/api/v1/projects/${proj.id}/management-reviews`);
+            list = Array.isArray(res) ? res : (res && Array.isArray(res.reviews)) ? res.reviews : (res && Array.isArray(res.list)) ? res.list : [];
+        } catch(e) {}
+        S.managementReviews = list;
+
+        const totalReviews = list.length;
+        const completedReviews = list.filter(m => m.status === 'Completed' || m.status === 'concluido').length;
+        const plannedReviews = totalReviews - completedReviews;
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Análises Críticas', value: totalReviews, color: 'var(--accent)', subtext: 'Reuniões registradas' },
+            { label: 'Reuniões Concluídas', value: completedReviews, color: '#34c759', subtext: 'Ata & decisões emitidas' },
+            { label: 'Reuniões Planejadas', value: plannedReviews, color: plannedReviews > 0 ? '#ffcc00' : 'var(--text-dim)', subtext: 'Em agendamento' },
+            { label: 'Conformidade Cl. 9.3', value: totalReviews > 0 ? 'Conforme' : 'Pendente', color: totalReviews > 0 ? '#34c759' : '#ff3b30', subtext: 'Requisito ISO 27001' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Data da Análise', 'Participantes (C-Level / Sponsor)', 'Status', 'Ações'],
+            list.map(m => {
+                const isCompleted = m.status === 'Completed' || m.status === 'concluido';
+                return [
+                    `<span style="font-weight:600;color:var(--accent);font-family:monospace;font-size:0.85rem">${escapeHTML(m.review_date)}</span>`,
+                    formatAttendees(m.attendees),
+                    window.renderStatusBadge(isCompleted ? 'Concluída' : 'Planejada', isCompleted ? 'success' : 'warning'),
+                    `<button onclick="window.openEditMgmtReviewModal('${m.id}')" class="btn btn-ghost btn-sm">Abrir Pauta / Editar</button>`
+                ];
+            }),
+            { emptyState: 'Nenhuma reunião de análise crítica cadastrada ainda.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openNewMgmtReviewModal = function() {
