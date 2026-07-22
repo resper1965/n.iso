@@ -172,6 +172,134 @@ import { navigate } from '../router.js';
         return { code: 'Other', name: 'Outros Controles', label: 'Geral' };
     }
 
+    const CONTROL_TITLES_PT = {
+        'A.5.1': 'Políticas de segurança da informação',
+        'A.5.2': 'Papéis e responsabilidades na segurança da informação',
+        'A.5.3': 'Segregação de funções',
+        'A.5.4': 'Responsabilidades da direção',
+        'A.5.5': 'Contato com autoridades',
+        'A.5.6': 'Contato com grupos de interesse especial',
+        'A.5.7': 'Inteligência sobre ameaças (Threat Intelligence)',
+        'A.5.8': 'Segurança da informação na gestão de projetos',
+        'A.5.9': 'Inventário de ativos de informação e outros associados',
+        'A.5.10': 'Uso aceitável de ativos de informação e outros associados',
+        'A.5.11': 'Devolução de ativos',
+        'A.5.12': 'Classificação da informação',
+        'A.5.13': 'Rotulagem da informação',
+        'A.5.14': 'Transferência de informação',
+        'A.5.15': 'Controle de acesso',
+        'A.5.16': 'Gestão de identidades',
+        'A.5.17': 'Informações de autenticação',
+        'A.5.18': 'Direitos de acesso',
+        'A.5.19': 'Segurança da informação no relacionamento com fornecedores',
+        'A.5.20': 'Tratamento da segurança nos acordos com fornecedores',
+        'A.5.21': 'Gestão da segurança na cadeia de suprimentos de TIC',
+        'A.5.22': 'Monitoramento e gestão de mudanças em fornecedores',
+        'A.5.23': 'Segurança da informação no uso de serviços em nuvem',
+        'A.5.24': 'Planejamento e preparação para gestão de incidentes',
+        'A.5.25': 'Avaliação e decisão sobre eventos de segurança',
+        'A.5.26': 'Resposta a incidentes de segurança da informação',
+        'A.5.27': 'Aprendizado com incidentes de segurança',
+        'A.5.28': 'Coleta de evidências de incidentes',
+        'A.5.29': 'Segurança da informação durante interrupções',
+        'A.5.30': 'Prontidão de TIC para continuidade dos negócios',
+        'A.5.31': 'Requisitos legais, regulatórios e contratuais',
+        'A.5.32': 'Direitos de propriedade intelectual',
+        'A.5.33': 'Proteção de registros da organização',
+        'A.5.34': 'Privacidade e proteção de dados pessoais (LGPD)',
+        'A.5.35': 'Análise crítica independente da segurança da informação',
+        'A.5.36': 'Conformidade com políticas e normas de segurança',
+        'A.5.37': 'Procedimentos operacionais documentados',
+        'A.6.1': 'Seleção e triagem de candidatos (Background Check)',
+        'A.6.2': 'Termos e condições de contratação',
+        'A.6.3': 'Conscientização, educação e treinamento em segurança',
+        'A.6.4': 'Processo disciplinar',
+        'A.6.5': 'Responsabilidades após término ou alteração contratual',
+        'A.6.6': 'Acordos de confidencialidade e não divulgação (NDA)',
+        'A.6.7': 'Trabalho remoto e teletrabalho',
+        'A.6.8': 'Notificação de eventos de segurança da informação',
+        'A.7.1': 'Perímetros de segurança física',
+        'A.7.2': 'Entrada física e controles de acesso',
+        'A.7.3': 'Proteção de escritórios, salas e instalações',
+        'A.7.4': 'Monitoramento da segurança física',
+        'A.7.5': 'Proteção contra ameaças físicas e ambientais',
+        'A.7.6': 'Trabalho em áreas seguras',
+        'A.7.7': 'Política de mesa limpa e tela limpa',
+        'A.7.8': 'Posicionamento e proteção de equipamentos',
+        'A.7.9': 'Segurança de ativos fora das instalações',
+        'A.7.10': 'Mídias de armazenamento de dados',
+        'A.7.11': 'Infraestrutura de apoio e utilidades (Energia/Nobreak)',
+        'A.7.12': 'Segurança do cabeamento de rede e energia',
+        'A.7.13': 'Manutenção de equipamentos',
+        'A.7.14': 'Descarte ou reutilização segura de equipamentos',
+        'A.8.1': 'Dispositivos de usuário final',
+        'A.8.2': 'Privilégios de acesso aos sistemas',
+        'A.8.3': 'Restrição de acesso à informação',
+        'A.8.4': 'Acesso ao código-fonte de programas',
+        'A.8.5': 'Autenticação segura',
+        'A.8.6': 'Gestão de capacidade dos recursos',
+        'A.8.7': 'Proteção contra malware e códigos maliciosos',
+        'A.8.8': 'Gestão de vulnerabilidades técnicas',
+        'A.8.9': 'Gestão de configuração e hardening',
+        'A.8.10': 'Exclusão segura de informações',
+        'A.8.11': 'Mascaramento de dados e anonimização',
+        'A.8.12': 'Prevenção contra vazamento de dados (DLP)',
+        'A.8.13': 'Cópia de segurança das informações (Backup)',
+        'A.8.14': 'Redundância das instalações de processamento',
+        'A.8.15': 'Registros de eventos e auditoria (Logging)',
+        'A.8.16': 'Atividades de monitoramento de sistemas',
+        'A.8.17': 'Sincronização de relógios (NTP)',
+        'A.8.18': 'Uso de utilitários privilegiados',
+        'A.8.19': 'Instalação de software nos sistemas operacionais',
+        'A.8.20': 'Segurança em redes de computadores',
+        'A.8.21': 'Segurança dos serviços de rede',
+        'A.8.22': 'Segregação de redes de comunicação',
+        'A.8.23': 'Filtragem de tráfego web',
+        'A.8.24': 'Uso de criptografia',
+        'A.8.25': 'Ciclo de vida de desenvolvimento seguro (SDLC)',
+        'A.8.26': 'Requisitos de segurança em aplicações',
+        'A.8.27': 'Engenharia de sistemas seguros',
+        'A.8.28': 'Codificação segura (Secure Coding)',
+        'A.8.29': 'Testes de segurança no desenvolvimento',
+        'A.8.30': 'Desenvolvimento terceirizado de software',
+        'A.8.31': 'Separação de ambientes de desenvolvimento, teste e produção',
+        'A.8.32': 'Gestão de mudanças nos sistemas e infraestrutura',
+        'A.8.33': 'Informações de teste e proteção de dados de homologação',
+        'A.8.34': 'Proteção de sistemas durante testes de auditoria'
+    };
+
+    const ENGLISH_TITLE_TRANSLATIONS = {
+        'policies for information security': 'Políticas de segurança da informação',
+        'acceptable use of information and other associated assets': 'Uso aceitável de ativos de informação e outros associados',
+        'return of assets': 'Devolução de ativos',
+        'classification of information': 'Classificação da informação',
+        'labelling of information': 'Rotulagem da informação',
+        'information transfer': 'Transferência de informação',
+        'access control': 'Controle de acesso',
+        'identity management': 'Gestão de identidades',
+        'authentication information': 'Informações de autenticação',
+        'access rights': 'Direitos de acesso',
+        'information security in supplier relationships': 'Segurança da informação no relacionamento com fornecedores',
+        'addressing information security within supplier agreements': 'Tratamento da segurança nos acordos com fornecedores',
+        'managing information security in the ICT supply chain': 'Gestão da segurança na cadeia de suprimentos de TIC',
+        'monitoring, review and change management of supplier services': 'Monitoramento e gestão de mudanças em fornecedores',
+        'information security for use of cloud services': 'Segurança da informação no uso de serviços em nuvem',
+        'information security incident management planning and preparation': 'Planejamento e preparação para gestão de incidentes',
+        'assessment and decision on information security events': 'Avaliação e decisão sobre eventos de segurança',
+        'response to information security incidents': 'Resposta a incidentes de segurança da informação',
+        'learning from information security incidents': 'Aprendizado com incidentes de segurança',
+        'collection of evidence': 'Coleta de evidências de incidentes',
+        'information security during disruption': 'Segurança da informação durante interrupções',
+        'ict readiness for business continuity': 'Prontidão de TIC para continuidade dos negócios',
+        'legal, statutory, regulatory and contractual requirements': 'Requisitos legais, regulatórios e contratuais',
+        'intellectual property rights': 'Direitos de propriedade intelectual',
+        'protection of records': 'Proteção de registros da organização',
+        'privacy and protection of personally identifiable information': 'Privacidade e proteção de dados pessoais (LGPD)',
+        'independent review of information security': 'Análise crítica independente da segurança da informação',
+        'compliance with policies, rules and standards for information security': 'Conformidade com políticas e normas de segurança',
+        'documented operating procedures': 'Procedimentos operacionais documentados'
+    };
+
     function parseControlTitle(ctrl) {
         const titleStr = ctrl.title || '';
         let controlCode = ctrl.id || '';
@@ -185,6 +313,17 @@ import { navigate } from '../router.js';
                 controlTitleText = match[2].trim();
             }
         }
+
+        const cleanId = (ctrl.id || controlCode).trim();
+        if (CONTROL_TITLES_PT[cleanId]) {
+            controlTitleText = CONTROL_TITLES_PT[cleanId];
+        } else {
+            const lowerTitle = controlTitleText.toLowerCase().trim();
+            if (ENGLISH_TITLE_TRANSLATIONS[lowerTitle]) {
+                controlTitleText = ENGLISH_TITLE_TRANSLATIONS[lowerTitle];
+            }
+        }
+
         return { code: controlCode, title: controlTitleText };
     }
 
@@ -837,9 +976,12 @@ import { navigate } from '../router.js';
                         }
                     }
 
+                    const parsed = parseControlTitle(ctrl);
+                    const policyTitle = parsed.title || ctrl.title;
+
                     return [
                         `<span style="font-weight:600; color:var(--accent)">${escapeHTML(displayId)}</span>`,
-                        `<div><strong>${escapeHTML(ctrl.title)}</strong><div style="font-size:0.75rem; color:var(--text-dim); margin-top:2px">${escapeHTML(ctrl.description || '').substring(0, 80)}...</div></div>`,
+                        `<div><strong>${escapeHTML(policyTitle)}</strong><div style="font-size:0.75rem; color:var(--text-dim); margin-top:2px">${escapeHTML(ctrl.description || '').substring(0, 80)}...</div></div>`,
                         cisoSign,
                         ceoSign,
                         window.renderStatusBadge(stageText, stageType),
