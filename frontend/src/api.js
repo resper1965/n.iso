@@ -12,7 +12,14 @@ async function api(m, p, b) {
         if (window.doLogout) window.doLogout(); 
         throw new Error('Unauthorized'); 
     }
-    const data = await r.json();
+    const contentType = r.headers.get('content-type') || '';
+    let data;
+    if (contentType.includes('application/json')) {
+        data = await r.json();
+    } else {
+        const text = await r.text();
+        throw new Error(`Resposta HTTP ${r.status} não é JSON (${p})`);
+    }
     if (!r.ok) throw new Error(data.error || (data.details ? data.details.map(i => i.message).join(', ') : 'API Error'));
     // ponytail: auto-unwrap enveloped arrays from backend (e.g. { ok: true, risks: [...] })
     if (data && data.ok === true) {

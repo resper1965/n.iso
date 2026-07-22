@@ -78,8 +78,24 @@ const ISO_GUIDELINES = {
     }
 
     async function renderProjectDetail(c, h, a) {
-        const p = S.currentProject || S.activeProject;
-        if (!p) { navigate('projects'); return; }
+        let p = S.currentProject || S.activeProject;
+        if (!p || !p.id) {
+            if (Array.isArray(S.projects) && S.projects.length > 0) {
+                p = S.projects[0];
+                S.activeProject = p;
+                S.currentProject = p;
+            } else {
+                try {
+                    const projs = await api('GET', '/api/v1/projects');
+                    if (Array.isArray(projs) && projs.length > 0) {
+                        p = projs[0];
+                        S.activeProject = p;
+                        S.currentProject = p;
+                    }
+                } catch(err) {}
+            }
+        }
+        if (!p || !p.id) { navigate('projects'); return; }
         h.textContent = 'Jornada';
         if (!S.expandedJourneys) S.expandedJourneys = {};
         if (!S.expandedPhases) S.expandedPhases = {};
