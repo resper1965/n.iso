@@ -774,81 +774,134 @@ import { navigate } from '../router.js';
     };
 
     async function renderContext(c, h, a) {
-        h.textContent = 'Análise de Contexto (Cláusula 4.1 / 4.2)';
-        a.innerHTML = '';
-        if (!S.activeProject) {
-            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
-            return;
+        h.textContent = 'Contexto & Escopo do SGSI (Cláusula 4.1 / 4.3)';
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
         }
         
+        a.innerHTML = `<button onclick="window.saveContext()" class="btn btn-primary">Salvar Alterações</button>`;
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando análise de contexto...</div>';
+        
         try {
-            const ctx = await api('GET', `/api/v1/projects/${S.activeProject.id}/context`) || {};
+            const ctx = await api('GET', `/api/v1/projects/${proj.id}/context`) || {};
             
-            c.innerHTML = `
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px" class="fade-in">
-                    <div class="card" style="grid-column:span 2; padding:24px">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:6px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">1. Análise SWOT de Segurança da Informação (Cláusula 4.1)</div>
-                        <div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:20px;line-height:1.4">Determine as questões internas e externas que afetam a capacidade do SGSI de alcançar seus resultados pretendidos.</div>
+            const countLines = str => (str || '').split('\n').filter(l => l.trim().length > 0).length;
+            const sCount = countLines(ctx.internal_strengths);
+            const wCount = countLines(ctx.internal_weaknesses);
+            const oCount = countLines(ctx.external_opportunities);
+            const tCount = countLines(ctx.external_threats);
+            const lCount = countLines(ctx.legal_requirements);
+            const cCount = countLines(ctx.contractual_requirements);
+            
+            const totalSwot = sCount + wCount + oCount + tCount;
+            const totalReqs = lCount + cCount;
+            const totalFatores = totalSwot + totalReqs;
+            const maturityScore = totalFatores > 0 ? 100 : 0;
+            const maturityStatus = maturityScore >= 80 ? 'CONFORME' : maturityScore > 0 ? 'EM CONSTRUÇÃO' : 'PENDENTE';
+
+            const statsHtml = window.renderStatCards([
+                { label: 'Total Fatores de Contexto', value: totalFatores, color: 'var(--accent)', subtext: 'Mapeados ISO 27001' },
+                { label: 'Forças & Oportunidades', value: sCount + oCount, color: '#34c759', subtext: 'Fatores positivos' },
+                { label: 'Fraquezas & Ameaças', value: wCount + tCount, color: (wCount + tCount) > 0 ? '#ff3b30' : 'var(--text-dim)', subtext: 'Pontos de atenção / Risco' },
+                { label: 'Maturidade Cláusula 4.3', value: `${maturityScore}%`, color: maturityScore >= 80 ? '#34c759' : '#ffcc00', subtext: maturityStatus }
+            ]);
+
+            let html = `
+                ${statsHtml}
+                
+                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px; margin-bottom:24px" class="fade-in">
+                    <!-- MATRIX SWOT 2x2 CARD -->
+                    <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                            <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.95rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px">
+                                Matriz SWOT de Segurança da Informação (Cláusula 4.1)
+                            </div>
+                            <span style="font-size:0.75rem; color:var(--text-dim)">${totalSwot} Fatores</span>
+                        </div>
                         
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-                            <div class="form-group">
-                                <label class="form-label" style="color:#00ade8;font-weight:600;display:flex;align-items:center;gap:6px">
-                                    <span style="width:6px;height:6px;background:#00ade8;border-radius:50%"></span>
-                                    Forças Internas (Strengths)
-                                </label>
-                                <textarea id="ctx-strengths" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Equipe de TI qualificada, liderança engajada...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+                            <div style="background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.2); border-radius:10px; padding:14px">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <label style="color:#00ade8; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                        <span style="width:8px; height:8px; background:#00ade8; border-radius:50%"></span>
+                                        Forças (Strengths)
+                                    </label>
+                                    ${window.renderStatusBadge(`${sCount} itens`, 'info')}
+                                </div>
+                                <textarea id="ctx-strengths" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Criptografia AES-256 no S3, arquitetura isolada via VPC...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label" style="color:#f59e0b;font-weight:600;display:flex;align-items:center;gap:6px">
-                                    <span style="width:6px;height:6px;background:#f59e0b;border-radius:50%"></span>
-                                    Fraquezas Internas (Weaknesses)
-                                </label>
-                                <textarea id="ctx-weaknesses" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Falta de conscientização de usuários, sistemas legados...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
+                            
+                            <div style="background:rgba(254,202,87,0.03); border:1px solid rgba(254,202,87,0.2); border-radius:10px; padding:14px">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <label style="color:#feca57; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                        <span style="width:8px; height:8px; background:#feca57; border-radius:50%"></span>
+                                        Fraquezas (Weaknesses)
+                                    </label>
+                                    ${window.renderStatusBadge(`${wCount} itens`, 'warning')}
+                                </div>
+                                <textarea id="ctx-weaknesses" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ausência de GuardDuty, falta de testes de restore...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label" style="color:#10b981;font-weight:600;display:flex;align-items:center;gap:6px">
-                                    <span style="width:6px;height:6px;background:#10b981;border-radius:50%"></span>
-                                    Oportunidades Externas (Opportunities)
-                                </label>
-                                <textarea id="ctx-opportunities" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Migração para nuvem com recursos nativos de segurança...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
+
+                            <div style="background:rgba(52,199,89,0.03); border:1px solid rgba(52,199,89,0.2); border-radius:10px; padding:14px">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <label style="color:#34c759; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                        <span style="width:8px; height:8px; background:#34c759; border-radius:50%"></span>
+                                        Oportunidades (Opportunities)
+                                    </label>
+                                    ${window.renderStatusBadge(`${oCount} itens`, 'success')}
+                                </div>
+                                <textarea id="ctx-opportunities" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Certificação ISO 27001 como diferencial competitivo...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label" style="color:#ef4444;font-weight:600;display:flex;align-items:center;gap:6px">
-                                    <span style="width:6px;height:6px;background:#ef4444;border-radius:50%"></span>
-                                    Ameaças Externas (Threats)
-                                </label>
-                                <textarea id="ctx-threats" class="form-input" style="width:100%;height:110px;resize:vertical;font-family:inherit" placeholder="Ex: Aumento de ataques ransomware no setor, concorrentes...">${escapeHTML(ctx.external_threats || '')}</textarea>
+
+                            <div style="background:rgba(255,59,48,0.03); border:1px solid rgba(255,59,48,0.2); border-radius:10px; padding:14px">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <label style="color:#ff3b30; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                        <span style="width:8px; height:8px; background:#ff3b30; border-radius:50%"></span>
+                                        Ameaças (Threats)
+                                    </label>
+                                    ${window.renderStatusBadge(`${tCount} itens`, 'danger')}
+                                </div>
+                                <textarea id="ctx-threats" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ataques cibernéticos no setor, atuações da ANPD...">${escapeHTML(ctx.external_threats || '')}</textarea>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="card" style="padding:24px">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">2. Requisitos Legais / Regulatórios</div>
-                        <div class="form-group">
-                            <textarea id="ctx-legal" class="form-input" style="width:100%;height:130px;resize:vertical;font-family:inherit" placeholder="Ex: LGPD (Lei 13.709), Resoluções do Banco Central, etc.">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+
+                    <!-- REQUISITOS NORMATIVOS & CONTRATUAIS CARD -->
+                    <div style="display:flex; flex-direction:column; gap:16px">
+                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
+                                    Requisitos Legais / Regulatórios
+                                </div>
+                                ${window.renderStatusBadge(`${lCount} req`, 'info')}
+                            </div>
+                            <textarea id="ctx-legal" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: LGPD (Lei 13.709), resoluções da ANPD...">${escapeHTML(ctx.legal_requirements || '')}</textarea>
                         </div>
-                    </div>
-                    
-                    <div class="card" style="padding:24px">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px">3. Requisitos Contratuais</div>
-                        <div class="form-group">
-                            <textarea id="ctx-contractual" class="form-input" style="width:100%;height:130px;resize:vertical;font-family:inherit" placeholder="Ex: SLAs de segurança exigidos por clientes, termos de auditoria de terceiros...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="card" style="grid-column:span 2; padding:24px">
-                        <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.95rem;margin-bottom:12px;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Notas Gerais</div>
-                        <div class="form-group">
-                            <textarea id="ctx-notes" class="form-input" style="width:100%;height:90px;resize:vertical;font-family:inherit" placeholder="Observações adicionais...">${escapeHTML(ctx.notes || '')}</textarea>
+
+                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
+                                    Requisitos Contratuais / SLAs
+                                </div>
+                                ${window.renderStatusBadge(`${cCount} req`, 'info')}
+                            </div>
+                            <textarea id="ctx-contractual" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: SLAs de segurança exigidos por clientes enterprise...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
                         </div>
                     </div>
                 </div>
-                
-                <div style="display:flex; justify-content:flex-end">
-                    <button onclick="window.saveContext()" class="btn btn-primary" style="padding:10px 24px; font-weight:600">Salvar Contexto</button>
+
+                <!-- NOTAS GERAIS & DECLARAÇÃO DE ESCOPO -->
+                <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:24px" class="fade-in">
+                    <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.9rem; color:var(--text); text-transform:uppercase; margin-bottom:8px">
+                        Declaração de Escopo & Fronteiras do SGSI (Cláusula 4.3)
+                    </div>
+                    <textarea id="ctx-notes" class="form-input" style="width:100%; height:80px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Registre o perímetro formal, sistemas e exclusões justificadas do SGSI...">${escapeHTML(ctx.notes || '')}</textarea>
                 </div>
             `;
+            c.innerHTML = html;
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar contexto: ${escapeHTML(e.message)}</div>`;
         }
