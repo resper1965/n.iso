@@ -212,26 +212,35 @@ import { navigate } from '../router.js';
     }
 
     async function renderCertification(c, h, a) {
-        h.textContent = 'Acompanhamento de Certificacao';
+        h.textContent = 'Acompanhamento de Certificação';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         let cert = null;
         try { cert = await api('GET', `/api/v1/projects/${proj.id}/certification`); } catch(e) {}
         if (!cert || !cert.id) {
             a.innerHTML = `<button class="btn btn-primary" onclick="initCertification('${proj.id}')">Iniciar Tracker</button>`;
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Nenhum tracker de certificacao</h3><p>Clique em Iniciar Tracker para comecar a acompanhar o processo de certificacao.</p></div>';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Nenhum tracker de certificação</h3><p>Clique em Iniciar Tracker para começar a acompanhar o processo de certificação.</p></div>';
             return;
         }
         a.innerHTML = '';
         const stages = ['Gap Assessment','Remediation','Internal Audit','Stage 1 Audit','Stage 2 Audit','Certified','Surveillance'];
+        const STAGE_MAP_PT = {
+            'Gap Assessment': 'Avaliação de Gaps',
+            'Remediation': 'Remediação & Implementação',
+            'Internal Audit': 'Auditoria Interna',
+            'Stage 1 Audit': 'Auditoria Estágio 1 (Documental)',
+            'Stage 2 Audit': 'Auditoria Estágio 2 (Certificação)',
+            'Certified': 'Certificado ISO 27001',
+            'Surveillance': 'Manutenção & Vigilância'
+        };
         const si = stages.indexOf(cert.stage);
         const pct = Math.round(((si + 1) / stages.length) * 100);
         c.innerHTML = `<div class="fade-in">
             <div class="card" style="padding:2.5rem;margin-bottom:1.5rem">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem">
                     <div>
-                        <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:0.5rem">Estagio Atual</div>
-                        <div style="font-size:1.8rem;font-weight:500;font-family:'Montserrat',sans-serif">${cert.stage}</div>
+                        <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:0.5rem">Estágio Atual</div>
+                        <div style="font-size:1.8rem;font-weight:500;font-family:'Montserrat',sans-serif;color:var(--text)">${STAGE_MAP_PT[cert.stage] || cert.stage}</div>
                     </div>
                     <div style="text-align:right">
                         <div style="font-size:2.5rem;font-weight:300;color:var(--accent);letter-spacing:-0.05em">${pct}%</div>
@@ -242,32 +251,32 @@ import { navigate } from '../router.js';
                     <div style="width:${pct}%;height:100%;background:linear-gradient(90deg, var(--accent), #00d2ff);border-radius:2px;transition:width(0.8s);box-shadow:0 0 15px var(--accent-dim)"></div>
                 </div>
                 <div style="display:flex;gap:0.35rem;flex-wrap:wrap">
-                    ${stages.map((s, i) => `<span style="font-size:0.55rem;padding:0.35rem 0.75rem;border-radius:8px;font-weight:600;letter-spacing:0.05em;background:${i <= si ? 'var(--accent-dim)' : 'var(--surface)'};border:1px solid ${i <= si ? 'var(--accent)' : 'var(--border)'};color:${i <= si ? 'var(--accent)' : 'var(--muted)'}">${s}</span>`).join('')}
+                    ${stages.map((s, i) => `<span style="font-size:0.55rem;padding:0.35rem 0.75rem;border-radius:8px;font-weight:600;letter-spacing:0.05em;background:${i <= si ? 'var(--accent-dim)' : 'var(--surface)'};border:1px solid ${i <= si ? 'var(--accent)' : 'var(--border)'};color:${i <= si ? 'var(--accent)' : 'var(--muted)'}">${STAGE_MAP_PT[s] || s}</span>`).join('')}
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">
                 <div class="card" style="padding:1.25rem">
-                    <div class="card-label">Auditoria S1</div>
-                    <div style="font-size:0.8rem;font-weight:500">${cert.stage1_date || 'TBD'}</div>
-                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage1_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage1_status || 'Pendente'}</div>
+                    <div class="card-label">Auditoria Estágio 1</div>
+                    <div style="font-size:0.8rem;font-weight:500">${cert.stage1_date || 'A definir'}</div>
+                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage1_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage1_status==='Passed'?'Aprovado':'Pendente'}</div>
                 </div>
                 <div class="card" style="padding:1.25rem">
-                    <div class="card-label">Auditoria S2</div>
-                    <div style="font-size:0.8rem;font-weight:500">${cert.stage2_date || 'TBD'}</div>
-                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage2_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage2_status || 'Pendente'}</div>
+                    <div class="card-label">Auditoria Estágio 2</div>
+                    <div style="font-size:0.8rem;font-weight:500">${cert.stage2_date || 'A definir'}</div>
+                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage2_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage2_status==='Passed'?'Aprovado':'Pendente'}</div>
                 </div>
                 <div class="card" style="padding:1.25rem">
-                    <div class="card-label">Registrar</div>
+                    <div class="card-label">Organismo Certificador</div>
                     <div style="font-size:0.8rem;font-weight:500">${escapeHTML(cert.registrar || 'Não definido')}</div>
                 </div>
                 <div class="card" style="padding:1.25rem">
-                    <div class="card-label">Target Date</div>
+                    <div class="card-label">Data Meta</div>
                     <div style="font-size:0.8rem;font-weight:500">${cert.target_date || 'Não definida'}</div>
                 </div>
             </div>
             <div style="margin-top:2rem;display:flex;gap:0.75rem;align-items:center;background:rgba(255,255,255,0.02);padding:1.25rem;border-radius:12px;border:1px solid rgba(255,255,255,0.04)">
-                <div style="font-size:0.7rem;color:var(--muted);white-space:nowrap">Mudar estagio para:</div>
-                <select class="form-select" id="cert-stage" style="max-width:200px;font-size:0.7rem">${stages.map(s => `<option ${s===cert.stage?'selected':''}>${s}</option>`).join('')}</select>
+                <div style="font-size:0.7rem;color:var(--muted);white-space:nowrap">Mudar estágio para:</div>
+                <select class="form-select" id="cert-stage" style="max-width:260px;font-size:0.75rem">${stages.map(s => `<option value="${s}" ${s===cert.stage?'selected':''}>${STAGE_MAP_PT[s] || s}</option>`).join('')}</select>
                 <button class="btn btn-primary" onclick="updateCertStage('${cert.id}')">Atualizar</button>
             </div>
         </div>`;
@@ -1667,23 +1676,23 @@ import { navigate } from '../router.js';
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Classificacao</label>
+                <label class="form-label">Classificação da Informação</label>
                 <select class="form-input" id="ast-e-classification">
-                    <option value="Confidential" ${ast.classification==='Confidential'?'selected':''}>Confidential</option>
-                    <option value="Restricted" ${ast.classification==='Restricted'?'selected':''}>Restricted</option>
-                    <option value="Internal" ${ast.classification==='Internal'?'selected':''}>Internal</option>
-                    <option value="Public" ${ast.classification==='Public'?'selected':''}>Public</option>
+                    <option value="Confidential" ${ast.classification==='Confidential'?'selected':''}>Confidencial</option>
+                    <option value="Restricted" ${ast.classification==='Restricted'?'selected':''}>Restrito</option>
+                    <option value="Internal" ${ast.classification==='Internal'?'selected':''}>Interno</option>
+                    <option value="Public" ${ast.classification==='Public'?'selected':''}>Público</option>
                 </select>
             </div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Dono</label><input class="form-input" id="ast-e-owner" value="${escapeHTML(ast.owner||'')}"></div>
-                <div class="form-group" style="flex:1"><label class="form-label">Localizacao</label><input class="form-input" id="ast-e-location" value="${escapeHTML(ast.location||'')}"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Localização</label><input class="form-input" id="ast-e-location" value="${escapeHTML(ast.location||'')}"></div>
             </div>
             <div class="form-group">
                 <label class="form-label">Status</label>
                 <select class="form-input" id="ast-e-status">
-                    <option value="Active" ${ast.status==='Active'?'selected':''}>Active</option>
-                    <option value="Inactive" ${ast.status==='Inactive'?'selected':''}>Inactive</option>
+                    <option value="Active" ${ast.status==='Active'?'selected':''}>Ativo</option>
+                    <option value="Inactive" ${ast.status==='Inactive'?'selected':''}>Inativo</option>
                 </select>
             </div>
             <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1.5rem">
