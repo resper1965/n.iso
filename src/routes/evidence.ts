@@ -22,6 +22,30 @@ evidenceApp.get('/:id/detail', async (c) => {
   }
 });
 
+async function downloadEvidence(c: any, id: string) {
+  try {
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!ev || !ev.r2_key) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    const obj = await c.env.STORAGE.get(ev.r2_key);
+    if (!obj) return c.json({ error: 'Arquivo da evidência não encontrado no R2' }, 404);
+
+    const headers = new Headers();
+    obj.writeHttpMetadata(headers);
+    headers.set('etag', obj.httpEtag);
+    headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(ev.file_name || 'evidencia')}"`);
+
+    return new Response(obj.body, { headers });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Falha ao baixar evidência', detail: e.message }, 500);
+  }
+}
+
+evidenceApp.get('/:id/download', async (c) => downloadEvidence(c, c.req.param('id')));
+projectEvidenceApp.get('/:evidenceId/download', async (c) => downloadEvidence(c, c.req.param('evidenceId')));
+
 evidenceApp.get('/:id/content', async (c) => {
   try {
     const id = c.req.param('id');

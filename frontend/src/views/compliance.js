@@ -722,7 +722,7 @@ import { navigate } from '../router.js';
                     dpoBadge,
                     ceoBadge,
                     aiBadge,
-                    `<a href="/api/v1/evidence/${e.id}/download" target="_blank" class="btn btn-ghost btn-sm">Download</a> ${dpoBtn} ${ceoBtn} ${evalBtn}`
+                    `<button onclick="window.downloadEvidenceFile('${e.id}')" class="btn btn-ghost btn-sm">Download</button> ${dpoBtn} ${ceoBtn} ${evalBtn}`
                 ];
             }),
             { emptyState: 'Nenhuma evidência enviada para este projeto.' }
