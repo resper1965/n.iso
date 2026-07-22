@@ -1407,7 +1407,11 @@ import { navigate } from '../router.js';
     async function renderAssets(c, h, a) {
         h.textContent = 'Ativos de Informação';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         a.innerHTML = `<button class="btn" onclick="exportCSV('assets')" style="margin-right:8px">Exportar CSV</button>` + (canCrud ? `<button class="btn btn-primary" onclick="window.openNewAssetModal('${proj.id}')">+ Novo Ativo</button>` : '');
@@ -1416,19 +1420,42 @@ import { navigate } from '../router.js';
         try { assets = await api('GET', `/api/v1/projects/${proj.id}/assets`); } catch(e) {}
         if (!Array.isArray(assets)) assets = [];
         S.assets = assets;
- 
-        const classColor = cl => cl === 'Confidential' ? 'var(--danger)' : cl === 'Restricted' ? 'var(--warning)' : cl === 'Internal' ? 'var(--info)' : 'var(--accent)';
-        c.innerHTML = `<div class="fade-in">${assets.length ? assets.map(ast => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openAssetDetailsModal('${ast.id}')">
-                <div style="flex:1">
-                    <div class="item-name">${escapeHTML(ast.name)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">Categoria: ${ast.category || 'Geral'} | Local: ${escapeHTML(ast.location || 'N/A')} | Dono: ${escapeHTML(ast.owner || 'N/A')}</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="background:${classColor(ast.classification)}20;color:${classColor(ast.classification)}">${ast.classification}</span>
-                    <span class="ctx-tag" style="background:rgba(255,255,255,0.05);color:var(--text-dim)">${ast.status || 'Active'}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum ativo</h3><p>Registre ativos para governança de segurança.</p></div>'}</div>`;
+
+        const totalAssets = assets.length;
+        const confidentialCount = assets.filter(ast => ast.classification === 'Confidential').length;
+        const restrictedCount = assets.filter(ast => ast.classification === 'Restricted' || ast.classification === 'Internal').length;
+        const activeCount = assets.filter(ast => ast.status === 'Active' || !ast.status).length;
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Ativos', value: totalAssets, color: 'var(--accent)', subtext: 'Inventário SGSI' },
+            { label: 'Confidenciais / Críticos', value: confidentialCount, color: confidentialCount > 0 ? '#ff3b30' : '#34c759', subtext: 'Proteção máxima' },
+            { label: 'Restritos / Internos', value: restrictedCount, color: '#ffcc00', subtext: 'Uso corporativo' },
+            { label: 'Ativos Operacionais', value: activeCount, color: '#34c759', subtext: 'Em uso ativo' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Nome do Ativo', 'Categoria', 'Localização', 'Proprietário (Owner)', 'Classificação', 'Status', 'Ações'],
+            assets.map(ast => {
+                const classType = ast.classification === 'Confidential' ? 'danger' : ast.classification === 'Restricted' ? 'warning' : 'info';
+                const statusType = ast.status === 'Active' || !ast.status ? 'success' : 'neutral';
+
+                return [
+                    `<strong>${escapeHTML(ast.name)}</strong>`,
+                    escapeHTML(ast.category || 'Geral'),
+                    escapeHTML(ast.location || 'N/A'),
+                    escapeHTML(ast.owner || 'N/A'),
+                    window.renderStatusBadge(ast.classification || 'Internal', classType),
+                    window.renderStatusBadge(ast.status || 'Active', statusType),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openAssetDetailsModal('${ast.id}')">Detalhes</button>`
+                ];
+            }),
+            { emptyState: 'Nenhum ativo de informação registrado neste projeto.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openAssetDetailsModal = function(id) {

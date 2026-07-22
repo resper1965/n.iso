@@ -6,7 +6,11 @@ import { navigate, render } from '../router.js';
     async function renderROPA(c, h, a) {
         h.textContent = 'ROPA — Registro de Atividades de Tratamento';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewROPAModal('${proj.id}')">+ Nova Atividade</button>` : '';
@@ -15,17 +19,41 @@ import { navigate, render } from '../router.js';
         try { records = await api('GET', `/api/v1/projects/${proj.id}/ropa`); } catch(e) {}
         if (!Array.isArray(records)) records = [];
         S.ropa = records;
-        c.innerHTML = `<div class="fade-in">${records.length ? records.map(r => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openROPADetailsModal('${r.id}')">
-                <div style="flex:1"><div class="item-name">${escapeHTML(r.processing_purpose)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(r.legal_basis || 'N/A')} | Sujeitos: ${escapeHTML(r.data_subjects || 'N/A')} | Retencao: ${escapeHTML(r.retention_period || 'N/A')}</div></div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${r.international_transfers ? '<span class="ctx-tag" style="color:var(--danger)">Transfer. Internacional</span>' : ''}
-                    ${r.dpia_required ? '<span class="ctx-tag" style="color:#feca57">DPIA Requerido</span>' : ''}
-                    <span class="ctx-tag ctx-tag-green">${r.status}</span>
-                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openROPAReport('${proj.id}')">Imprimir PDF</button>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro ROPA</h3><p>Registre atividades de tratamento de dados pessoais.</p></div>'}</div>`;
+
+        const totalRecords = records.length;
+        const dpiaReqCount = records.filter(r => r.dpia_required).length;
+        const intlTransCount = records.filter(r => r.international_transfers).length;
+        const activeRecords = records.filter(r => r.status === 'Active' || !r.status).length;
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Processamentos', value: totalRecords, color: 'var(--accent)', subtext: 'Atividades mapeadas' },
+            { label: 'Atividades Ativas', value: activeRecords, color: '#34c759', subtext: 'Em operação' },
+            { label: 'DPIA Requerido', value: dpiaReqCount, color: dpiaReqCount > 0 ? '#ffcc00' : '#34c759', subtext: 'Avaliação de impacto' },
+            { label: 'Transferências Int.', value: intlTransCount, color: intlTransCount > 0 ? '#ff3b30' : 'var(--accent)', subtext: 'Fronteiras internacionais' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Propósito do Tratamento', 'Base Legal', 'Titulares', 'Retenção', 'DPIA Requerido', 'Status', 'Ações'],
+            records.map(r => {
+                const statusType = r.status === 'Active' || !r.status ? 'success' : 'info';
+                return [
+                    `<strong>${escapeHTML(r.processing_purpose)}</strong>`,
+                    escapeHTML(r.legal_basis || 'N/A'),
+                    escapeHTML(r.data_subjects || 'N/A'),
+                    escapeHTML(r.retention_period || 'N/A'),
+                    r.dpia_required ? window.renderStatusBadge('Sim', 'warning') : window.renderStatusBadge('Não', 'neutral'),
+                    window.renderStatusBadge(r.status || 'Active', statusType),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openROPADetailsModal('${r.id}')">Detalhes</button>
+                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="event.stopPropagation(); window.openROPAReport('${proj.id}')">PDF</button>`
+                ];
+            }),
+            { emptyState: 'Nenhum registro ROPA cadastrado neste projeto.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openROPADetailsModal = function(id) {
@@ -227,7 +255,11 @@ import { navigate, render } from '../router.js';
     async function renderDPIA(c, h, a) {
         h.textContent = 'DPIA / RIPD — Relatório de Impacto à Proteção de Dados';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewDPIAModal('${proj.id}')">+ Novo Relatório (DPIA)</button>` : '';
@@ -236,22 +268,39 @@ import { navigate, render } from '../router.js';
         try { assessments = await api('GET', `/api/v1/projects/${proj.id}/dpia`); } catch(e) {}
         if (!Array.isArray(assessments)) assessments = [];
         S.dpia = assessments;
-        
-        const statusColor = s => s === 'Approved' ? 'var(--success)' : s === 'Under Review' ? '#feca57' : 'var(--muted)';
-        
-        c.innerHTML = `<div class="fade-in">${assessments.length ? assessments.map(dp => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openDPIADetailsModal('${dp.id}')">
-                <div style="flex:1">
-                    <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(dp.system_name)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">
-                        <strong>Titulares:</strong> ${escapeHTML(dp.data_subjects_types || 'N/A')} | <strong>Categorias:</strong> ${escapeHTML(dp.personal_data_categories || 'N/A')}
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="color:${statusColor(dp.status)}; border-color:${statusColor(dp.status)}">${dp.status}</span>
-                    <button class="btn btn-ghost" style="padding:2px 6px; font-size:0.7rem; border-color:var(--accent); color:var(--accent)" onclick="event.stopPropagation(); window.openDPIAReport('${proj.id}', '${dp.id}')">Imprimir PDF</button>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum relatório DPIA / RIPD</h3><p>Crie avaliações de impacto à proteção de dados para sistemas críticos.</p></div>'}</div>`;
+
+        const totalDPIA = assessments.length;
+        const approvedCount = assessments.filter(dp => dp.status === 'Approved').length;
+        const reviewCount = assessments.filter(dp => dp.status === 'Under Review').length;
+        const draftCount = totalDPIA - (approvedCount + reviewCount);
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Relatórios DPIA', value: totalDPIA, color: 'var(--accent)', subtext: 'Avaliações registradas' },
+            { label: 'Aprovados', value: approvedCount, color: '#34c759', subtext: 'Risco aceitável / mitigado' },
+            { label: 'Em Revisão', value: reviewCount, color: '#ffcc00', subtext: 'Aguardando DPO / CISO' },
+            { label: 'Rascunhos / Pendentes', value: draftCount, color: 'var(--text-dim)', subtext: 'Em elaboração' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Sistema / Operação', 'Tipos de Titulares', 'Categorias de Dados', 'Status', 'Ações'],
+            assessments.map(dp => {
+                const statusType = dp.status === 'Approved' ? 'success' : dp.status === 'Under Review' ? 'warning' : 'info';
+                return [
+                    `<strong>${escapeHTML(dp.system_name)}</strong>`,
+                    escapeHTML(dp.data_subjects_types || 'N/A'),
+                    escapeHTML(dp.personal_data_categories || 'N/A'),
+                    window.renderStatusBadge(dp.status || 'Draft', statusType),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openDPIADetailsModal('${dp.id}')">Detalhes</button>
+                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="event.stopPropagation(); window.openDPIAReport('${proj.id}', '${dp.id}')">PDF</button>`
+                ];
+            }),
+            { emptyState: 'Nenhum relatório DPIA / RIPD cadastrado.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openDPIADetailsModal = function(id) {

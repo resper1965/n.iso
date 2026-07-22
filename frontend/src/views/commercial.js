@@ -154,43 +154,42 @@ import { navigate } from '../router.js';
     }
 
     async function renderAssessments(c, h, a) {
-        h.textContent = 'Levantamentos';
+        h.textContent = 'Levantamentos de Escopo';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const assessments = await api('GET', '/api/v1/assessments');
-            console.log('Assessments loaded:', assessments);
-            if (!Array.isArray(assessments) || assessments.length === 0) {
-                c.innerHTML = '<div class="card fade-in"><div class="empty-state" style="padding:2rem;text-align:center;color:var(--muted)">Nenhum levantamento encontrado.</div></div>';
-                return;
-            }
+            const asArr = Array.isArray(assessments) ? assessments : [];
+            S.assessments = asArr;
+
+            const totalAs = asArr.length;
+            const completedAs = asArr.filter(as => as.status === 'completed' || as.status === 'concluido').length;
+            const activeAs = totalAs - completedAs;
+
+            const statsHtml = window.renderStatCards([
+                { label: 'Total Levantamentos', value: totalAs, color: 'var(--accent)', subtext: 'Pesquisas de escopo' },
+                { label: 'Em Andamento', value: activeAs, color: '#ffcc00', subtext: 'Em preenchimento' },
+                { label: 'Concluídos', value: completedAs, color: '#34c759', subtext: 'Prontos para proposta' }
+            ]);
+
+            const tableHtml = window.renderDataTable(
+                ['Cliente / Empresa', 'Data de Criação', 'Status', 'Ações'],
+                asArr.map(as => {
+                    const date = as.created_at ? as.created_at.split(' ')[0] : '—';
+                    const statusType = as.status === 'completed' || as.status === 'concluido' ? 'success' : 'warning';
+                    return [
+                        `<strong>${escapeHTML(as.client_name || 'Sem nome')}</strong>`,
+                        date,
+                        window.renderStatusBadge(as.status || 'Em andamento', statusType),
+                        `<button class="btn btn-primary btn-sm" onclick="openAssessmentDetail('${as.id}')">Gerenciar Levantamento &rarr;</button>`
+                    ];
+                }),
+                { emptyState: 'Nenhum levantamento de escopo cadastrado.' }
+            );
+
             c.innerHTML = `
-                <div class="card fade-in">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Status</th>
-                                        <th>Criado em</th>
-                                <th style="text-align:right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${assessments.map(as => {
-                                const date = as.created_at ? as.created_at.split(' ')[0] : '---';
-                                return `
-                                <tr>
-                                    <td style="font-weight:500">${escapeHTML(as.client_name || 'Sem nome')}</td>
-                                    <td><span class="status-badge status-${as.status || 'in_progress'}">${as.status || 'Em andamento'}</span></td>
-                                    <td>${date}</td>
-                                    <td style="text-align:right">
-                                        <button class="btn" onclick="openAssessmentDetail('${as.id}')">Gerenciar</button>
-                                    </td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
+                ${statsHtml}
+                ${tableHtml}
             `;
         } catch (e) {
             console.error('Error rendering assessments:', e);

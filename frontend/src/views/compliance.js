@@ -656,75 +656,82 @@ import { navigate } from '../router.js';
     };
 
     async function renderEvidence(c, h, a) {
-        h.textContent = 'Evidencias';
-        a.innerHTML = '';
-        if (!S.currentProject) {
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Selecione um projeto</h3><p>Acesse um projeto para ver suas evidencias.</p></div>';
+        h.textContent = 'Central de Evidências';
+        const proj = S.currentProject || S.activeProject || S.projects[0];
+        if (!proj) {
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Selecione um projeto</h3><p>Acesse um projeto para ver suas evidências.</p></div>';
             return;
         }
-        a.innerHTML = `<button class="btn btn-primary" onclick="openEvidenceUploadModal('${S.currentProject.id}')">Upload Evidencia</button>`;
+        
+        a.innerHTML = `<button class="btn btn-primary" onclick="openEvidenceUploadModal('${proj.id}')">+ Upload Evidência</button>`;
+
         let evidence = [];
-        try { evidence = await api('GET', `/api/v1/projects/${S.currentProject.id}/evidence`); } catch(e) {}
+        try { evidence = await api('GET', `/api/v1/projects/${proj.id}/evidence`); } catch(e) {}
         if (!Array.isArray(evidence)) evidence = [];
-        if (!evidence.length) {
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Nenhuma evidencia</h3><p>Faca upload de evidencias para este projeto.</p></div>';
-            return;
-        }
-        c.innerHTML = `<div class="fade-in">
-            <div style="display:flex; flex-direction:column; gap:1rem">
-                ${evidence.map(e => {
-                    const fileName = e.file_name || e.filename || 'Evidência sem nome';
-                    const fileHash = e.file_hash || e.sha256_hash || '';
-                    const hash = fileHash ? fileHash.substring(0, 16) : '';
-                    const date = e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : '';
-                    const sizeKB = e.file_size ? `${(e.file_size / 1024).toFixed(1)} KB` : '';
-                    
-                    const cisoDetails = e.ciso_approved_ip 
-                      ? `<br><span style="font-size:0.6rem; color:var(--text-dim); margin-left:10px; font-family:monospace">IP: ${escapeHTML(e.ciso_approved_ip)}</span>` 
-                      : '';
-                    const cisoSign = e.ciso_approved_by 
-                      ? `<span style="color:var(--success)">DPO: Assinado por ${escapeHTML(e.ciso_approved_by)} (${new Date(e.ciso_approved_at).toLocaleDateString('pt-BR')})</span>${cisoDetails}` 
-                      : `<span style="color:var(--text-dim)">DPO: Pendente de assinatura</span>`;
-                      
-                    const ceoDetails = e.ceo_approved_ip 
-                      ? `<br><span style="font-size:0.6rem; color:var(--text-dim); margin-left:10px; font-family:monospace">IP: ${escapeHTML(e.ceo_approved_ip)}</span>` 
-                      : '';
-                    const ceoSign = e.ceo_approved_by 
-                      ? `<span style="color:var(--success)">CEO: Assinado por ${escapeHTML(e.ceo_approved_by)} (${new Date(e.ceo_approved_at).toLocaleDateString('pt-BR')})</span>${ceoDetails}` 
-                      : `<span style="color:var(--text-dim)">CEO: Pendente de assinatura</span>`;
 
-                    const isOrgUser = S.user && S.user.role === 'org_user';
-                    const cisoBtn = (!e.ciso_approved_by && !isOrgUser)
-                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ciso')">Assinar DPO</button>` 
-                      : '';
-                      
-                    const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
-                      ? `<button class="btn btn-ghost" onclick="signEvidence('${e.id}', 'ceo')">Assinar CEO</button>` 
-                      : '';
+        const totalEvidence = evidence.length;
+        const dpoSignedCount = evidence.filter(e => e.ciso_approved_by).length;
+        const ceoSignedCount = evidence.filter(e => e.ceo_approved_by).length;
+        const aiEvaluatedCount = evidence.filter(e => e.ai_status).length;
 
-                    return `<div class="card" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:center; gap:1.5rem">
-                        <div style="flex:1">
-                            <div style="font-family:'Montserrat', sans-serif; font-weight:500; font-size:0.9rem; margin-bottom:0.4rem; color:var(--text)">${escapeHTML(fileName)}</div>
-                            <div style="display:flex; gap:1rem; font-size:0.7rem; color:var(--text-dim)">
-                                <span>Tamanho: ${sizeKB}</span>
-                                <span>Data: ${date}</span>
-                                <span>Por: ${escapeHTML(e.uploaded_by || 'system')}</span>
-                            </div>
-                            ${hash ? `<div style="font-size:0.65rem; color:var(--accent); font-family:monospace; margin-top:0.4rem">SHA-256: ${hash}...</div>` : ''}
-                            <div style="display:flex; flex-direction:column; gap:0.25rem; margin-top:0.6rem; font-size:0.75rem">
-                                <div>${cisoSign}</div>
-                                <div>${ceoSign}</div>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:0.5rem">
-                            ${cisoBtn}
-                            ${ceoBtn}
-                            <button class="btn btn-ghost" onclick="viewEvidence('${e.id}')">Ver</button>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>
-        </div>`;
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Evidências', value: totalEvidence, color: 'var(--accent)', subtext: 'Arquivos no repositório R2' },
+            { label: 'Assinadas DPO', value: dpoSignedCount, color: '#34c759', subtext: 'Aprovação técnica' },
+            { label: 'Assinadas CEO', value: ceoSignedCount, color: '#34c759', subtext: 'Aprovação executiva' },
+            { label: 'Avaliadas por IA', value: aiEvaluatedCount, color: '#ffcc00', subtext: 'Análise automática' }
+        ]);
+
+        const isOrgUser = S.user && S.user.role === 'org_user';
+
+        const tableHtml = window.renderDataTable(
+            ['Arquivo Evidência', 'Tamanho', 'Hash (SHA-256)', 'Assinatura DPO', 'Assinatura CEO', 'Avaliação IA', 'Ações'],
+            evidence.map(e => {
+                const fileName = e.file_name || e.filename || 'Evidência sem nome';
+                const fileHash = e.file_hash || e.sha256_hash || '';
+                const hashShort = fileHash ? fileHash.substring(0, 16) + '...' : '—';
+                const sizeKB = e.file_size ? `${(e.file_size / 1024).toFixed(1)} KB` : '—';
+
+                const dpoBadge = e.ciso_approved_by 
+                    ? window.renderStatusBadge(`OK (${escapeHTML(e.ciso_approved_by)})`, 'success') 
+                    : window.renderStatusBadge('Pendente', 'neutral');
+
+                const ceoBadge = e.ceo_approved_by 
+                    ? window.renderStatusBadge(`OK (${escapeHTML(e.ceo_approved_by)})`, 'success') 
+                    : window.renderStatusBadge('Pendente', 'neutral');
+
+                const aiBadgeType = e.ai_status === 'CONFORME' ? 'success' : e.ai_status === 'PARCIAL' ? 'warning' : e.ai_status === 'NAO CONFORME' ? 'danger' : 'neutral';
+                const aiBadge = e.ai_status 
+                    ? window.renderStatusBadge(e.ai_status, aiBadgeType) 
+                    : window.renderStatusBadge('Não avaliado', 'neutral');
+
+                const dpoBtn = (!e.ciso_approved_by && !isOrgUser)
+                    ? `<button class="btn btn-ghost btn-sm" onclick="signEvidence('${e.id}', 'ciso')">Assinar DPO</button>`
+                    : '';
+                const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
+                    ? `<button class="btn btn-ghost btn-sm" onclick="signEvidence('${e.id}', 'ceo')">Assinar CEO</button>`
+                    : '';
+                const evalBtn = (!isOrgUser)
+                    ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="evaluateEvidenceAI('${e.id}')">IA</button>`
+                    : '';
+
+                return [
+                    `<strong>${escapeHTML(fileName)}</strong>`,
+                    sizeKB,
+                    `<code style="font-size:0.65rem;color:var(--text-dim)">${hashShort}</code>`,
+                    dpoBadge,
+                    ceoBadge,
+                    aiBadge,
+                    `<a href="/api/v1/evidence/${e.id}/download" target="_blank" class="btn btn-ghost btn-sm">Download</a> ${dpoBtn} ${ceoBtn} ${evalBtn}`
+                ];
+            }),
+            { emptyState: 'Nenhuma evidência enviada para este projeto.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     function openEvidenceUploadModal(projectId) {
