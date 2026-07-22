@@ -287,10 +287,10 @@ import { navigate } from '../router.js';
             <div class="form-group">
                 <label class="form-label">Tratamento</label>
                 <select class="form-input" id="risk-treatment" onchange="window.onRiskTreatmentChange(this)">
-                    <option value="Mitigate">Mitigate</option>
-                    <option value="Accept">Accept (Aceitar)</option>
-                    <option value="Transfer">Transfer</option>
-                    <option value="Avoid">Avoid</option>
+                    <option value="Mitigate">Mitigar</option>
+                    <option value="Accept">Aceitar</option>
+                    <option value="Transfer">Transferir</option>
+                    <option value="Avoid">Evitar</option>
                 </select>
             </div>
             <div class="form-group">
@@ -359,7 +359,7 @@ import { navigate } from '../router.js';
                 <div class="form-group" style="flex:1"><label class="form-label">Probabilidade (1-5)</label><input class="form-input" id="risk-e-prob" type="number" min="1" max="5" value="${r.probability||3}"></div>
             </div>
             <div class="form-group"><label class="form-label">Tratamento</label>
-                <select class="form-input" id="risk-e-treatment">${['Mitigate','Accept','Transfer','Avoid'].map(o => `<option ${o===r.treatment?'selected':''}>${o}</option>`).join('')}</select></div>
+                <select class="form-input" id="risk-e-treatment">${[{v:'Mitigate',l:'Mitigar'},{v:'Accept',l:'Aceitar'},{v:'Transfer',l:'Transferir'},{v:'Avoid',l:'Evitar'}].map(o => `<option value="${o.v}" ${o.v===r.treatment?'selected':''}>${o.l}</option>`).join('')}</select></div>
             <div class="form-group">
                 <label class="form-label">Controle Annex A Vinculado (Opcional)</label>
                 <select class="form-input" id="risk-e-control">
@@ -1249,7 +1249,7 @@ import { navigate } from '../router.js';
             <div class="form-group"><label class="form-label">Plano de Acao (Action Plan)</label><textarea class="form-input" id="capa-plan" placeholder="Passos a serem tomados..."></textarea></div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Severidade</label>
-                    <select class="form-input" id="capa-sev"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
+                    <select class="form-input" id="capa-sev"><option value="Low">Baixo</option><option value="Medium" selected>Médio</option><option value="High">Alto</option><option value="Critical">Crítico</option></select></div>
                 <div class="form-group" style="flex:1"><label class="form-label">Prazo</label><input class="form-input" id="capa-due" type="date"></div>
             </div>
             <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="capa-assigned" placeholder="Ex: CISO"></div>
@@ -1317,11 +1317,11 @@ import { navigate } from '../router.js';
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Severidade</label>
                     <select class="form-input" id="capa-e-sev">
-                        ${['Low','Medium','High','Critical'].map(o => `<option ${o===ca.severity?'selected':''}>${o}</option>`).join('')}
+                        ${[{v:'Low',l:'Baixo'},{v:'Medium',l:'Médio'},{v:'High',l:'Alto'},{v:'Critical',l:'Crítico'}].map(o => `<option value="${o.v}" ${o.v===ca.severity?'selected':''}>${o.l}</option>`).join('')}
                     </select></div>
                 <div class="form-group" style="flex:1"><label class="form-label">Status</label>
                     <select class="form-input" id="capa-e-status">
-                        ${['Open','In Progress','Closed'].map(o => `<option ${o===ca.status?'selected':''}>${o}</option>`).join('')}
+                        ${[{v:'Open',l:'Aberto'},{v:'In Progress',l:'Em Andamento'},{v:'Closed',l:'Fechado'}].map(o => `<option value="${o.v}" ${o.v===ca.status?'selected':''}>${o.l}</option>`).join('')}
                     </select></div>
             </div>
             <div style="display:flex;gap:0.5rem">
