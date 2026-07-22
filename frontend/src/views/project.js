@@ -97,7 +97,7 @@ const ISO_GUIDELINES = {
             console.log("[nISO Debug] config:", config);
             console.log("[nISO Debug] checklistProgress:", checklistProgress);
             
-            S.checklistsConfig = config;
+            S.checklistsConfig = (config && config.checklists) ? config.checklists : (config || {});
             S.currentGovernance = governanceMembers || [];
             // ponytail: hydrate phaseChecks and metadata from D1 (server wins over stale localStorage)
             if (!S.phaseChecksNotes) S.phaseChecksNotes = {};
@@ -202,7 +202,8 @@ const ISO_GUIDELINES = {
                 // Filter phases inside this journey
                 let filteredPhases = jPhases.filter(ph => {
                     if (statusFilter !== 'all' && ph.status !== statusFilter) return false;
-                    const phChecklist = (S.checklistsConfig && S.checklistsConfig[ph.phase_number]) || [];
+                    const phRaw = S.checklistsConfig ? (S.checklistsConfig[ph.phase_number] || (S.checklistsConfig.checklists && S.checklistsConfig.checklists[ph.phase_number])) : [];
+                    const phChecklist = Array.isArray(phRaw) ? phRaw : [];
                     const matchingItems = phChecklist.filter(item => {
                         if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
                         if (searchQuery) {
@@ -253,7 +254,8 @@ const ISO_GUIDELINES = {
                             ${window.renderJourneyDiagnosticPanel(journeyIdx, p.id)}
                             ${filteredPhases.map(ph => {
                                 const isPhExpanded = (S.expandedPhases && S.expandedPhases[ph.phase_number]) === true;
-                                const phChecklist = (S.checklistsConfig && S.checklistsConfig[ph.phase_number]) || [];
+                                const phItemRaw = S.checklistsConfig ? (S.checklistsConfig[ph.phase_number] || (S.checklistsConfig.checklists && S.checklistsConfig.checklists[ph.phase_number])) : [];
+                                const phChecklist = Array.isArray(phItemRaw) ? phItemRaw : [];
                                 const filteredItems = phChecklist.filter(item => {
                                     if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
                                     if (searchQuery) {

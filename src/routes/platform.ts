@@ -275,6 +275,20 @@ platformApp.put('/notifications/:id/read', async (c) => {
   return c.json({ ok: true });
 });
 
+platformApp.get('/portfolio', async (c) => {
+  try {
+    const user = c.get('user');
+    let stmt = c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
+    if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client') && user.client_project_id) {
+      stmt = c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user.client_project_id);
+    }
+    const { results } = await stmt.all();
+    return c.json({ ok: true, portfolio: results || [], projects: results || [] });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao buscar portfólio', detail: e.message }, 500);
+  }
+});
+
 // Phase config & Auditor token
 platformApp.get('/phases/config', (c) => {
   return c.json({ ok: true, titles: PHASE_TITLES, checklists: PHASE_CHECKLISTS });

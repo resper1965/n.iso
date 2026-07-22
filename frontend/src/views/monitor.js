@@ -8,7 +8,17 @@ import { navigate } from '../router.js';
         a.innerHTML = ''; // Clear actions
         
         let portfolio = [];
-        try { portfolio = await api('GET', '/api/v1/portfolio'); } catch(e) {}
+        try { 
+            const res = await api('GET', '/api/v1/portfolio'); 
+            portfolio = Array.isArray(res) ? res : (res && res.projects ? res.projects : (res && res.portfolio ? res.portfolio : []));
+        } catch(e) {
+            try {
+                const res = await api('GET', '/api/v1/projects');
+                portfolio = Array.isArray(res) ? res : (res && res.projects ? res.projects : []);
+            } catch(err) {
+                portfolio = [];
+            }
+        }
         if (!Array.isArray(portfolio) || portfolio.length === 0) {
             c.innerHTML = '<div class="empty-state"><h3>Nenhum projeto ativo para monitorar.</h3></div>';
             return;
