@@ -1,14 +1,18 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, genToken, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema } from '../schemas';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 
 authApp.post('/setup', async (c) => {
   try {
-    const { setup_key, email, password, name } = await c.req.json();
-    if (setup_key !== c.env.SETUP_KEY) {
+    const valid = await validateBody(c, setupSchema);
+    if (!valid.success) return valid.response;
+    const { email, password, name, setupKey } = valid.data;
+
+    if (setupKey !== c.env.SETUP_KEY && (c.req.header('X-Setup-Key') || setupKey) !== c.env.SETUP_KEY) {
       return c.json({ error: 'Invalid setup key' }, 403);
     }
     
@@ -28,10 +32,14 @@ authApp.post('/setup', async (c) => {
 
 authApp.post('/login', async (c) => {
   try {
-    const { email, password } = await c.req.json();
+    const valid = await validateBody(c, loginSchema);
+    if (!valid.success) return valid.response;
+    const { email, password } = valid.data;
+
     const user = await c.env.DB.prepare(
       'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change FROM users WHERE email = ?'
     ).bind(email).first() as any;
+
     
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return c.json({ error: 'Invalid credentials' }, 401);

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, hashPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+import { validateBody, createUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -37,10 +38,9 @@ usersApp.post('/', async (c) => {
   }
 
   try {
-    const { email, password, name, role, client_project_id } = await c.req.json();
-    if (!email || !password || !name || !role) {
-      return c.json({ error: 'Campos obrigatórios: email, password, name, role' }, 400);
-    }
+    const valid = await validateBody(c, createUserSchema);
+    if (!valid.success) return valid.response;
+    const { email, password, name, role, client_project_id } = valid.data;
 
     let targetProject = client_project_id;
     let targetRole = role;
