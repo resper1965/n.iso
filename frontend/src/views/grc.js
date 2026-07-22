@@ -466,8 +466,10 @@ import { navigate } from '../router.js';
         a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewVendorModal('${proj.id}')">+ Novo Fornecedor</button>` : '';
 
         let vendors = [];
-        try { vendors = await api('GET', `/api/v1/projects/${proj.id}/vendors`); } catch(e) {}
-        if (!Array.isArray(vendors)) vendors = [];
+        try { 
+            const res = await api('GET', `/api/v1/projects/${proj.id}/vendors`); 
+            vendors = Array.isArray(res) ? res : (res && Array.isArray(res.vendors)) ? res.vendors : [];
+        } catch(e) {}
         S.vendors = vendors;
 
         const totalVendors = vendors.length;
@@ -808,9 +810,11 @@ import { navigate } from '../router.js';
 
         let records = [];
         let summary = {};
-        try { records = await api('GET', `/api/v1/projects/${proj.id}/training`); } catch(e) {}
+        try { 
+            const res = await api('GET', `/api/v1/projects/${proj.id}/training`); 
+            records = Array.isArray(res) ? res : (res && Array.isArray(res.records)) ? res.records : [];
+        } catch(e) {}
         try { summary = await api('GET', `/api/v1/projects/${proj.id}/training/summary`); } catch(e) {}
-        if (!Array.isArray(records)) records = [];
         S.training = records;
 
         const totalRecords = records.length;
@@ -1110,8 +1114,10 @@ import { navigate } from '../router.js';
         a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewCAPAModal('${proj.id}')">+ Nova Ação</button>` : '';
 
         let items = [];
-        try { items = await api('GET', `/api/v1/projects/${proj.id}/capa`); } catch(e) {}
-        if (!Array.isArray(items)) items = [];
+        try { 
+            const res = await api('GET', `/api/v1/projects/${proj.id}/capa`); 
+            items = Array.isArray(res) ? res : (res && Array.isArray(res.actions)) ? res.actions : (res && Array.isArray(res.capa)) ? res.capa : [];
+        } catch(e) {}
         S.capa = items;
 
         const totalCAPA = items.length;
@@ -1394,8 +1400,10 @@ import { navigate } from '../router.js';
         a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewAuditModal('${proj.id}')">+ Nova Auditoria</button>` : '';
 
         let audits = [];
-        try { audits = await api('GET', `/api/v1/projects/${proj.id}/audits`); } catch(e) {}
-        if (!Array.isArray(audits)) audits = [];
+        try { 
+            const res = await api('GET', `/api/v1/projects/${proj.id}/audits`); 
+            audits = Array.isArray(res) ? res : (res && Array.isArray(res.audits)) ? res.audits : [];
+        } catch(e) {}
         S.audits = audits;
 
         const totalAudits = audits.length;
