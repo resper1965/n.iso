@@ -1378,8 +1378,10 @@ import { navigate } from '../router.js';
         a.innerHTML = `<button class="btn" onclick="exportCSV('assets')" style="margin-right:8px">Exportar CSV</button>` + (canCrud ? `<button class="btn btn-primary" onclick="window.openNewAssetModal('${proj.id}')">+ Novo Ativo</button>` : '');
         
         let assets = [];
-        try { assets = await api('GET', `/api/v1/projects/${proj.id}/assets`); } catch(e) {}
-        if (!Array.isArray(assets)) assets = [];
+        try { 
+            const res = await api('GET', `/api/v1/projects/${proj.id}/assets`); 
+            assets = Array.isArray(res) ? res : (res && Array.isArray(res.assets)) ? res.assets : [];
+        } catch(e) {}
         S.assets = assets;
 
         const totalAssets = assets.length;
