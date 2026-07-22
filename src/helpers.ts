@@ -65,3 +65,65 @@ export function escapeHtml(s: string): string {
   if (!s) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/** Gera um token criptograficamente seguro para sessões */
+export function genToken(): string {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
+export async function sendEmail(c: any, to: string, subject: string, html: string): Promise<boolean> {
+  const apiKey = c.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}\nConteúdo: ${html}`);
+    return true;
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'nISO <noreply@ness.lat>',
+        to: [to],
+        subject: subject,
+        html: html
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[EMAIL ERROR] Falha no Resend API: ${res.status} - ${errText}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`[EMAIL ERROR] Erro no envio de e-mail: ${e}`);
+    return false;
+  }
+}
+
+export async function hashPassword(password: string, salt?: string): Promise<string> {
+  const s = salt || crypto.randomUUID();
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode(s), iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
+  const hash = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${s}:${hash}`;
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (!stored.includes(':')) {
+    const msgBuffer = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const legacyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return legacyHash === stored;
+  }
+  const [salt] = stored.split(':');
+  const rehash = await hashPassword(password, salt);
+  return rehash === stored;
+}
+
