@@ -190,17 +190,20 @@ import { navigate } from '../router.js';
 
     async function renderSoA(c, h, a) {
         h.textContent = 'Statement of Applicability (SoA)';
-        a.innerHTML = '';
-        if (!S.activeProject) {
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) {
+            a.innerHTML = '';
             c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo para visualizar o SoA.</div>';
             return;
         }
         
+        a.innerHTML = `<button class="btn btn-secondary" onclick="window.generateSoA('${proj.id}')" style="margin-right:8px">Gerar SoA (AI)</button><button class="btn btn-primary" onclick="window.migrate27701('${proj.id}')">Migrar 27701</button>`;
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando controles do SoA...</div>';
+        
         try {
             const [controls, traceData] = await Promise.all([
-                api('GET', `/api/v1/projects/${S.activeProject.id}/controls`) || [],
-                api('GET', `/api/v1/projects/${S.activeProject.id}/traceability`).then(r => r.controls).catch(() => [])
+                api('GET', `/api/v1/projects/${proj.id}/controls`) || [],
+                api('GET', `/api/v1/projects/${proj.id}/traceability`).then(r => r.controls).catch(() => [])
             ]);
             
             const traceMap = {};
@@ -240,33 +243,16 @@ import { navigate } from '../router.js';
                 stdGroups[std][sub.code].controls.push(ctrl);
             });
 
-            let html = `
-                <div class="soa-stat-grid">
-                    <div class="soa-stat-card applicable">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalApplicable} <span style="font-size:0.95rem;color:var(--text-dim)">/ ${controls.length}</span></div>
-                            <div style="font-size: 0.65rem; background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2); padding:2px 8px; border-radius:10px; font-weight:600;">
-                                ${controls.length > 0 ? ((totalApplicable / controls.length) * 100).toFixed(0) : 0}%
-                            </div>
-                        </div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Controles Aplicáveis</div>
-                    </div>
-                    <div class="soa-stat-card not-applicable">
-                        <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalNA}</div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Controles Não Aplicáveis</div>
-                    </div>
-                    <div class="soa-stat-card justified">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div class="stat-value" style="font-size:1.8rem; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--text);">${totalJustified} <span style="font-size:0.95rem;color:var(--text-dim)">/ ${totalNA || 1}</span></div>
-                            <div class="badge" style="font-size:0.65rem; background:${totalNA > 0 && totalJustified === totalNA ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'}; color:${totalNA > 0 && totalJustified === totalNA ? '#10b981' : '#f59e0b'}; border:1px solid ${totalNA > 0 && totalJustified === totalNA ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}; padding:2px 8px; border-radius:10px; font-weight:600;">
-                                ${totalNA > 0 && totalJustified === totalNA ? 'Conforme' : 'Pendente'}
-                            </div>
-                        </div>
-                        <div class="stat-label" style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-top:12px;">Justificativas de Exclusão</div>
-                    </div>
-                </div>
+            const statsHtml = window.renderStatCards([
+                { label: 'Controles Aplicáveis', value: `${totalApplicable} / ${controls.length}`, color: 'var(--accent)', subtext: `${controls.length > 0 ? ((totalApplicable / controls.length) * 100).toFixed(0) : 0}% de cobertura` },
+                { label: 'Controles Não Aplicáveis', value: totalNA, color: 'var(--text-dim)', subtext: 'Exclusões de escopo' },
+                { label: 'Justificativas de Exclusão', value: `${totalJustified} / ${totalNA || 1}`, color: totalNA > 0 && totalJustified === totalNA ? '#34c759' : '#ffcc00', subtext: totalNA > 0 && totalJustified === totalNA ? 'Conforme' : 'Pendente' }
+            ]);
 
-                <div class="soa-filters" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:2rem;align-items:center;background:rgba(15,20,35,0.4);border:1px solid var(--border);border-radius:12px;padding:16px;backdrop-filter:var(--glass-blur)">
+            let html = `
+                ${statsHtml}
+
+                <div class="soa-filters fade-in" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:2rem;align-items:center;background:rgba(15,20,35,0.4);border:1px solid var(--border);border-radius:12px;padding:16px;backdrop-filter:var(--glass-blur)">
                     <div style="flex:1;min-width:280px;position:relative">
                         <input type="text" id="soa-search" placeholder="Buscar por ID ou termo..." oninput="window.filterSoATable()" style="width:100%;background:rgba(7,11,20,0.5);border:1px solid var(--border);border-radius:10px;padding:8px 12px 8px 36px;color:var(--text);font-size:0.85rem;outline:none" />
                         <svg viewBox="0 0 24 24" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--text-dim);fill:none;stroke-width:1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -283,7 +269,7 @@ import { navigate } from '../router.js';
 
             for (const [stdName, subGroups] of Object.entries(stdGroups).sort()) {
                 html += `
-                    <div style="margin-top:2.5rem; margin-bottom:1.25rem; font-family:'Montserrat',sans-serif; font-weight:500; font-size:1.1rem; color:var(--text); letter-spacing:0.5px; display:flex; align-items:center; gap:8px">
+                    <div style="margin-top:2rem; margin-bottom:1rem; font-family:'Montserrat',sans-serif; font-weight:700; font-size:1.05rem; color:var(--text); letter-spacing:0.5px; display:flex; align-items:center; gap:8px" class="fade-in">
                         <span style="width:4px; height:18px; background:var(--accent); border-radius:2px; display:inline-block"></span>
                         Norma ${escapeHTML(stdName)}
                     </div>
@@ -307,7 +293,7 @@ import { navigate } from '../router.js';
                     const isOpen = window.soaAccordionStates[sectionId];
 
                     html += `
-                        <div class="soa-section soa-accordion ${isOpen ? 'active' : ''}" id="soa-acc-${sectionId}">
+                        <div class="soa-section soa-accordion ${isOpen ? 'active' : ''} fade-in" id="soa-acc-${sectionId}">
                             <div class="soa-accordion-header" onclick="window.toggleSoAAccordion('${sectionId}')">
                                 <div class="soa-accordion-title">
                                     <span class="code">${escapeHTML(subData.meta.label)}</span>
@@ -324,17 +310,17 @@ import { navigate } from '../router.js';
                                 </div>
                             </div>
                             <div class="soa-accordion-content">
-                                <div class="data-table" style="overflow-x:auto">
-                                    <table>
+                                <div style="overflow-x:auto; width:100%">
+                                    <table class="data-table" style="width:100%; table-layout:fixed">
                                         <thead>
                                             <tr>
-                                                <th style="width:90px">ID</th>
-                                                <th style="width:240px">Controle</th>
-                                                <th style="width:130px">Aplicável?</th>
+                                                <th style="width:75px">ID</th>
+                                                <th style="width:220px">Controle</th>
+                                                <th style="width:105px">Aplicável?</th>
                                                 <th style="width:125px">Status</th>
-                                                <th style="width:145px">Rastreabilidade</th>
-                                                <th>Justificativa / Notas</th>
-                                                <th style="width:115px">Maturidade</th>
+                                                <th style="width:140px">Rastreabilidade</th>
+                                                <th style="width:auto">Justificativa / Notas</th>
+                                                <th style="width:110px">Maturidade</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -352,7 +338,7 @@ import { navigate } from '../router.js';
                         html += `
                             <tr id="soa-row-${ctrl.id}" class="soa-row" data-standard="${escapeHTML(ctrl.standard || '')}" data-title="${escapeHTML(ctrl.title || '')}" data-status="${escapeHTML(ctrl.status || 'Missing')}">
                                 <td style="font-weight:700;color:var(--accent);font-size:0.8rem;white-space:nowrap">${escapeHTML(parsed.code)}</td>
-                                <td style="font-weight:400;font-size:0.8rem;line-height:1.45">${escapeHTML(parsed.title)}</td>
+                                <td style="font-weight:400;font-size:0.8rem;line-height:1.45;word-break:break-word">${escapeHTML(parsed.title)}</td>
                                 <td>
                                     <div class="segmented-control ${isNA ? 'not-applicable' : 'applicable'}" id="seg-toggle-${ctrl.id}">
                                         <button type="button" class="seg-btn ${!isNA ? 'active' : ''}" onclick="${!isNA ? '' : `window.toggleSoAApplicability('${ctrl.id}', 'Applicable')`}">Sim</button>
@@ -360,16 +346,14 @@ import { navigate } from '../router.js';
                                     </div>
                                 </td>
                                 <td>
-                                    <span class="badge ${isNA ? 'badge-not-applicable' : 'badge-' + (ctrl.status || 'missing').toLowerCase().replace(/\s/g,'-')}">
-                                        ${escapeHTML(ctrl.status || 'Missing')}
-                                    </span>
+                                    ${window.renderStatusBadge(ctrl.status === 'Implemented' || ctrl.status === 'Approved' ? 'success' : isNA ? 'info' : 'warning', ctrl.status || 'Pendente')}
                                 </td>
                                 <td>
                                     <div style="display:flex;gap:6px">
-                                        <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.12)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
+                                        <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.12)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
                                             R: ${risksCount}
                                         </span>
-                                        <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.15)' : 'var(--border)'};padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
+                                        <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.15)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
                                             E: ${evidenceCount}
                                         </span>
                                     </div>
@@ -382,6 +366,7 @@ import { navigate } from '../router.js';
                                     <input type="text" value="${escapeHTML(ctrl.description || '')}" 
                                         placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
                                         class="soa-justification-input ${isJustificationMissing ? 'required-missing' : ''}" 
+                                        style="width:100%; box-sizing:border-box; background:rgba(7,11,20,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 10px; color:var(--text); font-size:0.8rem;"
                                         onblur="window.saveSoAJustification('${ctrl.id}', this.value); if (this.value.trim() !== '') { this.classList.remove('required-missing'); } else if (${isNA}) { this.classList.add('required-missing'); }" />
                                 </td>
                                 <td>
