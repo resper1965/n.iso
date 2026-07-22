@@ -1062,6 +1062,27 @@ import { navigate } from '../router.js';
         }
     };
 
+    function formatAttendees(attendeesStr) {
+        if (!attendeesStr) return '<span style="color:var(--text-dim)">Não definidos</span>';
+        const parts = attendeesStr.split(',').map(p => p.trim()).filter(Boolean);
+        return `<div style="display: flex; flex-wrap: wrap; gap: 6px;">` + 
+            parts.map(part => {
+                const match = part.match(/^([^(]+)\s*(?:\(([^)]+)\))?$/);
+                if (match) {
+                    const name = match[1].trim();
+                    const role = match[2] ? match[2].trim() : '';
+                    return `
+                        <span style="display: inline-flex; align-items: center; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: var(--text); line-height: 1;">
+                            <span style="font-weight: 400; margin-right: 4px;">${escapeHTML(name)}</span>
+                            ${role ? `<span style="color: var(--accent); font-size: 0.65rem; font-weight: 500;">(${escapeHTML(role)})</span>` : ''}
+                        </span>
+                    `;
+                }
+                return `<span style="display: inline-flex; align-items: center; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: var(--text); line-height: 1;">${escapeHTML(part)}</span>`;
+            }).join('') + 
+        `</div>`;
+    }
+
     async function renderManagementReview(c, h, a) {
         h.textContent = 'Análise Crítica pela Direção (Cláusula 9.3)';
         const isOrgUser = S.user && S.user.role === 'org_user';
@@ -1103,11 +1124,11 @@ import { navigate } from '../router.js';
             list.forEach(m => {
                 html += `
                     <tr>
-                        <td style="font-weight:600;color:var(--accent)">${m.review_date}</td>
-                        <td style="font-size:0.85rem">${escapeHTML(m.attendees || 'Não definidos')}</td>
+                        <td style="font-weight:600;color:var(--accent);font-family:monospace;font-size:0.85rem">${m.review_date}</td>
+                        <td>${formatAttendees(m.attendees)}</td>
                         <td><span class="badge ${m.status === 'Completed' ? 'badge-implemented' : 'badge-pending'}">${m.status === 'Completed' ? 'Concluída' : 'Planejada'}</span></td>
                         <td style="text-align:center">
-                            <button onclick="window.openEditMgmtReviewModal('${m.id}')" class="btn-secondary" style="padding:4px 10px">Abrir Pauta / Editar</button>
+                            <button onclick="window.openEditMgmtReviewModal('${m.id}')" class="btn-secondary" style="padding:6px 12px; font-size: 0.75rem;">Abrir Pauta / Editar</button>
                         </td>
                     </tr>
                 `;
