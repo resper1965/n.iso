@@ -73,97 +73,90 @@ import { navigate, render } from '../router.js';
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
             ]);
-            const activeProjects = Array.isArray(projects) ? projects.filter(p => p.status === 'active') : [];
-            
+            const leadsCount = Array.isArray(leads) ? leads.length : 0;
+            const assessmentsCount = Array.isArray(assessments) ? assessments.length : 0;
+            const projectsCount = activeProjects.length;
+
             const totalControls = Array.isArray(controls) ? controls.length : 0;
             const approvedControls = Array.isArray(controls) ? controls.filter(ctrl => ctrl.status === 'Approved' || ctrl.status === 'Implemented').length : 0;
             const gapsControls = totalControls - approvedControls;
             const complianceRate = totalControls > 0 ? Math.round((approvedControls / totalControls) * 100) : 0;
 
+            const headerHtml = window.renderPageHeader(
+                'Dashboard Executivo',
+                'Visão geral da governança, conformidade e projetos ativos no nISO',
+                `<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>
+                 <button class="btn btn-ghost" onclick="navigate('monitor')">Monitor</button>`
+            );
+
+            const statsHtml = window.renderStatCards([
+                { label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' },
+                { label: 'Levantamentos', value: assessmentsCount, color: '#ffcc00', subtext: 'Assessments cadastrados' },
+                { label: 'Projetos em Curso', value: projectsCount, color: '#34c759', subtext: 'Implementações ISO ativas' },
+                { label: 'Taxa de Conformidade', value: `${complianceRate}%`, color: complianceRate >= 80 ? '#34c759' : complianceRate >= 50 ? '#ffcc00' : '#00ade8', subtext: `${approvedControls} de ${totalControls} controles` }
+            ]);
+
+            const assessmentsTable = window.renderDataTable(
+                [
+                    { label: 'Cliente', key: 'client_name' },
+                    { label: 'Status', key: 'status', render: (row) => window.renderStatusBadge(row.status === 'completed' ? 'success' : row.status === 'in_progress' ? 'warning' : 'info', row.status || 'Pendente') },
+                    {
+                        label: 'Ações', align: 'right', render: (row) => `
+                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="openAssessmentDetail('${row.id}')">Ver</button>
+                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="generateProposalFromAssessment('${row.id}')">Proposta</button>
+                        `
+                    }
+                ],
+                assessments.slice(0, 5),
+                { emptyMessage: 'Nenhum levantamento recente cadastrado.' }
+            );
+
+            const projectsTable = window.renderDataTable(
+                [
+                    { label: 'Projeto', render: (row) => escapeHTML(row.project_name || row.client_name || 'Sem nome') },
+                    {
+                        label: 'Progresso', render: (row) => `
+                            <div style="display:flex; align-items:center; gap:0.75rem; width:100%;">
+                                <div class="progress-bar" style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden;"><div class="progress-fill" style="width:${row.progress || 0}%; background:var(--accent); height:100%;"></div></div>
+                                <span style="font-size:0.75rem; font-weight:600; color:var(--accent);">${row.progress || 0}%</span>
+                            </div>
+                        `
+                    },
+                    { label: 'Ação', align: 'right', render: (row) => `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="openProjectDetail('${row.id}')">Gerenciar</button>` }
+                ],
+                projects.slice(0, 5),
+                { emptyMessage: 'Nenhum projeto ativo.' }
+            );
+
             c.innerHTML = `
-                <div class="stats-grid fade-in">
-                    <div class="card stat-card" onclick="navigate('leads')">
-                        <div class="stat-label">Leads Ativos</div>
-                        <div class="stat-value">${Array.isArray(leads) ? leads.length : 0}</div>
-                    </div>
-                    <div class="card stat-card" onclick="navigate('assessments')">
-                        <div class="stat-label">Levantamentos</div>
-                        <div class="stat-value">${Array.isArray(assessments) ? assessments.length : 0}</div>
-                    </div>
-                    <div class="card stat-card" onclick="navigate('projects')">
-                        <div class="stat-label">Projetos em Curso</div>
-                        <div class="stat-value">${activeProjects.length}</div>
-                    </div>
-                </div>
+                <div class="fade-in">
+                    ${headerHtml}
+                    ${statsHtml}
 
-                <div class="card fade-in" style="margin-top:1.5rem; background:linear-gradient(135deg, rgba(0,173,232,0.05) 0%, rgba(7,11,20,0) 100%)">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
-                        <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.95rem">Burnup de Gaps — Velocidade de Conformidade</div>
-                        <span class="ctx-tag" style="background:var(--accent)20; color:var(--accent); font-weight:600">${complianceRate}% Implementado</span>
+                    <div class="card fade-in" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.65); border:1px solid rgba(229,235,255,0.08); border-radius:12px; padding:1.5rem; backdrop-filter:blur(24px);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
+                            <div style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1rem; color:var(--text);">Burnup de Gaps — Velocidade de Conformidade</div>
+                            <span style="background:rgba(0,173,232,0.15); color:var(--accent); padding:0.25rem 0.61rem; border-radius:6px; font-weight:600; font-size:0.75rem;">${complianceRate}% Implementado</span>
+                        </div>
+                        <div class="progress-bar" style="height:8px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:1rem">
+                            <div class="progress-fill" style="width: ${complianceRate}%; background:linear-gradient(90deg, var(--accent), #34c759); height:100%;"></div>
+                        </div>
+                        <div style="display:flex; gap:1.5rem; font-size:0.8rem; color:var(--text-dim)">
+                            <div><strong style="color:var(--text)">Controles Implementados:</strong> ${approvedControls}</div>
+                            <div><strong style="color:var(--text)">Gaps Restantes:</strong> ${gapsControls}</div>
+                            <div><strong style="color:var(--text)">Total do ISMS:</strong> ${totalControls}</div>
+                        </div>
                     </div>
-                    <div class="progress-bar" style="height:8px; margin-bottom:1rem">
-                        <div class="progress-fill" style="width: ${complianceRate}%"></div>
-                    </div>
-                    <div style="display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-dim)">
-                        <div><strong>Controles Aprovados/Implementados:</strong> ${approvedControls}</div>
-                        <div><strong>Gaps Restantes:</strong> ${gapsControls}</div>
-                        <div><strong>Total do ISMS:</strong> ${totalControls}</div>
-                    </div>
-                </div>
-                <div class="card fade-in" style="margin-top:1.5rem">
-                    <div style="font-family:'Montserrat',sans-serif;font-weight:500;margin-bottom:1rem">Levantamentos Recentes</div>
-                    <div style="overflow-x:auto">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>Cliente</th><th>Status</th><th>Ação</th></tr>
-                            </thead>
-                            <tbody>
-                                ${assessments.slice(0, 5).map(as => `
-                                    <tr>
-                                        <td>${escapeHTML(as.client_name)}</td>
-                                        <td><span class="status-badge status-${as.status}">${as.status}</span></td>
-                                        <td>
-                                            <button class="btn btn-ghost" style="padding:0.2rem 0.5rem;font-size:0.6rem" onclick="openAssessmentDetail('${as.id}')">Ver</button>
-                                            <button class="btn btn-ghost" style="padding:0.2rem 0.5rem;font-size:0.6rem" onclick="generateProposalFromAssessment('${as.id}')">ðŸ“„</button>
-                                        </td>
-                                    </tr>
-                                `).join('') || '<tr><td colspan="3">Nenhum levantamento recente</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
 
-                <div class="card fade-in" style="margin-top:1.5rem">
-                    <div style="font-family:'Montserrat',sans-serif;font-weight:500;margin-bottom:1rem">Projetos Ativos</div>
-                    <div style="overflow-x:auto">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>Projeto</th><th>Progresso</th><th>Ação</th></tr>
-                            </thead>
-                            <tbody>
-                                ${projects.slice(0, 5).map(p => `
-                                    <tr>
-                                        <td>${escapeHTML(p.project_name || p.client_name)}</td>
-                                        <td>
-                                            <div style="display:flex;align-items:center;gap:0.5rem">
-                                                <div class="progress-bar" style="flex:1;height:4px"><div class="progress-fill" style="width:${p.progress || 0}%"></div></div>
-                                                <span style="font-size:0.6rem">${p.progress || 0}%</span>
-                                            </div>
-                                        </td>
-                                        <td><button class="btn btn-ghost" style="padding:0.2rem 0.5rem;font-size:0.6rem" onclick="openProjectDetail('${p.id}')">Gerenciar</button></td>
-                                    </tr>
-                                `).join('') || '<tr><td colspan="3">Nenhum projeto ativo</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="card fade-in" style="margin-top:1.5rem">
-                    <div style="font-family:'Montserrat',sans-serif;font-weight:500;margin-bottom:1rem">Ações Rápidas</div>
-                    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
-                        <button class="btn btn-primary" onclick="openCreateLeadModal()">Novo Lead</button>
-                        <button class="btn" onclick="navigate('monitor')">Ver Monitor</button>
-                        <button class="btn btn-ghost" onclick="loadAll()">ðŸ”„ Atualizar Dados</button>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:1.5rem;">
+                        <div>
+                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Levantamentos Recentes</h3>
+                            ${assessmentsTable}
+                        </div>
+                        <div>
+                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Projetos Ativos</h3>
+                            ${projectsTable}
+                        </div>
                     </div>
                 </div>
             `;
