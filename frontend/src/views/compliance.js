@@ -593,6 +593,7 @@ import { navigate } from '../router.js';
                     `;
 
                     subData.controls.forEach(ctrl => {
+                        const parsed = parseControlTitle(ctrl);
                         const isNA = ctrl.status === 'Not Applicable';
                         const trace = traceMap[ctrl.id] || { risks: [], evidence: [] };
                         const risksCount = (trace.risks || []).length;
