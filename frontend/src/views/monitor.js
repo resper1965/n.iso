@@ -832,7 +832,7 @@ import { navigate } from '../router.js';
             const tabsHeader = `
                 <div style="display:flex; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px" class="fade-in">
                     <button onclick="window.switchContextTab('swot')" class="btn ${activeTab !== 'charter' ? 'btn-primary' : 'btn-ghost'}" style="font-size:0.85rem">Matriz SWOT & Requisitos (Cl. 4.1 / 4.2)</button>
-                    <button onclick="window.switchContextTab('charter')" class="btn ${activeTab === 'charter' ? 'btn-primary' : 'btn-ghost'}" style="font-size:0.85rem">🏛️ Charter de Escopo & Fronteiras do SGSI (Cl. 4.3)</button>
+                    <button onclick="window.switchContextTab('charter')" class="btn ${activeTab === 'charter' ? 'btn-primary' : 'btn-ghost'}" style="font-size:0.85rem">Charter de Escopo & Fronteiras do SGSI (Cl. 4.3)</button>
                 </div>
             `;
 
