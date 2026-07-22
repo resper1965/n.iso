@@ -2,7 +2,14 @@ import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
 
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
-  const sessionId = c.req.header('X-Session-ID') || c.req.header('Authorization')?.replace('Bearer ', '');
+  const sessionId = 
+    c.req.header('X-Session-ID') || 
+    c.req.header('Authorization')?.replace('Bearer ', '') ||
+    c.req.query('token') ||
+    c.req.query('sessionId') ||
+    c.req.query('session_id') ||
+    c.req.query('session');
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized: Missing session token' }, 401);
   }
