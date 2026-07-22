@@ -105,6 +105,34 @@ export function renderStatusBadge(arg1, arg2) {
         text = arg1 || arg2 || '';
     }
 
+    const STATUS_DICT = {
+        'implemented': 'Implementado',
+        'not applicable': 'Não Aplicável',
+        'approved': 'Aprovado',
+        'compliant': 'Conforme',
+        'missing': 'Pendente',
+        'partial': 'Parcial',
+        'draft': 'Rascunho',
+        'under review': 'Em Revisão',
+        'active': 'Ativo',
+        'pending': 'Pendente',
+        'open': 'Aberto',
+        'closed': 'Fechado',
+        'low': 'Baixo',
+        'medium': 'Médio',
+        'high': 'Alto',
+        'critical': 'Crítico',
+        'planned': 'Planejado',
+        'completed': 'Concluído',
+        'in_progress': 'Em Andamento',
+        'in progress': 'Em Andamento'
+    };
+
+    const lowerText = text.toString().toLowerCase().trim();
+    if (STATUS_DICT[lowerText]) {
+        text = STATUS_DICT[lowerText];
+    }
+
     const styles = {
         success: 'background:rgba(52,199,89,0.12); color:#34c759; border:1px solid rgba(52,199,89,0.3);',
         warning: 'background:rgba(255,204,0,0.12); color:#ffcc00; border:1px solid rgba(255,204,0,0.3);',
