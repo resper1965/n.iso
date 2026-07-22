@@ -788,6 +788,24 @@ import { navigate } from '../router.js';
         try {
             const ctx = await api('GET', `/api/v1/projects/${proj.id}/context`) || {};
             
+            let scopeCharter = {
+                perimeter: '',
+                boundaries: '',
+                exclusions: '',
+                impacted_users: '',
+                ciso_approved_by: '',
+                ceo_approved_by: ''
+            };
+            try {
+                if (ctx.notes && ctx.notes.trim().startsWith('{')) {
+                    scopeCharter = Object.assign(scopeCharter, JSON.parse(ctx.notes));
+                } else {
+                    scopeCharter.perimeter = ctx.notes || '';
+                }
+            } catch(e) {
+                scopeCharter.perimeter = ctx.notes || '';
+            }
+
             const countLines = str => (str || '').split('\n').filter(l => l.trim().length > 0).length;
             const sCount = countLines(ctx.internal_strengths);
             const wCount = countLines(ctx.internal_weaknesses);
@@ -802,6 +820,8 @@ import { navigate } from '../router.js';
             const maturityScore = totalFatores > 0 ? 100 : 0;
             const maturityStatus = maturityScore >= 80 ? 'CONFORME' : maturityScore > 0 ? 'EM CONSTRUÇÃO' : 'PENDENTE';
 
+            const activeTab = S.contextTab || 'swot';
+
             const statsHtml = window.renderStatCards([
                 { label: 'Total Fatores de Contexto', value: totalFatores, color: 'var(--accent)', subtext: 'Mapeados ISO 27001' },
                 { label: 'Forças & Oportunidades', value: sCount + oCount, color: '#34c759', subtext: 'Fatores positivos' },
@@ -809,121 +829,196 @@ import { navigate } from '../router.js';
                 { label: 'Maturidade Cláusula 4.3', value: `${maturityScore}%`, color: maturityScore >= 80 ? '#34c759' : '#ffcc00', subtext: maturityStatus }
             ]);
 
-            let html = `
-                ${statsHtml}
-                
-                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px; margin-bottom:24px" class="fade-in">
-                    <!-- MATRIX SWOT 2x2 CARD -->
-                    <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-                            <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.95rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px">
-                                Matriz SWOT de Segurança da Informação (Cláusula 4.1)
-                            </div>
-                            <span style="font-size:0.75rem; color:var(--text-dim)">${totalSwot} Fatores</span>
-                        </div>
-                        
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
-                            <div style="background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.2); border-radius:10px; padding:14px">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                    <label style="color:#00ade8; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
-                                        <span style="width:8px; height:8px; background:#00ade8; border-radius:50%"></span>
-                                        Forças (Strengths)
-                                    </label>
-                                    ${window.renderStatusBadge(`${sCount} itens`, 'info')}
-                                </div>
-                                <textarea id="ctx-strengths" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Criptografia AES-256 no S3, arquitetura isolada via VPC...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
-                            </div>
-                            
-                            <div style="background:rgba(254,202,87,0.03); border:1px solid rgba(254,202,87,0.2); border-radius:10px; padding:14px">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                    <label style="color:#feca57; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
-                                        <span style="width:8px; height:8px; background:#feca57; border-radius:50%"></span>
-                                        Fraquezas (Weaknesses)
-                                    </label>
-                                    ${window.renderStatusBadge(`${wCount} itens`, 'warning')}
-                                </div>
-                                <textarea id="ctx-weaknesses" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ausência de GuardDuty, falta de testes de restore...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
-                            </div>
-
-                            <div style="background:rgba(52,199,89,0.03); border:1px solid rgba(52,199,89,0.2); border-radius:10px; padding:14px">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                    <label style="color:#34c759; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
-                                        <span style="width:8px; height:8px; background:#34c759; border-radius:50%"></span>
-                                        Oportunidades (Opportunities)
-                                    </label>
-                                    ${window.renderStatusBadge(`${oCount} itens`, 'success')}
-                                </div>
-                                <textarea id="ctx-opportunities" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Certificação ISO 27001 como diferencial competitivo...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
-                            </div>
-
-                            <div style="background:rgba(255,59,48,0.03); border:1px solid rgba(255,59,48,0.2); border-radius:10px; padding:14px">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                    <label style="color:#ff3b30; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
-                                        <span style="width:8px; height:8px; background:#ff3b30; border-radius:50%"></span>
-                                        Ameaças (Threats)
-                                    </label>
-                                    ${window.renderStatusBadge(`${tCount} itens`, 'danger')}
-                                </div>
-                                <textarea id="ctx-threats" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ataques cibernéticos no setor, atuações da ANPD...">${escapeHTML(ctx.external_threats || '')}</textarea>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- REQUISITOS NORMATIVOS & CONTRATUAIS CARD -->
-                    <div style="display:flex; flex-direction:column; gap:16px">
-                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
-                                    Requisitos Legais / Regulatórios
-                                </div>
-                                ${window.renderStatusBadge(`${lCount} req`, 'info')}
-                            </div>
-                            <textarea id="ctx-legal" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: LGPD (Lei 13.709), resoluções da ANPD...">${escapeHTML(ctx.legal_requirements || '')}</textarea>
-                        </div>
-
-                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
-                                    Requisitos Contratuais / SLAs
-                                </div>
-                                ${window.renderStatusBadge(`${cCount} req`, 'info')}
-                            </div>
-                            <textarea id="ctx-contractual" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: SLAs de segurança exigidos por clientes enterprise...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- NOTAS GERAIS & DECLARAÇÃO DE ESCOPO -->
-                <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:24px" class="fade-in">
-                    <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.9rem; color:var(--text); text-transform:uppercase; margin-bottom:8px">
-                        Declaração de Escopo & Fronteiras do SGSI (Cláusula 4.3)
-                    </div>
-                    <textarea id="ctx-notes" class="form-input" style="width:100%; height:80px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Registre o perímetro formal, sistemas e exclusões justificadas do SGSI...">${escapeHTML(ctx.notes || '')}</textarea>
+            const tabsHeader = `
+                <div style="display:flex; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px" class="fade-in">
+                    <button onclick="window.switchContextTab('swot')" class="btn ${activeTab !== 'charter' ? 'btn-primary' : 'btn-ghost'}" style="font-size:0.85rem">Matriz SWOT & Requisitos (Cl. 4.1 / 4.2)</button>
+                    <button onclick="window.switchContextTab('charter')" class="btn ${activeTab === 'charter' ? 'btn-primary' : 'btn-ghost'}" style="font-size:0.85rem">🏛️ Charter de Escopo & Fronteiras do SGSI (Cl. 4.3)</button>
                 </div>
             `;
-            c.innerHTML = html;
+
+            let tabBody = '';
+            if (activeTab === 'charter') {
+                tabBody = `
+                    <div style="display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:24px" class="fade-in">
+                        <!-- PERÍMETRO & FRONTEIRAS -->
+                        <div style="display:flex; flex-direction:column; gap:16px">
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.9rem; color:var(--accent); text-transform:uppercase; margin-bottom:8px">
+                                    1. Perímetro de Negócio, Sistemas & Infraestrutura (Cláusula 4.3.a)
+                                </div>
+                                <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:10px">Defina os produtos, serviços, plataformas (ex: APIs, biometria), aplicações e ambientes de nuvem/escritórios abrangidos pelo SGSI.</div>
+                                <textarea id="charter-perimeter" class="form-input" style="width:100%; height:100px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Ex: Plataforma cliente Face ID, APIs REST de biometria facial, infraestrutura AWS us-east-1 e repositórios de dados biográficos.">${escapeHTML(scopeCharter.perimeter)}</textarea>
+                            </div>
+
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.9rem; color:var(--accent); text-transform:uppercase; margin-bottom:8px">
+                                    2. Fronteiras Físicas, Lógicas e Organizacionais (Cláusula 4.3.b)
+                                </div>
+                                <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:10px">Especifique limites de rede (VPCs, firewalls), localidades físicas de escritórios, unidades operacionais e acessos remotos.</div>
+                                <textarea id="charter-boundaries" class="form-input" style="width:100%; height:90px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Ex: VPCs de Produção na AWS, subredes privadas EKS, escritório central em SP e colaboradores autorizados via VPN ZTNA.">${escapeHTML(scopeCharter.boundaries)}</textarea>
+                            </div>
+
+                            <div style="background:rgba(255,59,48,0.02); border:1px solid rgba(255,59,48,0.2); border-radius:12px; padding:20px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.9rem; color:#ff3b30; text-transform:uppercase; margin-bottom:8px">
+                                    3. Exclusões Justificadas de Escopo (Exclusões Aceitas por Auditores)
+                                </div>
+                                <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:10px">Descreva detalhadamente o que está **fora do escopo** e a justificativa técnica normativamente válida perante o auditor ISO 27001.</div>
+                                <textarea id="charter-exclusions" class="form-input" style="width:100%; height:90px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Ex: Unidades fabris externas e sistemas legados de RH (mantidos fora do perímetro inicial sem interconexão com a API de produção).">${escapeHTML(scopeCharter.exclusions)}</textarea>
+                            </div>
+                        </div>
+
+                        <!-- GOVERNANÇA & APROVAÇÃO EXECUTIVA -->
+                        <div style="display:flex; flex-direction:column; gap:16px">
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase; margin-bottom:8px">
+                                    Público & Titulares Impactados
+                                </div>
+                                <textarea id="charter-users" class="form-input" style="width:100%; height:80px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: 150 colaboradores internos, 2M de titulares de dados biométricos LGPD e 12 clientes B2B.">${escapeHTML(scopeCharter.impacted_users)}</textarea>
+                            </div>
+
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase; margin-bottom:12px">
+                                    Aprovação do Escopo (Sign-Off Executivo)
+                                </div>
+                                
+                                <div style="margin-bottom:12px">
+                                    <label style="font-size:0.75rem; color:var(--text-dim); display:block; margin-bottom:4px">Assinatura Líder SGSI / CISO</label>
+                                    <input type="text" id="charter-ciso" class="form-input" style="width:100%; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 10px" value="${escapeHTML(scopeCharter.ciso_approved_by)}" placeholder="Nome do CISO / Responsável" />
+                                </div>
+
+                                <div>
+                                    <label style="font-size:0.75rem; color:var(--text-dim); display:block; margin-bottom:4px">Assinatura Direção Executiva / CEO</label>
+                                    <input type="text" id="charter-ceo" class="form-input" style="width:100%; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 10px" value="${escapeHTML(scopeCharter.ceo_approved_by)}" placeholder="Nome do CEO / Direção" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                tabBody = `
+                    <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px; margin-bottom:24px" class="fade-in">
+                        <!-- MATRIX SWOT 2x2 CARD -->
+                        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                                <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.95rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px">
+                                    Matriz SWOT de Segurança da Informação (Cláusula 4.1)
+                                </div>
+                                <span style="font-size:0.75rem; color:var(--text-dim)">${totalSwot} Fatores</span>
+                            </div>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+                                <div style="background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.2); border-radius:10px; padding:14px">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                        <label style="color:#00ade8; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                            <span style="width:8px; height:8px; background:#00ade8; border-radius:50%"></span>
+                                            Forças (Strengths)
+                                        </label>
+                                        ${window.renderStatusBadge(`${sCount} itens`, 'info')}
+                                    </div>
+                                    <textarea id="ctx-strengths" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Criptografia AES-256 no S3, arquitetura isolada via VPC...">${escapeHTML(ctx.internal_strengths || '')}</textarea>
+                                </div>
+                                
+                                <div style="background:rgba(254,202,87,0.03); border:1px solid rgba(254,202,87,0.2); border-radius:10px; padding:14px">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                        <label style="color:#feca57; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                            <span style="width:8px; height:8px; background:#feca57; border-radius:50%"></span>
+                                            Fraquezas (Weaknesses)
+                                        </label>
+                                        ${window.renderStatusBadge(`${wCount} itens`, 'warning')}
+                                    </div>
+                                    <textarea id="ctx-weaknesses" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ausência de GuardDuty, falta de testes de restore...">${escapeHTML(ctx.internal_weaknesses || '')}</textarea>
+                                </div>
+
+                                <div style="background:rgba(52,199,89,0.03); border:1px solid rgba(52,199,89,0.2); border-radius:10px; padding:14px">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                        <label style="color:#34c759; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                            <span style="width:8px; height:8px; background:#34c759; border-radius:50%"></span>
+                                            Oportunidades (Opportunities)
+                                        </label>
+                                        ${window.renderStatusBadge(`${oCount} itens`, 'success')}
+                                    </div>
+                                    <textarea id="ctx-opportunities" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Certificação ISO 27001 como diferencial competitivo...">${escapeHTML(ctx.external_opportunities || '')}</textarea>
+                                </div>
+
+                                <div style="background:rgba(255,59,48,0.03); border:1px solid rgba(255,59,48,0.2); border-radius:10px; padding:14px">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                        <label style="color:#ff3b30; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:6px">
+                                            <span style="width:8px; height:8px; background:#ff3b30; border-radius:50%"></span>
+                                            Ameaças (Threats)
+                                        </label>
+                                        ${window.renderStatusBadge(`${tCount} itens`, 'danger')}
+                                    </div>
+                                    <textarea id="ctx-threats" class="form-input" style="width:100%; height:110px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: Ataques cibernéticos no setor, atuações da ANPD...">${escapeHTML(ctx.external_threats || '')}</textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- REQUISITOS NORMATIVOS & CONTRATUAIS CARD -->
+                        <div style="display:flex; flex-direction:column; gap:16px">
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
+                                        Requisitos Legais / Regulatórios
+                                    </div>
+                                    ${window.renderStatusBadge(`${lCount} req`, 'info')}
+                                </div>
+                                <textarea id="ctx-legal" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: LGPD (Lei 13.709), resoluções da ANPD...">${escapeHTML(ctx.legal_requirements || '')}</textarea>
+                            </div>
+
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:18px; flex:1">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                                    <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:0.85rem; color:var(--accent); text-transform:uppercase">
+                                        Requisitos Contratuais / SLAs
+                                    </div>
+                                    ${window.renderStatusBadge(`${cCount} req`, 'info')}
+                                </div>
+                                <textarea id="ctx-contractual" class="form-input" style="width:100%; height:85px; resize:vertical; font-family:inherit; font-size:0.82rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px" placeholder="Ex: SLAs de segurança exigidos por clientes enterprise...">${escapeHTML(ctx.contractual_requirements || '')}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            c.innerHTML = `
+                ${statsHtml}
+                ${tabsHeader}
+                ${tabBody}
+            `;
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar contexto: ${escapeHTML(e.message)}</div>`;
         }
     }
 
+    window.switchContextTab = function(tabName) {
+        S.contextTab = tabName;
+        render();
+    };
+
     window.saveContext = async function() {
         try {
             const body = {
-                internal_strengths: document.getElementById('ctx-strengths').value,
-                internal_weaknesses: document.getElementById('ctx-weaknesses').value,
-                external_opportunities: document.getElementById('ctx-opportunities').value,
-                external_threats: document.getElementById('ctx-threats').value,
-                legal_requirements: document.getElementById('ctx-legal').value,
-                contractual_requirements: document.getElementById('ctx-contractual').value,
-                notes: document.getElementById('ctx-notes').value
+                internal_strengths: document.getElementById('ctx-strengths')?.value || '',
+                internal_weaknesses: document.getElementById('ctx-weaknesses')?.value || '',
+                external_opportunities: document.getElementById('ctx-opportunities')?.value || '',
+                external_threats: document.getElementById('ctx-threats')?.value || '',
+                legal_requirements: document.getElementById('ctx-legal')?.value || '',
+                contractual_requirements: document.getElementById('ctx-contractual')?.value || '',
+                notes: JSON.stringify({
+                    perimeter: document.getElementById('charter-perimeter')?.value || '',
+                    boundaries: document.getElementById('charter-boundaries')?.value || '',
+                    exclusions: document.getElementById('charter-exclusions')?.value || '',
+                    impacted_users: document.getElementById('charter-users')?.value || '',
+                    ciso_approved_by: document.getElementById('charter-ciso')?.value || '',
+                    ceo_approved_by: document.getElementById('charter-ceo')?.value || ''
+                })
             };
             await api('PUT', `/api/v1/projects/${S.activeProject.id}/context`, body);
-            showToast('Análise de contexto salva com sucesso');
+            showToast('Contexto e Charter de Escopo salvos com sucesso');
         } catch(e) {
-            showToast('Erro ao salvar contexto', 'error');
+            showToast('Erro ao salvar contexto: ' + e.message, 'danger');
         }
     };
+
 
     async function renderStakeholders(c, h, a) {
         h.textContent = 'Partes Interessadas (Cláusula 4.2)';
