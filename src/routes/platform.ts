@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
+import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 
 export const platformApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -290,8 +291,36 @@ platformApp.get('/portfolio', async (c) => {
 });
 
 // Phase config & Auditor token
-platformApp.get('/phases/config', (c) => {
-  return c.json({ ok: true, titles: PHASE_TITLES, checklists: PHASE_CHECKLISTS });
+platformApp.get('/pricing-config', async (c) => {
+  try {
+    await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
+    const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
+    const saved = row ? JSON.parse(row.value) : {};
+    const merged = { ...DEFAULT_FINANCIAL_MODEL, ...saved,
+      taxaVendaPD: { ...DEFAULT_FINANCIAL_MODEL.taxaVendaPD, ...(saved.taxaVendaPD || {}) },
+      custoInternoPD: { ...DEFAULT_FINANCIAL_MODEL.custoInternoPD, ...(saved.custoInternoPD || {}) },
+      tributos: { ...DEFAULT_FINANCIAL_MODEL.tributos, ...(saved.tributos || {}) },
+      bufferRisco: { ...DEFAULT_FINANCIAL_MODEL.bufferRisco, ...(saved.bufferRisco || {}) },
+    };
+    return c.json(merged);
+  } catch (e: any) {
+    return c.json(DEFAULT_FINANCIAL_MODEL);
+  }
+});
+
+platformApp.put('/pricing-config', async (c) => {
+  try {
+    await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
+    const body = await c.req.json();
+    const json = JSON.stringify(body);
+    await c.env.DB.prepare(
+      "INSERT INTO settings (key, value, updated_at) VALUES ('pricing_config', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')"
+    ).bind(json, json).run();
+    await logAudit(c.env.DB, 'pricing_config.updated', c.get('user')?.email ?? 'system', 'Config de precificação atualizada');
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao salvar config', detail: e.message }, 500);
+  }
 });
 
 platformApp.get('/auditor/:token/project', async (c) => {

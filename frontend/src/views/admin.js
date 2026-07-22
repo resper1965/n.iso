@@ -8,7 +8,12 @@ import { navigate, render } from '../router.js';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
-            const cfg = await api('GET', '/api/v1/pricing-config');
+            let cfg;
+            try {
+                cfg = await api('GET', '/api/v1/pricing-config');
+            } catch(err) {
+                cfg = await api('GET', '/api/v1/proposals/config/pricing');
+            }
 
             function numInput(id, val, label, suffix) {
                 return `<div class="form-group" style="flex:1;min-width:140px">
@@ -77,7 +82,7 @@ import { navigate, render } from '../router.js';
             <button class="btn btn-primary" style="padding:0.6rem 2rem" onclick="savePricingConfig()">Salvar Configuracoes</button>
             `;
         } catch(e) {
-            c.innerHTML = '<div class="error">Erro ao carregar configuracoes</div>';
+            c.innerHTML = '<div class="error">Erro ao carregar configuracoes: ' + escapeHTML(e.message) + '</div>';
         }
     }
 
@@ -96,7 +101,11 @@ import { navigate, render } from '../router.js';
                 comissaoPct: g('cfg-comissao')/100,
                 bufferRisco: { 1: g('cfg-buffer-1')/100, 2: g('cfg-buffer-2')/100, 3: g('cfg-buffer-3')/100, 4: g('cfg-buffer-4')/100 }
             };
-            await api('PUT', '/api/v1/pricing-config', config);
+            try {
+                await api('PUT', '/api/v1/pricing-config', config);
+            } catch(err) {
+                await api('PUT', '/api/v1/proposals/config/pricing', config);
+            }
             showToast('Configuracoes salvas com sucesso');
         } catch(e) { showToast('Erro: ' + e.message, 'error'); }
     }
