@@ -1481,14 +1481,21 @@ import { navigate } from '../router.js';
 
         c.innerHTML = `
             <div class="fade-in">
-                <div class="card" style="margin-bottom:1.5rem; display:flex; gap:2rem; align-items:center">
-                    <div>
-                        <div class="card-label">Assinaturas Registradas</div>
-                        <div style="font-size:1.8rem; font-weight:600; color:var(--accent)">${totalAcks}</div>
+                <div class="card" style="margin-bottom:1.5rem; display:flex; justify-between; align-items:center; flex-wrap:wrap; gap:1.5rem">
+                    <div style="display:flex; gap:2rem; align-items:center">
+                        <div>
+                            <div class="card-label">Assinaturas Registradas</div>
+                            <div style="font-size:1.8rem; font-weight:600; color:var(--accent)">${totalAcks}</div>
+                        </div>
+                        <div>
+                            <div class="card-label">Projeto Ativo</div>
+                            <div style="font-size:1.1rem; font-weight:500">${escapeHTML(proj.project_name || proj.client_name)}</div>
+                        </div>
                     </div>
                     <div>
-                        <div class="card-label">Projeto Ativo</div>
-                        <div style="font-size:1.1rem; font-weight:500">${escapeHTML(proj.project_name || proj.client_name)}</div>
+                        <button class="btn btn-primary" onclick="window.copyPublicPolicyPortalLink('${proj.id}')">
+                            Copiar Link do Portal Explicito (OTP)
+                        </button>
                     </div>
                 </div>
 
@@ -1507,7 +1514,7 @@ import { navigate } from '../router.js';
                                     <th>E-mail</th>
                                     <th>Politica</th>
                                     <th>Data / Hora</th>
-                                    <th>Endereco IP</th>
+                                    <th>Endereco IP / Origem</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1519,6 +1526,16 @@ import { navigate } from '../router.js';
             </div>
         `;
     }
+
+    window.copyPublicPolicyPortalLink = function(projectId) {
+        const url = `${window.location.origin}/politicas.html?project=${projectId}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url);
+        } else {
+            prompt('Copie a URL do Portal de Políticas:', url);
+        }
+        showToast('Link do Portal de Políticas copiado!');
+    };
 
     window.submitSelfAcknowledgment = async function(projectId) {
         const policyType = document.getElementById('ack-self-policy').value;

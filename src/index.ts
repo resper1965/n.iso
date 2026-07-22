@@ -6516,7 +6516,170 @@ app.post('/api/v1/projects/:id/policy-acknowledgments', async (c) => {
   }
 });
 
-// --- TRILHA DE AUDITORIA ---
+// --- PORTAL PÚBLICO DE POLÍTICAS (OTP VIA E-MAIL) ---
+app.post('/api/v1/public/policies/request-otp', async (c) => {
+  try {
+    const { project_id, name, email } = await c.req.json();
+    if (!project_id || !email) {
+      return c.json({ error: 'Projeto e E-mail são obrigatórios' }, 400);
+    }
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(project_id).first();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = (name || cleanEmail.split('@')[0]).trim();
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const otpKey = `otp_${project_id}_${cleanEmail}`;
+    const otpData = {
+      otp,
+      name: cleanName,
+      email: cleanEmail,
+      project_id,
+      expires_at: Date.now() + 15 * 60 * 1000
+    };
+
+    await c.env.SESSIONS.put(otpKey, JSON.stringify(otpData), { expirationTtl: 900 });
+
+    // Simulação do envio de e-mail com o OTP
+    console.log(`[OTP SIMULATION] Código para ${cleanEmail} (Projeto ${project_id}): ${otp}`);
+    await logAudit(c.env.DB, 'policy.otp_requested', cleanEmail, `OTP de acesso às políticas solicitado para projeto ${project_id}`);
+
+    return c.json({
+      ok: true,
+      message: `Código de verificação enviado para ${cleanEmail}. (Para ambiente de demonstração: ${otp})`,
+      demo_otp: otp
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao gerar código OTP', detail: e.message }, 500);
+  }
+});
+
+app.post('/api/v1/public/policies/verify-otp', async (c) => {
+  try {
+    const { project_id, email, otp } = await c.req.json();
+    if (!project_id || !email || !otp) {
+      return c.json({ error: 'Projeto, E-mail e Código OTP são obrigatórios' }, 400);
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const otpKey = `otp_${project_id}_${cleanEmail}`;
+    const stored = await c.env.SESSIONS.get(otpKey);
+
+    if (!stored) {
+      return c.json({ error: 'Código expirado ou inválido. Solicite um novo código.' }, 400);
+    }
+
+    const otpData = JSON.parse(stored);
+    if (otpData.otp !== otp.trim()) {
+      return c.json({ error: 'Código de verificação incorreto.' }, 400);
+    }
+
+    // OTP confirmado! Gera token de sessão temporária pública
+    const sessionToken = `pubpol_${crypto.randomUUID().replace(/-/g, '')}`;
+    const sessionData = {
+      project_id,
+      name: otpData.name,
+      email: cleanEmail,
+      authenticated_at: new Date().toISOString()
+    };
+
+    await c.env.SESSIONS.put(`pubpol_sess_${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: 7200 });
+    await c.env.SESSIONS.delete(otpKey);
+
+    await logAudit(c.env.DB, 'policy.otp_verified', cleanEmail, `Acesso público a políticas liberado para ${cleanEmail}`);
+
+    return c.json({
+      ok: true,
+      token: sessionToken,
+      name: otpData.name,
+      email: cleanEmail,
+      project_id
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao verificar OTP', detail: e.message }, 500);
+  }
+});
+
+app.get('/api/v1/public/policies/list', async (c) => {
+  try {
+    const token = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return c.json({ error: 'Token de acesso não fornecido' }, 401);
+
+    const sessionRaw = await c.env.SESSIONS.get(`pubpol_sess_${token}`);
+    if (!sessionRaw) return c.json({ error: 'Sessão expirada. Por favor, autentique-se novamente.' }, 401);
+
+    const session = JSON.parse(sessionRaw);
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(session.project_id).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    // Busca controles do tipo política ou controles gerais de conformidade
+    const { results: controls } = await c.env.DB.prepare(
+      `SELECT id, standard, title, description, status FROM compliance_controls WHERE project_id = ? ORDER BY title ASC`
+    ).bind(session.project_id).all<any>();
+
+    // Busca aceites já realizados por este colaborador
+    const { results: acks } = await c.env.DB.prepare(
+      `SELECT * FROM policy_acknowledgments WHERE project_id = ? AND user_email = ?`
+    ).bind(session.project_id, session.email).all<any>();
+
+    return c.json({
+      ok: true,
+      project: {
+        id: project.id,
+        client_name: project.client_name,
+        project_name: project.project_name || project.client_name
+      },
+      user: {
+        name: session.name,
+        email: session.email
+      },
+      controls: controls || [],
+      acknowledgments: acks || []
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao carregar políticas', detail: e.message }, 500);
+  }
+});
+
+app.post('/api/v1/public/policies/ack', async (c) => {
+  try {
+    const token = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return c.json({ error: 'Token de acesso não fornecido' }, 401);
+
+    const sessionRaw = await c.env.SESSIONS.get(`pubpol_sess_${token}`);
+    if (!sessionRaw) return c.json({ error: 'Sessão expirada. Por favor, autentique-se novamente.' }, 401);
+
+    const session = JSON.parse(sessionRaw);
+    const { policy_type, user_name, user_email } = await c.req.json();
+    if (!policy_type) return c.json({ error: 'Tipo/Nome da Política é obrigatório' }, 400);
+
+    const nameToRecord = user_name || session.name;
+    const emailToRecord = user_email || session.email;
+    const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+    const userAgent = c.req.header('User-Agent') || 'unknown';
+
+    const ackId = crypto.randomUUID().replace(/-/g, '');
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'INSERT INTO policy_acknowledgments (id, project_id, policy_type, user_name, user_email, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(ackId, session.project_id, policy_type, nameToRecord, emailToRecord, ipAddress, userAgent).run();
+
+    await logAudit(c.env.DB, 'policy.acknowledged_public', emailToRecord, `Ciência registrada via portal público para ${policy_type} por ${nameToRecord}`);
+
+    return c.json({
+      ok: true,
+      id: ackId,
+      acknowledged_at: now,
+      policy_type,
+      user_name: nameToRecord,
+      user_email: emailToRecord,
+      ip_address: ipAddress
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao registrar ciência eletrônica', detail: e.message }, 500);
+  }
+});
 app.get('/api/v1/projects/:id/audit-trail', async (c) => {
   const projectId = c.req.param('id');
   const { results } = await c.env.DB.prepare(

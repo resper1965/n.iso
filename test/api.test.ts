@@ -605,4 +605,79 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(data.templates[0]).toHaveProperty('popularity');
     });
   });
+
+  describe('Public Policy Portal OTP Flow', () => {
+    it('should generate OTP and store in KV SESSIONS', async () => {
+      const request = new Request('http://localhost/api/v1/public/policies/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: 'proj1', name: 'Maria Silva', email: 'maria@empresa.com' })
+      });
+
+      const putSpy = vi.fn().mockResolvedValue(undefined);
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          put: putSpy
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnValue({
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue({ id: 'proj1', client_name: 'Empresa Teste' }),
+              run: vi.fn().mockResolvedValue({ success: true })
+            })
+          })
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data.ok).toBe(true);
+      expect(data.demo_otp).toBeDefined();
+      expect(putSpy).toHaveBeenCalledWith(
+        'otp_proj1_maria@empresa.com',
+        expect.stringContaining(data.demo_otp),
+        expect.objectContaining({ expirationTtl: 900 })
+      );
+    });
+
+    it('should verify OTP and grant public policy session token', async () => {
+      const request = new Request('http://localhost/api/v1/public/policies/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: 'proj1', email: 'maria@empresa.com', otp: '123456' })
+      });
+
+      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({
+        otp: '123456',
+        name: 'Maria Silva',
+        email: 'maria@empresa.com',
+        project_id: 'proj1'
+      }));
+      const putSpy = vi.fn().mockResolvedValue(undefined);
+      const deleteSpy = vi.fn().mockResolvedValue(undefined);
+
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: getSpy,
+          put: putSpy,
+          delete: deleteSpy
+        }
+      };
+
+      // @ts-ignore
+      const response = await worker.fetch(request, env);
+      expect(response.status).toBe(200);
+      const data = await response.json() as any;
+      expect(data.ok).toBe(true);
+      expect(data.token).toBeDefined();
+      expect(deleteSpy).toHaveBeenCalledWith('otp_proj1_maria@empresa.com');
+    });
+  });
 });
