@@ -788,7 +788,11 @@ import { navigate } from '../router.js';
     async function renderPoliciesDashboard(c, h, a) {
         h.textContent = 'Gestão de Políticas (A.5.1)';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         a.innerHTML = '';
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando painel de políticas...</div>';
@@ -802,110 +806,69 @@ import { navigate } from '../router.js';
             const ciso = projectControls.filter(ctrl => ctrl.ciso_approved_by && !ctrl.ceo_approved_by).length;
             const vigentes = projectControls.filter(ctrl => ctrl.ciso_approved_by && ctrl.ceo_approved_by).length;
             
-            let html = `
-                <div class="fade-in">
-                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px">
-                        <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
-                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Total de Políticas</div>
-                            <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:var(--accent); margin-top:8px">${total}</div>
-                        </div>
-                        <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
-                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Rascunho / Pendentes</div>
-                            <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:var(--danger); margin-top:8px">${draft}</div>
-                        </div>
-                        <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
-                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Aprovadas Líder SGSI</div>
-                            <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:#feca57; margin-top:8px">${ciso}</div>
-                        </div>
-                        <div class="stat-card" style="background:rgba(229,235,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
-                            <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500">Aprovadas & Vigentes</div>
-                            <div style="font-family:'Montserrat',sans-serif; font-size:1.8rem; font-weight:700; color:var(--success); margin-top:8px">${vigentes}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="data-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Controle ID</th>
-                                    <th>Política / Controle</th>
-                                    <th>Assinatura Líder SGSI</th>
-                                    <th>Assinatura Direção</th>
-                                    <th>Estágio</th>
-                                    <th>Status SoA</th>
-                                    <th style="width:180px; text-align:center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-            `;
-            
-            projectControls.forEach(ctrl => {
-                let stageText = 'Rascunho';
-                let stageColor = 'var(--text-dim)';
-                if (ctrl.ciso_approved_by && ctrl.ceo_approved_by) {
-                    stageText = 'Vigente';
-                    stageColor = 'var(--success)';
-                } else if (ctrl.ciso_approved_by) {
-                    stageText = 'Revisão Líder SGSI';
-                    stageColor = '#feca57';
-                } else if (ctrl.ceo_approved_by) {
-                    stageText = 'Revisão Direção Executiva';
-                    stageColor = '#ff9f43';
-                }
-                
-                const cisoSign = ctrl.ciso_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ciso_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
-                const ceoSign = ctrl.ceo_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ceo_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
-                
-                const statusColor = s => s === 'Compliant' ? 'var(--success)' : s === 'Partial' ? '#feca57' : 'var(--danger)';
+            const statsHtml = window.renderStatCards([
+                { label: 'Total de Políticas', value: total, color: 'var(--accent)', subtext: 'Controles no escopo' },
+                { label: 'Rascunho / Pendentes', value: draft, color: '#ff3b30', subtext: 'Requer elaboração' },
+                { label: 'Aprovadas Líder SGSI', value: ciso, color: '#feca57', subtext: 'Aprovação técnica' },
+                { label: 'Aprovadas & Vigentes', value: vigentes, color: '#34c759', subtext: 'Assinatura DPO + CEO' }
+            ]);
 
-                // Map DB ID back to formatted display ID (e.g. ctrl-a51 -> A.5.1)
-                let displayId = ctrl.id || '';
-                if (displayId.startsWith('ctrl-')) {
-                    const clean = displayId.replace('ctrl-', '');
-                    if (clean.startsWith('a')) {
-                        const parts = clean.substring(1).match(/\d+/g);
-                        if (parts && parts.length) {
+            const tableHtml = window.renderDataTable(
+                ['Controle ID', 'Política / Controle', 'Assinatura Líder SGSI', 'Assinatura Direção', 'Estágio', 'Status SoA', 'Ações'],
+                projectControls.map(ctrl => {
+                    let stageText = 'Rascunho';
+                    let stageType = 'neutral';
+                    if (ctrl.ciso_approved_by && ctrl.ceo_approved_by) {
+                        stageText = 'Vigente';
+                        stageType = 'success';
+                    } else if (ctrl.ciso_approved_by) {
+                        stageText = 'Revisão Líder SGSI';
+                        stageType = 'warning';
+                    } else if (ctrl.ceo_approved_by) {
+                        stageText = 'Revisão Direção Executiva';
+                        stageType = 'warning';
+                    }
+                    
+                    const cisoSign = ctrl.ciso_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ciso_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
+                    const ceoSign = ctrl.ceo_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ceo_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
+                    
+                    const statusType = (ctrl.status === 'Compliant' || ctrl.status === 'IMPLEMENTED' || ctrl.status === 'Implemented') ? 'success' : (ctrl.status === 'Partial' || ctrl.status === 'PARTIAL') ? 'warning' : 'danger';
+
+                    // Map DB ID back to formatted display ID (e.g. ctrl-a51 -> A.5.1)
+                    let displayId = ctrl.id || '';
+                    if (displayId.startsWith('ctrl-')) {
+                        const clean = displayId.replace('ctrl-', '');
+                        if (clean.startsWith('a')) {
                             const num = clean.substring(1);
-                        if (num.length >= 2) {
-                            const chapter = num.charAt(0);
-                            const controlNum = num.substring(1);
-                            displayId = `A.${chapter}.${controlNum}`;
-                        } else {
-                            displayId = `A.${num.charAt(0)}.0`;
-                        }
+                            if (num.length >= 2) {
+                                const chapter = num.charAt(0);
+                                const controlNum = num.substring(1);
+                                displayId = `A.${chapter}.${controlNum}`;
+                            } else {
+                                displayId = `A.${num.charAt(0)}.0`;
+                            }
                         } else {
                             displayId = clean.toUpperCase();
                         }
-                    } else {
-                        displayId = clean.toUpperCase();
                     }
-                }
 
-                html += `
-                    <tr>
-                        <td style="font-weight:600; color:var(--accent)">${escapeHTML(displayId)}</td>
-                        <td>
-                            <div style="font-weight:600; color:var(--text)">${escapeHTML(ctrl.title)}</div>
-                            <div style="font-size:0.75rem; color:var(--text-dim); margin-top:2px">${escapeHTML(ctrl.description || '').substring(0, 80)}...</div>
-                        </td>
-                        <td>${cisoSign}</td>
-                        <td>${ceoSign}</td>
-                        <td><span class="ctx-tag" style="color:${stageColor}; border-color:${stageColor}">${stageText}</span></td>
-                        <td><span class="badge" style="background:${statusColor(ctrl.status)}; color:#000; font-weight:600; padding:2px 8px; border-radius:4px">${escapeHTML(ctrl.status)}</span></td>
-                        <td style="text-align:center">
-                            <button onclick="window.openGeneratePolicyModal('${proj.id}', '${escapeHTML(displayId)}')" class="btn-secondary" style="padding:4px 8px; font-size:0.75rem">Visualizar / Gerar</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                    return [
+                        `<span style="font-weight:600; color:var(--accent)">${escapeHTML(displayId)}</span>`,
+                        `<div><strong>${escapeHTML(ctrl.title)}</strong><div style="font-size:0.75rem; color:var(--text-dim); margin-top:2px">${escapeHTML(ctrl.description || '').substring(0, 80)}...</div></div>`,
+                        cisoSign,
+                        ceoSign,
+                        window.renderStatusBadge(stageText, stageType),
+                        window.renderStatusBadge(ctrl.status || 'IMPLEMENTED', statusType),
+                        `<button onclick="window.openGeneratePolicyModal('${proj.id}', '${escapeHTML(displayId)}')" class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
+                    ];
+                }),
+                { emptyState: 'Nenhuma política cadastrada.' }
+            );
+
+            c.innerHTML = `
+                ${statsHtml}
+                ${tableHtml}
             `;
-            c.innerHTML = html;
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar Gestão de Políticas: ${escapeHTML(e.message)}</div>`;
         }
