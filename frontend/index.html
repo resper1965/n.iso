@@ -46,11 +46,11 @@
                     <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este é seu primeiro acesso, você deve cadastrar uma nova senha segura para prosseguir.</p>
                     <div style="margin-bottom:1.5rem">
                         <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
-                        <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura" required>
+                        <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura" autocomplete="new-password" required>
                     </div>
                     <div style="margin-bottom:2rem">
                         <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
-                        <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha" required>
+                        <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha" autocomplete="new-password" required>
                     </div>
                     <button type="submit" class="btn btn-primary" style="width:100%">Definir Senha e Entrar</button>
                     <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
@@ -74,7 +74,7 @@
                         </div>
                         <div style="margin-bottom:1.5rem">
                             <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
-                            <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha">
+                            <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha" autocomplete="new-password">
                         </div>
                         <button type="button" class="btn btn-primary" style="width:100%" onclick="doForgotPasswordReset()">Alterar Senha e Entrar</button>
                     </div>

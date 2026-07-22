@@ -196,6 +196,36 @@ platformApp.get('/dashboard', async (c) => {
   });
 });
 
+platformApp.get('/dashboard/stats', async (c) => {
+  try {
+    const user = c.get('user');
+    const isClient = user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client');
+    const projectId = isClient ? user.client_project_id : null;
+    
+    const whereResource = projectId ? 'WHERE project_id = ?' : '';
+    const whereProject = projectId ? 'WHERE id = ?' : '';
+    const params = projectId ? [projectId] : [];
+
+    const stats: any = await c.env.DB.batch([
+      c.env.DB.prepare('SELECT count(*) as count FROM leads'),
+      c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
+      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
+      c.env.DB.prepare(`SELECT count(*) as count FROM evidence ${whereResource} ${whereResource ? "AND" : "WHERE"} evaluation_status = 'pending'`).bind(...params),
+      c.env.DB.prepare(`SELECT count(*) as count FROM risks ${whereResource} ${whereResource ? "AND" : "WHERE"} impact * probability >= 15`).bind(...params)
+    ]);
+
+    return c.json({
+      leads: stats[0].results?.[0]?.count || 0,
+      projects: stats[1].results?.[0]?.count || 0,
+      controls_done: stats[2].results?.[0]?.count || 0,
+      pending_evidence: stats[3].results?.[0]?.count || 0,
+      critical_risks: stats[4].results?.[0]?.count || 0
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Erro ao obter estatísticas do dashboard', detail: e.message }, 500);
+  }
+});
+
 // Client portal endpoints
 platformApp.get('/client/dashboard', async (c) => {
   try {
