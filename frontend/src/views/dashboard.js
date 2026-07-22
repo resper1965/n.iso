@@ -73,6 +73,7 @@ import { navigate, render } from '../router.js';
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
             ]);
+            const activeProjects = Array.isArray(projects) ? projects.filter(p => p && (p.status === 'active' || !p.status)) : [];
             const leadsCount = Array.isArray(leads) ? leads.length : 0;
             const assessmentsCount = Array.isArray(assessments) ? assessments.length : 0;
             const projectsCount = activeProjects.length;

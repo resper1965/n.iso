@@ -23,14 +23,13 @@
             <!-- Standard Login Box -->
             <div class="login-box" id="standard-login-box">
                 <form onsubmit="doLogin(); return false;">
-                    <h2 style="font-family:'Montserrat';margin-bottom:2rem">Acesso Corporate</h2>
                     <div style="margin-bottom:1.5rem">
                         <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
-                        <input type="email" id="login-email" class="form-input" placeholder="seu@email.com" required>
+                        <input type="email" id="login-email" class="form-input" placeholder="seu@email.com" autocomplete="username" required>
                     </div>
                     <div style="margin-bottom:2rem">
                         <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Senha</label>
-                        <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+                        <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" required>
                     </div>
                     <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
                     <div style="margin-top:1.5rem; text-align:center;">
