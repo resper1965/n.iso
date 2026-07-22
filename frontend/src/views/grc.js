@@ -454,28 +454,68 @@ import { navigate } from '../router.js';
     };
 
     async function renderVendors(c, h, a) {
-        h.textContent = 'Fornecedores (KYV)';
+        h.innerHTML = '';
+        a.innerHTML = '';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewVendorModal('${proj.id}')">+ Novo Fornecedor</button>` : '';
         
         let vendors = [];
         try { vendors = await api('GET', `/api/v1/projects/${proj.id}/vendors`); } catch(e) {}
         if (!Array.isArray(vendors)) vendors = [];
         S.vendors = vendors;
-        const dilColor = d => d === 'Low' ? 'var(--accent)' : d === 'Medium' ? 'var(--info)' : 'var(--danger)';
-        c.innerHTML = `<div class="fade-in">${vendors.length ? vendors.map(v => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openVendorDetailsModal('${v.id}')">
-                <div style="flex:1"><div class="item-name">${escapeHTML(v.name)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${v.category || 'Geral'} | Score: ${v.trust_score} | DPA: ${v.dpa_signed ? 'Sim' : 'Nao'}</div></div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${v.has_iso27001 ? '<span class="ctx-tag ctx-tag-green">27001</span>' : ''}
-                    ${v.has_soc2 ? '<span class="ctx-tag ctx-tag-green">SOC2</span>' : ''}
-                    <span class="ctx-tag" style="color:${dilColor(v.diligence_level)}">${v.diligence_level}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum fornecedor</h3><p>Registre fornecedores para gestao de terceiros.</p></div>'}</div>`;
+
+        const totalVendors = vendors.length;
+        const avgScore = totalVendors ? Math.round(vendors.reduce((acc, v) => acc + (v.trust_score || 0), 0) / totalVendors) : 0;
+        const dpaSignedCount = vendors.filter(v => v.dpa_signed).length;
+        const highDilCount = vendors.filter(v => v.diligence_level === 'High' || v.diligence_level === 'Critical').length;
+
+        const headerHtml = window.renderPageHeader(
+            'Gestão de Fornecedores (KYV)',
+            'Diligência de terceiros, trust score, certificações de segurança e acordos de privacidade (DPA)',
+            canCrud ? `<button class="btn btn-primary" onclick="window.openNewVendorModal('${proj.id}')">+ Novo Fornecedor</button>` : ''
+        );
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total Fornecedores', value: totalVendors, color: 'var(--accent)', subtext: 'Terceiros mapeados' },
+            { label: 'Trust Score Médio', value: `${avgScore}/100`, color: avgScore >= 80 ? '#34c759' : avgScore >= 50 ? '#ffcc00' : 'var(--danger)', subtext: 'Postura global' },
+            { label: 'DPAs Assinados', value: dpaSignedCount, color: '#34c759', subtext: 'Proteção de dados' },
+            { label: 'Alta Diligência', value: highDilCount, color: '#ff3b30', subtext: 'Acompanhamento rigoroso' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Fornecedor', 'Categoria', 'Trust Score', 'DPA Assinado', 'Certificações', 'Nível Diligência', 'Ações'],
+            vendors.map(v => {
+                const certs = [];
+                if (v.has_iso27001) certs.push('ISO 27001');
+                if (v.has_iso27701) certs.push('ISO 27701');
+                if (v.has_soc2) certs.push('SOC 2');
+                if (v.attached_certifications) certs.push(v.attached_certifications);
+                const certStr = certs.length ? certs.join(', ') : '—';
+                const scoreColor = (v.trust_score || 0) >= 80 ? 'var(--success)' : (v.trust_score || 0) >= 50 ? '#ffcc00' : 'var(--danger)';
+
+                return [
+                    `<strong>${escapeHTML(v.name)}</strong>`,
+                    escapeHTML(v.category || 'Geral'),
+                    `<span style="font-weight:700;color:${scoreColor}">${v.trust_score || 0}/100</span>`,
+                    v.dpa_signed ? window.renderStatusBadge('Sim', 'success') : window.renderStatusBadge('Não', 'danger'),
+                    `<span style="font-size:0.75rem;color:var(--text-dim)">${escapeHTML(certStr)}</span>`,
+                    window.renderStatusBadge(v.diligence_level || 'Low', v.diligence_level === 'High' ? 'danger' : 'info'),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openVendorDetailsModal('${v.id}')">Detalhes</button>`
+                ];
+            }),
+            { emptyState: 'Nenhum fornecedor registrado neste projeto.' }
+        );
+
+        c.innerHTML = `
+            ${headerHtml}
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openVendorDetailsModal = function(id) {
@@ -760,12 +800,15 @@ import { navigate } from '../router.js';
     };
 
     async function renderTraining(c, h, a) {
-        h.textContent = 'Treinamento e Conscientizacao';
+        h.innerHTML = '';
+        a.innerHTML = '';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = (canCrud ? `<button class="btn btn-primary" onclick="window.openNewTrainingModal('${proj.id}')">+ Novo Registro</button> ` : '') + `<button class="btn" style="background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--border)" onclick="window.openImportTrainingModal('${proj.id}')">Importar JSON</button>`;
         
         let records = [];
         let summary = {};
@@ -774,28 +817,49 @@ import { navigate } from '../router.js';
         if (!Array.isArray(records)) records = [];
         S.training = records;
 
-        const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'Expired' ? 'var(--danger)' : 'var(--warning)';
-        const summaryHtml = summary.total ? `<div class="card" style="margin-bottom:1.5rem;display:flex;gap:2rem;align-items:center">
-            <div><div class="card-label">Cobertura</div><div style="font-size:1.5rem;font-weight:600;color:var(--accent)">${summary.coverage_percent || 0}%</div></div>
-            <div><div class="card-label">Completos</div><div style="font-size:1.1rem;font-weight:500">${summary.completed || 0}/${summary.total || 0}</div></div>
-            <div><div class="card-label">Status</div><div style="font-size:0.8rem;color:${summary.compliance_status === 'Compliant' ? 'var(--accent)' : 'var(--danger)'}">${summary.compliance_status || 'N/A'}</div></div>
-        </div>` : '';
+        const totalRecords = records.length;
+        const completedRecords = records.filter(r => r.status === 'Completed').length;
+        const coveragePct = summary.coverage_percent || (totalRecords ? Math.round((completedRecords / totalRecords) * 100) : 0);
+        const compStatus = summary.compliance_status || (coveragePct >= 80 ? 'Compliant' : 'Non-Compliant');
 
-        c.innerHTML = `<div class="fade-in">${summaryHtml}${records.length ? records.map(r => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openTrainingDetailsModal('${r.id}')">
-                <div style="flex:1">
-                    <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(r.training_name)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">
-                        <strong>Colaborador:</strong> ${escapeHTML(r.employee_name)}
-                        ${r.score ? `| <strong>Score:</strong> ${r.score}%` : ''}
-                        ${r.evidence_file ? ` | <span style="color:var(--success)">● Com Evidência</span>` : ' | <span style="color:var(--text-dim)">○ Sem Evidência</span>'}
-                    </div>
-                </div>
-                <div style="text-align:right">
-                    <span class="ctx-tag" style="color:${statusColor(r.status)}">${r.status}</span>
-                    ${r.completion_date ? `<div style="font-size:0.6rem;color:var(--muted);margin-top:0.25rem">${r.completion_date}</div>` : ''}
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhum registro de treinamento</h3></div>'}</div>`;
+        const headerHtml = window.renderPageHeader(
+            'Treinamento & Conscientização',
+            'Métricas de conscientização em segurança da informação, acompanhamento de testes e evidências de certificados',
+            (canCrud ? `<button class="btn btn-primary" onclick="window.openNewTrainingModal('${proj.id}')">+ Novo Registro</button> ` : '') +
+            `<button class="btn btn-ghost" onclick="window.openImportTrainingModal('${proj.id}')">Importar JSON</button>`
+        );
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Cobertura de Treinamento', value: `${coveragePct}%`, color: coveragePct >= 80 ? '#34c759' : '#ffcc00', subtext: 'Meta ISO 27001' },
+            { label: 'Concluídos', value: `${completedRecords}/${totalRecords}`, color: '#34c759', subtext: 'Colaboradores aptos' },
+            { label: 'Pendentes / Expirados', value: totalRecords - completedRecords, color: totalRecords - completedRecords > 0 ? '#ffcc00' : 'var(--accent)', subtext: 'Requer atenção' },
+            { label: 'Status Global', value: compStatus, color: compStatus === 'Compliant' ? '#34c759' : '#ff3b30', subtext: 'Avaliação SGSI' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Treinamento', 'Colaborador', 'Score (%)', 'Data Conclusão', 'Evidência', 'Status', 'Ações'],
+            records.map(r => {
+                const hasEvidence = !!r.evidence_file;
+                const statusType = r.status === 'Completed' ? 'success' : r.status === 'Expired' ? 'danger' : 'warning';
+
+                return [
+                    `<strong>${escapeHTML(r.training_name)}</strong>`,
+                    escapeHTML(r.employee_name),
+                    r.score ? `<strong>${r.score}%</strong>` : '—',
+                    r.completion_date || '—',
+                    hasEvidence ? '<span style="color:var(--success)">● Anexada</span>' : '<span style="color:var(--text-dim)">○ Ausente</span>',
+                    window.renderStatusBadge(r.status || 'Pending', statusType),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openTrainingDetailsModal('${r.id}')">Detalhes</button>`
+                ];
+            }),
+            { emptyState: 'Nenhum registro de treinamento cadastrado para este projeto.' }
+        );
+
+        c.innerHTML = `
+            ${headerHtml}
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openTrainingDetailsModal = function(id) {
@@ -1046,34 +1110,62 @@ import { navigate } from '../router.js';
     };
 
     async function renderCAPA(c, h, a) {
-        h.textContent = 'Acoes Corretivas (CAPA)';
+        h.innerHTML = '';
+        a.innerHTML = '';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewCAPAModal('${proj.id}')">+ Nova Acao</button>` : '';
         
         let items = [];
         try { items = await api('GET', `/api/v1/projects/${proj.id}/capa`); } catch(e) {}
         if (!Array.isArray(items)) items = [];
         S.capa = items;
-        
-        const sevColor = s => s === 'Critical' ? 'var(--danger)' : s === 'High' ? '#ff9f43' : s === 'Medium' ? '#feca57' : 'var(--accent)';
-        const statusColor = s => s === 'Closed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
-        
-        c.innerHTML = `<div class="fade-in">${items.length ? items.map(ca => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openCAPADetailsModal('${ca.id}')">
-                <div style="flex:1">
-                    <div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(ca.title)}</div>
-                    <div class="item-meta" style="margin-top:0.25rem">
-                        <strong>Responsavel:</strong> ${escapeHTML(ca.assigned_to || 'Sem responsavel')} | <strong>Prazo:</strong> ${ca.due_date || 'N/A'}
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    <span class="ctx-tag" style="color:${sevColor(ca.severity)}">${ca.severity}</span>
-                    <span class="ctx-tag" style="color:${statusColor(ca.status)}">${ca.status}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhuma acao corretiva</h3></div>'}</div>`;
+
+        const totalCAPA = items.length;
+        const openCAPA = items.filter(i => i.status === 'Open' || i.status === 'In Progress').length;
+        const closedCAPA = items.filter(i => i.status === 'Closed').length;
+        const criticalCAPA = items.filter(i => i.severity === 'Critical' || i.severity === 'High').length;
+
+        const headerHtml = window.renderPageHeader(
+            'Ações Corretivas (CAPA)',
+            'Tratamento sistemático de não conformidades, planos de ação preventiva e eliminação de causa raiz',
+            canCrud ? `<button class="btn btn-primary" onclick="window.openNewCAPAModal('${proj.id}')">+ Nova Ação</button>` : ''
+        );
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total Ações CAPA', value: totalCAPA, color: 'var(--accent)', subtext: 'Planos registrados' },
+            { label: 'Abertas / Em Andamento', value: openCAPA, color: openCAPA > 0 ? '#ffcc00' : '#34c759', subtext: 'Requer acompanhamento' },
+            { label: 'Concluídas / Fechadas', value: closedCAPA, color: '#34c759', subtext: 'Resoluções efetivas' },
+            { label: 'Críticas / Alta Severidade', value: criticalCAPA, color: criticalCAPA > 0 ? '#ff3b30' : '#34c759', subtext: 'Prioridade máxima' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Título da Ação', 'Responsável', 'Prazo', 'Severidade', 'Status', 'Ações'],
+            items.map(ca => {
+                const sevBadgeType = ca.severity === 'Critical' ? 'danger' : ca.severity === 'High' ? 'warning' : 'info';
+                const statusBadgeType = ca.status === 'Closed' ? 'success' : ca.status === 'In Progress' ? 'warning' : 'info';
+
+                return [
+                    `<strong>${escapeHTML(ca.title)}</strong>`,
+                    escapeHTML(ca.assigned_to || 'Sem responsável'),
+                    ca.due_date || '—',
+                    window.renderStatusBadge(ca.severity || 'Medium', sevBadgeType),
+                    window.renderStatusBadge(ca.status || 'Open', statusBadgeType),
+                    `<button class="btn btn-ghost btn-sm" onclick="window.openCAPADetailsModal('${ca.id}')">Detalhes</button>`
+                ];
+            }),
+            { emptyState: 'Nenhuma ação corretiva registrada para este projeto.' }
+        );
+
+        c.innerHTML = `
+            ${headerHtml}
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openCAPADetailsModal = async function(id) {
@@ -1308,28 +1400,65 @@ import { navigate } from '../router.js';
     };
 
     async function renderAudits(c, h, a) {
-        h.textContent = 'Calendario de Auditorias';
+        h.innerHTML = '';
+        a.innerHTML = '';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
+        }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewAuditModal('${proj.id}')">+ Nova Auditoria</button>` : '';
         
         let audits = [];
         try { audits = await api('GET', `/api/v1/projects/${proj.id}/audits`); } catch(e) {}
         if (!Array.isArray(audits)) audits = [];
         S.audits = audits;
-        const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
-        c.innerHTML = `<div class="fade-in">${audits.length ? audits.map(au => `
-            <div class="list-item" style="cursor:pointer" onclick="window.openAuditDetailsModal('${au.id}')">
-                <div style="flex:1"><div class="item-name" style="font-weight:600; color:var(--accent)">${escapeHTML(au.title)}</div>
-                <div class="item-meta" style="margin-top:0.25rem">${escapeHTML(au.audit_type)} | ${escapeHTML(au.auditor_name || 'TBD')} | ${au.scheduled_date}</div></div>
-                <div style="display:flex;align-items:center;gap:0.5rem">
-                    ${au.findings_count ? `<span style="font-size:0.7rem;color:var(--danger);margin-right:0.5rem">${au.findings_count} achados</span>` : ''}
-                    ${au.status !== 'Completed' ? `<button class="btn" style="padding:4px 8px;font-size:0.75rem;margin-right:0.5rem;border-color:var(--accent);color:var(--accent)" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>` : ''}
-                    <span class="ctx-tag" style="color:${statusColor(au.status)}">${au.status}</span>
-                </div>
-            </div>`).join('') : '<div class="empty-state"><h3>Nenhuma auditoria agendada</h3></div>'}</div>`;
+
+        const totalAudits = audits.length;
+        const plannedAudits = audits.filter(au => au.status === 'Planned' || au.status === 'In Progress').length;
+        const completedAudits = audits.filter(au => au.status === 'Completed').length;
+        const totalFindings = audits.reduce((acc, au) => acc + (au.findings_count || 0), 0);
+
+        const headerHtml = window.renderPageHeader(
+            'Calendário de Auditorias',
+            'Agendamento e execução de auditorias internas e externas de conformidade ISO 27001 / ISO 27701',
+            canCrud ? `<button class="btn btn-primary" onclick="window.openNewAuditModal('${proj.id}')">+ Nova Auditoria</button>` : ''
+        );
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total de Auditorias', value: totalAudits, color: 'var(--accent)', subtext: 'Ciclo de auditoria' },
+            { label: 'Agendadas / Em Execução', value: plannedAudits, color: '#ffcc00', subtext: 'Próximas fases' },
+            { label: 'Concluídas', value: completedAudits, color: '#34c759', subtext: 'Relatórios emitidos' },
+            { label: 'Total de Achados', value: totalFindings, color: totalFindings > 0 ? '#ff3b30' : '#34c759', subtext: 'Gaps mapeados' }
+        ]);
+
+        const tableHtml = window.renderDataTable(
+            ['Título da Auditoria', 'Tipo', 'Auditor Responsável', 'Data Agendada', 'Achados', 'Status', 'Ações'],
+            audits.map(au => {
+                const statusBadgeType = au.status === 'Completed' ? 'success' : au.status === 'In Progress' ? 'warning' : 'info';
+                const executeBtn = au.status !== 'Completed' 
+                    ? `<button class="btn btn-primary btn-sm" style="margin-right:0.25rem" onclick="event.stopPropagation(); navigate('audit-execution', { activeAuditId: '${au.id}' })">Executar</button>`
+                    : '';
+
+                return [
+                    `<strong>${escapeHTML(au.title)}</strong>`,
+                    escapeHTML(au.audit_type || 'Interna'),
+                    escapeHTML(au.auditor_name || 'TBD'),
+                    au.scheduled_date || '—',
+                    au.findings_count ? `<span style="color:var(--danger);font-weight:600">${au.findings_count} achados</span>` : '—',
+                    window.renderStatusBadge(au.status || 'Planned', statusBadgeType),
+                    `${executeBtn}<button class="btn btn-ghost btn-sm" onclick="window.openAuditDetailsModal('${au.id}')">Detalhes</button>`
+                ];
+            }),
+            { emptyState: 'Nenhuma auditoria agendada para este projeto.' }
+        );
+
+        c.innerHTML = `
+            ${headerHtml}
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openAuditDetailsModal = function(id) {
