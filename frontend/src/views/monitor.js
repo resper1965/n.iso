@@ -874,100 +874,73 @@ import { navigate } from '../router.js';
 
     async function renderStakeholders(c, h, a) {
         h.textContent = 'Partes Interessadas (Cláusula 4.2)';
-        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn btn-primary">Novo Stakeholder</button>`;
-        if (!S.activeProject) {
-            c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Selecione um projeto ativo.</div>';
-            return;
+        const proj = S.activeProject || S.projects[0];
+        if (!proj) { 
+            a.innerHTML = '';
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            return; 
         }
         
-        c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando partes interessadas...</div>';
+        a.innerHTML = `<button onclick="window.openStakeholderModal()" class="btn btn-primary">+ Novo Stakeholder</button>`;
+        
+        let list = [];
         try {
-            const list = await api('GET', `/api/v1/projects/${S.activeProject.id}/stakeholders`) || [];
-            S.stakeholders = list;
-            
-            if (list.length === 0) {
-                c.innerHTML = `
-                    <div style="padding:3rem;text-align:center;color:var(--muted)">
-                        Nenhum stakeholder cadastrado ainda.<br><br>
-                        <button onclick="window.openStakeholderModal()" class="btn btn-primary">Adicionar Primeira Parte Interessada</button>
-                    </div>
-                `;
-                return;
-            }
-            
-            const catLabels = {
-                client: 'Cliente',
-                regulator: 'Regulador / Auditor',
-                shareholder: 'Diretoria / Acionista',
-                employee: 'Colaborador',
-                supplier: 'Fornecedor / Operador',
-                partner: 'Parceiro',
-                consultant: 'Consultor'
-            };
+            const res = await api('GET', `/api/v1/projects/${proj.id}/stakeholders`);
+            list = Array.isArray(res) ? res : (res && Array.isArray(res.stakeholders)) ? res.stakeholders : (res && Array.isArray(res.list)) ? res.list : [];
+        } catch(e) {}
+        S.stakeholders = list;
 
-            let html = `
-                <div class="card fade-in">
-                    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem">Identifique, catalogue e gerencie os requisitos de segurança e privacidade das partes interessadas em conformidade com a Cláusula 4.2 da ISO 27001.</div>
-                    <div class="data-table" style="overflow-x:auto">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Parte Interessada</th>
-                                    <th style="width:110px">Tipo</th>
-                                    <th style="width:160px">Categoria</th>
-                                    <th>Expectativas / Requisitos de SI</th>
-                                    <th style="width:110px">Influência</th>
-                                    <th>Método de Comunicação</th>
-                                    <th style="width:150px; text-align:center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-            `;
-            
-            list.forEach(s => {
+        const total = list.length;
+        const external = list.filter(s => s.type === 'external' || s.type === 'externo').length;
+        const internal = list.filter(s => s.type === 'internal' || s.type === 'interno').length;
+        const highInfluence = list.filter(s => (s.influence || '').toLowerCase() === 'high' || (s.influence || '').toLowerCase() === 'alta').length;
+
+        const statsHtml = window.renderStatCards([
+            { label: 'Total Partes Interessadas', value: total, color: 'var(--accent)', subtext: 'Mapeadas ISO 27001' },
+            { label: 'Partes Externas', value: external, color: '#34c759', subtext: 'Reguladores, Clientes & Operadores' },
+            { label: 'Partes Internas', value: internal, color: '#00ade8', subtext: 'Equipes & Diretoria' },
+            { label: 'Alta Influência', value: highInfluence, color: highInfluence > 0 ? '#ff3b30' : 'var(--text-dim)', subtext: 'Requisitos prioritários' }
+        ]);
+
+        const catLabels = {
+            client: 'Cliente',
+            regulator: 'Regulador / Auditor',
+            shareholder: 'Diretoria / Acionista',
+            employee: 'Colaborador',
+            supplier: 'Fornecedor / Operador',
+            partner: 'Parceiro',
+            consultant: 'Consultor'
+        };
+
+        const tableHtml = window.renderDataTable(
+            ['Parte Interessada', 'Tipo', 'Categoria', 'Expectativas / Requisitos de SI', 'Influência', 'Método de Comunicação', 'Ações'],
+            list.map(s => {
                 const catLabel = catLabels[s.category] || s.category || 'N/A';
-                
-                const typeBadge = s.type === 'internal'
-                    ? `<span class="badge" style="background:rgba(0, 173, 232, 0.08); color:var(--accent); border:1px solid rgba(0, 173, 232, 0.15)">Interno</span>`
-                    : `<span class="badge" style="background:rgba(255, 255, 255, 0.04); color:var(--text-dim); border:1px solid rgba(255, 255, 255, 0.08)">Externo</span>`;
-                
+                const isInternal = s.type === 'internal' || s.type === 'interno';
                 const influenceLvl = (s.influence || 'Medium').toLowerCase();
-                let influenceStyle = 'background:rgba(255, 255, 255, 0.04); color:var(--text-dim); border:1px solid rgba(255, 255, 255, 0.08)';
-                if (influenceLvl === 'high') {
-                    influenceStyle = 'background:rgba(239, 68, 68, 0.08); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.15)';
-                } else if (influenceLvl === 'medium') {
-                    influenceStyle = 'background:rgba(245, 158, 11, 0.08); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.15)';
-                }
-                const influenceBadge = `<span class="badge" style="${influenceStyle}">${escapeHTML(s.influence || 'Medium')}</span>`;
+                const influenceType = (influenceLvl === 'high' || influenceLvl === 'alta') ? 'danger' : (influenceLvl === 'medium' || influenceLvl === 'média') ? 'warning' : 'neutral';
+                const influenceText = (influenceLvl === 'high' || influenceLvl === 'alta') ? 'Alta' : (influenceLvl === 'medium' || influenceLvl === 'média') ? 'Média' : 'Baixa';
 
-                html += `
-                    <tr>
-                        <td style="font-weight:600; color:var(--text)">${escapeHTML(s.name)}</td>
-                        <td>${typeBadge}</td>
-                        <td style="font-weight:500">${escapeHTML(catLabel)}</td>
-                        <td style="font-size:0.8rem; line-height:1.45">${escapeHTML(s.requirements || '')}</td>
-                        <td>${influenceBadge}</td>
-                        <td style="font-size:0.8rem; line-height:1.45">${escapeHTML(s.communication_method || '')}</td>
-                        <td>
-                            <div style="display:flex; gap:6px; justify-content:center; white-space:nowrap">
-                                <button onclick="window.openStakeholderModal('${s.id}')" class="btn" style="padding:4px 8px; font-size:0.7rem; height:26px">Editar</button>
-                                <button onclick="window.deleteStakeholder('${s.id}')" class="btn btn-ghost" style="padding:4px 8px; font-size:0.7rem; height:26px; color:#ef4444; border:1px solid rgba(239,68,68,0.15)">Deletar</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-            c.innerHTML = html;
-        } catch(e) {
-            c.innerHTML = `<div class="error">Erro ao carregar stakeholders: ${escapeHTML(e.message)}</div>`;
-        }
+                return [
+                    `<strong>${escapeHTML(s.name)}</strong>`,
+                    window.renderStatusBadge(isInternal ? 'Interno' : 'Externo', isInternal ? 'info' : 'neutral'),
+                    escapeHTML(catLabel),
+                    `<div style="font-size:0.8rem; line-height:1.45; max-width:300px">${escapeHTML(s.requirements || '')}</div>`,
+                    window.renderStatusBadge(influenceText, influenceType),
+                    `<div style="font-size:0.8rem; line-height:1.45">${escapeHTML(s.communication_method || '')}</div>`,
+                    `<div style="display:flex; gap:6px; justify-content:center">
+                        <button onclick="window.openStakeholderModal('${s.id}')" class="btn btn-ghost btn-sm">Editar</button>
+                        <button onclick="window.deleteStakeholder('${s.id}')" class="btn btn-ghost btn-sm" style="color:#ff3b30">Excluir</button>
+                    </div>`
+                ];
+            }),
+            { emptyState: 'Nenhum stakeholder cadastrado ainda.' }
+        );
+
+        c.innerHTML = `
+            ${statsHtml}
+            ${tableHtml}
+        `;
     }
 
     window.openStakeholderModal = function(id = null) {
