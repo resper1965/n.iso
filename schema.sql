@@ -286,8 +286,11 @@ CREATE TABLE IF NOT EXISTS assets (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    type TEXT, -- tipo do ativo (usado no cadastro de ativos)
     category TEXT, -- Informação, Software, Hardware, Pessoas
     classification TEXT DEFAULT 'Confidential', -- Confidential, Restricted, Internal, Public
+    criticality TEXT DEFAULT 'Medium', -- Low, Medium, High, Critical
+    description TEXT,
     owner TEXT,
     location TEXT, -- ex: AWS S3, local, etc.
     status TEXT DEFAULT 'Active',
@@ -646,22 +649,9 @@ CREATE INDEX IF NOT EXISTS idx_auditor_notes_project ON auditor_notes(project_id
 -- SPRINT GAPS: ATIVOS, KPIS E ACEITES DE POLÍTICAS
 -- -----------------------------------------------
 
-CREATE TABLE IF NOT EXISTS assets (
-  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  project_id TEXT REFERENCES projects(id),
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  classification TEXT DEFAULT 'Internal', -- Public, Internal, Confidential, Restricted
-  owner TEXT,
-  location TEXT,
-  status TEXT DEFAULT 'Active',
-  description TEXT,
-  confidentiality_rating INTEGER DEFAULT 3,
-  integrity_rating INTEGER DEFAULT 3,
-  availability_rating INTEGER DEFAULT 3,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- ponytail: definição canônica de `assets` unificada acima (inclui type/criticality/
+-- description). A duplicata que existia aqui foi removida — CREATE TABLE IF NOT EXISTS
+-- fazia a segunda ser silenciosamente ignorada e divergir da usada pelo código.
 CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
 
 CREATE TABLE IF NOT EXISTS performance_metrics (
@@ -694,7 +684,7 @@ CREATE INDEX IF NOT EXISTS idx_acknowledgments_project ON policy_acknowledgments
 CREATE TABLE IF NOT EXISTS dpia_assessments (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    system_name TEXT NOT NULL,
+    system_name TEXT,
     data_flow_description TEXT,
     data_subjects_types TEXT,
     personal_data_categories TEXT,
@@ -704,6 +694,15 @@ CREATE TABLE IF NOT EXISTS dpia_assessments (
     dpo_opinion TEXT,
     dpo_signature TEXT,
     ceo_signature TEXT,
+    -- Colunas usadas pelo código atual (create/update/approve/report de DPIA)
+    ropa_id TEXT,
+    processing_name TEXT,
+    data_category_risk TEXT,
+    technical_measures TEXT,
+    residual_risk_level TEXT,
+    dpo_recommendations TEXT,
+    dpo_approved_by TEXT,
+    dpo_approved_at TEXT,
     status TEXT DEFAULT 'Draft', -- Draft, Under Review, Approved
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

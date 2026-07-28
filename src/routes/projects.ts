@@ -258,7 +258,7 @@ projectsApp.post('/:id/documents/upload', async (c) => {
 
     const user = c.get('user');
     await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, sha256_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
+      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'conforme', 'Documento Interno do SGSI Controlado', ?, datetime('now'))`
     ).bind(docId, projectId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
 
