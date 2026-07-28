@@ -35,16 +35,21 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     const path = new URL(c.req.url).pathname;
 
     if ((user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
-      const allowedWritePaths = [
-        '/checklist-progress',
-        '/evidence',
-        '/documents/upload',
-        '/policy-acknowledgments',
-        '/policies/ack',
-        '/mcp/execute',
-        '/chat'
+      // Allow-list preciso (método + rota) das escritas permitidas a papéis
+      // read-only. Matching por sufixo/regex — nunca substring — para que
+      // DELETE de evidência e ações de aprovação/assinatura/avaliação fiquem
+      // sempre bloqueadas (antes vazavam via path.includes('/evidence')).
+      const allowedWrites: Array<{ methods: string[]; test: (p: string) => boolean }> = [
+        { methods: ['PUT', 'POST'], test: p => p.endsWith('/checklist-progress') },
+        { methods: ['POST'], test: p => p.endsWith('/evidence/upload') },
+        { methods: ['PUT'], test: p => /\/evidence\/[^/]+\/content$/.test(p) },
+        { methods: ['POST'], test: p => p.endsWith('/documents/upload') },
+        { methods: ['POST', 'PUT'], test: p => p.includes('/policy-acknowledgments') },
+        { methods: ['POST', 'PUT'], test: p => p.includes('/policies/ack') },
+        { methods: ['POST'], test: p => p.endsWith('/mcp/execute') },
+        { methods: ['POST'], test: p => p.endsWith('/chat') },
       ];
-      const isAllowed = allowedWritePaths.some(p => path.includes(p));
+      const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
       if (!isAllowed) {
         return c.json({ error: 'Forbidden: Read-only role cannot perform write operations' }, 403);
       }

@@ -368,6 +368,40 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect((await worker.fetch(req, staffEnv)).status).not.toBe(403);
     });
 
+    it('should block a read-only role from deleting or approving evidence but allow upload', async () => {
+      const clientEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'org_user', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'ev1', project_id: '123', r2_key: 'k' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+
+      const del = new Request('http://localhost/api/v1/evidence/ev1', {
+        method: 'DELETE', headers: { 'Authorization': 'Bearer t' },
+      });
+      const approve = new Request('http://localhost/api/v1/evidence/ev1/approve', {
+        method: 'POST', headers: { 'Authorization': 'Bearer t', 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const upload = new Request('http://localhost/api/v1/projects/123/evidence/upload', {
+        method: 'POST', headers: { 'Authorization': 'Bearer t' },
+      });
+
+      // @ts-ignore
+      expect((await worker.fetch(del, clientEnv)).status).toBe(403);
+      // @ts-ignore
+      expect((await worker.fetch(approve, clientEnv)).status).toBe(403);
+      // @ts-ignore
+      expect((await worker.fetch(upload, clientEnv)).status).not.toBe(403);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }
