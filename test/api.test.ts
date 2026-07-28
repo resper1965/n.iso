@@ -318,6 +318,56 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(getOtherRes.status).toBe(403);
     });
 
+    it('should block client from a project-scoped route of another project (tenant middleware)', async () => {
+      // /projects/:id/risks previously had no access check — now guarded by projectAccessMiddleware.
+      const clientEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [{ id: 'r1', project_id: '999' }] }),
+        },
+      };
+
+      const ownReq = new Request('http://localhost/api/v1/projects/123/risks', {
+        headers: { 'Authorization': 'Bearer client-token' },
+      });
+      const otherReq = new Request('http://localhost/api/v1/projects/999/risks', {
+        headers: { 'Authorization': 'Bearer client-token' },
+      });
+
+      // @ts-ignore
+      expect((await worker.fetch(ownReq, clientEnv)).status).not.toBe(403);
+      // @ts-ignore
+      expect((await worker.fetch(otherReq, clientEnv)).status).toBe(403);
+    });
+
+    it('should allow staff (consultor) to access any project scope', async () => {
+      const staffEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'consultor' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      const req = new Request('http://localhost/api/v1/projects/any-project/risks', {
+        headers: { 'Authorization': 'Bearer staff-token' },
+      });
+      // @ts-ignore
+      expect((await worker.fetch(req, staffEnv)).status).not.toBe(403);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

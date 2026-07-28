@@ -22,8 +22,10 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   try {
     const user = JSON.parse(sessionData);
     
-    // Legacy role mapping for backward compatibility
-    if (user.role === 'admin') user.role = 'org_admin';
+    // Legacy role mapping for backward compatibility.
+    // Keep consistent with the login handler (routes/auth.ts): 'admin' is a
+    // platform-level admin, not a project-scoped org_admin.
+    if (user.role === 'admin') user.role = 'platform_admin';
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'platform_admin';
     else if (user.role === 'client_admin') user.role = 'client';

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 import { authMiddleware } from './middleware/auth';
+import { projectAccessMiddleware } from './middleware/project-access';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
@@ -69,6 +70,9 @@ app.route('/api/v1/public', publicApp);
 
 // 5. Auth Middleware para demais rotas /api/v1
 app.use('/api/v1/*', authMiddleware);
+
+// 5b. Isolamento multi-tenant: reforça acesso ao projeto em rotas com escopo de projeto
+app.use('/api/v1/projects/:projectId/*', projectAccessMiddleware);
 
 // 6. Sub-rotas montadas
 app.route('/api/v1/users', usersApp);

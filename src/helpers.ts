@@ -55,9 +55,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   return true;
 }
 
-export function requireProjectAccess(user: any, projectId: string) {
+/**
+ * Garante que o usuário tem acesso ao projeto. Papéis de staff (consultor/
+ * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
+ * seu client_project_id. Lança em caso de negação (fail-closed).
+ */
+export function requireProjectAccess(user: any, projectId: string): true {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
+  throw new Error('Forbidden: No access to this project');
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */
