@@ -138,4 +138,14 @@ app.get('/*', async (c) => {
   return c.text('Not found', 404);
 });
 
+// 8. Handler de erro global: garante corpo JSON consistente em erros não capturados
+// e evita vazar detalhes internos ao cliente (o stack fica apenas nos logs).
+app.onError((err, c) => {
+  console.error('[nISO] Unhandled error:', err);
+  const detail = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'test'
+    ? (err as Error).message
+    : undefined;
+  return c.json({ error: 'Erro interno do servidor', ...(detail ? { detail } : {}) }, 500);
+});
+
 export default app;
