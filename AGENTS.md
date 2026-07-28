@@ -6,10 +6,11 @@ Se voce esta lendo isto, voce e o agente responsavel por continuar o desenvolvim
 Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA frontend (sem framework). Deploy via wrangler deploy.
 
 ## Stack Tecnica
-- **Backend**: src/index.ts - Hono API, ~3400 linhas. Todos endpoints incluindo risk, vendor, training, ROPA, audit calendar, CAPA, portfolio, webhooks, API keys, CSV exports, certification tracker, AI chat, onboarding, marketplace, public pricing/stats.
-- **Services**: src/services/pricing.ts (~17KB), memory.ts (Vectorize RAG), soa-logic.ts (93 regras), migration-service.ts (2013→2022).
-- **Agents**: src/agents/ - PolicyAgent (Llama 3 + RAG), EvidenceAgent (Llama 3).
-- **Frontend**: frontend/dist/index.html - Vanilla JS SPA, ~2530 linhas. 16 views. frontend/dist/auditor.html - portal auditor. frontend/dist/landing.html - landing page publica.
+- **Backend**: src/index.ts e o composition root (~140 linhas) que monta os sub-routers de dominio em src/routes/*.ts (auth, users, leads, proposals, assessments, projects, evidence, vendors, training, ropa, audits, capa, certifications, public, ai, governance, auditor, platform, risks, policies, integrations). Cobre risk, vendor, training, ROPA, audit calendar, CAPA, portfolio, webhooks, API keys, CSV exports, certification tracker, AI chat, onboarding, marketplace, public pricing/stats.
+- **Middleware**: src/middleware/auth.ts (sessao + RBAC write-guard method+rota) e src/middleware/project-access.ts (isolamento multi-tenant em /api/v1/projects/:projectId/*).
+- **Services**: src/services/pricing.ts (~17KB), memory.ts (Vectorize RAG), soa-logic.ts (93 regras), migration-service.ts (2013→2022), policy-generator.ts (templates via binding ASSETS).
+- **Agents**: src/agents/ - PolicyAgent (GPT-4.1 via Gateway com fallback Llama 3.3), EvidenceAgent, AssessmentAgent.
+- **Frontend**: SPA Vanilla JS modular em frontend/src/ (bundle via Vite -> frontend/dist, servido pelo binding ASSETS). Entrada frontend/index.html + src/main.js; router.js, state.js (global S), api.js, ui.js (utils compartilhados), globals.js e src/views/*.js. politicas.html e o portal publico de politicas.
 - **Schema**: schema.sql - D1 tables (23): assessments, assessment_answers, projects, project_phases, leads, proposals, contracts, users, compliance_controls, evidence, audit_logs, auditor_tokens, notifications, risks, vendors, training_records, ropa_records, audit_schedule, corrective_actions, api_keys, webhooks, organizations, certification_tracking, ai_chat_history.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2), AI.
 
@@ -92,8 +93,11 @@ Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA fronten
 - Login: split-screen (branding esquerda, form direita).
 
 ## Restricoes Tecnicas
-- serveStatic DEVE ser o ultimo catch-all route em src/index.ts.
-- Frontend: sem modulos ES, tudo no escopo window. State global S.
+- O catch-all estatico (c.env.ASSETS.fetch) DEVE ser a ultima rota em src/index.ts.
+- authMiddleware roda antes das rotas /api/v1/*; projectAccessMiddleware roda logo apos, em /api/v1/projects/:projectId/*. Rotas realmente publicas (auth, public) sao montadas antes do authMiddleware.
+- SETUP_KEY e um segredo (wrangler secret put SETUP_KEY); sem ele /auth/setup fica desabilitado (falha fechada). Nunca commitar segredos em wrangler.jsonc.
+- Segredos/tokens de seguranca usam CSPRNG (genToken/genNumericCode), nunca Math.random/genId.
+- Frontend: sem modulos ES em runtime, tudo no escopo window. State global S.
 - Schema: alinhar com schema.sql antes de adicionar colunas.
 - Ponytail mode: YAGNI, reusar patterns, menor diff possivel, boring over clever.
 
