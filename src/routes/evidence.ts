@@ -25,7 +25,7 @@ evidenceApp.get('/:id/detail', async (c) => {
 async function downloadEvidence(c: any, id: string) {
   try {
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
-    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first();
     if (!ev || !ev.r2_key) return c.json({ error: 'Evidência não encontrada' }, 404);
 
     const obj = await c.env.STORAGE.get(ev.r2_key);

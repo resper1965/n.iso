@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 export type StandardVersion = 'v2022' | 'v2013' | 'v2026';
 
 export interface PolicyContext {
@@ -23,11 +20,11 @@ const TEMPLATE_DEPENDENCIES: Record<string, string[]> = {
 };
 
 export class PolicyGeneratorService {
-  private templatesBase: string;
   private assetsFetcher?: any;
 
-  constructor(basePath: string, assetsFetcher?: any) {
-    this.templatesBase = join(basePath, 'src/templates/policies');
+  // ponytail: basePath kept for call-site compatibility; templates are served via the
+  // ASSETS binding on Workers (no filesystem at runtime), so it is intentionally unused.
+  constructor(_basePath: string, assetsFetcher?: any) {
     this.assetsFetcher = assetsFetcher;
   }
 
@@ -43,18 +40,15 @@ export class PolicyGeneratorService {
       throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
     }
 
-    let content = '';
-    if (this.assetsFetcher) {
-      const url = `http://assets/templates/policies/${context.standardVersion}/${templateName}.md`;
-      const res = await this.assetsFetcher.fetch(new Request(url));
-      if (!res.ok) {
-        throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
-      }
-      content = await res.text();
-    } else {
-      const filePath = join(this.templatesBase, context.standardVersion, `${templateName}.md`);
-      content = await readFile(filePath, 'utf-8');
+    if (!this.assetsFetcher) {
+      throw new Error('PolicyGeneratorService requires the ASSETS binding to load templates.');
     }
+    const url = `http://assets/templates/policies/${context.standardVersion}/${templateName}.md`;
+    const res = await this.assetsFetcher.fetch(new Request(url));
+    if (!res.ok) {
+      throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
+    }
+    let content = await res.text();
 
     const now = new Date();
     const nextYear = new Date();
