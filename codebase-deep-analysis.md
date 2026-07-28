@@ -7,6 +7,24 @@
 
 ---
 
+## 0. Status de implementação (atualizado)
+
+Correções já aplicadas nesta branch (PR #9), cada uma validada com `tsc` limpo e testes verdes (46 → **104 testes**, 14/14 suítes):
+
+| Commit | Fase | Item | Status |
+|---|---|---|---|
+| `f478bfc` | 0 | CI verde: lockfile, `tsc`, `node:fs` nos testes (CR-5) | ✅ |
+| `28b765b` | 1 | Auth hardening: `SETUP_KEY` fail-closed + removido do repo; tokens/OTP CSPRNG; rate limiting; constant-time (CR-2, AL-1/2/3) | ✅ |
+| `8cdc327` | 1 | Isolamento multi-tenant / IDOR — middleware `/projects/:projectId/*` (CR-1) | ✅ |
+| `3b260c7` | 1 | RBAC preciso method+rota (AL-4) | ✅ |
+| `3437f80` | — | Docs de contexto atualizados (BX-1) | ✅ |
+| `4abf15c` | 2 | Error handler global `app.onError` (MD-1) | ✅ |
+| `30fabcf` | 2 | Schema drift evidência/assets/DPIA + migration 0013 (CR-3) | ✅ |
+
+**Ainda aberto** (prioridade decrescente): CR-4 (servir templates de política via ASSETS), CR-6/CR-7/CR-8 (frontend: dots, localStorage, tema), MD-2 (RAG metadata), MD-6 (validação de upload), MD-7/DA-2/DA-3 (índices/FKs), Fases 3–5. Fugas de listagem sem `:projectId` (proposals/assessments) e o rebuild de `dpia_assessments.system_name NOT NULL` em DBs antigos precisam de tratamento dedicado (ver migration 0013).
+
+---
+
 ## 1. Sumário executivo
 
 O nISO é um produto GRC (ISO 27001/27701 + LGPD) **funcionalmente amplo e maduro na superfície**: 28 rotinas de menu, ~50 features, ~98 endpoints, 23 tabelas D1, agentes de IA (política/evidência), motores puros bem estruturados (`pricing.ts`, `soa-logic.ts`). Todas as 28 telas renderizam com dados reais — **não há stubs "em breve"**. A decomposição do antigo monólito `index.ts` em ~30 módulos de rota/serviço é um trabalho de arquitetura genuíno e bem-feito.
