@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, genToken, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 
@@ -592,7 +592,7 @@ projectsApp.post('/:id/auditor-token', async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json<{ days_valid?: number }>();
     const days = body.days_valid ?? 30;
-    const token = genId() + genId();
+    const token = genToken();
     const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
 
     await c.env.DB.prepare(

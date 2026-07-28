@@ -1,7 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { genId, escapeHtml, requireResourceAccess } from '../src/helpers';
+import { genId, escapeHtml, requireResourceAccess, genNumericCode, constantTimeEqual } from '../src/helpers';
 
 describe('helpers', () => {
+  describe('genNumericCode', () => {
+    it('returns a 6-digit numeric string by default', () => {
+      const code = genNumericCode();
+      expect(code).toMatch(/^\d{6}$/);
+    });
+
+    it('respects the requested length and pads with leading zeros', () => {
+      expect(genNumericCode(4)).toMatch(/^\d{4}$/);
+      expect(genNumericCode(8)).toMatch(/^\d{8}$/);
+    });
+
+    it('produces varied values across calls', () => {
+      const codes = new Set(Array.from({ length: 50 }, () => genNumericCode()));
+      expect(codes.size).toBeGreaterThan(1);
+    });
+  });
+
+  describe('constantTimeEqual', () => {
+    it('is true for identical strings', () => {
+      expect(constantTimeEqual('abc123', 'abc123')).toBe(true);
+    });
+
+    it('is false for different content or length', () => {
+      expect(constantTimeEqual('abc123', 'abc124')).toBe(false);
+      expect(constantTimeEqual('abc', 'abcd')).toBe(false);
+      expect(constantTimeEqual('', 'x')).toBe(false);
+    });
+  });
+
   describe('genId', () => {
     it('returns a non-empty string', () => {
       const id = genId();

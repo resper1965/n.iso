@@ -56,9 +56,10 @@
 		}
 	},
 
+	// SETUP_KEY é um segredo: configure com `npx wrangler secret put SETUP_KEY`.
+	// Sem ele, o endpoint POST /api/v1/auth/setup fica desabilitado (falha fechada).
 	"vars": {
 		"ENVIRONMENT": "development",
-		"SETUP_KEY": "setup-123",
 		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/0a6c490dd5fe9051422c15c9e133138e/n-iso"
 	}
 }

@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+import { genId, genToken, genNumericCode, rateLimit, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+
+/** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
+function clientIp(c: any): string {
+  return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+}
 import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema } from '../schemas';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -12,7 +17,12 @@ authApp.post('/setup', async (c) => {
     if (!valid.success) return valid.response;
     const { email, password, name, setupKey } = valid.data;
 
-    if (setupKey !== c.env.SETUP_KEY && (c.req.header('X-Setup-Key') || setupKey) !== c.env.SETUP_KEY) {
+    // Falha fechada: sem SETUP_KEY configurado (via wrangler secret), /setup fica desabilitado.
+    if (!c.env.SETUP_KEY) {
+      return c.json({ error: 'Setup is disabled' }, 403);
+    }
+    const providedKey = c.req.header('X-Setup-Key') || setupKey;
+    if (!providedKey || providedKey !== c.env.SETUP_KEY) {
       return c.json({ error: 'Invalid setup key' }, 403);
     }
     
@@ -32,6 +42,10 @@ authApp.post('/setup', async (c) => {
 
 authApp.post('/login', async (c) => {
   try {
+    if (!(await rateLimit(c.env.SESSIONS, `login:${clientIp(c)}`, 20, 300))) {
+      return c.json({ error: 'Muitas tentativas. Tente novamente em alguns minutos.' }, 429);
+    }
+
     const valid = await validateBody(c, loginSchema);
     if (!valid.success) return valid.response;
     const { email, password } = valid.data;
@@ -94,6 +108,10 @@ authApp.post('/reset-password-first', async (c) => {
 
 authApp.post('/forgot-password', async (c) => {
   try {
+    if (!(await rateLimit(c.env.SESSIONS, `forgot:${clientIp(c)}`, 10, 3600))) {
+      return c.json({ error: 'Muitas solicitações. Tente novamente mais tarde.' }, 429);
+    }
+
     const { email } = await c.req.json<{ email: string }>();
     if (!email) return c.json({ error: 'Email é obrigatório' }, 400);
 
@@ -105,7 +123,7 @@ authApp.post('/forgot-password', async (c) => {
       return c.json({ ok: true, message: 'Se o e-mail estiver cadastrado, um código foi gerado.' });
     }
 
-    const token = String(Math.floor(100000 + Math.random() * 900000));
+    const token = genNumericCode(6);
     await c.env.SESSIONS.put(`reset_token:${token}`, JSON.stringify({ email: user.email }), { expirationTtl: 3600 });
 
     console.log(`[PASSWORD RESET] Token para ${user.email}: ${token}`);
@@ -136,6 +154,11 @@ authApp.post('/forgot-password', async (c) => {
 
 authApp.post('/reset-password', async (c) => {
   try {
+    // Limita tentativas de adivinhação do código de 6 dígitos por IP.
+    if (!(await rateLimit(c.env.SESSIONS, `reset:${clientIp(c)}`, 10, 3600))) {
+      return c.json({ error: 'Muitas tentativas. Tente novamente mais tarde.' }, 429);
+    }
+
     const { token, newPassword } = await c.req.json<{ token: string; newPassword: string }>();
     if (!token || !newPassword) return c.json({ error: 'Token e nova senha são obrigatórios' }, 400);
 

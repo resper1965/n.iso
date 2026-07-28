@@ -73,6 +73,43 @@ export function genToken(): string {
   return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Gera um código numérico de N dígitos com CSPRNG (rejection sampling, sem viés de módulo) */
+export function genNumericCode(digits = 6): string {
+  const max = 10 ** digits;
+  const limit = Math.floor(0xffffffff / max) * max;
+  const arr = new Uint32Array(1);
+  let x: number;
+  do {
+    crypto.getRandomValues(arr);
+    x = arr[0];
+  } while (x >= limit);
+  return String(x % max).padStart(digits, '0');
+}
+
+/** Comparação de tempo constante para hashes/tokens (evita timing side-channels) */
+export function constantTimeEqual(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/**
+ * Rate limit best-effort baseado em KV. Retorna true se a ação é permitida.
+ * Incrementa um contador com janela deslizante por expiração de TTL.
+ * ponytail: get-then-put não é atômico no KV (eventual consistency); é proteção
+ * básica contra brute force, não um limitador rígido.
+ */
+export async function rateLimit(kv: KVNamespace, key: string, max: number, windowSec: number): Promise<boolean> {
+  const k = `ratelimit:${key}`;
+  const current = parseInt((await kv.get(k)) || '0', 10) || 0;
+  if (current >= max) return false;
+  await kv.put(k, String(current + 1), { expirationTtl: windowSec });
+  return true;
+}
+
 /** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
 export async function sendEmail(c: any, to: string, subject: string, html: string): Promise<boolean> {
   const apiKey = c.env.RESEND_API_KEY;
@@ -120,10 +157,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
     const msgBuffer = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
     const legacyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return legacyHash === stored;
+    return constantTimeEqual(legacyHash, stored);
   }
   const [salt] = stored.split(':');
   const rehash = await hashPassword(password, salt);
-  return rehash === stored;
+  return constantTimeEqual(rehash, stored);
 }
 
