@@ -57,10 +57,14 @@ export class PolicyGeneratorService {
     const fetchTemplate = (version: string) =>
       this.assetsFetcher.fetch(new Request(`http://assets/templates/policies/${version}/${templateName}.md`));
 
-    let res = await fetchTemplate(context.standardVersion);
-    // Só existem templates v2022; qualquer outra versão cai de volta em v2022.
-    if (!res.ok && context.standardVersion !== 'v2022') {
-      res = await fetchTemplate('v2022');
+    // Só existem templates v2022. Caímos de volta para v2022 APENAS em 404
+    // (versão inexistente) — erros 5xx são preservados como falha, não mascarados.
+    // A versão realmente usada é rastreada para o ID do documento não mentir a norma.
+    let resolvedVersion = context.standardVersion;
+    let res = await fetchTemplate(resolvedVersion);
+    if (res.status === 404 && resolvedVersion !== 'v2022') {
+      resolvedVersion = 'v2022';
+      res = await fetchTemplate(resolvedVersion);
     }
     if (!res.ok) {
       throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
@@ -73,7 +77,7 @@ export class PolicyGeneratorService {
 
     // Document ID dinâmico com versão da norma
     const docIdPrefix = templateName.toUpperCase().substring(0, 3);
-    const standardSuffix = context.standardVersion.replace('v', '');
+    const standardSuffix = resolvedVersion.replace('v', '');
     const dynamicDocId = `POL-${docIdPrefix}-${standardSuffix}-001`;
 
     const replacements: Record<string, string> = {
