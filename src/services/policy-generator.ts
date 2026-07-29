@@ -40,11 +40,28 @@ export class PolicyGeneratorService {
       throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
     }
 
+    // Validação de trust boundary: templateName é interpolado numa URL de fetch,
+    // então restringimos a um charset seguro (impede path traversal / escapar do
+    // diretório de templates). A versão da norma também é validada contra a lista fixa.
+    if (!/^[a-z0-9-]+$/.test(templateName)) {
+      throw new Error(`Nome de template inválido: ${templateName}`);
+    }
+    const VALID_VERSIONS: StandardVersion[] = ['v2022', 'v2013', 'v2026'];
+    if (!VALID_VERSIONS.includes(context.standardVersion)) {
+      throw new Error(`Versão de norma inválida: ${context.standardVersion}`);
+    }
+
     if (!this.assetsFetcher) {
       throw new Error('PolicyGeneratorService requires the ASSETS binding to load templates.');
     }
-    const url = `http://assets/templates/policies/${context.standardVersion}/${templateName}.md`;
-    const res = await this.assetsFetcher.fetch(new Request(url));
+    const fetchTemplate = (version: string) =>
+      this.assetsFetcher.fetch(new Request(`http://assets/templates/policies/${version}/${templateName}.md`));
+
+    let res = await fetchTemplate(context.standardVersion);
+    // Só existem templates v2022; qualquer outra versão cai de volta em v2022.
+    if (!res.ok && context.standardVersion !== 'v2022') {
+      res = await fetchTemplate('v2022');
+    }
     if (!res.ok) {
       throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
     }
