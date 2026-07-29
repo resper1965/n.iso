@@ -342,7 +342,7 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       });
 
       // @ts-ignore
-      expect((await worker.fetch(ownReq, clientEnv)).status).not.toBe(403);
+      expect((await worker.fetch(ownReq, clientEnv)).status).toBe(200);
       // @ts-ignore
       expect((await worker.fetch(otherReq, clientEnv)).status).toBe(403);
     });
@@ -365,7 +365,7 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
         headers: { 'Authorization': 'Bearer staff-token' },
       });
       // @ts-ignore
-      expect((await worker.fetch(req, staffEnv)).status).not.toBe(403);
+      expect((await worker.fetch(req, staffEnv)).status).toBe(200);
     });
 
     it('should block a read-only role from deleting or approving evidence but allow upload', async () => {
@@ -390,16 +390,19 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       const approve = new Request('http://localhost/api/v1/evidence/ev1/approve', {
         method: 'POST', headers: { 'Authorization': 'Bearer t', 'Content-Type': 'application/json' }, body: '{}',
       });
+      const fd = new FormData();
+      fd.append('file', new File(['evidencia'], 'evidence.txt', { type: 'text/plain' }));
       const upload = new Request('http://localhost/api/v1/projects/123/evidence/upload', {
-        method: 'POST', headers: { 'Authorization': 'Bearer t' },
+        method: 'POST', headers: { 'Authorization': 'Bearer t' }, body: fd,
       });
 
       // @ts-ignore
       expect((await worker.fetch(del, clientEnv)).status).toBe(403);
       // @ts-ignore
       expect((await worker.fetch(approve, clientEnv)).status).toBe(403);
+      // upload com arquivo válido: passa o RBAC guard e persiste (201)
       // @ts-ignore
-      expect((await worker.fetch(upload, clientEnv)).status).not.toBe(403);
+      expect((await worker.fetch(upload, clientEnv)).status).toBe(201);
     });
 
     it('should map legacy roles to new roles for compatibility', async () => {

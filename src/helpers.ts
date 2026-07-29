@@ -79,8 +79,12 @@ export function genToken(): string {
   return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Gera um código numérico de N dígitos com CSPRNG (rejection sampling, sem viés de módulo) */
+/** Gera um código numérico de N dígitos com CSPRNG (rejection sampling, sem viés de módulo).
+ *  digits deve ser inteiro em 1..9 (acima de 9, 10**digits estoura Uint32 e o loop nunca termina). */
 export function genNumericCode(digits = 6): string {
+  if (!Number.isInteger(digits) || digits < 1 || digits > 9) {
+    throw new Error('genNumericCode: digits deve ser um inteiro entre 1 e 9');
+  }
   const max = 10 ** digits;
   const limit = Math.floor(0xffffffff / max) * max;
   const arr = new Uint32Array(1);

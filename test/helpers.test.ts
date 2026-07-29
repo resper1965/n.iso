@@ -17,6 +17,12 @@ describe('helpers', () => {
       const codes = new Set(Array.from({ length: 50 }, () => genNumericCode()));
       expect(codes.size).toBeGreaterThan(1);
     });
+
+    it('throws for invalid widths (0, fractional, >9)', () => {
+      expect(() => genNumericCode(0)).toThrow();
+      expect(() => genNumericCode(1.5)).toThrow();
+      expect(() => genNumericCode(10)).toThrow(); // 10**10 estoura Uint32 -> loop infinito sem o guard
+    });
   });
 
   describe('constantTimeEqual', () => {

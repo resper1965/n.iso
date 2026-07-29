@@ -123,7 +123,13 @@ authApp.post('/forgot-password', async (c) => {
       return c.json({ ok: true, message: 'Se o e-mail estiver cadastrado, um código foi gerado.' });
     }
 
-    const token = genNumericCode(6);
+    // Garante unicidade do código enquanto ativo: sem isto, dois pedidos concorrentes
+    // com o mesmo código de 6 dígitos fariam o segundo sobrescrever o mapeamento de
+    // email do primeiro (permitindo reset da conta errada).
+    let token = genNumericCode(6);
+    for (let i = 0; i < 5 && (await c.env.SESSIONS.get(`reset_token:${token}`)); i++) {
+      token = genNumericCode(6);
+    }
     await c.env.SESSIONS.put(`reset_token:${token}`, JSON.stringify({ email: user.email }), { expirationTtl: 3600 });
 
     console.log(`[PASSWORD RESET] Token para ${user.email}: ${token}`);

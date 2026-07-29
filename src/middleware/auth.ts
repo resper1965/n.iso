@@ -34,7 +34,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     const method = c.req.method.toUpperCase();
     const path = new URL(c.req.url).pathname;
 
-    if ((user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+    if ((user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
       // Allow-list preciso (método + rota) das escritas permitidas a papéis
       // read-only. Matching por sufixo/regex — nunca substring — para que
       // DELETE de evidência e ações de aprovação/assinatura/avaliação fiquem
@@ -44,8 +44,8 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
         { methods: ['POST'], test: p => p.endsWith('/evidence/upload') },
         { methods: ['PUT'], test: p => /\/evidence\/[^/]+\/content$/.test(p) },
         { methods: ['POST'], test: p => p.endsWith('/documents/upload') },
-        { methods: ['POST', 'PUT'], test: p => p.includes('/policy-acknowledgments') },
-        { methods: ['POST', 'PUT'], test: p => p.includes('/policies/ack') },
+        { methods: ['POST', 'PUT'], test: p => p.endsWith('/policy-acknowledgments') },
+        { methods: ['POST', 'PUT'], test: p => p.endsWith('/policies/ack') },
         { methods: ['POST'], test: p => p.endsWith('/mcp/execute') },
         { methods: ['POST'], test: p => p.endsWith('/chat') },
       ];
