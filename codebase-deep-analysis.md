@@ -27,7 +27,7 @@ Correções já aplicadas nesta branch (PR #9), cada uma validada com `tsc` limp
 
 ## 1. Sumário executivo
 
-O nISO é um produto GRC (ISO 27001/27701 + LGPD) **funcionalmente amplo e maduro na superfície**: 28 rotinas de menu, ~50 features, ~98 endpoints, 23 tabelas D1, agentes de IA (política/evidência), motores puros bem estruturados (`pricing.ts`, `soa-logic.ts`). Todas as 28 telas renderizam com dados reais — **não há stubs "em breve"**. A decomposição do antigo monólito `index.ts` em ~30 módulos de rota/serviço é um trabalho de arquitetura genuíno e bem-feito.
+O nISO é um produto GRC (ISO 27001/27701 + LGPD) **funcionalmente amplo e maduro na superfície**: 28 rotinas de menu, ~50 features, ~98 endpoints, mais de 20 tabelas D1, agentes de IA (política/evidência), motores puros bem estruturados (`pricing.ts`, `soa-logic.ts`). Todas as 28 telas renderizam com dados reais — **não há stubs "em breve"**. A decomposição do antigo monólito `index.ts` em ~30 módulos de rota/serviço é um trabalho de arquitetura genuíno e bem-feito.
 
 Porém, sob a superfície há **problemas estruturais graves** que impedem considerá-lo pronto para produção sensível a dados pessoais:
 
@@ -72,6 +72,8 @@ Reproduzindo o pipeline do CI (`.github/workflows/ci.yml`) localmente:
 ---
 
 ## 3. Achados por severidade (consolidado e deduplicado)
+
+> **Nota:** as Seções 2 e 3 registram o **estado-base (pré-remediação)** medido no início da análise. Vários itens já foram corrigidos nesta branch — consulte a **Seção 0** para o status atual. Os achados aqui são preservados como linha de base; itens ainda em aberto estão sinalizados na Seção 0.
 
 Referências no formato `arquivo:linha`. Itens confirmados por mais de uma trilha estão marcados.
 
@@ -230,7 +232,7 @@ Priorizado por risco. Trilhas dentro de uma fase podem rodar **em paralelo**; as
 - **5.4** BX-2..BX-7: deduplicar rotas/handlers, tipar `AI`/reduzir `any`, mover account ids para config, corrigir diacríticos e `--accent-dim`.
 
 ### Sequência recomendada
-```
+```text
 Fase 0  ──▶ Fase 1 ─┐
                     ├─▶ Fase 2 ──▶ Fase 5
         Fase 3 ─────┤
