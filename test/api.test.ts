@@ -478,6 +478,43 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect((await worker.fetch(rwWrite, writeEnv)).status).toBe(201);
     });
 
+    it('should reach public token routes without a session (auditor portal + assessment)', async () => {
+      const auditorEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ project_id: '123' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      // No Authorization header — the token in the path is the credential.
+      const auditor = new Request('http://localhost/api/v1/auditor/tok123/notes');
+      // @ts-ignore
+      expect((await worker.fetch(auditor, auditorEnv)).status).toBe(200);
+
+      const assessEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'a1', client_name: 'X', status: 'In Progress' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      const assess = new Request('http://localhost/api/v1/assessments/public/tok456');
+      // @ts-ignore
+      expect((await worker.fetch(assess, assessEnv)).status).toBe(200);
+    });
+
+    it('should still require a session for internal auditor-notes routes', async () => {
+      const req = new Request('http://localhost/api/v1/projects/123/auditor-notes');
+      // @ts-ignore
+      expect((await worker.fetch(req, mockEnv)).status).toBe(401);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

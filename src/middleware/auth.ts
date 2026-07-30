@@ -37,7 +37,18 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<Variables['use
   };
 }
 
+// Rotas públicas validadas por token NO PRÓPRIO handler (não exigem sessão nISO):
+// - portal do auditor externo (/api/v1/auditor/:token/...) valida contra auditor_tokens;
+// - links públicos de assessment (/api/v1/assessments/public/:token...) validam access_token.
+// Obs.: '/api/v1/auditor/' NÃO casa com '/api/v1/auditor-notes/...' (rota interna autenticada).
+const PUBLIC_TOKEN_PREFIXES = ['/api/v1/assessments/public/', '/api/v1/auditor/'];
+
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (PUBLIC_TOKEN_PREFIXES.some(p => path.startsWith(p))) {
+    return next();
+  }
+
   let user: Variables['user'];
 
   const apiKey = c.req.header('X-API-Key');
@@ -80,7 +91,6 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
 
   // Global RBAC enforcement for org_user / client roles (aplica a sessões E API keys).
   const method = c.req.method.toUpperCase();
-  const path = new URL(c.req.url).pathname;
 
   if ((user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
     // Allow-list preciso (método + rota) das escritas permitidas a papéis
