@@ -17,6 +17,13 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<Variables['use
     return c.json({ error: 'Unauthorized: Invalid or expired API key' }, 401);
   }
 
+  // Enforce permissions: chaves 'read' (o default) não podem executar mutações.
+  const method = c.req.method.toUpperCase();
+  const writeCapable = row.permissions === 'write' || row.permissions === 'admin';
+  if (!writeCapable && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
+    return c.json({ error: 'Forbidden: read-only API key cannot perform write operations' }, 403);
+  }
+
   // last_used_at é best-effort: não deve derrubar a request se falhar.
   await c.env.DB.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").bind(row.id).run().catch(() => {});
 

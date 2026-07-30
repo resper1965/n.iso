@@ -5,7 +5,7 @@
 
 CREATE TABLE IF NOT EXISTS project_knowledge (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     type TEXT DEFAULT 'other',
     content TEXT,

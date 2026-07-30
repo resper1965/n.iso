@@ -625,7 +625,9 @@ window.initApp = async function initApp() {
                 const myProj = S.projects.find(p => p.id === S.user.client_project_id);
                 if (myProj) {
                     S.activeProject = myProj;
-                    localStorage.setItem('niso_activeProjectId', myProj.id);
+                    // Persiste sob a MESMA chave que o state hidrata no reload
+                    // (niso_activeProject), senão o projeto ativo se perdia ao recarregar.
+                    localStorage.setItem('niso_activeProject', JSON.stringify(myProj));
                 }
             }
         }

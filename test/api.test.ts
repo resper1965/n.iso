@@ -446,6 +446,38 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect((await worker.fetch(other, env)).status).toBe(403);
     });
 
+    it('should block a read-only API key from writes but allow a write-capable key', async () => {
+      const readEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const roWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'ro' } });
+      // @ts-ignore
+      expect((await worker.fetch(roWrite, readEnv)).status).toBe(403);
+
+      const writeEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k2', project_id: '123', status: 'Active', expires_at: null, permissions: 'write' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const fd = new FormData();
+      fd.append('file', new File(['x'], 'e.txt', { type: 'text/plain' }));
+      const rwWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'rw' }, body: fd });
+      // @ts-ignore
+      expect((await worker.fetch(rwWrite, writeEnv)).status).toBe(201);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

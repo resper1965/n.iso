@@ -17,7 +17,9 @@ export class MemoryService {
     // 2. Salvar no Vectorize. A chave de metadados é `project_id` — a MESMA usada
     // pelo KnowledgeService — para que ambos compartilhem o mesmo índice e o RAG
     // do PolicyAgent enxergue os documentos ingeridos.
-    const id = `${projectId}_${type}_${Date.now()}`;
+    // ID único e resistente a colisão: dois writes no mesmo ms para o mesmo projeto
+    // não devem sobrescrever um ao outro (Date.now() sozinho colidia).
+    const id = `${projectId}_${type}_${crypto.randomUUID()}`;
     await this.vectorize.upsert([{
       id,
       values,

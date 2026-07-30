@@ -104,10 +104,13 @@ export function genNumericCode(digits = 6): string {
 
 /** Comparação de tempo constante para hashes/tokens (evita timing side-channels) */
 export function constantTimeEqual(a: string, b: string): boolean {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  // Comprimento diferente NÃO retorna cedo (evita vazar o tamanho por timing):
+  // a diferença de tamanho entra no acumulador e iteramos sobre o maior comprimento.
+  let result = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    result |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   }
   return result === 0;
 }
