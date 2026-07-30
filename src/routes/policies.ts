@@ -36,7 +36,9 @@ policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
     try {
       const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
       const policyCtx = await memory.retrieveContext(projectId, `policy ${controlId}`, 'policy', 3);
-      const clientCtx = await memory.retrieveContext(projectId, `${controlId} organograma sistemas ativos seguranca`, 'client_doc', 3);
+      // Sem filtro de tipo: documentos ingeridos pelo KnowledgeService são classificados
+      // como interview/procedure/evidence/etc., não 'client_doc'.
+      const clientCtx = await memory.retrieveContext(projectId, `${controlId} organograma sistemas ativos seguranca`, undefined, 3);
       ragContext = [policyCtx, clientCtx].filter(Boolean).join('\n---\n');
     } catch(e) { /* vectorize may not be populated yet */ }
 

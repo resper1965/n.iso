@@ -72,6 +72,12 @@ export function escapeHtml(s: string): string {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** SHA-256 de uma string, em hex. Usado para hashear/lookup de API keys. */
+export async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Gera um token criptograficamente seguro para sessões */
 export function genToken(): string {
   const arr = new Uint8Array(32);

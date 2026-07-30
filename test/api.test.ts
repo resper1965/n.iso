@@ -405,6 +405,47 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect((await worker.fetch(upload, clientEnv)).status).toBe(201);
     });
 
+    it('should authenticate a valid API key scoped to its project and 401 an invalid one', async () => {
+      const validEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const ok = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'valid-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(ok, validEnv)).status).toBe(200);
+
+      const invalidEnv = {
+        ...mockEnv,
+        DB: { ...mockEnv.DB, prepare: vi.fn().mockReturnThis(), bind: vi.fn().mockReturnThis(), first: vi.fn().mockResolvedValue(null) },
+      };
+      const bad = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'bad-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(bad, invalidEnv)).status).toBe(401);
+    });
+
+    it('should block an API key from another project (tenant scope)', async () => {
+      const env = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const other = new Request('http://localhost/api/v1/projects/999/risks', { headers: { 'X-API-Key': 'valid-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(other, env)).status).toBe(403);
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

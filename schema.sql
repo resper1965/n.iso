@@ -748,3 +748,17 @@ CREATE TABLE IF NOT EXISTS policy_templates (
   description TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
+-- -----------------------------------------------
+-- KNOWLEDGE BASE (RAG) — ingestão de documentos do projeto
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_knowledge (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    type TEXT DEFAULT 'other',
+    content TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_project_knowledge_project ON project_knowledge(project_id);
