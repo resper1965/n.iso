@@ -3,24 +3,9 @@ import { api, API_BASE } from './api.js';
 import { render, navigate } from './router.js';
 import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 
-window.toggleTheme = function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'dark';
-        const next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-        updateThemeIcon(next);
-    }
-
-window.updateThemeIcon = function updateThemeIcon(theme) {
-        const btn = document.getElementById('theme-toggle-btn');
-        if (!btn) return;
-        const svg = btn.querySelector('svg');
-        if (theme === 'light') {
-            svg.innerHTML = '<path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
-        } else {
-            svg.innerHTML = '<path d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z"/>';
-        }
-    }
+// ponytail: o toggle de tema foi removido — o design system da ness. é OLED Dark
+// nativo (design.md §2) e não havia CSS [data-theme], então o controle não fazia
+// nada além de trocar o próprio ícone (enganoso). Sem tema claro, sem toggle.
 
 window.viewEvidence = async function viewEvidence(id) {
         try {
