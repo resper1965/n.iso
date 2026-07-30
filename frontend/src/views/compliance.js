@@ -4,7 +4,7 @@ import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
     function renderControls(c, h, a) {
-        h.textContent = S.lang === 'en' ? 'Controls' : 'Controles';
+        h.textContent = 'Controles';
         if (!S.controls.length) {
             c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
             return;

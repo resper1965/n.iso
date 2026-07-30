@@ -94,11 +94,6 @@ window.viewEvidence = async function viewEvidence(id) {
         }
     }
 
-window.setLang = function setLang(lang) {
-        S.lang = 'pt';
-        localStorage.setItem('niso_lang', 'pt');
-        console.log('Language set to: pt');
-    }
 
 window.toggleGroup = function toggleGroup(groupId) {
         const groups = document.querySelectorAll('.sidebar-group');
@@ -637,7 +632,6 @@ window.initApp = async function initApp() {
 
         updateHeaderUser();
         updateActiveProjectWidget();
-        setLang(S.lang);
 
         if (isClient && S.user.client_project_id) {
             navigate('project-detail');

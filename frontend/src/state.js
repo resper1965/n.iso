@@ -20,7 +20,7 @@ function safeParse(key, isValid = isPlainObject) {
 }
 
 export     const S = {
-        view: 'dashboard', lang: 'pt',
+        view: 'dashboard',
         token: localStorage.getItem('niso_token') || null,
         user: safeParse('niso_user'),
         activeProject: safeParse('niso_activeProject'),
