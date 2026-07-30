@@ -762,3 +762,28 @@ CREATE TABLE IF NOT EXISTS project_knowledge (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_project_knowledge_project ON project_knowledge(project_id);
+
+-- -----------------------------------------------
+-- SCOPE CHANGES (solicitações de alteração de escopo do projeto)
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS scope_changes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    change_description TEXT NOT NULL,
+    reason TEXT,
+    impact_analysis TEXT,
+    requested_by TEXT,
+    status TEXT DEFAULT 'Pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_scope_changes_project ON scope_changes(project_id);
+
+-- -----------------------------------------------
+-- ÍNDICES em colunas quentes (filtros frequentes)
+-- -----------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_evidence_project ON evidence(project_id);
+CREATE INDEX IF NOT EXISTS idx_controls_project ON compliance_controls(project_id);
+CREATE INDEX IF NOT EXISTS idx_users_client_project ON users(client_project_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
