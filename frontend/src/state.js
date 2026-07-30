@@ -1,10 +1,18 @@
-// Parse seguro de valores do localStorage: um valor corrompido (escrita truncada,
-// edição manual, cota) não deve derrubar o boot do app. Em caso de erro, limpa a
-// chave e retorna null para permitir recuperação.
-function safeParse(key) {
+function isPlainObject(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+// Parse seguro + validação de forma do localStorage. Um valor corrompido (JSON
+// inválido) OU com forma inesperada (array/primitivo/objeto malformado) não deve
+// entrar no estado nem derrubar o boot. Em qualquer falha, limpa a chave e retorna
+// null (permite recuperação). `isValid` valida a forma esperada (padrão: objeto plano).
+function safeParse(key, isValid = isPlainObject) {
     try {
         const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!isValid(parsed)) throw new Error('forma inesperada');
+        return parsed;
     } catch {
         try { localStorage.removeItem(key); } catch { /* noop */ }
         return null;

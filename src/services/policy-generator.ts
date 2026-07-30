@@ -30,25 +30,30 @@ export class PolicyGeneratorService {
 
   shouldGenerate(templateId: string, soa?: Record<string, boolean>): boolean {
     if (!soa) return true;
-    const dependencies = TEMPLATE_DEPENDENCIES[templateId];
+    // hasOwnProperty: evita cair em propriedades herdadas (constructor/toString/…)
+    // que retornariam funções e quebrariam o .some abaixo.
+    const dependencies = Object.prototype.hasOwnProperty.call(TEMPLATE_DEPENDENCIES, templateId)
+      ? TEMPLATE_DEPENDENCIES[templateId]
+      : undefined;
     if (!dependencies) return true;
     return dependencies.some(ctrl => soa[ctrl] === true);
   }
 
   async generate(templateName: string, context: PolicyContext): Promise<string> {
-    if (!this.shouldGenerate(templateName, context.soa)) {
-      throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
-    }
-
-    // Validação de trust boundary: templateName é interpolado numa URL de fetch,
-    // então restringimos a um charset seguro (impede path traversal / escapar do
-    // diretório de templates). A versão da norma também é validada contra a lista fixa.
+    // Validação de trust boundary ANTES de qualquer lookup: templateName é
+    // interpolado numa URL de fetch e usado como chave de objeto, então restringimos
+    // a um charset seguro (impede path traversal e acesso a chaves herdadas). A versão
+    // da norma também é validada contra a lista fixa.
     if (!/^[a-z0-9-]+$/.test(templateName)) {
       throw new Error(`Nome de template inválido: ${templateName}`);
     }
     const VALID_VERSIONS: StandardVersion[] = ['v2022', 'v2013', 'v2026'];
     if (!VALID_VERSIONS.includes(context.standardVersion)) {
       throw new Error(`Versão de norma inválida: ${context.standardVersion}`);
+    }
+
+    if (!this.shouldGenerate(templateName, context.soa)) {
+      throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
     }
 
     if (!this.assetsFetcher) {
