@@ -366,7 +366,7 @@ window.renderNotifDropdown = function renderNotifDropdown() {
         }
         dd.innerHTML = items.slice(0, 15).map(n => `
             <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}')">
-                <div style="font-weight:dots${n.read ? '400' : '600'}">dots${escapeHTML(n.title)}</div>
+                <div style="font-weight:${n.read ? '400' : '600'}">${escapeHTML(n.title)}</div>
                 <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.2rem">${escapeHTML(n.message || '')}</div>
                 <div class="notif-time">${n.created_at ? n.created_at.split('T')[0] : ''}</div>
             </div>
