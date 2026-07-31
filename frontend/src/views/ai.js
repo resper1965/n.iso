@@ -92,7 +92,7 @@ import { navigate, render } from '../router.js';
         h.textContent = 'AI Compliance Assistant';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
-        a.innerHTML = `<button class="btn" onclick="clearChatHistory('${proj.id}')">Limpar Historico</button>`;
+        a.innerHTML = `<button class="btn" onclick="clearChatHistory('${proj.id}')">Limpar Histórico</button>`;
         let history = [];
         try { history = await api('GET', `/api/v1/projects/${proj.id}/chat/history`); } catch(e) {}
         if (!Array.isArray(history)) history = [];

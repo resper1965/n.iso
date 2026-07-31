@@ -347,7 +347,7 @@ window.renderNotifDropdown = function renderNotifDropdown() {
         const dd = document.getElementById('notif-dropdown');
         const items = S.notifications || [];
         if (!items.length) {
-            dd.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.75rem">Sem notificacoes</div>';
+            dd.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.75rem">Sem notificações</div>';
             return;
         }
         dd.innerHTML = items.slice(0, 15).map(n => `
@@ -1064,7 +1064,7 @@ window.renderSelfServiceBlock = function renderSelfServiceBlock(c, blocks) {
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:1rem">
                 ${idx > 0 ? '<button class="btn" onclick="ssPrev()">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Proximo' : 'Concluir Assessment'}</button>
+                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
             </div>
         </div>`;
     }

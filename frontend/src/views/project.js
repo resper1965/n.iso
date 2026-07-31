@@ -1249,7 +1249,7 @@ const ISO_GUIDELINES = {
     }
 
     async function wsUploadEvidence(docType) {
-        const labels = { organograma:'Organograma', policy:'Politicas Existentes', inventory:'Inventario de Ativos', topology:'Topologia de Rede', systems:'Lista de Sistemas', contracts:'Contratos Fornecedores', incidents:'Registro de Incidentes', certifications:'Certificacoes Vigentes', floorplan:'Planta Baixa', audit_report:'Relatorio de Auditoria', ropa:'RoPA / Mapeamento Dados', backup_dr:'Backup e DR' };
+        const labels = { organograma:'Organograma', policy:'Políticas Existentes', inventory:'Inventario de Ativos', topology:'Topologia de Rede', systems:'Lista de Sistemas', contracts:'Contratos Fornecedores', incidents:'Registro de Incidentes', certifications:'Certificacoes Vigentes', floorplan:'Planta Baixa', audit_report:'Relatório de Auditoria', ropa:'RoPA / Mapeamento Dados', backup_dr:'Backup e DR' };
         openModal(`<h3 style="margin-bottom:1rem">Upload: ${labels[docType] || docType}</h3>
             <div class="form-group"><label class="form-label">Arquivo</label><input type="file" id="doc-file" class="form-input" accept=".pdf,.docx,.xlsx,.txt,.csv,.md,.png,.jpg,.jpeg"></div>
             <div id="doc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.5rem 0"></div>

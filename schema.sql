@@ -197,8 +197,6 @@ BEFORE DELETE ON audit_logs
 BEGIN
   SELECT RAISE(ABORT, 'audit_logs is append-only');
 END;
--- Unicidade do hash de API key (lookup de autenticação depende disso).
-CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -484,6 +482,10 @@ CREATE INDEX IF NOT EXISTS idx_ropa_project ON ropa_records(project_id);
 CREATE INDEX IF NOT EXISTS idx_audit_schedule_project ON audit_schedule(project_id);
 CREATE INDEX IF NOT EXISTS idx_capa_project ON corrective_actions(project_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_project ON api_keys(project_id);
+-- Unicidade do hash de API key (o lookup de autenticação depende disso).
+-- Precisa vir DEPOIS do CREATE TABLE acima — em banco limpo, um índice declarado
+-- antes da tabela faz o schema.sql inteiro falhar.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
 
 -- ═══════════════════════════════════════════════

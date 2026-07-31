@@ -4,7 +4,7 @@ import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '.
 import { navigate, render } from '../router.js';
 
     async function renderSettings(c, h, a) {
-        h.textContent = 'Configuracoes';
+        h.textContent = 'Configurações';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
@@ -79,7 +79,7 @@ import { navigate, render } from '../router.js';
                 </div>
             </div>
 
-            <button class="btn btn-primary" style="padding:0.6rem 2rem" onclick="savePricingConfig()">Salvar Configuracoes</button>
+            <button class="btn btn-primary" style="padding:0.6rem 2rem" onclick="savePricingConfig()">Salvar Configurações</button>
             `;
         } catch(e) {
             c.innerHTML = '<div class="error">Erro ao carregar configuracoes: ' + escapeHTML(e.message) + '</div>';
@@ -106,7 +106,7 @@ import { navigate, render } from '../router.js';
             } catch(err) {
                 await api('PUT', '/api/v1/proposals/config/pricing', config);
             }
-            showToast('Configuracoes salvas com sucesso');
+            showToast('Configurações salvas com sucesso');
         } catch(e) { showToast('Erro: ' + e.message, 'error'); }
     }
 

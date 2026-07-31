@@ -32,10 +32,15 @@ export type Bindings = {
   SESSIONS: KVNamespace;
   VECTOR_INDEX: VectorizeIndex;
   STORAGE: R2Bucket;
-  AI: any;
+  AI: Ai;
   SETUP_KEY?: string;
   ENVIRONMENT?: string;
-  ASSETS?: any;
+  ASSETS?: Fetcher;
+  /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts). */
+  CF_ACCOUNT_ID?: string;
+  AI_GATEWAY_ID?: string;
+  AI_GATEWAY_TOKEN?: string;
+  RESEND_API_KEY?: string;
 };
 
 export type Variables = {

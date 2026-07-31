@@ -1,4 +1,4 @@
-import { BaseAgent, AgentContext, AgentResponse } from './types';
+import { BaseAgent, AgentContext, AgentResponse, gatewayConfig } from './types';
 
 export class PolicyAgent extends BaseAgent {
   private buildSystemPrompt(controlId?: string, organizationalMemory?: string, standardReference?: string): string {
@@ -38,11 +38,12 @@ ${standardReference || 'Use o conhecimento base da ISO 27001:2022 Anexo A.'}
     const token = this.env?.AI_GATEWAY_TOKEN;
     if (!token) return null;
     try {
-      const res = await fetch('https://api.cloudflare.com/client/v4/accounts/0a6c490dd5fe9051422c15c9e133138e/ai/run', {
+      const { accountId, gatewayId } = gatewayConfig(this.env);
+      const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'cf-aig-gateway-id': 'n-iso',
+          'cf-aig-gateway-id': gatewayId,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

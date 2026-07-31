@@ -4,23 +4,11 @@ import { Bindings, Variables } from '../index';
 import { genId, genToken, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
+import { seedPhases } from '../services/project-setup';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const controlsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-
-async function seedPhasesLocal(db: D1Database, projectId: string) {
-  const phaseStmt = db.prepare(
-    `INSERT INTO project_phases (id, project_id, phase_number, title, status, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, '', datetime('now'))`
-  );
-  const batch: any[] = [];
-  PHASE_TITLES.forEach((title, i) => {
-    const status = i === 0 ? 'in_progress' : 'pending';
-    batch.push(phaseStmt.bind(genId(), projectId, i, title, status));
-  });
-  await db.batch(batch);
-}
 
 // ─── Projects CRUD ──────────────────────────────────────────────────────────
 
@@ -53,7 +41,7 @@ projectsApp.post('/', async (c) => {
       body.org_role ?? ''
     ).run();
 
-    await seedPhasesLocal(c.env.DB, id);
+    await seedPhases(c.env.DB, id);
     await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
@@ -79,36 +67,6 @@ projectsApp.get('/', async (c) => {
     return c.json(results);
   } catch (e: any) {
     return c.json({ error: 'Falha ao listar projetos', detail: e.message }, 500);
-  }
-});
-
-projectsApp.get('/dashboard/stats', async (c) => {
-  try {
-    const user = c.get('user');
-    const isClient = user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client');
-    const projectId = isClient ? user.client_project_id : null;
-    
-    const whereResource = projectId ? 'WHERE project_id = ?' : '';
-    const whereProject = projectId ? 'WHERE id = ?' : '';
-    const params = projectId ? [projectId] : [];
-
-    const stats: any = await c.env.DB.batch([
-      c.env.DB.prepare('SELECT count(*) as count FROM leads'),
-      c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM evidence ${whereResource} ${whereResource ? "AND" : "WHERE"} evaluation_status = 'pending'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM risks ${whereResource} ${whereResource ? "AND" : "WHERE"} impact * probability >= 15`).bind(...params)
-    ]);
-
-    return c.json({
-      leads: stats[0].results?.[0]?.count || 0,
-      projects: stats[1].results?.[0]?.count || 0,
-      controls_done: stats[2].results?.[0]?.count || 0,
-      pending_evidence: stats[3].results?.[0]?.count || 0,
-      critical_risks: stats[4].results?.[0]?.count || 0
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao carregar estatísticas', detail: e.message }, 500);
   }
 });
 

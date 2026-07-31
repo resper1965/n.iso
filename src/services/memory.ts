@@ -1,4 +1,4 @@
-import { EMBEDDING_MODEL } from './embeddings';
+import { embed } from './embeddings';
 
 export class MemoryService {
   private ai: any;
@@ -11,10 +11,7 @@ export class MemoryService {
 
   async storeFact(projectId: string, fact: string, type: 'policy' | 'evidence' | 'standard' | 'client_doc' = 'policy', metadata: any = {}) {
     // 1. Gerar Embedding do fato
-    const embeddingResponse = await this.ai.run(EMBEDDING_MODEL, {
-      text: [fact],
-    });
-    const values = embeddingResponse.data[0];
+    const values = await embed(this.ai, fact);
 
     // 2. Salvar no Vectorize. A chave de metadados é `project_id` — a MESMA usada
     // pelo KnowledgeService — para que ambos compartilhem o mesmo índice e o RAG
@@ -37,10 +34,7 @@ export class MemoryService {
   }
 
   async retrieveContext(projectId: string, query: string, type?: string, topK: number = 5): Promise<string> {
-    const embeddingResponse = await this.ai.run(EMBEDDING_MODEL, {
-      text: [query],
-    });
-    const values = embeddingResponse.data[0];
+    const values = await embed(this.ai, query);
 
     const filter: any = { project_id: projectId };
     if (type) filter.type = type;

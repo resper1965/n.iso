@@ -154,7 +154,7 @@ import { navigate } from '../router.js';
                     <div style="width:10px;height:10px;border-radius:50%;background:${semaphore.color};flex-shrink:0" title="${semaphore.label}"></div>
                     <div>
                         <div class="item-name">${escapeHTML(p.project_name || p.client_name)}</div>
-                        <div class="item-meta" style="margin-top:0.25rem">${p.project_name ? escapeHTML(p.client_name) + ' · ' : ''}Fases: ${p.completed_phases}/${p.phase_count} | Riscos: ${p.risk_count} | Evidencias: ${p.evidence_count}</div>
+                        <div class="item-meta" style="margin-top:0.25rem">${p.project_name ? escapeHTML(p.client_name) + ' · ' : ''}Fases: ${p.completed_phases}/${p.phase_count} | Riscos: ${p.risk_count} | Evidências: ${p.evidence_count}</div>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem">

@@ -1612,7 +1612,7 @@ import { navigate } from '../router.js';
     };
 
     async function renderAcknowledgments(c, h, a) {
-        h.textContent = 'Ciencia de Politicas';
+        h.textContent = 'Ciencia de Políticas';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
             c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
@@ -1736,7 +1736,7 @@ import { navigate } from '../router.js';
                 </div>
 
                 <div class="card">
-                    <div class="card-label">Historico de Ciencia de Politicas</div>
+                    <div class="card-label">Histórico de Ciencia de Políticas</div>
                     <div style="overflow-x:auto;">
                         <table class="data-table">
                             <thead>

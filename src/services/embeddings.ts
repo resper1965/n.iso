@@ -21,3 +21,20 @@ export const EMBEDDING_MODEL = '@cf/baai/bge-m3';
 
 /** Dimensão dos vetores gerados por EMBEDDING_MODEL (para criar o índice). */
 export const EMBEDDING_DIMENSIONS = 1024;
+
+/**
+ * Gera o embedding de um texto e devolve o vetor.
+ *
+ * O tipo de saída do bge-m3 é uma UNIÃO (consulta | embedding | assíncrono), então
+ * o acesso direto a `.data` não compila: só a variante de embedding a possui.
+ * Chamando com `{ text }` a resposta é sempre a variante de embedding, e é isso
+ * que este helper estreita — em um único lugar, em vez de espalhar `as any`.
+ */
+export async function embed(ai: Ai, text: string): Promise<number[]> {
+  const res = await ai.run(EMBEDDING_MODEL, { text: [text] });
+  const data = (res as { data?: number[][] }).data;
+  if (!data?.[0]) {
+    throw new Error('Falha ao gerar embedding: resposta sem vetor');
+  }
+  return data[0];
+}

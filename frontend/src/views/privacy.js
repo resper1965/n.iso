@@ -160,7 +160,7 @@ import { navigate, render } from '../router.js';
                 </select></div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Retencao</label><input class="form-input" id="ropa-retention" placeholder="Ex: 5 anos"></div>
-                <div class="form-group" style="flex:1"><label class="form-label">Responsavel</label><input class="form-input" id="ropa-owner" placeholder="Ex: DPO"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Responsável</label><input class="form-input" id="ropa-owner" placeholder="Ex: DPO"></div>
             </div>
             <div class="form-group"><label class="form-label">Destinatarios / Compartilhamento</label><input class="form-input" id="ropa-recipients" placeholder="Ex: Contabilidade, INSS, Cloud Providers"></div>
             <div class="form-group"><label class="form-label">Salvaguardas de Transferência (Se aplicável)</label><input class="form-input" id="ropa-safeguards" placeholder="Ex: Standard Contractual Clauses (SCCs)"></div>
@@ -210,7 +210,7 @@ import { navigate, render } from '../router.js';
                 </select></div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Retencao</label><input class="form-input" id="ropa-e-retention" value="${escapeHTML(r.retention_period||'')}"></div>
-                <div class="form-group" style="flex:1"><label class="form-label">Responsavel</label><input class="form-input" id="ropa-e-owner" value="${escapeHTML(r.owner||'')}"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Responsável</label><input class="form-input" id="ropa-e-owner" value="${escapeHTML(r.owner||'')}"></div>
             </div>
             <div class="form-group"><label class="form-label">Destinatarios / Compartilhamento</label><input class="form-input" id="ropa-e-recipients" value="${escapeHTML(r.recipients||'')}"></div>
             <div class="form-group"><label class="form-label">Salvaguardas de Transferência</label><input class="form-input" id="ropa-e-safeguards" value="${escapeHTML(r.transfer_safeguards||'')}"></div>
@@ -321,7 +321,7 @@ import { navigate, render } from '../router.js';
                 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
                     <div style="grid-column:span 2">
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descricao do Fluxo de Dados</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descrição do Fluxo de Dados</div>
                         <div style="font-size:0.85rem; color:var(--text)">${escapeHTML(dp.data_flow_description || 'Sem descricao')}</div>
                     </div>
                     <div>
