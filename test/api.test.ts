@@ -1,913 +1,482 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { env } from 'cloudflare:test';
 import worker from '../src/index';
+import { hashPassword, sha256Hex } from '../src/helpers';
+import { applySchema, sessionFor } from './helpers/d1';
 
-// Mock global for Hono's serveStatic
-// @ts-ignore
-global.__STATIC_CONTENT_MANIFEST = '{}';
-// @ts-ignore
-global.__STATIC_CONTENT = {};
+/**
+ * Testes de API contra D1 e KV REAIS (miniflare).
+ *
+ * A versão anterior deste arquivo montava um `mockEnv` cujo D1 devolvia
+ * `{ ok: true }` para qualquer `first()` e `{ success: true }` para qualquer
+ * `run()`. Com isso a suíte não conseguia falhar: uma consulta a tabela
+ * inexistente, um INSERT com coluna errada ou uma constraint violada passavam
+ * todos como sucesso. Foi assim que o código chegou a produção consultando
+ * tabelas que não existiam.
+ *
+ * Agora cada requisição executa o SQL de verdade contra o schema.sql canônico.
+ * As asserções de autorização continuam as mesmas — o que mudou é que agora
+ * elas só passam se o handler por trás também funcionar.
+ *
+ * Projetos da fixture: `proj-123` (o do usuário) e `proj-999` (o outro tenant).
+ */
 
-// Mock environment for D1, KV, etc.
-const mockEnv = {
-  DB: {
-    prepare: vi.fn().mockReturnThis(),
-    bind: vi.fn().mockReturnThis(),
-    first: vi.fn().mockResolvedValue({ ok: true }),
-    all: vi.fn().mockResolvedValue({ results: [] }),
-    run: vi.fn().mockResolvedValue({ success: true }),
-    batch: vi.fn().mockResolvedValue([]),
-  },
-  SESSIONS: {
-    get: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-  STORAGE: {
-    get: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-    list: vi.fn(),
-  },
-  AI: {
-    run: vi.fn(),
-  },
-  VECTOR_INDEX: {
-    query: vi.fn(),
-    upsert: vi.fn(),
-  },
-  ENVIRONMENT: 'test',
-  SETUP_KEY: 'test-123',
-};
+const PROJ = 'proj-123';
+const OUTRO = 'proj-999';
 
-describe('nISO API Unit Tests (Mocked Env)', () => {
-  it('should return 200 for public pricing endpoint', async () => {
-    const request = new Request('http://localhost/api/v1/public/pricing');
-    // @ts-ignore
-    const response = await worker.fetch(request, mockEnv);
-    expect(response.status).toBe(200);
-    const data = await response.json() as any;
-    expect(data).toHaveProperty('ok', true);
+/** IA e Vectorize não têm binding no ambiente de teste; nenhum caminho aqui depende deles. */
+function testEnv(extra: Record<string, unknown> = {}) {
+  return { ...env, AI: { run: async () => ({ response: 'stub' }) }, ...extra } as any;
+}
+
+async function req(path: string, init: RequestInit = {}, e = testEnv()) {
+  return worker.fetch(new Request(`http://localhost${path}`, init), e);
+}
+
+const CHAVE_LEITURA = 'chave-de-leitura';
+const CHAVE_ESCRITA = 'chave-de-escrita';
+
+describe('nISO API (D1 e KV reais)', () => {
+  let admin: Record<string, string>;
+  let orgAdmin: Record<string, string>;
+  let orgUser: Record<string, string>;
+  let client: Record<string, string>;
+  let legacyAdmin: Record<string, string>;
+  let consultor: Record<string, string>;
+
+  beforeAll(async () => {
+    await applySchema();
+    const senha = await hashPassword('password123');
+
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(PROJ, 'Cliente Um', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(OUTRO, 'Cliente Dois', 'ISO 27001', 'controller', 'Active'),
+
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-admin', 'admin@ness.io', senha, 'Admin', 'platform_admin', null),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-orgadmin', 'orgadmin@cliente.com', senha, 'Org Admin', 'org_admin', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-orguser', 'orguser@cliente.com', senha, 'Org User', 'org_user', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-client', 'client@cliente.com', senha, 'Cliente', 'client', PROJ),
+      // Alvo das operações de PUT/DELETE em /users/:id.
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-alvo', 'alvo@cliente.com', senha, 'Alvo', 'org_user', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-recuperar', 'test@example.com', senha, 'Recuperar', 'org_user', PROJ),
+
+      env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, status) VALUES (?,?,?,?,?)`)
+        .bind('ctrl-proprio', PROJ, 'ISO 27001:2022', 'Controle próprio', 'Missing'),
+      env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, status) VALUES (?,?,?,?,?)`)
+        .bind('ctrl-alheio', OUTRO, 'ISO 27001:2022', 'Controle alheio', 'Missing'),
+
+      env.DB.prepare(
+        `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      ).bind('ev-proprio', PROJ, 'a.md', 'k/a.md', 'aa', 'text/markdown', 2, 'x@y', 'pending'),
+      env.DB.prepare(
+        `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      ).bind('ev-alheio', OUTRO, 'b.md', 'k/b.md', 'bb', 'text/markdown', 2, 'x@y', 'pending'),
+
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
+        .bind('at-1', PROJ, 'tok123', '2099-01-01T00:00:00Z'),
+
+      env.DB.prepare(`INSERT INTO assessments (id, client_name, status, access_token) VALUES (?,?,?,?)`)
+        .bind('assess-1', 'Empresa X', 'In Progress', 'tok456'),
+
+      env.DB.prepare(`INSERT INTO policy_templates (id, title, iso_ref) VALUES (?,?,?)`)
+        .bind('isp', 'Information Security Policy (ISP)', '5.1'),
+
+      // Chaves de API: o banco guarda o SHA-256, nunca o valor em claro.
+      env.DB.prepare(`INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`)
+        .bind('key-ro', PROJ, await sha256Hex(CHAVE_LEITURA), 'leitura', 'read', 'Active'),
+      env.DB.prepare(`INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`)
+        .bind('key-rw', PROJ, await sha256Hex(CHAVE_ESCRITA), 'escrita', 'write', 'Active'),
+    ]);
+
+    admin = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'platform_admin' });
+    orgAdmin = await sessionFor({ id: 'usr-orgadmin', email: 'orgadmin@cliente.com', role: 'org_admin', client_project_id: PROJ });
+    orgUser = await sessionFor({ id: 'usr-orguser', email: 'orguser@cliente.com', role: 'org_user', client_project_id: PROJ });
+    client = await sessionFor({ id: 'usr-client', email: 'client@cliente.com', role: 'client', client_project_id: PROJ });
+    consultor = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'consultant' });
+    // Papel legado, mapeado para platform_admin pelo authMiddleware.
+    legacyAdmin = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'admin' });
   });
 
-  it('should return 401 for protected dashboard endpoint without token', async () => {
-    const request = new Request('http://localhost/api/v1/dashboard/stats');
-    // @ts-ignore
-    const response = await worker.fetch(request, mockEnv);
-    expect(response.status).toBe(401);
+  it('rota pública de pricing responde 200 sem sessão', async () => {
+    const res = await req('/api/v1/public/pricing');
+    expect(res.status).toBe(200);
+    expect((await res.json() as any).ok).toBe(true);
   });
 
-  describe('RBAC & IDOR Protections', () => {
-    it('should allow ADMIN to list users', async () => {
-      const request = new Request('http://localhost/api/v1/admin/users', {
-        headers: { 'Authorization': 'Bearer admin-token' }
-      });
-      // Mocking session check logic
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'admin' })),
-        }
-      };
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithSession);
-      expect(response.status).not.toBe(401);
-      expect(response.status).not.toBe(403);
+  it('rota protegida sem token responde 401', async () => {
+    expect((await req('/api/v1/dashboard/stats')).status).toBe(401);
+  });
+
+  describe('RBAC e isolamento entre clientes', () => {
+    it('platform_admin lista usuários', async () => {
+      const res = await req('/api/v1/admin/users', { headers: admin });
+      expect(res.status).toBe(200);
+      // Sem mock: são os usuários que a fixture criou de verdade.
+      expect((await res.json() as any[]).length).toBeGreaterThan(0);
     });
 
-    it('should block CLIENT from accessing admin users', async () => {
-      const request = new Request('http://localhost/api/v1/admin/users', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-      const envWithClientSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client' })),
-        }
-      };
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithClientSession);
-      expect(response.status).toBe(403);
+    it('client não acessa a listagem de usuários', async () => {
+      expect((await req('/api/v1/admin/users', { headers: client })).status).toBe(403);
     });
 
-        it('should block cross-organization project access (IDOR)', async () => {
-      const request = new Request('http://localhost/api/v1/projects/999', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-      const envWithClientSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ 
-            id: 2, 
-            role: 'client', 
-            client_project_id: '123' // Only has access to project 123
-          })),
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithClientSession);
-      expect(response.status).toBe(403);
+    it('client não acessa projeto de outro cliente (IDOR)', async () => {
+      expect((await req(`/api/v1/projects/${OUTRO}`, { headers: client })).status).toBe(403);
     });
 
-    it('should allow platform_admin to call PUT and DELETE users', async () => {
-      const putRequest = new Request('http://localhost/api/v1/users/456', {
+    it('platform_admin altera e remove usuário, e a linha some do banco', async () => {
+      const put = await req('/api/v1/users/usr-alvo', {
         method: 'PUT',
-        headers: { 'Authorization': 'Bearer admin-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Name', role: 'org_admin' })
+        headers: { ...admin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Nome Novo', role: 'org_admin' }),
       });
-      const deleteRequest = new Request('http://localhost/api/v1/users/456', {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer admin-token' }
-      });
+      expect(put.status).toBe(200);
+      const alterado = await env.DB.prepare("SELECT name, role FROM users WHERE id='usr-alvo'").first<any>();
+      expect(alterado.name).toBe('Nome Novo');
+      expect(alterado.role).toBe('org_admin');
 
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'platform_admin' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: '456', email: 'test@example.com' }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        }
-      };
-
-      // @ts-ignore
-      const putResponse = await worker.fetch(putRequest, envWithSession);
-      expect(putResponse.status).toBe(200);
-
-      // @ts-ignore
-      const deleteResponse = await worker.fetch(deleteRequest, envWithSession);
-      expect(deleteResponse.status).toBe(200);
+      const del = await req('/api/v1/users/usr-alvo', { method: 'DELETE', headers: admin });
+      expect(del.status).toBe(200);
+      const removido = await env.DB.prepare("SELECT id FROM users WHERE id='usr-alvo'").first<any>();
+      expect(removido).toBeNull();
     });
 
-    it('should allow platform_admin to create new users', async () => {
-      const request = new Request('http://localhost/api/v1/users', {
+    it('platform_admin cria usuário e a senha é gravada com hash', async () => {
+      const res = await req('/api/v1/users', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer admin-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'newuser@example.com', password: 'password123', name: 'New User', role: 'org_admin', client_project_id: '123' })
+        headers: { ...admin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'novo@example.com', password: 'password123', name: 'Novo', role: 'org_admin', client_project_id: PROJ }),
       });
-
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'platform_admin' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithSession);
-      expect(response.status).toBe(201);
-      const data = await response.json() as any;
-      expect(data).toHaveProperty('id');
-      expect(data.email).toBe('newuser@example.com');
+      const data = await res.json() as any;
+      expect(res.status, JSON.stringify(data)).toBe(201);
+      expect(data.email).toBe('novo@example.com');
       expect(data.role).toBe('org_admin');
+
+      const gravado = await env.DB.prepare("SELECT password_hash FROM users WHERE email='novo@example.com'").first<any>();
+      expect(gravado.password_hash).not.toBe('password123');
+      expect(gravado.password_hash).toContain(':'); // salt:hash do PBKDF2
     });
 
-    it('should allow org_admin to create users for their own project and restrict roles', async () => {
-      const request = new Request('http://localhost/api/v1/users', {
+    it('org_admin cria usuário sempre no próprio projeto, mesmo pedindo outro', async () => {
+      const res = await req('/api/v1/users', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer org-admin-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'orguser@example.com', password: 'password123', name: 'Org User', role: 'org_user', client_project_id: 'diff-project-123' })
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'dele@example.com', password: 'password123', name: 'Dele', role: 'org_user', client_project_id: OUTRO }),
       });
+      const data = await res.json() as any;
+      expect(res.status, JSON.stringify(data)).toBe(201);
+      expect(data.client_project_id).toBe(PROJ);
 
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: 'my-project-123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithSession);
-      expect(response.status).toBe(201);
-      const data = await response.json() as any;
-      expect(data.client_project_id).toBe('my-project-123'); // project_id coerced
-      expect(data.role).toBe('org_user');
+      // O que vale é o que ficou no banco, não o que a resposta disse.
+      const gravado = await env.DB.prepare("SELECT client_project_id FROM users WHERE email='dele@example.com'").first<any>();
+      expect(gravado.client_project_id).toBe(PROJ);
     });
 
-    it('should prevent org_admin from creating platform_admin users', async () => {
-      const request = new Request('http://localhost/api/v1/users', {
+    it('org_admin não cria platform_admin', async () => {
+      const res = await req('/api/v1/users', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer org-admin-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'badadmin@example.com', password: 'password123', name: 'Bad Admin', role: 'platform_admin' })
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'mau@example.com', password: 'password123', name: 'Mau', role: 'platform_admin' }),
       });
-
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: 'my-project-123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithSession);
-      expect(response.status).toBe(403);
+      expect(res.status).toBe(403);
+      const criado = await env.DB.prepare("SELECT id FROM users WHERE email='mau@example.com'").first<any>();
+      expect(criado).toBeNull();
     });
 
-    it('should enforce read-only role (org_user) to block write but allow checklist-progress and evidence upload', async () => {
-      const blockRequest = new Request('http://localhost/api/v1/projects/123/risks', {
+    it('org_user é bloqueado em escrita geral mas pode marcar checklist', async () => {
+      const bloqueado = await req(`/api/v1/projects/${PROJ}/risks`, {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer user-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Risk' })
+        headers: { ...orgUser, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset: 'A', threat: 'T', impact: 3, probability: 3 }),
       });
-      
-      const allowChecklistRequest = new Request('http://localhost/api/v1/projects/123/checklist-progress', {
+      expect(bloqueado.status).toBe(403);
+
+      const permitido = await req(`/api/v1/projects/${PROJ}/checklist-progress`, {
         method: 'PUT',
-        headers: { 'Authorization': 'Bearer user-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: 'p1_1', is_checked: 1 })
+        headers: { ...orgUser, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: 'p1_1', phase_number: 1, is_checked: 1 }),
       });
-
-      const envWithSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 3, role: 'org_user', client_project_id: '123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        }
-      };
-
-      // @ts-ignore
-      const blockResponse = await worker.fetch(blockRequest, envWithSession);
-      expect(blockResponse.status).toBe(403);
-
-      // @ts-ignore
-      const allowResponse = await worker.fetch(allowChecklistRequest, envWithSession);
-      expect(allowResponse.status).not.toBe(403);
+      expect(permitido.status).not.toBe(403);
     });
 
-    it('should handle project assets CRUD scoping correctly', async () => {
-      // 1. Create asset under own project
-      const createRequest = new Request('http://localhost/api/v1/projects/123/assets', {
+    it('assets: cria no próprio projeto, lista, e é bloqueado no alheio', async () => {
+      const criar = await req(`/api/v1/projects/${PROJ}/assets`, {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer client-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Database RDS', category: 'Software', classification: 'Confidential', owner: 'DevOps', location: 'AWS', status: 'Active' })
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Database RDS', type: 'Software', category: 'Software', criticality: 'High', owner: 'DevOps', location: 'AWS' }),
       });
+      expect(criar.status, await criar.clone().text()).toBe(201);
 
-      // 2. Access assets list
-      const getRequest = new Request('http://localhost/api/v1/projects/123/assets', {
-        method: 'GET',
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
+      const listar = await req(`/api/v1/projects/${PROJ}/assets`, { headers: orgAdmin });
+      expect(listar.status).toBe(200);
+      const lista = await listar.json() as any;
+      const itens = Array.isArray(lista) ? lista : lista.assets || lista.results;
+      expect(itens.some((a: any) => a.name === 'Database RDS')).toBe(true);
 
-      // 3. Block access to another project assets list
-      const getOtherRequest = new Request('http://localhost/api/v1/projects/999/assets', {
-        method: 'GET',
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-
-      const dbMock = {
-        ...mockEnv.DB,
-        prepare: vi.fn().mockReturnThis(),
-        bind: vi.fn().mockReturnThis(),
-        all: vi.fn().mockResolvedValue({ results: [{ id: 'a1', name: 'Database RDS' }] }),
-        run: vi.fn().mockResolvedValue({ success: true })
-      };
-
-      const env = {
-        ...mockEnv,
-        DB: dbMock,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'org_admin', client_project_id: '123' }))
-        }
-      };
-
-      // @ts-ignore
-      const createRes = await worker.fetch(createRequest, env);
-      expect(createRes.status).toBe(201);
-
-      // @ts-ignore
-      const getRes = await worker.fetch(getRequest, env);
-      expect(getRes.status).toBe(200);
-
-      // @ts-ignore
-      const getOtherRes = await worker.fetch(getOtherRequest, env);
-      expect(getOtherRes.status).toBe(403);
+      expect((await req(`/api/v1/projects/${OUTRO}/assets`, { headers: orgAdmin })).status).toBe(403);
     });
 
-    it('should block client from a project-scoped route of another project (tenant middleware)', async () => {
-      // /projects/:id/risks previously had no access check — now guarded by projectAccessMiddleware.
-      const clientEnv = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue({ results: [{ id: 'r1', project_id: '999' }] }),
-        },
-      };
-
-      const ownReq = new Request('http://localhost/api/v1/projects/123/risks', {
-        headers: { 'Authorization': 'Bearer client-token' },
-      });
-      const otherReq = new Request('http://localhost/api/v1/projects/999/risks', {
-        headers: { 'Authorization': 'Bearer client-token' },
-      });
-
-      // @ts-ignore
-      expect((await worker.fetch(ownReq, clientEnv)).status).toBe(200);
-      // @ts-ignore
-      expect((await worker.fetch(otherReq, clientEnv)).status).toBe(403);
+    it('client acessa riscos do próprio projeto e é bloqueado no alheio', async () => {
+      expect((await req(`/api/v1/projects/${PROJ}/risks`, { headers: client })).status).toBe(200);
+      expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: client })).status).toBe(403);
     });
 
-    it('should allow staff (consultor) to access any project scope', async () => {
-      const staffEnv = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'consultor' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-        },
-      };
-      const req = new Request('http://localhost/api/v1/projects/any-project/risks', {
-        headers: { 'Authorization': 'Bearer staff-token' },
-      });
-      // @ts-ignore
-      expect((await worker.fetch(req, staffEnv)).status).toBe(200);
+    it('papel de staff alcança qualquer projeto', async () => {
+      expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: consultor })).status).toBe(200);
     });
 
-    it('should block a read-only role from deleting or approving evidence but allow upload', async () => {
-      const clientEnv = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'org_user', client_project_id: '123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'ev1', project_id: '123', r2_key: 'k' }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        },
-      };
+    it('papel read-only não apaga nem aprova evidência, mas faz upload', async () => {
+      expect((await req('/api/v1/evidence/ev-proprio', { method: 'DELETE', headers: orgUser })).status).toBe(403);
 
-      const del = new Request('http://localhost/api/v1/evidence/ev1', {
-        method: 'DELETE', headers: { 'Authorization': 'Bearer t' },
+      const aprovar = await req('/api/v1/evidence/ev-proprio/approve', {
+        method: 'POST', headers: { ...orgUser, 'Content-Type': 'application/json' }, body: '{}',
       });
-      const approve = new Request('http://localhost/api/v1/evidence/ev1/approve', {
-        method: 'POST', headers: { 'Authorization': 'Bearer t', 'Content-Type': 'application/json' }, body: '{}',
-      });
+      expect(aprovar.status).toBe(403);
+
       const fd = new FormData();
       fd.append('file', new File(['evidencia'], 'evidence.txt', { type: 'text/plain' }));
-      const upload = new Request('http://localhost/api/v1/projects/123/evidence/upload', {
-        method: 'POST', headers: { 'Authorization': 'Bearer t' }, body: fd,
+      const upload = await req(`/api/v1/projects/${PROJ}/evidence/upload`, { method: 'POST', headers: orgUser, body: fd });
+      expect(upload.status, await upload.clone().text()).toBe(201);
+
+      // A evidência não pode ter sido apagada pelo DELETE recusado.
+      const ainda = await env.DB.prepare("SELECT id FROM evidence WHERE id='ev-proprio'").first<any>();
+      expect(ainda).not.toBeNull();
+    });
+
+    it('chave de API válida autentica; inválida responde 401', async () => {
+      const ok = await req(`/api/v1/projects/${PROJ}/risks`, { headers: { 'X-API-Key': CHAVE_LEITURA } });
+      expect(ok.status).toBe(200);
+
+      const ruim = await req(`/api/v1/projects/${PROJ}/risks`, { headers: { 'X-API-Key': 'chave-inexistente' } });
+      expect(ruim.status).toBe(401);
+    });
+
+    it('chave de API não alcança projeto de outro cliente', async () => {
+      expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: { 'X-API-Key': CHAVE_LEITURA } })).status).toBe(403);
+    });
+
+    it('chave read não escreve; chave write escreve', async () => {
+      const semPermissao = await req(`/api/v1/projects/${PROJ}/evidence/upload`, {
+        method: 'POST', headers: { 'X-API-Key': CHAVE_LEITURA },
       });
+      expect(semPermissao.status).toBe(403);
 
-      // @ts-ignore
-      expect((await worker.fetch(del, clientEnv)).status).toBe(403);
-      // @ts-ignore
-      expect((await worker.fetch(approve, clientEnv)).status).toBe(403);
-      // upload com arquivo válido: passa o RBAC guard e persiste (201)
-      // @ts-ignore
-      expect((await worker.fetch(upload, clientEnv)).status).toBe(201);
-    });
-
-    it('should authenticate a valid API key scoped to its project and 401 an invalid one', async () => {
-      const validEnv = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        },
-      };
-      const ok = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'valid-key' } });
-      // @ts-ignore
-      expect((await worker.fetch(ok, validEnv)).status).toBe(200);
-
-      const invalidEnv = {
-        ...mockEnv,
-        DB: { ...mockEnv.DB, prepare: vi.fn().mockReturnThis(), bind: vi.fn().mockReturnThis(), first: vi.fn().mockResolvedValue(null) },
-      };
-      const bad = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'bad-key' } });
-      // @ts-ignore
-      expect((await worker.fetch(bad, invalidEnv)).status).toBe(401);
-    });
-
-    it('should block an API key from another project (tenant scope)', async () => {
-      const env = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        },
-      };
-      const other = new Request('http://localhost/api/v1/projects/999/risks', { headers: { 'X-API-Key': 'valid-key' } });
-      // @ts-ignore
-      expect((await worker.fetch(other, env)).status).toBe(403);
-    });
-
-    it('should block a read-only API key from writes but allow a write-capable key', async () => {
-      const readEnv = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        },
-      };
-      const roWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'ro' } });
-      // @ts-ignore
-      expect((await worker.fetch(roWrite, readEnv)).status).toBe(403);
-
-      const writeEnv = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'k2', project_id: '123', status: 'Active', expires_at: null, permissions: 'write' }),
-          run: vi.fn().mockResolvedValue({ success: true }),
-        },
-      };
       const fd = new FormData();
       fd.append('file', new File(['x'], 'e.txt', { type: 'text/plain' }));
-      const rwWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'rw' }, body: fd });
-      // @ts-ignore
-      expect((await worker.fetch(rwWrite, writeEnv)).status).toBe(201);
+      const comPermissao = await req(`/api/v1/projects/${PROJ}/evidence/upload`, {
+        method: 'POST', headers: { 'X-API-Key': CHAVE_ESCRITA }, body: fd,
+      });
+      expect(comPermissao.status, await comPermissao.clone().text()).toBe(201);
     });
 
-    it('should reach public token routes without a session (auditor portal + assessment)', async () => {
-      const auditorEnv = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ project_id: '123' }),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-        },
-      };
-      // No Authorization header — the token in the path is the credential.
-      const auditor = new Request('http://localhost/api/v1/auditor/tok123/notes');
-      // @ts-ignore
-      expect((await worker.fetch(auditor, auditorEnv)).status).toBe(200);
-
-      const assessEnv = {
-        ...mockEnv,
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'a1', client_name: 'X', status: 'In Progress' }),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-        },
-      };
-      const assess = new Request('http://localhost/api/v1/assessments/public/tok456');
-      // @ts-ignore
-      expect((await worker.fetch(assess, assessEnv)).status).toBe(200);
+    it('chave revogada não autentica', async () => {
+      await env.DB.prepare("UPDATE api_keys SET status='Revoked' WHERE id='key-ro'").run();
+      expect((await req(`/api/v1/projects/${PROJ}/risks`, { headers: { 'X-API-Key': CHAVE_LEITURA } })).status).toBe(401);
     });
 
-    it('should still require a session for internal auditor-notes routes', async () => {
-      const req = new Request('http://localhost/api/v1/projects/123/auditor-notes');
-      // @ts-ignore
-      expect((await worker.fetch(req, mockEnv)).status).toBe(401);
+    it('rotas públicas por token dispensam sessão', async () => {
+      // O token no caminho é a credencial; não há header de autenticação.
+      expect((await req('/api/v1/auditor/tok123/notes')).status).toBe(200);
+      expect((await req('/api/v1/assessments/public/tok456')).status).toBe(200);
     });
 
-    it('should block cross-project access on every route mounting style', async () => {
-      // As rotas com escopo de projeto são montadas de 3 formas diferentes e todas
-      // resolvem para /api/v1/projects/<id>/... — este teste garante que o
-      // projectAccessMiddleware cobre as três, não só a que já era testada.
+    it('auditor-notes interno continua exigindo sessão', async () => {
+      expect((await req(`/api/v1/projects/${PROJ}/auditor-notes`)).status).toBe(401);
+    });
+
+    it('bloqueia acesso cross-project nos três estilos de montagem de rota', async () => {
+      // As rotas com escopo de projeto são montadas de 3 formas e todas resolvem
+      // para /api/v1/projects/<id>/... — o middleware precisa cobrir as três.
       const paths = [
-        '/api/v1/projects/999/evidence',              // A: sub-app em /projects/:projectId
-        '/api/v1/projects/999/stakeholders',          // B: montado em /api/v1
-        '/api/v1/projects/999/webhooks',              // C: montado em '' com path completo
-        '/api/v1/projects/999/risks',                 // C
-        '/api/v1/projects/999/export/audit-log',      // C (export CSV)
+        `/api/v1/projects/${OUTRO}/evidence`,           // A: sub-app em /projects/:projectId
+        `/api/v1/projects/${OUTRO}/stakeholders`,       // B: montado em /api/v1
+        `/api/v1/projects/${OUTRO}/webhooks`,           // C: montado em '' com path completo
+        `/api/v1/projects/${OUTRO}/risks`,              // C
+        `/api/v1/projects/${OUTRO}/export/audit-log`,   // C (export CSV)
       ];
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-          first: vi.fn().mockResolvedValue(null),
-        },
-      };
       for (const p of paths) {
-        const req = new Request(`http://localhost${p}`, { headers: { 'Authorization': 'Bearer t' } });
-        // @ts-ignore
-        const res = await worker.fetch(req, env);
+        const res = await req(p, { headers: client });
         expect(res.status, `${p} deveria negar acesso cross-project`).toBe(403);
       }
     });
 
-    it('should map legacy roles to new roles for compatibility', async () => {
-      const request = new Request('http://localhost/api/v1/users', {
-        headers: { 'Authorization': 'Bearer old-admin-token' }
-      });
-      const envWithLegacySession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'admin' })), // legacy admin
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          all: vi.fn().mockResolvedValue({ results: [] }),
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithLegacySession);
-      expect(response.status).toBe(200);
+    it('papel legado admin é mapeado para platform_admin', async () => {
+      expect((await req('/api/v1/users', { headers: legacyAdmin })).status).toBe(200);
     });
   });
 
-  describe('RBAC and Scoping checks', () => {
-    it('should restrict project listing for client role to their bound project', async () => {
-      const request = new Request('http://localhost/api/v1/projects', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-      
-      const firstMock = vi.fn().mockResolvedValue({ id: '123', client_name: 'Client Proj' });
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: firstMock
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json();
+  describe('Escopo de leitura por papel', () => {
+    it('client só enxerga o próprio projeto na listagem', async () => {
+      const res = await req('/api/v1/projects', { headers: client });
+      expect(res.status).toBe(200);
+      const data = await res.json() as any[];
       expect(data).toHaveLength(1);
-      expect(data[0].id).toBe('123');
-      expect(firstMock).toHaveBeenCalled();
+      expect(data[0].id).toBe(PROJ);
     });
 
-    it('should restrict controls listing for client role to their bound project', async () => {
-      const request = new Request('http://localhost/api/v1/controls', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-
-      const allMock = vi.fn().mockResolvedValue({ results: [{ id: 'ctrl_1', project_id: '123' }] });
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          all: allMock
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data).toHaveLength(1);
-      expect(data[0].project_id).toBe('123');
+    it('client só enxerga os controles do próprio projeto', async () => {
+      const res = await req('/api/v1/controls', { headers: client });
+      expect(res.status).toBe(200);
+      const data = await res.json() as any[];
+      expect(data.length).toBeGreaterThan(0);
+      expect(data.every(c => c.project_id === PROJ)).toBe(true);
     });
 
-    it('should block client access to other project evidence detail', async () => {
-      const request = new Request('http://localhost/api/v1/evidence/evidence_other/detail', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'evidence_other', project_id: '456' })
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(403);
+    it('client não vê detalhe de evidência de outro projeto', async () => {
+      expect((await req('/api/v1/evidence/ev-alheio/detail', { headers: client })).status).toBe(403);
     });
 
-    it('should block client access to other project control maturity update', async () => {
-      const request = new Request('http://localhost/api/v1/controls/ctrl_other/maturity', {
+    it('client não atualiza maturidade de controle de outro projeto', async () => {
+      const res = await req('/api/v1/controls/ctrl-alheio/maturity', {
         method: 'PUT',
-        headers: { 'Authorization': 'Bearer client-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maturity: 3 })
+        headers: { ...client, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maturity: 3 }),
       });
+      expect(res.status).toBe(403);
 
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnThis(),
-          bind: vi.fn().mockReturnThis(),
-          first: vi.fn().mockResolvedValue({ id: 'ctrl_other', project_id: '456' })
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(403);
+      const ctrl = await env.DB.prepare("SELECT maturity FROM compliance_controls WHERE id='ctrl-alheio'").first<any>();
+      expect(ctrl.maturity).toBe(0);
     });
 
-    it('should block client access to global platform-wide dashboard', async () => {
-      const request = new Request('http://localhost/api/v1/dashboard', {
-        headers: { 'Authorization': 'Bearer client-token' }
-      });
-
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 2, role: 'client', client_project_id: '123' }))
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(403);
+    it('client não acessa o dashboard global da plataforma', async () => {
+      expect((await req('/api/v1/dashboard', { headers: client })).status).toBe(403);
     });
   });
 
-  describe('Password Recovery flow', () => {
-    it('should generate a recovery token when email exists', async () => {
-      const request = new Request('http://localhost/api/v1/auth/forgot-password', {
+  describe('Recuperação de senha', () => {
+    it('gera token de recuperação e o guarda no KV', async () => {
+      const res = await req('/api/v1/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'test@example.com' })
-      });
+        body: JSON.stringify({ email: 'test@example.com' }),
+      }, testEnv({ ENVIRONMENT: 'development' }));
 
-      const dbMock = {
-        ...mockEnv.DB,
-        first: vi.fn().mockResolvedValue({ id: 'u_test', email: 'test@example.com' })
-      };
+      const data = await res.json() as any;
+      expect(res.status).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.reset_token).toBeTruthy();
 
-      const putSpy = vi.fn();
-      const sessionsMock = {
-        ...mockEnv.SESSIONS,
-        put: putSpy
-      };
-
-      const env = {
-        ...mockEnv,
-        DB: dbMock,
-        SESSIONS: sessionsMock,
-        ENVIRONMENT: 'development'
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
-      expect(data).toHaveProperty('ok', true);
-      expect(data).toHaveProperty('reset_token');
-      expect(putSpy).toHaveBeenCalled();
+      // O token existe no KV de verdade, sob a chave que o reset espera.
+      const guardado = await env.SESSIONS.get(`reset_token:${data.reset_token}`);
+      expect(guardado).not.toBeNull();
+      expect(JSON.parse(guardado!).email).toBe('test@example.com');
     });
 
-    it('should reset password with valid token', async () => {
-      const request = new Request('http://localhost/api/v1/auth/reset-password', {
+    it('redefine a senha com token válido, invalida o token e grava o novo hash', async () => {
+      // Fluxo inteiro no mesmo teste: o storage é isolado por teste, então um
+      // token criado noutro `it` não existiria aqui.
+      const pedido = await req('/api/v1/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: 'recovery-token-123', newPassword: 'newPassword123' })
+        body: JSON.stringify({ email: 'test@example.com' }),
+      }, testEnv({ ENVIRONMENT: 'development' }));
+      const { reset_token } = await pedido.json() as any;
+
+      const antes = await env.DB.prepare("SELECT password_hash FROM users WHERE email='test@example.com'").first<any>();
+
+      const res = await req('/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: reset_token, newPassword: 'novaSenha123' }),
       });
+      expect(res.status).toBe(200);
+      expect((await res.json() as any).ok).toBe(true);
 
-      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ email: 'test@example.com' }));
-      const deleteSpy = vi.fn();
-      const runSpy = vi.fn().mockResolvedValue({ success: true });
+      const depois = await env.DB.prepare("SELECT password_hash FROM users WHERE email='test@example.com'").first<any>();
+      expect(depois.password_hash).not.toBe(antes.password_hash);
 
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: getSpy,
-          delete: deleteSpy
-        },
-        DB: {
-          ...mockEnv.DB,
-          run: runSpy
-        }
-      };
+      // Token de uso único: precisa sumir do KV.
+      expect(await env.SESSIONS.get(`reset_token:${reset_token}`)).toBeNull();
+    });
 
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
-      expect(data).toHaveProperty('ok', true);
-      expect(getSpy).toHaveBeenCalledWith('reset_token:recovery-token-123');
-      expect(runSpy).toHaveBeenCalled();
-      expect(deleteSpy).toHaveBeenCalledWith('reset_token:recovery-token-123');
+    it('token inválido não redefine senha', async () => {
+      const res = await req('/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'nao-existe', newPassword: 'qualquer123' }),
+      });
+      expect(res.status).not.toBe(200);
     });
   });
 
-  describe('Policy Templates', () => {
-    it('should return all templates from DB', async () => {
-      const request = new Request('http://localhost/api/v1/policy-templates', {
-        headers: { 'Authorization': 'Bearer admin-token' }
-      });
-      
-      const allSpy = vi.fn().mockResolvedValue({
-        results: [
-          { id: 'isp', title: 'Information Security Policy (ISP)', iso_ref: '5.1' }
-        ]
-      });
-      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ id: 'admin1', role: 'platform_admin' }));
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: getSpy
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnValue({ all: allSpy })
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
+  describe('Templates de política', () => {
+    it('lista os templates que estão no banco', async () => {
+      const res = await req('/api/v1/policy-templates', { headers: admin });
+      const data = await res.json() as any;
+      expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
-      expect(data.templates).toBeDefined();
-      expect(data.templates.length).toBe(1);
-      expect(data.templates[0].id).toBe('isp');
+      expect(data.templates.some((t: any) => t.id === 'isp')).toBe(true);
     });
 
-    it('should return marketplace templates enriched from DB', async () => {
-      const request = new Request('http://localhost/api/v1/marketplace/templates', {
-        headers: { 'Authorization': 'Bearer admin-token' }
-      });
-      
-      const allSpy = vi.fn().mockResolvedValue({
-        results: [
-          { id: 'isp', title: 'Information Security Policy (ISP)', iso_ref: '5.1' }
-        ]
-      });
-      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({ id: 'admin1', role: 'platform_admin' }));
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: getSpy
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnValue({ all: allSpy })
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
+    it('marketplace enriquece os templates do banco', async () => {
+      const res = await req('/api/v1/marketplace/templates', { headers: admin });
+      const data = await res.json() as any;
+      expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
-      expect(data.templates).toBeDefined();
       expect(data.templates[0]).toHaveProperty('popularity');
     });
   });
 
-  describe('Public Policy Portal OTP Flow', () => {
-    it('should generate OTP and store in KV SESSIONS', async () => {
-      const request = new Request('http://localhost/api/v1/public/policies/request-otp', {
+  describe('Portal público de políticas (OTP)', () => {
+    it('gera OTP e guarda no KV com expiração', async () => {
+      const res = await req('/api/v1/public/policies/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: 'proj1', name: 'Maria Silva', email: 'maria@empresa.com' })
+        body: JSON.stringify({ project_id: PROJ, name: 'Maria Silva', email: 'maria@empresa.com' }),
       });
-
-      const putSpy = vi.fn().mockResolvedValue(undefined);
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          put: putSpy
-        },
-        DB: {
-          ...mockEnv.DB,
-          prepare: vi.fn().mockReturnValue({
-            bind: vi.fn().mockReturnValue({
-              first: vi.fn().mockResolvedValue({ id: 'proj1', client_name: 'Empresa Teste' }),
-              run: vi.fn().mockResolvedValue({ success: true })
-            })
-          })
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
+      const data = await res.json() as any;
+      expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
-      expect(data.demo_otp).toBeDefined();
-      expect(putSpy).toHaveBeenCalledWith(
-        'otp_proj1_maria@empresa.com',
-        expect.stringContaining(data.demo_otp),
-        expect.objectContaining({ expirationTtl: 900 })
-      );
+      expect(data.demo_otp).toBeTruthy();
+
+      const guardado = await env.SESSIONS.get(`otp_${PROJ}_maria@empresa.com`);
+      expect(guardado).not.toBeNull();
+      expect(JSON.parse(guardado!).otp).toBe(data.demo_otp);
     });
 
-    it('should verify OTP and grant public policy session token', async () => {
-      const request = new Request('http://localhost/api/v1/public/policies/verify-otp', {
+    it('verifica o OTP, devolve token e consome o código', async () => {
+      const pedido = await req('/api/v1/public/policies/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: 'proj1', email: 'maria@empresa.com', otp: '123456' })
+        body: JSON.stringify({ project_id: PROJ, name: 'Maria Silva', email: 'maria@empresa.com' }),
+      });
+      const { demo_otp } = await pedido.json() as any;
+
+      const res = await req('/api/v1/public/policies/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: PROJ, email: 'maria@empresa.com', otp: demo_otp }),
+      });
+      const data = await res.json() as any;
+      expect(res.status).toBe(200);
+      expect(data.token).toBeTruthy();
+
+      // OTP é de uso único.
+      expect(await env.SESSIONS.get(`otp_${PROJ}_maria@empresa.com`)).toBeNull();
+    });
+
+    it('OTP errado não concede token', async () => {
+      await req('/api/v1/public/policies/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: PROJ, name: 'Maria Silva', email: 'maria@empresa.com' }),
       });
 
-      const getSpy = vi.fn().mockResolvedValue(JSON.stringify({
-        otp: '123456',
-        name: 'Maria Silva',
-        email: 'maria@empresa.com',
-        project_id: 'proj1'
-      }));
-      const putSpy = vi.fn().mockResolvedValue(undefined);
-      const deleteSpy = vi.fn().mockResolvedValue(undefined);
-
-      const env = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: getSpy,
-          put: putSpy,
-          delete: deleteSpy
-        }
-      };
-
-      // @ts-ignore
-      const response = await worker.fetch(request, env);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
-      expect(data.ok).toBe(true);
-      expect(data.token).toBeDefined();
-      expect(deleteSpy).toHaveBeenCalledWith('otp_proj1_maria@empresa.com');
+      const res = await req('/api/v1/public/policies/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: PROJ, email: 'maria@empresa.com', otp: '000000' }),
+      });
+      expect(res.status).not.toBe(200);
     });
   });
 });
