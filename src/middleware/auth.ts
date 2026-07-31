@@ -7,7 +7,7 @@ import { sha256Hex } from '../helpers';
  * usuário (escopado ao projeto da chave, papel read-only `client`) ou uma Response
  * de erro. A chave só é aceita se existir, estiver Active e não expirada.
  */
-async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variables['user']; writeCapable: boolean } | Response> {
+async function resolveApiKeyUser(c: any, apiKey: string): Promise<Variables['user'] | Response> {
   const keyHash = await sha256Hex(apiKey);
   const row = await c.env.DB.prepare(
     'SELECT id, project_id, permissions, status, expires_at FROM api_keys WHERE key_hash = ?'
@@ -27,17 +27,13 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
   // last_used_at é best-effort: não deve derrubar a request se falhar.
   await c.env.DB.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").bind(row.id).run().catch(() => {});
 
-  // API keys entram como papel `client` escopado ao projeto, herdando o isolamento
-  // de tenant. `writeCapable` é devolvido porque a autorização de escrita de uma
-  // chave é o campo `permissions` acima — não o allow-list de humano read-only.
+  // API keys entram como papel `client` escopado ao projeto: herdam o mesmo
+  // isolamento de tenant e o write-guard read-only já aplicados abaixo.
   return {
-    user: {
-      id: `apikey:${row.id}`,
-      email: `apikey:${row.id}`,
-      role: 'client',
-      client_project_id: row.project_id,
-    },
-    writeCapable,
+    id: `apikey:${row.id}`,
+    email: `apikey:${row.id}`,
+    role: 'client',
+    client_project_id: row.project_id,
   };
 }
 
@@ -54,14 +50,12 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   }
 
   let user: Variables['user'];
-  let apiKeyWriteCapable = false;
 
   const apiKey = c.req.header('X-API-Key');
   if (apiKey) {
     const resolved = await resolveApiKeyUser(c, apiKey);
     if (resolved instanceof Response) return resolved;
-    user = resolved.user;
-    apiKeyWriteCapable = resolved.writeCapable;
+    user = resolved;
   } else {
     const sessionId =
       c.req.header('X-Session-ID') ||
@@ -98,11 +92,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   // Global RBAC enforcement for org_user / client roles (aplica a sessões E API keys).
   const method = c.req.method.toUpperCase();
 
-  // Chave de API com permissão de escrita já foi autorizada por `permissions` acima;
-  // o allow-list abaixo existe para papéis HUMANOS read-only. Sem esta exceção, uma
-  // integração legítima (o mcp-server-niso) tomava 403 mesmo com chave 'write'.
-  // O isolamento de tenant continua valendo — projectAccessMiddleware roda depois.
-  if (!apiKeyWriteCapable && (user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
+  if ((user.role === 'org_user' || user.role === 'client') && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
     // Allow-list preciso (método + rota) das escritas permitidas a papéis
     // read-only. Matching por sufixo/regex — nunca substring — para que
     // DELETE de evidência e ações de aprovação/assinatura/avaliação fiquem
