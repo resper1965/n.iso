@@ -43,9 +43,16 @@ describe('Cabeçalhos de segurança', () => {
 
   it('permite exatamente as origens externas que o frontend usa', async () => {
     const csp = (await headers()).get('Content-Security-Policy') || '';
-    expect(csp).toContain('https://cdn.jsdelivr.net'); // marked.js
     expect(csp).toContain('https://fonts.googleapis.com');
     expect(csp).toContain('https://fonts.gstatic.com');
+  });
+
+  it('não permite script de CDN nenhuma — marked entra pelo bundle', async () => {
+    const csp = (await headers()).get('Content-Security-Policy') || '';
+    const scriptSrc = csp.split(';').find(d => d.trim().startsWith('script-src')) || '';
+    expect(scriptSrc).not.toContain('jsdelivr');
+    expect(scriptSrc).not.toContain('unpkg');
+    expect(scriptSrc).not.toContain('cdn');
   });
 
   it('aplica os cabeçalhos também em rota autenticada que devolve 401', async () => {

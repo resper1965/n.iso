@@ -74,7 +74,7 @@ app.use('*', secureHeaders({
     // aplicacao inteira para. Com ela, o CSP NAO protege contra XSS injetado —
     // as diretivas abaixo e que entregam valor hoje. Caminho de upgrade:
     // migrar os onclick para addEventListener e trocar por nonce.
-    scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+    scriptSrc: ["'self'", "'unsafe-inline'"],
     styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
     imgSrc: ["'self'", 'data:', 'blob:'],

@@ -7,7 +7,12 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- marked v15.0.12, servido pelo nosso domínio (frontend/public/marked.min.js).
+         Antes vinha de cdn.jsdelivr.net/npm/marked/ — URL sem versão e sem SRI, o que
+         significava executar, com a sessão do usuário, o que a CDN servisse naquele dia.
+         Fica como <script> estático e não como import: o arquivo é UMD e, passando pelo
+         bundler, o export não chega em window.marked (verificado no navegador). -->
+    <script src="/marked.min.js"></script>
 
 </head>
 <body>
