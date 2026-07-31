@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Sem filtro de branch: `branches: [main]` casa com a BASE do PR, então PR
+  # empilhado sobre outro branch não rodava job nenhum — e "0 checks" se parece
+  # com "ainda não começou", não com "não vai rodar". Aconteceu no PR #14.
   pull_request:
-    branches: [main]
 
 # O CI só lê o repositório. Sem isso, o GITHUB_TOKEN vem com escrita por padrão.
 permissions:
