@@ -515,6 +515,39 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect((await worker.fetch(req, mockEnv)).status).toBe(401);
     });
 
+    it('should block cross-project access on every route mounting style', async () => {
+      // As rotas com escopo de projeto são montadas de 3 formas diferentes e todas
+      // resolvem para /api/v1/projects/<id>/... — este teste garante que o
+      // projectAccessMiddleware cobre as três, não só a que já era testada.
+      const paths = [
+        '/api/v1/projects/999/evidence',              // A: sub-app em /projects/:projectId
+        '/api/v1/projects/999/stakeholders',          // B: montado em /api/v1
+        '/api/v1/projects/999/webhooks',              // C: montado em '' com path completo
+        '/api/v1/projects/999/risks',                 // C
+        '/api/v1/projects/999/export/audit-log',      // C (export CSV)
+      ];
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+          first: vi.fn().mockResolvedValue(null),
+        },
+      };
+      for (const p of paths) {
+        const req = new Request(`http://localhost${p}`, { headers: { 'Authorization': 'Bearer t' } });
+        // @ts-ignore
+        const res = await worker.fetch(req, env);
+        expect(res.status, `${p} deveria negar acesso cross-project`).toBe(403);
+      }
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

@@ -455,7 +455,7 @@ const ISO_GUIDELINES = {
             if (window.refreshDoDDrawer) window.refreshDoDDrawer();
         } catch (e) {
             console.error("[nISO Debug] Erro ao carregar fases do projeto:", e);
-            c.innerHTML = `<div class="error">Erro ao carregar fases do projeto: ${e.message}</div>`;
+            c.innerHTML = `<div class="error">Erro ao carregar fases do projeto: ${escapeHTML(e.message)}</div>`;
         }
     }
 

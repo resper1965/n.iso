@@ -135,7 +135,7 @@ import { navigate } from '../router.js';
             `;
             
         } catch (e) {
-            c.innerHTML = `<div class="error">Erro ao carregar monitoramento do projeto: ${e.message}</div>`;
+            c.innerHTML = `<div class="error">Erro ao carregar monitoramento do projeto: ${escapeHTML(e.message)}</div>`;
         }
     }
 
@@ -482,7 +482,7 @@ import { navigate } from '../router.js';
                 </div>
             `;
         } catch(e) {
-            c.innerHTML = `<div class="error">Erro ao carregar governança: ${e.message}</div>`;
+            c.innerHTML = `<div class="error">Erro ao carregar governança: ${escapeHTML(e.message)}</div>`;
         }
     }
 

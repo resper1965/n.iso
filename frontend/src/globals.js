@@ -144,6 +144,9 @@ window.doLogin = async function doLogin() {
     }
 
 window.doLogout = function doLogout() {
+        // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
+        // chamava doLogout de novo.
+        clearInterval(window._notifPoll);
         S.token = null; S.user = null; S.activeProject = null;
         localStorage.removeItem('niso_token');
         localStorage.removeItem('niso_user');
@@ -647,7 +650,7 @@ window.initApp = async function initApp() {
             navigate('dashboard');
         }
         // ponytail: poll notifications every 60s
-        setInterval(loadNotifications, 60000);
+        window._notifPoll = setInterval(loadNotifications, 60000);
         // Close dropdowns on outside click
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.dropdown-wrap')) {

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, escapeHtml } from '../helpers';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -140,35 +140,35 @@ projectRopaApp.get('/report', async (c) => {
 
     let rowsHtml = '';
     for (const r of (records || [])) {
-      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${r.ciso_approved_by} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
-      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${r.ceo_approved_by} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
+      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
+      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
       
       rowsHtml += `
         <div class="ropa-card">
           <div class="ropa-card-header">
-            <h3>${r.processing_purpose}</h3>
-            <span class="ropa-status status-${r.status}">${r.status}</span>
+            <h3>${escapeHtml(r.processing_purpose)}</h3>
+            <span class="ropa-status status-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
           </div>
           <div class="ropa-card-body">
             <div class="ropa-field">
               <div class="ropa-label">Categorias de Dados</div>
-              <div class="ropa-value">${r.data_categories || '-'}</div>
+              <div class="ropa-value">${escapeHtml(r.data_categories || '-')}</div>
             </div>
             <div class="ropa-field">
               <div class="ropa-label">Titulares</div>
-              <div class="ropa-value">${r.data_subjects || '-'}</div>
+              <div class="ropa-value">${escapeHtml(r.data_subjects || '-')}</div>
             </div>
             <div class="ropa-field">
               <div class="ropa-label">Base Legal</div>
-              <div class="ropa-value">${r.legal_basis}</div>
+              <div class="ropa-value">${escapeHtml(r.legal_basis)}</div>
             </div>
             <div class="ropa-field">
               <div class="ropa-label">Tempo de Retenção</div>
-              <div class="ropa-value">${r.retention_period || '-'}</div>
+              <div class="ropa-value">${escapeHtml(r.retention_period || '-')}</div>
             </div>
             <div class="ropa-field full-width">
               <div class="ropa-label">Destinatários / Compartilhamento</div>
-              <div class="ropa-value">${r.recipients || '-'}</div>
+              <div class="ropa-value">${escapeHtml(r.recipients || '-')}</div>
             </div>
           </div>
           <div class="ropa-card-footer">
