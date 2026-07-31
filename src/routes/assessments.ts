@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification, escapeHtml } from '../helpers';
 import { calculatePricing } from '../services/pricing';
@@ -110,23 +111,6 @@ function buildPricingAnswers(ansMap: Record<string, any>) {
     scope_type: ansMap['scope_type'] || '',
     headcount: ansMap['headcount'] || ansMap['tech_people'] || '',
   };
-}
-
-async function seedPhasesLocal(db: D1Database, projectId: string) {
-  const phaseStmt = db.prepare(
-    `INSERT INTO project_phases (id, project_id, phase_number, title, status, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, '', datetime('now'))`
-  );
-  const evidenceStmt = db.prepare(
-    `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by, created_at)
-     VALUES (?, ?, ?, 'pending_upload', 'none', 'system', datetime('now'))`
-  );
-  const batch: any[] = [];
-  PHASE_TITLES.forEach((title, i) => {
-    const status = i === 0 ? 'in_progress' : 'pending';
-    batch.push(phaseStmt.bind(genId(), projectId, i, title, status));
-  });
-  await db.batch(batch);
 }
 
 assessmentsApp.post('/', async (c) => {
@@ -460,7 +444,7 @@ assessmentsApp.post('/:id/convert', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
     ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id).run();
 
-    await seedPhasesLocal(c.env.DB, projectId);
+    await seedPhases(c.env.DB, projectId);
 
     await c.env.DB.prepare(
       `UPDATE assessments SET status = 'converted', converted_project_id = ?, completed_at = datetime('now') WHERE id = ?`

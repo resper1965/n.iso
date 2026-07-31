@@ -8,14 +8,15 @@ export async function logAudit(
   actor: string,
   details: string,
   justification: string = '',
-  ip: string = ''
+  ip: string = '',
+  projectId?: string
 ) {
   await db
     .prepare(
-      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     )
-    .bind(genId(), action, actor, details, justification, ip)
+    .bind(genId(), action, actor, details, justification, ip, projectId ?? null)
     .run();
 }
 
@@ -55,9 +56,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   return true;
 }
 
-export function requireProjectAccess(user: any, projectId: string) {
+/**
+ * Garante que o usuário tem acesso ao projeto. Papéis de staff (consultor/
+ * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
+ * seu client_project_id. Lança em caso de negação (fail-closed).
+ */
+export function requireProjectAccess(user: any, projectId: string): true {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
+  throw new Error('Forbidden: No access to this project');
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */
@@ -66,11 +73,61 @@ export function escapeHtml(s: string): string {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** SHA-256 de uma string, em hex. Usado para hashear/lookup de API keys. */
+export async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Gera um token criptograficamente seguro para sessões */
 export function genToken(): string {
   const arr = new Uint8Array(32);
   crypto.getRandomValues(arr);
   return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Gera um código numérico de N dígitos com CSPRNG (rejection sampling, sem viés de módulo).
+ *  digits deve ser inteiro em 1..9 (acima de 9, 10**digits estoura Uint32 e o loop nunca termina). */
+export function genNumericCode(digits = 6): string {
+  if (!Number.isInteger(digits) || digits < 1 || digits > 9) {
+    throw new Error('genNumericCode: digits deve ser um inteiro entre 1 e 9');
+  }
+  const max = 10 ** digits;
+  const limit = Math.floor(0xffffffff / max) * max;
+  const arr = new Uint32Array(1);
+  let x: number;
+  do {
+    crypto.getRandomValues(arr);
+    x = arr[0];
+  } while (x >= limit);
+  return String(x % max).padStart(digits, '0');
+}
+
+/** Comparação de tempo constante para hashes/tokens (evita timing side-channels) */
+export function constantTimeEqual(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  // Comprimento diferente NÃO retorna cedo (evita vazar o tamanho por timing):
+  // a diferença de tamanho entra no acumulador e iteramos sobre o maior comprimento.
+  let result = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    result |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return result === 0;
+}
+
+/**
+ * Rate limit best-effort baseado em KV. Retorna true se a ação é permitida.
+ * Incrementa um contador com janela deslizante por expiração de TTL.
+ * ponytail: get-then-put não é atômico no KV (eventual consistency); é proteção
+ * básica contra brute force, não um limitador rígido.
+ */
+export async function rateLimit(kv: KVNamespace, key: string, max: number, windowSec: number): Promise<boolean> {
+  const k = `ratelimit:${key}`;
+  const current = parseInt((await kv.get(k)) || '0', 10) || 0;
+  if (current >= max) return false;
+  await kv.put(k, String(current + 1), { expirationTtl: windowSec });
+  return true;
 }
 
 /** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
@@ -120,10 +177,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
     const msgBuffer = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
     const legacyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return legacyHash === stored;
+    return constantTimeEqual(legacyHash, stored);
   }
   const [salt] = stored.split(':');
   const rehash = await hashPassword(password, salt);
-  return rehash === stored;
+  return constantTimeEqual(rehash, stored);
 }
 

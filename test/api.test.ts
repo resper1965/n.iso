@@ -318,6 +318,236 @@ describe('nISO API Unit Tests (Mocked Env)', () => {
       expect(getOtherRes.status).toBe(403);
     });
 
+    it('should block client from a project-scoped route of another project (tenant middleware)', async () => {
+      // /projects/:id/risks previously had no access check — now guarded by projectAccessMiddleware.
+      const clientEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [{ id: 'r1', project_id: '999' }] }),
+        },
+      };
+
+      const ownReq = new Request('http://localhost/api/v1/projects/123/risks', {
+        headers: { 'Authorization': 'Bearer client-token' },
+      });
+      const otherReq = new Request('http://localhost/api/v1/projects/999/risks', {
+        headers: { 'Authorization': 'Bearer client-token' },
+      });
+
+      // @ts-ignore
+      expect((await worker.fetch(ownReq, clientEnv)).status).toBe(200);
+      // @ts-ignore
+      expect((await worker.fetch(otherReq, clientEnv)).status).toBe(403);
+    });
+
+    it('should allow staff (consultor) to access any project scope', async () => {
+      const staffEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 1, role: 'consultor' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      const req = new Request('http://localhost/api/v1/projects/any-project/risks', {
+        headers: { 'Authorization': 'Bearer staff-token' },
+      });
+      // @ts-ignore
+      expect((await worker.fetch(req, staffEnv)).status).toBe(200);
+    });
+
+    it('should block a read-only role from deleting or approving evidence but allow upload', async () => {
+      const clientEnv = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'org_user', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'ev1', project_id: '123', r2_key: 'k' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+
+      const del = new Request('http://localhost/api/v1/evidence/ev1', {
+        method: 'DELETE', headers: { 'Authorization': 'Bearer t' },
+      });
+      const approve = new Request('http://localhost/api/v1/evidence/ev1/approve', {
+        method: 'POST', headers: { 'Authorization': 'Bearer t', 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const fd = new FormData();
+      fd.append('file', new File(['evidencia'], 'evidence.txt', { type: 'text/plain' }));
+      const upload = new Request('http://localhost/api/v1/projects/123/evidence/upload', {
+        method: 'POST', headers: { 'Authorization': 'Bearer t' }, body: fd,
+      });
+
+      // @ts-ignore
+      expect((await worker.fetch(del, clientEnv)).status).toBe(403);
+      // @ts-ignore
+      expect((await worker.fetch(approve, clientEnv)).status).toBe(403);
+      // upload com arquivo válido: passa o RBAC guard e persiste (201)
+      // @ts-ignore
+      expect((await worker.fetch(upload, clientEnv)).status).toBe(201);
+    });
+
+    it('should authenticate a valid API key scoped to its project and 401 an invalid one', async () => {
+      const validEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const ok = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'valid-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(ok, validEnv)).status).toBe(200);
+
+      const invalidEnv = {
+        ...mockEnv,
+        DB: { ...mockEnv.DB, prepare: vi.fn().mockReturnThis(), bind: vi.fn().mockReturnThis(), first: vi.fn().mockResolvedValue(null) },
+      };
+      const bad = new Request('http://localhost/api/v1/projects/123/risks', { headers: { 'X-API-Key': 'bad-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(bad, invalidEnv)).status).toBe(401);
+    });
+
+    it('should block an API key from another project (tenant scope)', async () => {
+      const env = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const other = new Request('http://localhost/api/v1/projects/999/risks', { headers: { 'X-API-Key': 'valid-key' } });
+      // @ts-ignore
+      expect((await worker.fetch(other, env)).status).toBe(403);
+    });
+
+    it('should block a read-only API key from writes but allow a write-capable key', async () => {
+      const readEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k1', project_id: '123', status: 'Active', expires_at: null, permissions: 'read' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const roWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'ro' } });
+      // @ts-ignore
+      expect((await worker.fetch(roWrite, readEnv)).status).toBe(403);
+
+      const writeEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'k2', project_id: '123', status: 'Active', expires_at: null, permissions: 'write' }),
+          run: vi.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      const fd = new FormData();
+      fd.append('file', new File(['x'], 'e.txt', { type: 'text/plain' }));
+      const rwWrite = new Request('http://localhost/api/v1/projects/123/evidence/upload', { method: 'POST', headers: { 'X-API-Key': 'rw' }, body: fd });
+      // @ts-ignore
+      expect((await worker.fetch(rwWrite, writeEnv)).status).toBe(201);
+    });
+
+    it('should reach public token routes without a session (auditor portal + assessment)', async () => {
+      const auditorEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ project_id: '123' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      // No Authorization header — the token in the path is the credential.
+      const auditor = new Request('http://localhost/api/v1/auditor/tok123/notes');
+      // @ts-ignore
+      expect((await worker.fetch(auditor, auditorEnv)).status).toBe(200);
+
+      const assessEnv = {
+        ...mockEnv,
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue({ id: 'a1', client_name: 'X', status: 'In Progress' }),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        },
+      };
+      const assess = new Request('http://localhost/api/v1/assessments/public/tok456');
+      // @ts-ignore
+      expect((await worker.fetch(assess, assessEnv)).status).toBe(200);
+    });
+
+    it('should still require a session for internal auditor-notes routes', async () => {
+      const req = new Request('http://localhost/api/v1/projects/123/auditor-notes');
+      // @ts-ignore
+      expect((await worker.fetch(req, mockEnv)).status).toBe(401);
+    });
+
+    it('should block cross-project access on every route mounting style', async () => {
+      // As rotas com escopo de projeto são montadas de 3 formas diferentes e todas
+      // resolvem para /api/v1/projects/<id>/... — este teste garante que o
+      // projectAccessMiddleware cobre as três, não só a que já era testada.
+      const paths = [
+        '/api/v1/projects/999/evidence',              // A: sub-app em /projects/:projectId
+        '/api/v1/projects/999/stakeholders',          // B: montado em /api/v1
+        '/api/v1/projects/999/webhooks',              // C: montado em '' com path completo
+        '/api/v1/projects/999/risks',                 // C
+        '/api/v1/projects/999/export/audit-log',      // C (export CSV)
+      ];
+      const env = {
+        ...mockEnv,
+        SESSIONS: {
+          ...mockEnv.SESSIONS,
+          get: vi.fn().mockResolvedValue(JSON.stringify({ id: 9, role: 'client', client_project_id: '123' })),
+        },
+        DB: {
+          ...mockEnv.DB,
+          prepare: vi.fn().mockReturnThis(),
+          bind: vi.fn().mockReturnThis(),
+          all: vi.fn().mockResolvedValue({ results: [] }),
+          first: vi.fn().mockResolvedValue(null),
+        },
+      };
+      for (const p of paths) {
+        const req = new Request(`http://localhost${p}`, { headers: { 'Authorization': 'Bearer t' } });
+        // @ts-ignore
+        const res = await worker.fetch(req, env);
+        expect(res.status, `${p} deveria negar acesso cross-project`).toBe(403);
+      }
+    });
+
     it('should map legacy roles to new roles for compatibility', async () => {
       const request = new Request('http://localhost/api/v1/users', {
         headers: { 'Authorization': 'Bearer old-admin-token' }

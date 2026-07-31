@@ -278,7 +278,7 @@ aiApp.post('/mcp/execute', async (c) => {
   }
   
   if (tool === 'check_control_compliance') {
-    const ctrl = await c.env.DB.prepare('SELECT status, maturity FROM compliance_controls WHERE project_id = ? AND control_id = ?')
+    const ctrl = await c.env.DB.prepare('SELECT status, maturity FROM compliance_controls WHERE project_id = ? AND id = ?')
       .bind(args.project_id, args.control_id).first();
     return c.json({ control: ctrl || { status: 'Not Started' } });
   }

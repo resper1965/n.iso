@@ -182,8 +182,21 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT,
     justification TEXT,
     ip_address TEXT,
+    project_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
+-- Trilha de auditoria imutável (append-only): bloqueia UPDATE/DELETE no nível do DB.
+CREATE TRIGGER IF NOT EXISTS audit_logs_no_update
+BEFORE UPDATE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'audit_logs is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS audit_logs_no_delete
+BEFORE DELETE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'audit_logs is append-only');
+END;
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -286,8 +299,11 @@ CREATE TABLE IF NOT EXISTS assets (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    type TEXT, -- tipo do ativo (usado no cadastro de ativos)
     category TEXT, -- Informação, Software, Hardware, Pessoas
     classification TEXT DEFAULT 'Confidential', -- Confidential, Restricted, Internal, Public
+    criticality TEXT DEFAULT 'Medium', -- Low, Medium, High, Critical
+    description TEXT,
     owner TEXT,
     location TEXT, -- ex: AWS S3, local, etc.
     status TEXT DEFAULT 'Active',
@@ -466,6 +482,10 @@ CREATE INDEX IF NOT EXISTS idx_ropa_project ON ropa_records(project_id);
 CREATE INDEX IF NOT EXISTS idx_audit_schedule_project ON audit_schedule(project_id);
 CREATE INDEX IF NOT EXISTS idx_capa_project ON corrective_actions(project_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_project ON api_keys(project_id);
+-- Unicidade do hash de API key (o lookup de autenticação depende disso).
+-- Precisa vir DEPOIS do CREATE TABLE acima — em banco limpo, um índice declarado
+-- antes da tabela faz o schema.sql inteiro falhar.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
 
 -- ═══════════════════════════════════════════════
@@ -646,22 +666,9 @@ CREATE INDEX IF NOT EXISTS idx_auditor_notes_project ON auditor_notes(project_id
 -- SPRINT GAPS: ATIVOS, KPIS E ACEITES DE POLÍTICAS
 -- -----------------------------------------------
 
-CREATE TABLE IF NOT EXISTS assets (
-  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  project_id TEXT REFERENCES projects(id),
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  classification TEXT DEFAULT 'Internal', -- Public, Internal, Confidential, Restricted
-  owner TEXT,
-  location TEXT,
-  status TEXT DEFAULT 'Active',
-  description TEXT,
-  confidentiality_rating INTEGER DEFAULT 3,
-  integrity_rating INTEGER DEFAULT 3,
-  availability_rating INTEGER DEFAULT 3,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- ponytail: definição canônica de `assets` unificada acima (inclui type/criticality/
+-- description). A duplicata que existia aqui foi removida — CREATE TABLE IF NOT EXISTS
+-- fazia a segunda ser silenciosamente ignorada e divergir da usada pelo código.
 CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
 
 CREATE TABLE IF NOT EXISTS performance_metrics (
@@ -694,7 +701,7 @@ CREATE INDEX IF NOT EXISTS idx_acknowledgments_project ON policy_acknowledgments
 CREATE TABLE IF NOT EXISTS dpia_assessments (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    system_name TEXT NOT NULL,
+    system_name TEXT,
     data_flow_description TEXT,
     data_subjects_types TEXT,
     personal_data_categories TEXT,
@@ -704,6 +711,15 @@ CREATE TABLE IF NOT EXISTS dpia_assessments (
     dpo_opinion TEXT,
     dpo_signature TEXT,
     ceo_signature TEXT,
+    -- Colunas usadas pelo código atual (create/update/approve/report de DPIA)
+    ropa_id TEXT,
+    processing_name TEXT,
+    data_category_risk TEXT,
+    technical_measures TEXT,
+    residual_risk_level TEXT,
+    dpo_recommendations TEXT,
+    dpo_approved_by TEXT,
+    dpo_approved_at TEXT,
     status TEXT DEFAULT 'Draft', -- Draft, Under Review, Approved
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -749,3 +765,42 @@ CREATE TABLE IF NOT EXISTS policy_templates (
   description TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
+-- -----------------------------------------------
+-- KNOWLEDGE BASE (RAG) — ingestão de documentos do projeto
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_knowledge (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    type TEXT DEFAULT 'other',
+    content TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_project_knowledge_project ON project_knowledge(project_id);
+
+-- -----------------------------------------------
+-- SCOPE CHANGES (solicitações de alteração de escopo do projeto)
+-- -----------------------------------------------
+
+CREATE TABLE IF NOT EXISTS scope_changes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    change_description TEXT NOT NULL,
+    reason TEXT,
+    impact_analysis TEXT,
+    requested_by TEXT,
+    status TEXT DEFAULT 'Pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_scope_changes_project ON scope_changes(project_id);
+
+-- -----------------------------------------------
+-- ÍNDICES em colunas quentes (filtros frequentes)
+-- -----------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_evidence_project ON evidence(project_id);
+CREATE INDEX IF NOT EXISTS idx_controls_project ON compliance_controls(project_id);
+CREATE INDEX IF NOT EXISTS idx_users_client_project ON users(client_project_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);

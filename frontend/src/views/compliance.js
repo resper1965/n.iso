@@ -4,7 +4,7 @@ import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
     function renderControls(c, h, a) {
-        h.textContent = S.lang === 'en' ? 'Controls' : 'Controles';
+        h.textContent = 'Controles';
         if (!S.controls.length) {
             c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
             return;
@@ -631,8 +631,8 @@ import { navigate } from '../router.js';
                                         </span>
                                     </div>
                                     <div style="display:flex;gap:4px;margin-top:4px">
-                                        ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO ✓</span>` : ''}
-                                        ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO ✓</span>` : ''}
+                                        ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO</span>` : ''}
+                                        ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO</span>` : ''}
                                     </div>
                                 </td>
                                 <td>
@@ -745,7 +745,7 @@ import { navigate } from '../router.js';
                 <span class="modal-title" style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--accent)">
                     Riscos Vinculados — ${escapeHTML(standard)}
                 </span>
-                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
             </div>
             <div style="margin-top:1rem">
         `;
@@ -810,7 +810,7 @@ import { navigate } from '../router.js';
                 <span class="modal-title" style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--accent)">
                     Evidências Vinculadas — ${escapeHTML(standard)}
                 </span>
-                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
             </div>
             <div style="margin-top:1rem">
         `;
@@ -1087,8 +1087,8 @@ import { navigate } from '../router.js';
                         stageType = 'warning';
                     }
                     
-                    const cisoSign = ctrl.ciso_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ciso_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
-                    const ceoSign = ctrl.ceo_approved_by ? `<span style="color:var(--success)">✓ ${escapeHTML(ctrl.ceo_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
+                    const cisoSign = ctrl.ciso_approved_by ? `<span style="color:var(--success)">${escapeHTML(ctrl.ciso_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
+                    const ceoSign = ctrl.ceo_approved_by ? `<span style="color:var(--success)">${escapeHTML(ctrl.ceo_approved_by)}</span>` : '<span style="color:var(--text-dim)">Pendente</span>';
                     
                     const statusType = (ctrl.status === 'Compliant' || ctrl.status === 'IMPLEMENTED' || ctrl.status === 'Implemented') ? 'success' : (ctrl.status === 'Partial' || ctrl.status === 'PARTIAL') ? 'warning' : 'danger';
 
@@ -1234,7 +1234,7 @@ import { navigate } from '../router.js';
                     <div style="width:100%">
                         <div>
                             <strong>Líder SGSI:</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleString()}</span>
+                            <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleString()}</span>
                         </div>
                         ${ctrl.ciso_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ciso_approved_ip)} | UA: ${escapeHTML(ctrl.ciso_approved_ua)}</div>` : ''}
                     </div>
@@ -1259,7 +1259,7 @@ import { navigate } from '../router.js';
                     <div style="width:100%">
                         <div>
                             <strong>Direção Executiva:</strong> 
-                            <span style="color:var(--success)">✓ Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleString()}</span>
+                            <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleString()}</span>
                         </div>
                         ${ctrl.ceo_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ceo_approved_ip)} | UA: ${escapeHTML(ctrl.ceo_approved_ua)}</div>` : ''}
                     </div>
@@ -1612,7 +1612,7 @@ import { navigate } from '../router.js';
     };
 
     async function renderAcknowledgments(c, h, a) {
-        h.textContent = 'Ciencia de Politicas';
+        h.textContent = 'Ciencia de Políticas';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
             c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
@@ -1736,7 +1736,7 @@ import { navigate } from '../router.js';
                 </div>
 
                 <div class="card">
-                    <div class="card-label">Historico de Ciencia de Politicas</div>
+                    <div class="card-label">Histórico de Ciencia de Políticas</div>
                     <div style="overflow-x:auto;">
                         <table class="data-table">
                             <thead>

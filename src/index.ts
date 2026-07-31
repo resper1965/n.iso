@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 import { authMiddleware } from './middleware/auth';
+import { projectAccessMiddleware } from './middleware/project-access';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
@@ -31,10 +32,15 @@ export type Bindings = {
   SESSIONS: KVNamespace;
   VECTOR_INDEX: VectorizeIndex;
   STORAGE: R2Bucket;
-  AI: any;
+  AI: Ai;
   SETUP_KEY?: string;
   ENVIRONMENT?: string;
-  ASSETS?: any;
+  ASSETS?: Fetcher;
+  /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts). */
+  CF_ACCOUNT_ID?: string;
+  AI_GATEWAY_ID?: string;
+  AI_GATEWAY_TOKEN?: string;
+  RESEND_API_KEY?: string;
 };
 
 export type Variables = {
@@ -69,6 +75,9 @@ app.route('/api/v1/public', publicApp);
 
 // 5. Auth Middleware para demais rotas /api/v1
 app.use('/api/v1/*', authMiddleware);
+
+// 5b. Isolamento multi-tenant: reforça acesso ao projeto em rotas com escopo de projeto
+app.use('/api/v1/projects/:projectId/*', projectAccessMiddleware);
 
 // 6. Sub-rotas montadas
 app.route('/api/v1/users', usersApp);
@@ -132,6 +141,16 @@ app.get('/*', async (c) => {
     return res;
   }
   return c.text('Not found', 404);
+});
+
+// 8. Handler de erro global: garante corpo JSON consistente em erros não capturados
+// e evita vazar detalhes internos ao cliente (o stack fica apenas nos logs).
+app.onError((err, c) => {
+  console.error('[nISO] Unhandled error:', err);
+  const detail = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'test'
+    ? (err as Error).message
+    : undefined;
+  return c.json({ error: 'Erro interno do servidor', ...(detail ? { detail } : {}) }, 500);
 });
 
 export default app;

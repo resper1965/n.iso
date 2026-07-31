@@ -7,7 +7,9 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "test": "vitest",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "db:backup": "wrangler d1 export niso-db --remote --output backups/niso-backup.sql",
+    "db:backup:local": "wrangler d1 export niso-db --local --output backups/local-backup.sql"
   },
   "dependencies": {
     "@cloudflare/vitest-pool-workers": "^0.4.0",

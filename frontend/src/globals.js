@@ -3,24 +3,9 @@ import { api, API_BASE } from './api.js';
 import { render, navigate } from './router.js';
 import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 
-window.toggleTheme = function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'dark';
-        const next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-        updateThemeIcon(next);
-    }
-
-window.updateThemeIcon = function updateThemeIcon(theme) {
-        const btn = document.getElementById('theme-toggle-btn');
-        if (!btn) return;
-        const svg = btn.querySelector('svg');
-        if (theme === 'light') {
-            svg.innerHTML = '<path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
-        } else {
-            svg.innerHTML = '<path d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z"/>';
-        }
-    }
+// ponytail: o toggle de tema foi removido — o design system da ness. é OLED Dark
+// nativo (design.md §2) e não havia CSS [data-theme], então o controle não fazia
+// nada além de trocar o próprio ícone (enganoso). Sem tema claro, sem toggle.
 
 window.viewEvidence = async function viewEvidence(id) {
         try {
@@ -109,11 +94,6 @@ window.viewEvidence = async function viewEvidence(id) {
         }
     }
 
-window.setLang = function setLang(lang) {
-        S.lang = 'pt';
-        localStorage.setItem('niso_lang', 'pt');
-        console.log('Language set to: pt');
-    }
 
 window.toggleGroup = function toggleGroup(groupId) {
         const groups = document.querySelectorAll('.sidebar-group');
@@ -123,11 +103,17 @@ window.toggleGroup = function toggleGroup(groupId) {
         const isExpanded = target.classList.contains('expanded');
 
         groups.forEach(g => g.classList.remove('expanded'));
-        labels.forEach(l => l.classList.add('collapsed'));
+        // aria-expanded acompanha o estado real: um valor estático mentiria
+        // para o leitor de tela depois do primeiro toggle.
+        labels.forEach(l => {
+            l.classList.add('collapsed');
+            l.setAttribute('aria-expanded', 'false');
+        });
 
         if (!isExpanded) {
             target.classList.add('expanded');
             label.classList.remove('collapsed');
+            label.setAttribute('aria-expanded', 'true');
         }
     }
 
@@ -158,6 +144,9 @@ window.doLogin = async function doLogin() {
     }
 
 window.doLogout = function doLogout() {
+        // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
+        // chamava doLogout de novo.
+        clearInterval(window._notifPoll);
         S.token = null; S.user = null; S.activeProject = null;
         localStorage.removeItem('niso_token');
         localStorage.removeItem('niso_user');
@@ -361,12 +350,12 @@ window.renderNotifDropdown = function renderNotifDropdown() {
         const dd = document.getElementById('notif-dropdown');
         const items = S.notifications || [];
         if (!items.length) {
-            dd.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.75rem">Sem notificacoes</div>';
+            dd.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.75rem">Sem notificações</div>';
             return;
         }
         dd.innerHTML = items.slice(0, 15).map(n => `
             <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}')">
-                <div style="font-weight:dots${n.read ? '400' : '600'}">dots${escapeHTML(n.title)}</div>
+                <div style="font-weight:${n.read ? '400' : '600'}">${escapeHTML(n.title)}</div>
                 <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.2rem">${escapeHTML(n.message || '')}</div>
                 <div class="notif-time">${n.created_at ? n.created_at.split('T')[0] : ''}</div>
             </div>
@@ -645,14 +634,15 @@ window.initApp = async function initApp() {
                 const myProj = S.projects.find(p => p.id === S.user.client_project_id);
                 if (myProj) {
                     S.activeProject = myProj;
-                    localStorage.setItem('niso_activeProjectId', myProj.id);
+                    // Persiste sob a MESMA chave que o state hidrata no reload
+                    // (niso_activeProject), senão o projeto ativo se perdia ao recarregar.
+                    localStorage.setItem('niso_activeProject', JSON.stringify(myProj));
                 }
             }
         }
 
         updateHeaderUser();
         updateActiveProjectWidget();
-        setLang(S.lang);
 
         if (isClient && S.user.client_project_id) {
             navigate('project-detail');
@@ -660,7 +650,7 @@ window.initApp = async function initApp() {
             navigate('dashboard');
         }
         // ponytail: poll notifications every 60s
-        setInterval(loadNotifications, 60000);
+        window._notifPoll = setInterval(loadNotifications, 60000);
         // Close dropdowns on outside click
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.dropdown-wrap')) {
@@ -961,9 +951,9 @@ window.openScopeChangeModal = async function(projectId, projData) {
                     ${history.length ? history.map((c, i) => `
                         <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
                             <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.approved_by)}<br>
-                            <em>Motivo:</em> ${escapeHTML(c.change_reason)}<br>
-                            <em>Impacto de Seg.:</em> ${escapeHTML(c.security_impact)}<br>
-                            <em>Novo Escopo:</em> ${escapeHTML(c.new_scope)}
+                            <strong>Motivo:</strong> ${escapeHTML(c.change_reason)}<br>
+                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.security_impact)}<br>
+                            <strong>Novo Escopo:</strong> ${escapeHTML(c.new_scope)}
                         </div>
                     `).join('') : 'Sem alterações de escopo registradas.'}
                 </div>
@@ -1077,7 +1067,7 @@ window.renderSelfServiceBlock = function renderSelfServiceBlock(c, blocks) {
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:1rem">
                 ${idx > 0 ? '<button class="btn" onclick="ssPrev()">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Proximo' : 'Concluir Assessment'}</button>
+                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
             </div>
         </div>`;
     }

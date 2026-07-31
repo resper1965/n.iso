@@ -153,7 +153,7 @@ proposalsApp.post('/:id/sign', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO project_phases (id, project_id, phase_number, title, status, created_at)
          VALUES (?, ?, ?, ?, ?, datetime('now'))`
-      ).bind(phaseId, projectId, i, PHASE_TITLES[i], status).run();
+      ).bind(phaseId, projectId, i, PHASE_TITLES[i] || `Fase ${i + 1}`, status).run();
     }
 
     await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${projectId} criado automaticamente com 41 fases a partir da proposta ${id}.`);

@@ -174,11 +174,11 @@ import { navigate } from '../router.js';
                         <div class="card" style="padding: 1.25rem; margin-bottom: 0; display: flex; align-items: center; justify-content: space-between;">
                             <div>
                                 <div class="card-label" style="margin-bottom: 0.25rem;">Total de Riscos</div>
-                                <div style="font-size: 1.8rem; font-weight: 600; font-family: 'Montserrat', sans-serif;">${risks.length}</div>
+                                <div style="font-size: 1.8rem; font-weight: 500; font-family: 'Montserrat', sans-serif;">${risks.length}</div>
                             </div>
                             <div style="text-align: right;">
                                 <div class="card-label" style="margin-bottom: 0.25rem;">Score Médio</div>
-                                <div style="font-size: 1.8rem; font-weight: 600; color: var(--accent); font-family: 'Montserrat', sans-serif;">${averageScore}</div>
+                                <div style="font-size: 1.8rem; font-weight: 500; color: var(--accent); font-family: 'Montserrat', sans-serif;">${averageScore}</div>
                             </div>
                         </div>
                     </div>
@@ -304,7 +304,7 @@ import { navigate } from '../router.js';
                 <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Executivo do Cliente (CEO)"></div>
                 <div class="form-group"><label class="form-label">Data do Aceite</label><input class="form-input" id="risk-accepted-at" type="date"></div>
             </div>
-            <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
+            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
             <div class="form-group"><label class="form-label">Plano de Tratamento</label><textarea class="form-input" id="risk-plan" rows="2" placeholder="Descreva as acoes..."></textarea></div>
             <button class="btn btn-primary" style="width:100%" onclick="window.createRisk('${projectId}')">Registrar Risco</button>
         `);
@@ -367,7 +367,7 @@ import { navigate } from '../router.js';
                     ${controlOptions}
                 </select>
             </div>
-            <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="risk-e-owner" value="${escapeHTML(r.owner||'')}"></div>
+            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="risk-e-owner" value="${escapeHTML(r.owner||'')}"></div>
             <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1rem">
                 <button class="btn" style="color:var(--danger)" onclick="if(confirm('Excluir este risco?')){api('DELETE','/api/v1/risks/${riskId}').then(()=>{forceCloseModal();render()})}">Excluir</button>
                 <button class="btn btn-primary" onclick="window.updateRisk('${riskId}')">Salvar</button>
@@ -536,7 +536,7 @@ import { navigate } from '../router.js';
                         <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(v.category || 'Geral')}</div>
                     </div>
                     <div>
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Nivel de Diligencia</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Nível de Diligencia</div>
                         <span class="ctx-tag" style="color:${dilColor(v.diligence_level)}; font-weight:600">${v.diligence_level || 'Low'}</span>
                     </div>
                     <div>
@@ -840,7 +840,7 @@ import { navigate } from '../router.js';
                     escapeHTML(r.employee_name),
                     r.score ? `<strong>${r.score}%</strong>` : '—',
                     r.completion_date || '—',
-                    hasEvidence ? '<span style="color:var(--success)">● Anexada</span>' : '<span style="color:var(--text-dim)">○ Ausente</span>',
+                    hasEvidence ? '<span style="color:var(--success)"> Anexada</span>' : '<span style="color:var(--text-dim)"> Ausente</span>',
                     window.renderStatusBadge(r.status || 'Pending', statusType),
                     `<button class="btn btn-ghost btn-sm" onclick="window.openTrainingDetailsModal('${r.id}')">Detalhes</button>`
                 ];
@@ -953,7 +953,7 @@ import { navigate } from '../router.js';
         openModal(`
             <div class="modal-header"><span class="modal-title">Novo Registro de Treinamento</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
             <div class="form-group"><label class="form-label">Nome do Colaborador</label><input class="form-input" id="tr-name" placeholder="Ex: Ana Silva"></div>
-            <div class="form-group"><label class="form-label">Treinamento</label><input class="form-input" id="tr-training" placeholder="Ex: Seguranca da Informacao Basico"></div>
+            <div class="form-group"><label class="form-label">Treinamento</label><input class="form-input" id="tr-training" placeholder="Ex: Seguranca da Informacao Básico"></div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Status</label>
                     <select class="form-input" id="tr-status"><option>Pending</option><option>Completed</option><option>Expired</option></select></div>
@@ -1190,7 +1190,7 @@ import { navigate } from '../router.js';
                 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:16px">
                     <div style="grid-column:span 2">
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descricao</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Descrição</div>
                         <div style="font-size:0.85rem; color:var(--text)">${escapeHTML(ca.description || 'Sem descricao')}</div>
                     </div>
                     <div>
@@ -1202,7 +1202,7 @@ import { navigate } from '../router.js';
                         <span class="ctx-tag" style="color:${statusColor(ca.status)}; font-weight:600">${ca.status || 'Open'}</span>
                     </div>
                     <div>
-                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsavel</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsável</div>
                         <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(ca.assigned_to || 'Sem responsavel')}</div>
                     </div>
                     <div>
@@ -1219,7 +1219,7 @@ import { navigate } from '../router.js';
                     </div>
                     <div style="grid-column:span 2">
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Resolucao / Evidencia de Fechamento</div>
-                        <div style="font-size:0.85rem; color:var(--text); white-space:pre-wrap">${escapeHTML(ca.resolution || 'Nenhuma resolucao cadastrada')}</div>
+                        <div style="font-size:0.85rem; color:var(--text); white-space:pre-wrap">${escapeHTML(ca.resolution || 'Nenhuma resolução cadastrada')}</div>
                     </div>
                     <div style="grid-column:span 2">
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Associacoes e Vinculos</div>
@@ -1243,8 +1243,8 @@ import { navigate } from '../router.js';
 
         openModal(`
             <div class="modal-header"><span class="modal-title">Nova Acao Corretiva</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
-            <div class="form-group"><label class="form-label">Titulo</label><input class="form-input" id="capa-title" placeholder="Ex: Implementar MFA em todos os sistemas"></div>
-            <div class="form-group"><label class="form-label">Descricao</label><textarea class="form-input" id="capa-desc" placeholder="Detalhe a acao corretiva..."></textarea></div>
+            <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="capa-title" placeholder="Ex: Implementar MFA em todos os sistemas"></div>
+            <div class="form-group"><label class="form-label">Descrição</label><textarea class="form-input" id="capa-desc" placeholder="Detalhe a acao corretiva..."></textarea></div>
             <div class="form-group"><label class="form-label">Causa Raiz (Root Cause)</label><textarea class="form-input" id="capa-root" placeholder="Causa identificada do problema..."></textarea></div>
             <div class="form-group"><label class="form-label">Plano de Acao (Action Plan)</label><textarea class="form-input" id="capa-plan" placeholder="Passos a serem tomados..."></textarea></div>
             <div style="display:flex;gap:0.5rem">
@@ -1252,7 +1252,7 @@ import { navigate } from '../router.js';
                     <select class="form-input" id="capa-sev"><option value="Low">Baixo</option><option value="Medium" selected>Médio</option><option value="High">Alto</option><option value="Critical">Crítico</option></select></div>
                 <div class="form-group" style="flex:1"><label class="form-label">Prazo</label><input class="form-input" id="capa-due" type="date"></div>
             </div>
-            <div class="form-group"><label class="form-label">Responsavel</label><input class="form-input" id="capa-assigned" placeholder="Ex: CISO"></div>
+            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="capa-assigned" placeholder="Ex: CISO"></div>
             
             <div class="card-label" style="margin-top:1rem;margin-bottom:0.5rem">Vinculos e Associacao</div>
             <div class="form-group">
@@ -1310,8 +1310,8 @@ import { navigate } from '../router.js';
 
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Acao Corretiva</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
-            <div class="form-group"><label class="form-label">Titulo</label><input class="form-input" id="capa-e-title" value="${escapeHTML(ca.title||'')}"></div>
-            <div class="form-group"><label class="form-label">Descricao</label><textarea class="form-input" id="capa-e-desc">${escapeHTML(ca.description||'')}</textarea></div>
+            <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="capa-e-title" value="${escapeHTML(ca.title||'')}"></div>
+            <div class="form-group"><label class="form-label">Descrição</label><textarea class="form-input" id="capa-e-desc">${escapeHTML(ca.description||'')}</textarea></div>
             <div class="form-group"><label class="form-label">Causa Raiz (Root Cause)</label><textarea class="form-input" id="capa-e-root">${escapeHTML(ca.root_cause||'')}</textarea></div>
             <div class="form-group"><label class="form-label">Plano de Acao (Action Plan)</label><textarea class="form-input" id="capa-e-plan">${escapeHTML(ca.action_plan||'')}</textarea></div>
             <div style="display:flex;gap:0.5rem">
@@ -1326,7 +1326,7 @@ import { navigate } from '../router.js';
             </div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Prazo</label><input class="form-input" id="capa-e-due" type="date" value="${ca.due_date||''}"></div>
-                <div class="form-group" style="flex:1"><label class="form-label">Responsavel</label><input class="form-input" id="capa-e-assigned" value="${escapeHTML(ca.assigned_to||'')}"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Responsável</label><input class="form-input" id="capa-e-assigned" value="${escapeHTML(ca.assigned_to||'')}"></div>
             </div>
             <div class="form-group"><label class="form-label">Resolucao (Se fechada)</label><textarea class="form-input" id="capa-e-resolution">${escapeHTML(ca.resolution||'')}</textarea></div>
             
@@ -1492,7 +1492,7 @@ import { navigate } from '../router.js';
                     </div>
                     <div style="grid-column:span 2">
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Notas / Observacoes</div>
-                        <div style="font-size:0.85rem; color:var(--muted); white-space:pre-wrap; margin-top:4px">${escapeHTML(au.notes || 'Nenhuma observacao registrada.')}</div>
+                        <div style="font-size:0.85rem; color:var(--muted); white-space:pre-wrap; margin-top:4px">${escapeHTML(au.notes || 'Nenhuma observação registrada.')}</div>
                     </div>
                 </div>
             </div>
@@ -1507,7 +1507,7 @@ import { navigate } from '../router.js';
     window.openNewAuditModal = function(projectId) {
         openModal(`
             <div class="modal-header"><span class="modal-title">Nova Auditoria</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
-            <div class="form-group"><label class="form-label">Titulo</label><input class="form-input" id="aud-title" placeholder="Ex: Auditoria Interna Anual"></div>
+            <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="aud-title" placeholder="Ex: Auditoria Interna Anual"></div>
             <div class="form-group"><label class="form-label">Tipo</label>
                 <select class="form-input" id="aud-type"><option>Internal</option><option>External</option><option>Surveillance</option><option>Certification</option></select></div>
             <div style="display:flex;gap:0.5rem">
@@ -1539,7 +1539,7 @@ import { navigate } from '../router.js';
         const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Auditoria</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
-            <div class="form-group"><label class="form-label">Titulo</label><input class="form-input" id="aud-e-title" value="${escapeHTML(au.title||'')}"></div>
+            <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="aud-e-title" value="${escapeHTML(au.title||'')}"></div>
             <div class="form-group"><label class="form-label">Tipo</label>
                 <select class="form-input" id="aud-e-type">
                     ${['Internal','External','Surveillance','Certification'].map(o => `<option ${o===au.audit_type?'selected':''}>${o}</option>`).join('')}

@@ -110,7 +110,7 @@ export     const ASSESSMENT_BLOCKS = [
         },
         {
             block: 8,
-            title: 'Documentacao e Politicas',
+            title: 'Documentacao e Políticas',
             questions: [
                 { key: 'doc_repo', type: 'select', text: 'Repositório de documentos de SI?', options: ['Repositório centralizado (Confluence, SharePoint)', 'Google Drive / pasta de rede', 'Documentos espalhados', 'Sem repositório'] },
                 { key: 'doc_version', type: 'select', text: 'Controle de versão de documentos?', options: ['Versionamento automático', 'Versionamento manual', 'Sem controle de versão'] },

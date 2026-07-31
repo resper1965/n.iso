@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, createVendorSchema } from '../schemas';
 
 export const vendorsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectVendorsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -74,7 +75,9 @@ projectVendorsApp.get('/', async (c) => {
 projectVendorsApp.post('/', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, createVendorSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const id = genId();
     const ts = calculateTrustScore(body);
     const dl = diligenceLevel(ts);

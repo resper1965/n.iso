@@ -1,26 +1,14 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, genToken, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
+import { seedPhases } from '../services/project-setup';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const controlsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-
-async function seedPhasesLocal(db: D1Database, projectId: string) {
-  const phaseStmt = db.prepare(
-    `INSERT INTO project_phases (id, project_id, phase_number, title, status, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, '', datetime('now'))`
-  );
-  const batch: any[] = [];
-  PHASE_TITLES.forEach((title, i) => {
-    const status = i === 0 ? 'in_progress' : 'pending';
-    batch.push(phaseStmt.bind(genId(), projectId, i, title, status));
-  });
-  await db.batch(batch);
-}
 
 // ─── Projects CRUD ──────────────────────────────────────────────────────────
 
@@ -53,8 +41,8 @@ projectsApp.post('/', async (c) => {
       body.org_role ?? ''
     ).run();
 
-    await seedPhasesLocal(c.env.DB, id);
-    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`);
+    await seedPhases(c.env.DB, id);
+    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
   } catch (e: any) {
@@ -79,36 +67,6 @@ projectsApp.get('/', async (c) => {
     return c.json(results);
   } catch (e: any) {
     return c.json({ error: 'Falha ao listar projetos', detail: e.message }, 500);
-  }
-});
-
-projectsApp.get('/dashboard/stats', async (c) => {
-  try {
-    const user = c.get('user');
-    const isClient = user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client');
-    const projectId = isClient ? user.client_project_id : null;
-    
-    const whereResource = projectId ? 'WHERE project_id = ?' : '';
-    const whereProject = projectId ? 'WHERE id = ?' : '';
-    const params = projectId ? [projectId] : [];
-
-    const stats: any = await c.env.DB.batch([
-      c.env.DB.prepare('SELECT count(*) as count FROM leads'),
-      c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM evidence ${whereResource} ${whereResource ? "AND" : "WHERE"} evaluation_status = 'pending'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM risks ${whereResource} ${whereResource ? "AND" : "WHERE"} impact * probability >= 15`).bind(...params)
-    ]);
-
-    return c.json({
-      leads: stats[0].results?.[0]?.count || 0,
-      projects: stats[1].results?.[0]?.count || 0,
-      controls_done: stats[2].results?.[0]?.count || 0,
-      pending_evidence: stats[3].results?.[0]?.count || 0,
-      critical_risks: stats[4].results?.[0]?.count || 0
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Falha ao carregar estatísticas', detail: e.message }, 500);
   }
 });
 
@@ -149,7 +107,7 @@ projectsApp.put('/:id', async (c) => {
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(id);
     await c.env.DB.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
-    await logAudit(c.env.DB, 'project.updated', user?.email ?? 'system', `Projeto ${id} atualizado: ${updates.join(', ')}`);
+    await logAudit(c.env.DB, 'project.updated', user?.email ?? 'system', `Projeto ${id} atualizado: ${updates.join(', ')}`, '', '', id);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -188,7 +146,7 @@ projectsApp.put('/:id/phases/:num', async (c) => {
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(projectId, num);
     await c.env.DB.prepare(`UPDATE project_phases SET ${updates.join(', ')} WHERE project_id = ? AND phase_number = ?`).bind(...values).run();
-    await logAudit(c.env.DB, 'phase.updated', c.get('user')?.email ?? 'system', `Fase ${num} do projeto ${projectId} atualizada`);
+    await logAudit(c.env.DB, 'phase.updated', c.get('user')?.email ?? 'system', `Fase ${num} do projeto ${projectId} atualizada`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -215,7 +173,7 @@ projectsApp.post('/:id/interviews', async (c) => {
     );
     const batch = answers.map(a => stmt.bind(genId(), projectId, a.track, a.question, a.answer, a.interviewee || null, a.gap_detected ? 1 : 0, a.notes || null));
     await c.env.DB.batch(batch);
-    await logAudit(c.env.DB, 'interviews.saved', c.get('user')?.email ?? 'system', `Salvas ${answers.length} respostas de entrevista para projeto ${projectId}`);
+    await logAudit(c.env.DB, 'interviews.saved', c.get('user')?.email ?? 'system', `Salvas ${answers.length} respostas de entrevista para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, count: answers.length });
   } catch (e: any) {
     return c.json({ error: 'Falha ao salvar entrevistas', detail: e.message }, 500);
@@ -258,11 +216,11 @@ projectsApp.post('/:id/documents/upload', async (c) => {
 
     const user = c.get('user');
     await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, sha256_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
+      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'conforme', 'Documento Interno do SGSI Controlado', ?, datetime('now'))`
     ).bind(docId, projectId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
 
-    await logAudit(c.env.DB, 'document.uploaded', user?.email || 'system', `Documento ${file.name} carregado para projeto ${projectId}`);
+    await logAudit(c.env.DB, 'document.uploaded', user?.email || 'system', `Documento ${file.name} carregado para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: docId, sha256: realSha256 }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha no upload de documento', detail: e.message }, 500);
@@ -289,7 +247,7 @@ projectsApp.put('/:id/documents/:docId', async (c) => {
     }
 
     const user = c.get('user');
-    await logAudit(c.env.DB, 'document.updated', user?.email || 'system', `Documento ${docId} atualizado no projeto ${projectId}`);
+    await logAudit(c.env.DB, 'document.updated', user?.email || 'system', `Documento ${docId} atualizado no projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao atualizar documento', detail: e.message }, 500);
@@ -323,7 +281,7 @@ projectsApp.post('/:id/assets', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(id, projectId, body.name, body.type, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '').run();
 
-    await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`);
+    await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao criar ativo', detail: e.message }, 500);
@@ -361,7 +319,7 @@ projectsApp.post('/:id/scope-changes', async (c) => {
       VALUES (?, ?, ?, ?, ?, ?, 'Pending')
     `).bind(changeId, projectId, change_description, reason || null, impact_analysis || null, requested_by || c.get('user')?.email || 'system').run();
 
-    await logAudit(c.env.DB, 'scope_change.created', c.get('user')?.email || 'system', `Solicitação de alteração de escopo ${changeId} criada para projeto ${projectId}`);
+    await logAudit(c.env.DB, 'scope_change.created', c.get('user')?.email || 'system', `Solicitação de alteração de escopo ${changeId} criada para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: changeId });
   } catch (e: any) {
     return c.json({ error: 'Falha ao registrar alteração de escopo', detail: e.message }, 500);
@@ -423,7 +381,7 @@ projectsApp.post('/:id/migrate-27701', async (c) => {
       }
     }
 
-    await logAudit(c.env.DB, 'migration.27701', c.get('user')?.email ?? 'system', `27701 migration (2013->2022): ${gaps.length} gaps, ${created} new controls, project ${projectId}`);
+    await logAudit(c.env.DB, 'migration.27701', c.get('user')?.email ?? 'system', `27701 migration (2013->2022): ${gaps.length} gaps, ${created} new controls, project ${projectId}`, '', '', projectId);
 
     return c.json({
       ok: true,
@@ -466,7 +424,7 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
       }
     }
 
-    await logAudit(c.env.DB, 'migration.27701.2025', c.get('user')?.email ?? 'system', `27701:2025 migration: ${gaps.length} gaps, ${created} new controls, project ${projectId}`);
+    await logAudit(c.env.DB, 'migration.27701.2025', c.get('user')?.email ?? 'system', `27701:2025 migration: ${gaps.length} gaps, ${created} new controls, project ${projectId}`, '', '', projectId);
 
     return c.json({
       ok: true,
@@ -541,7 +499,7 @@ projectsApp.post('/:id/dpia', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?)`
     ).bind(id, projectId, body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, now).run();
     const user = c.get('user');
-    await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`);
+    await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao criar DPIA', detail: e.message }, 500);
@@ -559,7 +517,7 @@ projectsApp.get('/:id/audit-pack', async (c) => {
       c.env.DB.prepare('SELECT * FROM project_phases WHERE project_id = ? ORDER BY phase_number ASC').bind(projectId).all(),
       c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ?').bind(projectId).all(),
       c.env.DB.prepare('SELECT * FROM evidence WHERE project_id = ?').bind(projectId).all(),
-      c.env.DB.prepare('SELECT * FROM audit_logs WHERE details LIKE ? ORDER BY created_at DESC LIMIT 100').bind(`%${projectId}%`).all()
+      c.env.DB.prepare('SELECT * FROM audit_logs WHERE project_id = ? OR (project_id IS NULL AND details LIKE ?) ORDER BY created_at DESC LIMIT 100').bind(projectId, `%${projectId}%`).all()
     ]);
 
     return c.json({
@@ -581,8 +539,8 @@ projectsApp.get('/:id/audit-pack', async (c) => {
 projectsApp.get('/:id/audit-trail', async (c) => {
   const projectId = c.req.param('id');
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM audit_logs WHERE details LIKE ? OR details LIKE ? ORDER BY created_at DESC LIMIT 500`
-  ).bind(`%${projectId}%`, `%${projectId.substring(0, 8)}%`).all();
+    `SELECT * FROM audit_logs WHERE project_id = ? OR (project_id IS NULL AND details LIKE ?) ORDER BY created_at DESC LIMIT 500`
+  ).bind(projectId, `%${projectId}%`).all();
   return c.json(results || []);
 });
 
@@ -592,7 +550,7 @@ projectsApp.post('/:id/auditor-token', async (c) => {
     const projectId = c.req.param('id');
     const body = await c.req.json<{ days_valid?: number }>();
     const days = body.days_valid ?? 30;
-    const token = genId() + genId();
+    const token = genToken();
     const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
 
     await c.env.DB.prepare(
@@ -600,7 +558,7 @@ projectsApp.post('/:id/auditor-token', async (c) => {
        VALUES (?, ?, ?, ?, datetime('now'))`
     ).bind(genId(), token, projectId, expiresAt).run();
 
-    await logAudit(c.env.DB, 'auditor_token.created', c.get('user')?.email ?? 'system', `Auditor token created for project ${projectId}, valid ${days} days`);
+    await logAudit(c.env.DB, 'auditor_token.created', c.get('user')?.email ?? 'system', `Auditor token created for project ${projectId}, valid ${days} days`, '', '', projectId);
     return c.json({ ok: true, token, expires_at: expiresAt }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao gerar token de auditor', detail: e.message }, 500);
@@ -635,7 +593,8 @@ controlsApp.put('/:id', async (c) => {
     updates.push("updated_at = datetime('now')");
     values.push(id);
     await c.env.DB.prepare(`UPDATE compliance_controls SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
-    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -656,7 +615,8 @@ controlsApp.put('/:id/maturity', async (c) => {
       'UPDATE compliance_controls SET maturity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(maturity, id).run();
 
-    await logAudit(c.env.DB, 'control.maturity_updated', c.get('user')?.email || 'system', `Maturidade do controle ${id} atualizada para ${maturity}`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.maturity_updated', c.get('user')?.email || 'system', `Maturidade do controle ${id} atualizada para ${maturity}`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
@@ -673,7 +633,8 @@ controlsApp.put('/:id/status', async (c) => {
       'UPDATE compliance_controls SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(status, id).run();
 
-    await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao atualizar status do controle', detail: e.message }, 500);
@@ -714,7 +675,7 @@ const handleControlApprove = async (c: any) => {
     const ua = c.req.header('User-Agent') || 'Unknown';
     const approvedBy = dbUser.name || user.email;
 
-    await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`);
+    await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`, '', '', targetProjectId);
     return c.json({ ok: true, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
     return c.json({ error: 'Falha ao assinar controle', detail: e.message }, 500);

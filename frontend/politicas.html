@@ -313,7 +313,7 @@
               <button onclick="handleSignAck()" class="btn-primary" id="btn-sign-ack" disabled style="opacity: 0.5;">Assinar Ciência Eletrônica</button>
             </div>
             <div class="signed-banner hidden" id="ack-completed-box">
-              ✓ Ciência registrada eletronicamente nesta política.
+              Ciência registrada eletronicamente nesta política.
               <div style="font-size: 0.75rem; color: #475569; margin-top: 4px;" id="ack-details-hash"></div>
             </div>
           </div>
@@ -442,7 +442,7 @@
         return `
           <div class="policy-item ${idx === 0 ? 'active' : ''}" onclick="selectPolicy(${idx})" id="pol-item-${idx}">
             ${ctrl.title}
-            ${isSigned ? '<span class="ack-badge">✓ Assinado</span>' : ''}
+            ${isSigned ? '<span class="ack-badge">Assinado</span>' : ''}
           </div>
         `;
       }).join('');

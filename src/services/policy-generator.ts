@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 export type StandardVersion = 'v2022' | 'v2013' | 'v2026';
 
 export interface PolicyContext {
@@ -23,38 +20,61 @@ const TEMPLATE_DEPENDENCIES: Record<string, string[]> = {
 };
 
 export class PolicyGeneratorService {
-  private templatesBase: string;
   private assetsFetcher?: any;
 
-  constructor(basePath: string, assetsFetcher?: any) {
-    this.templatesBase = join(basePath, 'src/templates/policies');
+  // ponytail: basePath kept for call-site compatibility; templates are served via the
+  // ASSETS binding on Workers (no filesystem at runtime), so it is intentionally unused.
+  constructor(_basePath: string, assetsFetcher?: any) {
     this.assetsFetcher = assetsFetcher;
   }
 
   shouldGenerate(templateId: string, soa?: Record<string, boolean>): boolean {
     if (!soa) return true;
-    const dependencies = TEMPLATE_DEPENDENCIES[templateId];
+    // hasOwnProperty: evita cair em propriedades herdadas (constructor/toString/…)
+    // que retornariam funções e quebrariam o .some abaixo.
+    const dependencies = Object.prototype.hasOwnProperty.call(TEMPLATE_DEPENDENCIES, templateId)
+      ? TEMPLATE_DEPENDENCIES[templateId]
+      : undefined;
     if (!dependencies) return true;
     return dependencies.some(ctrl => soa[ctrl] === true);
   }
 
   async generate(templateName: string, context: PolicyContext): Promise<string> {
+    // Validação de trust boundary ANTES de qualquer lookup: templateName é
+    // interpolado numa URL de fetch e usado como chave de objeto, então restringimos
+    // a um charset seguro (impede path traversal e acesso a chaves herdadas). A versão
+    // da norma também é validada contra a lista fixa.
+    if (!/^[a-z0-9-]+$/.test(templateName)) {
+      throw new Error(`Nome de template inválido: ${templateName}`);
+    }
+    const VALID_VERSIONS: StandardVersion[] = ['v2022', 'v2013', 'v2026'];
+    if (!VALID_VERSIONS.includes(context.standardVersion)) {
+      throw new Error(`Versão de norma inválida: ${context.standardVersion}`);
+    }
+
     if (!this.shouldGenerate(templateName, context.soa)) {
       throw new Error(`Template ${templateName} is not applicable according to the SoA.`);
     }
 
-    let content = '';
-    if (this.assetsFetcher) {
-      const url = `http://assets/templates/policies/${context.standardVersion}/${templateName}.md`;
-      const res = await this.assetsFetcher.fetch(new Request(url));
-      if (!res.ok) {
-        throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
-      }
-      content = await res.text();
-    } else {
-      const filePath = join(this.templatesBase, context.standardVersion, `${templateName}.md`);
-      content = await readFile(filePath, 'utf-8');
+    if (!this.assetsFetcher) {
+      throw new Error('PolicyGeneratorService requires the ASSETS binding to load templates.');
     }
+    const fetchTemplate = (version: string) =>
+      this.assetsFetcher.fetch(new Request(`http://assets/templates/policies/${version}/${templateName}.md`));
+
+    // Só existem templates v2022. Caímos de volta para v2022 APENAS em 404
+    // (versão inexistente) — erros 5xx são preservados como falha, não mascarados.
+    // A versão realmente usada é rastreada para o ID do documento não mentir a norma.
+    let resolvedVersion = context.standardVersion;
+    let res = await fetchTemplate(resolvedVersion);
+    if (res.status === 404 && resolvedVersion !== 'v2022') {
+      resolvedVersion = 'v2022';
+      res = await fetchTemplate(resolvedVersion);
+    }
+    if (!res.ok) {
+      throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
+    }
+    let content = await res.text();
 
     const now = new Date();
     const nextYear = new Date();
@@ -62,7 +82,7 @@ export class PolicyGeneratorService {
 
     // Document ID dinâmico com versão da norma
     const docIdPrefix = templateName.toUpperCase().substring(0, 3);
-    const standardSuffix = context.standardVersion.replace('v', '');
+    const standardSuffix = resolvedVersion.replace('v', '');
     const dynamicDocId = `POL-${docIdPrefix}-${standardSuffix}-001`;
 
     const replacements: Record<string, string> = {

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, createCapaSchema } from '../schemas';
 
 export const capaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectCapaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -50,7 +51,9 @@ projectCapaApp.get('/', async (c) => {
 projectCapaApp.post('/', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, createCapaSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(

@@ -1,3 +1,5 @@
+import { embed } from './embeddings';
+
 export class MemoryService {
   private ai: any;
   private vectorize: VectorizeIndex;
@@ -7,36 +9,34 @@ export class MemoryService {
     this.vectorize = vectorize;
   }
 
-  async storeFact(organizationId: string, fact: string, type: 'policy' | 'evidence' | 'standard' | 'client_doc' = 'policy', metadata: any = {}) {
+  async storeFact(projectId: string, fact: string, type: 'policy' | 'evidence' | 'standard' | 'client_doc' = 'policy', metadata: any = {}) {
     // 1. Gerar Embedding do fato
-    const embeddingResponse = await this.ai.run('@cf/baai/bge-small-en-v1.5', {
-      text: [fact],
-    });
-    const values = embeddingResponse.data[0];
+    const values = await embed(this.ai, fact);
 
-    // 2. Salvar no Vectorize
-    const id = `${organizationId}_${type}_${Date.now()}`;
+    // 2. Salvar no Vectorize. A chave de metadados é `project_id` — a MESMA usada
+    // pelo KnowledgeService — para que ambos compartilhem o mesmo índice e o RAG
+    // do PolicyAgent enxergue os documentos ingeridos.
+    // ID único e resistente a colisão: dois writes no mesmo ms para o mesmo projeto
+    // não devem sobrescrever um ao outro (Date.now() sozinho colidia).
+    const id = `${projectId}_${type}_${crypto.randomUUID()}`;
     await this.vectorize.upsert([{
       id,
       values,
-      metadata: { 
+      metadata: {
         ...metadata,
-        organizationId, 
-        fact, 
-        type 
+        project_id: projectId,
+        fact,
+        type
       }
     }]);
 
     return id;
   }
 
-  async retrieveContext(organizationId: string, query: string, type?: string, topK: number = 5): Promise<string> {
-    const embeddingResponse = await this.ai.run('@cf/baai/bge-small-en-v1.5', {
-      text: [query],
-    });
-    const values = embeddingResponse.data[0];
+  async retrieveContext(projectId: string, query: string, type?: string, topK: number = 5): Promise<string> {
+    const values = await embed(this.ai, query);
 
-    const filter: any = { organizationId };
+    const filter: any = { project_id: projectId };
     if (type) filter.type = type;
 
     const matches = await this.vectorize.query(values, {

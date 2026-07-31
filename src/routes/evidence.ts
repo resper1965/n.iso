@@ -25,7 +25,7 @@ evidenceApp.get('/:id/detail', async (c) => {
 async function downloadEvidence(c: any, id: string) {
   try {
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
-    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
+    const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first();
     if (!ev || !ev.r2_key) return c.json({ error: 'Evidência não encontrada' }, 404);
 
     const obj = await c.env.STORAGE.get(ev.r2_key);
@@ -85,7 +85,7 @@ evidenceApp.put('/:id/content', async (c) => {
     });
 
     await c.env.DB.prepare(
-      'UPDATE evidence SET file_size = ?, sha256_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      'UPDATE evidence SET file_size = ?, file_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(arrayBuffer.byteLength, realSha256, id).run();
 
     const user = c.get('user');
@@ -282,7 +282,7 @@ projectEvidenceApp.post('/upload', async (c) => {
 
     const user = c.get('user');
     await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, sha256_hash, evaluation_status, uploaded_by, created_at)
+      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, uploaded_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
     ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
 

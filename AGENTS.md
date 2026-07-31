@@ -6,10 +6,11 @@ Se voce esta lendo isto, voce e o agente responsavel por continuar o desenvolvim
 Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA frontend (sem framework). Deploy via wrangler deploy.
 
 ## Stack Tecnica
-- **Backend**: src/index.ts - Hono API, ~3400 linhas. Todos endpoints incluindo risk, vendor, training, ROPA, audit calendar, CAPA, portfolio, webhooks, API keys, CSV exports, certification tracker, AI chat, onboarding, marketplace, public pricing/stats.
-- **Services**: src/services/pricing.ts (~17KB), memory.ts (Vectorize RAG), soa-logic.ts (93 regras), migration-service.ts (2013→2022).
-- **Agents**: src/agents/ - PolicyAgent (Llama 3 + RAG), EvidenceAgent (Llama 3).
-- **Frontend**: frontend/dist/index.html - Vanilla JS SPA, ~2530 linhas. 16 views. frontend/dist/auditor.html - portal auditor. frontend/dist/landing.html - landing page publica.
+- **Backend**: src/index.ts e o composition root (~140 linhas) que monta os sub-routers de dominio em src/routes/*.ts (auth, users, leads, proposals, assessments, projects, evidence, vendors, training, ropa, audits, capa, certifications, public, ai, governance, auditor, platform, risks, policies, integrations). Cobre risk, vendor, training, ROPA, audit calendar, CAPA, portfolio, webhooks, API keys, CSV exports, certification tracker, AI chat, onboarding, marketplace, public pricing/stats.
+- **Middleware**: src/middleware/auth.ts (sessao + RBAC write-guard method+rota) e src/middleware/project-access.ts (isolamento multi-tenant em /api/v1/projects/:projectId/*).
+- **Services**: src/services/pricing.ts (~17KB), memory.ts (Vectorize RAG), soa-logic.ts (93 regras), migration-service.ts (2013→2022), policy-generator.ts (templates via binding ASSETS).
+- **Agents**: src/agents/ - PolicyAgent (GPT-4.1 via Gateway com fallback Llama 3.3), EvidenceAgent, AssessmentAgent.
+- **Frontend**: SPA Vanilla JS modular em frontend/src/ (bundle via Vite -> frontend/dist, servido pelo binding ASSETS). Entrada frontend/index.html + src/main.js; router.js, state.js (global S), api.js, ui.js (utils compartilhados), globals.js e src/views/*.js. politicas.html e o portal publico de politicas.
 - **Schema**: schema.sql - D1 tables (23): assessments, assessment_answers, projects, project_phases, leads, proposals, contracts, users, compliance_controls, evidence, audit_logs, auditor_tokens, notifications, risks, vendors, training_records, ropa_records, audit_schedule, corrective_actions, api_keys, webhooks, organizations, certification_tracking, ai_chat_history.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2), AI.
 
@@ -92,8 +93,17 @@ Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA fronten
 - Login: split-screen (branding esquerda, form direita).
 
 ## Restricoes Tecnicas
-- serveStatic DEVE ser o ultimo catch-all route em src/index.ts.
-- Frontend: sem modulos ES, tudo no escopo window. State global S.
+- O catch-all estatico (c.env.ASSETS.fetch) DEVE ser a ultima rota em src/index.ts.
+- authMiddleware roda antes das rotas /api/v1/*; projectAccessMiddleware roda logo apos, em /api/v1/projects/:projectId/*. Rotas realmente publicas (auth, public) sao montadas antes do authMiddleware.
+- SETUP_KEY e um segredo (wrangler secret put SETUP_KEY); sem ele /auth/setup fica desabilitado (falha fechada). Nunca commitar segredos em wrangler.jsonc.
+- Segredos/tokens de seguranca usam CSPRNG (genToken/genNumericCode), nunca Math.random/genId.
+- Embedding do RAG: use SEMPRE a constante EMBEDDING_MODEL (src/services/embeddings.ts) —
+  MemoryService e KnowledgeService precisam do mesmo modelo (vetores de modelos
+  diferentes nao sao comparaveis). O modelo atual e bge-m3 (multilingue, PT-BR),
+  1024 dimensoes. Trocar de modelo exige RECRIAR o indice Vectorize com a nova
+  dimensao e reingerir o conteudo (runbook no topo de embeddings.ts).
+- Antes de aplicar migrations em producao: `npm run db:backup` (ver backups/README.md).
+- Frontend: sem modulos ES em runtime, tudo no escopo window. State global S.
 - Schema: alinhar com schema.sql antes de adicionar colunas.
 - Ponytail mode: YAGNI, reusar patterns, menor diff possivel, boring over clever.
 
@@ -107,27 +117,21 @@ Este projeto utiliza o GitHub Spec Kit para desenvolvimento orientado a especifi
 
 # Ponytail lazy senior dev mode
 
-You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.
+Instalado como skill: `.claude/skills/ponytail/SKILL.md` (fonte:
+github.com/DietrichGebert/ponytail, MIT). Ativa em qualquer tarefa de codigo,
+ou por "ponytail" / "lazy mode" / "simplest solution"; niveis lite|full|ultra
+(default full); desliga com "stop ponytail".
 
-Before writing any code, stop at the first rung that holds:
+Resumo operacional: escada YAGNI -> reusar o que ja existe no codebase ->
+stdlib -> recurso nativo da plataforma -> dependencia ja instalada -> uma
+linha -> so entao o minimo que funciona. Deletar antes de adicionar, menor
+diff que funciona, `ponytail:` comentando simplificacoes deliberadas.
 
-1. Does this need to be built at all? (YAGNI)
-2. Does it already exist in this codebase? Reuse it.
-3. Does the standard library already do this? Use it.
-4. Does a native platform feature cover it? Use it.
-5. Does an already-installed dependency solve it? Use it.
-6. Can this be one line? Make it one line.
-7. Only then: write the minimum code that works.
+Nunca simplificar: entendimento do problema, validacao em trust boundary,
+tratamento de erro, seguranca, acessibilidade.
 
-Rules:
-- No abstractions that were not explicitly requested.
-- No new dependency if it can be avoided.
-- No boilerplate nobody asked for.
-- Deletion over addition. Boring over clever. Fewest files possible.
-- Shortest working diff wins.
-- Mark intentional simplifications with a ponytail: comment.
-
-Not lazy about: understanding the problem, input validation at trust boundaries, error handling, security, accessibility.
+O texto completo vive na skill — nao duplicar as regras aqui, senao as duas
+copias divergem (foi o que aconteceu com a versao inline anterior).
 
 ## Regras Adicionais do Ecossistema
 - **test-driven-development**: Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.

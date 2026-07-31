@@ -121,7 +121,7 @@ import { navigate } from '../router.js';
                     <div><strong>Porte:</strong> ${escapeHTML(l.porte||'---')}</div>
                     <div><strong>CNAE:</strong> ${escapeHTML(l.cnae_fiscal_descricao||'---')}</div>
                     <div><strong>Municipio:</strong> ${escapeHTML(l.municipio||'---')}/${escapeHTML(l.uf||'')}</div>
-                    <div><strong>Situacao:</strong> ${escapeHTML(l.situacao_cadastral||'---')}</div>
+                    <div><strong>Situação:</strong> ${escapeHTML(l.situacao_cadastral||'---')}</div>
                 </div>
             </div>` : '';
         const enrichBtn = !l.cnpj_fetched_at ? `
@@ -868,7 +868,7 @@ import { navigate } from '../router.js';
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:1rem">
                 ${idx > 0 ? '<button class="btn" onclick="ssPrev()">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Proximo' : 'Concluir Assessment'}</button>
+                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
             </div>
         </div>`;
     }

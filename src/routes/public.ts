@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
-import { logAudit } from '../helpers';
+import { logAudit, genNumericCode } from '../helpers';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -37,7 +37,7 @@ publicApp.post('/policies/request-otp', async (c) => {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = (name || cleanEmail.split('@')[0]).trim();
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = genNumericCode(6);
 
     const otpKey = `otp_${project_id}_${cleanEmail}`;
     const otpData = {

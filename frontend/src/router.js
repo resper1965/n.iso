@@ -10,11 +10,18 @@ export     function navigate(view, data) {
         S.view = targetView;
         if (data) Object.assign(S, data);
         
-        // Update active states in sidebar
-        document.querySelectorAll('.sidebar-nav').forEach(el => el.classList.remove('active'));
+        // Update active states in sidebar. aria-current expõe a página atual a
+        // leitores de tela — antes o estado ativo era só cor (invisível para AT).
+        document.querySelectorAll('.sidebar-nav').forEach(el => {
+            el.classList.remove('active');
+            el.removeAttribute('aria-current');
+        });
         const navId = `nav-${targetView.split('-')[0]}`;
         const el = document.getElementById(navId);
-        if (el) el.classList.add('active');
+        if (el) {
+            el.classList.add('active');
+            el.setAttribute('aria-current', 'page');
+        }
 
         render();
     }
