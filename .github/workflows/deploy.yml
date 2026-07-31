@@ -1,0 +1,73 @@
+name: Deploy
+
+# Até 2026-07 o deploy era `npm run deploy` na máquina de alguém. O efeito é que
+# ninguém sabia o que estava em produção: correções de segurança já mergeadas em
+# `main` ficaram semanas sem sair. Este workflow existe para que deploy pare de
+# depender de alguém lembrar.
+#
+# Pré-requisitos (Settings do repositório — não entram em commit):
+#   1. Secret `CLOUDFLARE_API_TOKEN` com permissão de editar Workers.
+#   2. Environment `production`. Marque "Required reviewers" nele se quiser que
+#      todo deploy passe por aprovação humana — é onde esse controle vive.
+#
+# O que este workflow NÃO faz, de propósito: aplicar migration. Migration em
+# produção exige backup verificado antes (`npm run db:backup`, runbook em
+# backups/README.md) e algumas reconstroem tabela com PII. Isso não roda sozinho.
+# O que ele faz é RECUSAR o deploy se houver migration pendente — publicar código
+# que consulta tabela que ainda não existe é exatamente o defeito que já custou
+# caro aqui.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Dois deploys simultâneos publicam versões imprevisíveis. O segundo espera.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Mesma verificação do CI. Redundante por PR, necessária por deploy manual
+      # e por push direto em main.
+      - name: TypeScript Check
+        run: npx tsc --noEmit
+
+      - name: Run Tests
+        run: npm test -- --run
+
+      - name: Build Frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Recusar deploy com migration pendente
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          saida=$(npx wrangler d1 migrations list niso-db --remote 2>&1 | tee /dev/stderr)
+          if echo "$saida" | grep -q "No migrations to apply"; then
+            echo "Nenhuma migration pendente — seguindo."
+            exit 0
+          fi
+          echo "::error::Há migration não aplicada em produção. Faça backup (npm run db:backup), aplique com 'wrangler d1 migrations apply niso-db --remote' e rode este workflow de novo."
+          exit 1
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
