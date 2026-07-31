@@ -57,9 +57,10 @@ integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
 integrations.delete('/api/v1/webhooks/:id', async (c) => {
   const id = c.req.param('id');
   await requireResourceAccess(c.env.DB, 'webhooks', id, c.get('user'));
+  const wh = await c.env.DB.prepare('SELECT project_id FROM webhooks WHERE id = ?').bind(id).first() as any;
   await c.env.DB.prepare('DELETE FROM webhooks WHERE id = ?').bind(id).run();
   const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_deleted', user.email, `Webhook ${id} deleted`).run();
+  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details, project_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_deleted', user.email, `Webhook ${id} deleted`, wh?.project_id ?? null).run();
   return c.json({ ok: true });
 });
 
@@ -122,9 +123,10 @@ integrations.get('/api/v1/projects/:id/api-keys', async (c) => {
 integrations.delete('/api/v1/api-keys/:id', async (c) => {
   const id = c.req.param('id');
   await requireResourceAccess(c.env.DB, 'api_keys', id, c.get('user'));
+  const ak = await c.env.DB.prepare('SELECT project_id FROM api_keys WHERE id = ?').bind(id).first() as any;
   await c.env.DB.prepare("UPDATE api_keys SET status = 'Revoked' WHERE id = ?").bind(id).run();
   const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_revoked', user.email, `API key ${id} revoked`).run();
+  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details, project_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_revoked', user.email, `API key ${id} revoked`, ak?.project_id ?? null).run();
   return c.json({ ok: true });
 });
 

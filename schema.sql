@@ -186,6 +186,19 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
+-- Trilha de auditoria imutável (append-only): bloqueia UPDATE/DELETE no nível do DB.
+CREATE TRIGGER IF NOT EXISTS audit_logs_no_update
+BEFORE UPDATE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'audit_logs is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS audit_logs_no_delete
+BEFORE DELETE ON audit_logs
+BEGIN
+  SELECT RAISE(ABORT, 'audit_logs is append-only');
+END;
+-- Unicidade do hash de API key (lookup de autenticação depende disso).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -771,7 +784,7 @@ CREATE INDEX IF NOT EXISTS idx_project_knowledge_project ON project_knowledge(pr
 
 CREATE TABLE IF NOT EXISTS scope_changes (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     change_description TEXT NOT NULL,
     reason TEXT,
     impact_analysis TEXT,

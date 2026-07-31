@@ -541,7 +541,7 @@ projectsApp.post('/:id/dpia', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?)`
     ).bind(id, projectId, body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, now).run();
     const user = c.get('user');
-    await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`);
+    await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao criar DPIA', detail: e.message }, 500);
@@ -635,7 +635,8 @@ controlsApp.put('/:id', async (c) => {
     updates.push("updated_at = datetime('now')");
     values.push(id);
     await c.env.DB.prepare(`UPDATE compliance_controls SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
-    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -656,7 +657,8 @@ controlsApp.put('/:id/maturity', async (c) => {
       'UPDATE compliance_controls SET maturity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(maturity, id).run();
 
-    await logAudit(c.env.DB, 'control.maturity_updated', c.get('user')?.email || 'system', `Maturidade do controle ${id} atualizada para ${maturity}`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.maturity_updated', c.get('user')?.email || 'system', `Maturidade do controle ${id} atualizada para ${maturity}`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
@@ -673,7 +675,8 @@ controlsApp.put('/:id/status', async (c) => {
       'UPDATE compliance_controls SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(status, id).run();
 
-    await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`);
+    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     return c.json({ error: 'Falha ao atualizar status do controle', detail: e.message }, 500);
@@ -714,7 +717,7 @@ const handleControlApprove = async (c: any) => {
     const ua = c.req.header('User-Agent') || 'Unknown';
     const approvedBy = dbUser.name || user.email;
 
-    await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`);
+    await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`, '', '', targetProjectId);
     return c.json({ ok: true, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
     return c.json({ error: 'Falha ao assinar controle', detail: e.message }, 500);
