@@ -51,7 +51,10 @@ export     function showToast(message, type = 'info') {
             backdrop-filter: blur(10px);
             animation: fadeIn 0.3s ease-out;
         `;
-        toast.innerHTML = message;
+        // textContent, nao innerHTML: dos 99 pontos que chamam showToast nenhum
+        // passa HTML, e varios interpolam `${e.message}` — texto que vem do
+        // servidor e pode ecoar entrada do usuario. Corrigir aqui vale por todos.
+        toast.textContent = message;
         document.body.appendChild(toast);
         setTimeout(() => {
             toast.style.opacity = '0';

@@ -13,10 +13,10 @@ import { navigate } from '../router.js';
             <div class="phase-item" onclick="openControlDetail('${ctrl.id}')" style="cursor:pointer">
                 <div class="phase-num" style="width:3.5rem;color:var(--accent)">${ctrl.id}</div>
                 <div style="flex:1">
-                    <div class="phase-title">${ctrl.title}</div>
+                    <div class="phase-title">${escapeHTML(ctrl.title)}</div>
                     ${ctrl.maturity ? `<div style="font-size:0.6rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
                 </div>
-                <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${ctrl.status}</div>
+                <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${escapeHTML(ctrl.status)}</div>
             </div>`).join('')}</div>`;
     }
 
