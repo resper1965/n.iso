@@ -8,14 +8,15 @@ export async function logAudit(
   actor: string,
   details: string,
   justification: string = '',
-  ip: string = ''
+  ip: string = '',
+  projectId?: string
 ) {
   await db
     .prepare(
-      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     )
-    .bind(genId(), action, actor, details, justification, ip)
+    .bind(genId(), action, actor, details, justification, ip, projectId ?? null)
     .run();
 }
 

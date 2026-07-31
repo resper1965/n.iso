@@ -50,7 +50,7 @@ integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
      VALUES (?, ?, ?, ?, ?, 'Active', 0, ?)`
   ).bind(id, projectId, body.url, body.events, body.secret || '', now).run();
   const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_created', user.email, `Webhook ${id} created for ${body.url}`).run();
+  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details, project_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_created', user.email, `Webhook ${id} created for ${body.url}`, projectId).run();
   return c.json({ ok: true, id }, 201);
 });
 
@@ -105,7 +105,7 @@ integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
   ).bind(id, projectId, keyHash, body.name, body.permissions || 'read', body.expires_at || null, now).run();
 
   const user = c.get('user');
-  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_created', user.email, `API key ${id} created`).run();
+  await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details, project_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'api_key_created', user.email, `API key ${id} created`, projectId).run();
 
   // ponytail: plaintext key returned ONCE — never stored
   return c.json({ ok: true, id, key: plainKey }, 201);
@@ -166,7 +166,11 @@ integrations.get('/api/v1/projects/:id/export/training', async (c) => {
 integrations.get('/api/v1/projects/:id/export/audit-log', async (c) => {
   const projectId = c.req.param('id');
   const user = c.get('user');
-  const result = await c.env.DB.prepare('SELECT * FROM audit_logs WHERE actor = ? ORDER BY created_at DESC LIMIT 500').bind(user.email).all();
+  // Escopado ao PROJETO (antes filtrava por actor, exportando as ações do próprio
+  // requisitante). Fallback LIKE cobre linhas legadas sem project_id populado.
+  const result = await c.env.DB.prepare(
+    'SELECT * FROM audit_logs WHERE project_id = ? OR (project_id IS NULL AND details LIKE ?) ORDER BY created_at DESC LIMIT 500'
+  ).bind(projectId, `%${projectId}%`).all();
   const rows = (result.results || []) as any[];
   const headers = 'id,action,actor,details,created_at';
   const csv = headers + '\n' + rows.map(r => 

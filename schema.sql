@@ -182,8 +182,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT,
     justification TEXT,
     ip_address TEXT,
+    project_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
