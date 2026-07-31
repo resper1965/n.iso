@@ -1,0 +1,3 @@
+# Não versionar dumps de banco (podem conter PII).
+*.sql
+!.gitignore
