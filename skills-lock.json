@@ -19,6 +19,18 @@
       "skillPath": "skills/finishing-a-development-branch/SKILL.md",
       "computedHash": "a2afe045ea677114a89854f296ae57f8d34eb84864daa7b08ea9434acded724d"
     },
+    "iso27001": {
+      "source": "sushegaad/claude-skills-governance-risk-and-compliance",
+      "sourceType": "github",
+      "skillPath": "plugins/iso27001/skills/iso27001/SKILL.md",
+      "computedHash": "e827c0598ae99d272ade5696ec66f37e3f411b3b9f2ad6ab8f61eb1de821ec0e"
+    },
+    "iso27701": {
+      "source": "sushegaad/claude-skills-governance-risk-and-compliance",
+      "sourceType": "github",
+      "skillPath": "plugins/iso27701/skills/iso27701/SKILL.md",
+      "computedHash": "2b9566e5ebb8487ca607adcae9ba2bf6769a8349f12affc2af1c8c50034158bd"
+    },
     "requesting-code-review": {
       "source": "obra/superpowers",
       "sourceType": "github",
