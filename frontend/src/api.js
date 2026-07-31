@@ -5,9 +5,18 @@ export const API_BASE = window.location.hostname === '127.0.0.1' || window.locat
 async function api(m, p, b) {
     const headers = { 'Content-Type': 'application/json' };
     if (S.token) headers['Authorization'] = `Bearer ${S.token}`;
-    const o = { method: m, headers };
+    // AbortSignal.timeout é nativo: sem ele, um backend travado deixava a UI
+    // esperando para sempre, sem erro e sem feedback.
+    const o = { method: m, headers, signal: AbortSignal.timeout(30000) };
     if (b) o.body = JSON.stringify(b);
-    const r = await fetch(API_BASE + p, o);
+    let r;
+    try {
+        r = await fetch(API_BASE + p, o);
+    } catch (e) {
+        if (e.name === 'TimeoutError') throw new Error(`Tempo esgotado ao chamar ${p} (30s)`);
+        if (e.name === 'AbortError') throw new Error(`Requisição cancelada (${p})`);
+        throw new Error(`Falha de rede ao chamar ${p}`);
+    }
     if (r.status === 401 && p !== '/api/v1/auth/login') { 
         if (window.doLogout) window.doLogout(); 
         throw new Error('Unauthorized'); 
