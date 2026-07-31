@@ -33,7 +33,7 @@ import { navigate, render } from '../router.js';
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
                             <div>
                                 <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 1</div>
-                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Avaliação de Escopo (Assessment Inicial)</h3>
+                                <h3 style="font-family:'Montserrat'; font-weight:500; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Avaliação de Escopo (Assessment Inicial)</h3>
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Questionário para mapear as atividades, equipe e tecnologia do seu negócio para cálculo do pricing e maturidade.</p>
                             </div>
                             <div style="text-align:right">
@@ -43,7 +43,7 @@ import { navigate, render } from '../router.js';
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
                             <div>
                                 <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 2</div>
-                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Proposta Comercial e Assinatura</h3>
+                                <h3 style="font-family:'Montserrat'; font-weight:500; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Proposta Comercial e Assinatura</h3>
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Aprovação da proposta comercial baseada no escopo mapeado e assinatura digital para início da adequação.</p>
                             </div>
                             <div style="text-align:right">
@@ -53,7 +53,7 @@ import { navigate, render } from '../router.js';
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
                             <div>
                                 <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 3</div>
-                                <h3 style="font-family:'Montserrat'; font-weight:600; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Início do SGSI & Projetos</h3>
+                                <h3 style="font-family:'Montserrat'; font-weight:500; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Início do SGSI & Projetos</h3>
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no nISO, checklists de conformidade e ativação dos assistentes de IA.</p>
                             </div>
                             <div style="text-align:right">
@@ -135,7 +135,7 @@ import { navigate, render } from '../router.js';
 
                     <div class="card fade-in" style="margin-bottom:1.5rem; background:rgba(15,23,42,0.65); border:1px solid rgba(229,235,255,0.08); border-radius:12px; padding:1.5rem; backdrop-filter:blur(24px);">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
-                            <div style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1rem; color:var(--text);">Burnup de Gaps — Velocidade de Conformidade</div>
+                            <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:1rem; color:var(--text);">Burnup de Gaps — Velocidade de Conformidade</div>
                             <span style="background:rgba(0,173,232,0.15); color:var(--accent); padding:0.25rem 0.61rem; border-radius:6px; font-weight:600; font-size:0.75rem;">${complianceRate}% Implementado</span>
                         </div>
                         <div class="progress-bar" style="height:8px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:1rem">
@@ -150,11 +150,11 @@ import { navigate, render } from '../router.js';
 
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:1.5rem;">
                         <div>
-                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Levantamentos Recentes</h3>
+                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Levantamentos Recentes</h3>
                             ${assessmentsTable}
                         </div>
                         <div>
-                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:600; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Projetos Ativos</h3>
+                            <h3 style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:1.05rem; margin-bottom:0.8rem; color:var(--text)">Projetos Ativos</h3>
                             ${projectsTable}
                         </div>
                     </div>

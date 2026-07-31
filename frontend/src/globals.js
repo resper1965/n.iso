@@ -103,11 +103,17 @@ window.toggleGroup = function toggleGroup(groupId) {
         const isExpanded = target.classList.contains('expanded');
 
         groups.forEach(g => g.classList.remove('expanded'));
-        labels.forEach(l => l.classList.add('collapsed'));
+        // aria-expanded acompanha o estado real: um valor estático mentiria
+        // para o leitor de tela depois do primeiro toggle.
+        labels.forEach(l => {
+            l.classList.add('collapsed');
+            l.setAttribute('aria-expanded', 'false');
+        });
 
         if (!isExpanded) {
             target.classList.add('expanded');
             label.classList.remove('collapsed');
+            label.setAttribute('aria-expanded', 'true');
         }
     }
 
@@ -942,9 +948,9 @@ window.openScopeChangeModal = async function(projectId, projData) {
                     ${history.length ? history.map((c, i) => `
                         <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
                             <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.approved_by)}<br>
-                            <em>Motivo:</em> ${escapeHTML(c.change_reason)}<br>
-                            <em>Impacto de Seg.:</em> ${escapeHTML(c.security_impact)}<br>
-                            <em>Novo Escopo:</em> ${escapeHTML(c.new_scope)}
+                            <strong>Motivo:</strong> ${escapeHTML(c.change_reason)}<br>
+                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.security_impact)}<br>
+                            <strong>Novo Escopo:</strong> ${escapeHTML(c.new_scope)}
                         </div>
                     `).join('') : 'Sem alterações de escopo registradas.'}
                 </div>

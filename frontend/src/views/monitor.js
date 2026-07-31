@@ -592,7 +592,7 @@ import { navigate } from '../router.js';
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Gerenciar Membros da Governança</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">✕</button>
+                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
             </div>
             <div id="gov-modal-body">
                 <div class="loading"></div>

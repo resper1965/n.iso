@@ -119,14 +119,14 @@ import { navigate, render } from '../router.js';
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Líder SGSI:</strong> 
-                            ${r.ciso_approved_by ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                            ${r.ciso_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
                         ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ciso')">Assinar</button>` : ''}
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Direção Executiva:</strong> 
-                            ${r.ceo_approved_by ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                            ${r.ceo_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
                         ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ceo')">Assinar</button>` : ''}
                     </div>
@@ -346,7 +346,7 @@ import { navigate, render } from '../router.js';
                     </div>
                     <div style="grid-column:span 2">
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Parecer do DPO (Encarregado)</div>
-                        <div style="font-size:0.85rem; color:var(--text); white-space:pre-wrap; font-style:italic">${escapeHTML(dp.dpo_opinion || 'Aguardando parecer formal do DPO')}</div>
+                        <div style="font-size:0.85rem; color:var(--text); white-space:pre-wrap">${escapeHTML(dp.dpo_opinion || 'Aguardando parecer formal do DPO')}</div>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Status do DPIA</div>
@@ -360,14 +360,14 @@ import { navigate, render } from '../router.js';
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Líder SGSI:</strong> 
-                            ${dp.dpo_signature ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(dp.dpo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                            ${dp.dpo_signature ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(dp.dpo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
                         ${!dp.dpo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ciso')">Assinar</button>` : ''}
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Direção Executiva:</strong> 
-                            ${dp.ceo_signature ? `<span style="color:var(--success)">✓ Aprovado por ${escapeHTML(dp.ceo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
+                            ${dp.ceo_signature ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(dp.ceo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
                         ${!dp.ceo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ceo')">Assinar</button>` : ''}
                     </div>

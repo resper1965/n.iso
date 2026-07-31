@@ -174,11 +174,11 @@ import { navigate } from '../router.js';
                         <div class="card" style="padding: 1.25rem; margin-bottom: 0; display: flex; align-items: center; justify-content: space-between;">
                             <div>
                                 <div class="card-label" style="margin-bottom: 0.25rem;">Total de Riscos</div>
-                                <div style="font-size: 1.8rem; font-weight: 600; font-family: 'Montserrat', sans-serif;">${risks.length}</div>
+                                <div style="font-size: 1.8rem; font-weight: 500; font-family: 'Montserrat', sans-serif;">${risks.length}</div>
                             </div>
                             <div style="text-align: right;">
                                 <div class="card-label" style="margin-bottom: 0.25rem;">Score Médio</div>
-                                <div style="font-size: 1.8rem; font-weight: 600; color: var(--accent); font-family: 'Montserrat', sans-serif;">${averageScore}</div>
+                                <div style="font-size: 1.8rem; font-weight: 500; color: var(--accent); font-family: 'Montserrat', sans-serif;">${averageScore}</div>
                             </div>
                         </div>
                     </div>
@@ -840,7 +840,7 @@ import { navigate } from '../router.js';
                     escapeHTML(r.employee_name),
                     r.score ? `<strong>${r.score}%</strong>` : '—',
                     r.completion_date || '—',
-                    hasEvidence ? '<span style="color:var(--success)">● Anexada</span>' : '<span style="color:var(--text-dim)">○ Ausente</span>',
+                    hasEvidence ? '<span style="color:var(--success)"> Anexada</span>' : '<span style="color:var(--text-dim)"> Ausente</span>',
                     window.renderStatusBadge(r.status || 'Pending', statusType),
                     `<button class="btn btn-ghost btn-sm" onclick="window.openTrainingDetailsModal('${r.id}')">Detalhes</button>`
                 ];
