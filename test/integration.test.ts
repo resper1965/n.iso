@@ -80,7 +80,9 @@ describe('Integration Tests', () => {
     });
 
     it('POST /api/v1/projects/test-project/risks with valid body returns success', async () => {
-      const body = JSON.stringify({ name: 'Test Risk', probability: 3, impact: 3 });
+      // asset e threat são NOT NULL em risks (schema.sql) — um corpo sem eles
+      // violaria a constraint num D1 real, então o payload válido precisa incluí-los.
+      const body = JSON.stringify({ asset: 'Servidor de aplicação', threat: 'Acesso não autorizado', probability: 3, impact: 3 });
       const req = new Request('http://localhost/api/v1/projects/test-project/risks', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer valid-token', 'Content-Type': 'application/json' },
@@ -89,6 +91,26 @@ describe('Integration Tests', () => {
       const res = await app.request(req, {}, { DB: mockD1, SESSIONS: mockAuthKV });
       expect(res.status).toBeGreaterThanOrEqual(200);
       expect(res.status).toBeLessThan(300);
+    });
+
+    it('POST /projects/:id/risks rejects a body missing required fields (400)', async () => {
+      const req = new Request('http://localhost/api/v1/projects/test-project/risks', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer valid-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Test Risk', probability: 3, impact: 3 })
+      });
+      const res = await app.request(req, {}, { DB: mockD1, SESSIONS: mockAuthKV });
+      expect(res.status).toBe(400);
+    });
+
+    it('POST /projects/:id/risks rejects out-of-range 5x5 scores (400)', async () => {
+      const req = new Request('http://localhost/api/v1/projects/test-project/risks', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer valid-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset: 'A', threat: 'T', impact: 99, probability: 3 })
+      });
+      const res = await app.request(req, {}, { DB: mockD1, SESSIONS: mockAuthKV });
+      expect(res.status).toBe(400);
     });
   });
 

@@ -1,20 +1,112 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { requireResourceAccess } from '../helpers';
+import { validateBody, createWebhookSchema, createApiKeySchema } from '../schemas';
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-/** Helper para validar URLs de webhook (SSRF guard) */
-function isValidWebhookUrl(urlStr: string): boolean {
+/**
+ * Normaliza um hostname que seja um literal IPv4 em qualquer codificação aceita
+ * (decimal "2130706433", octal "0177.0.0.1", hex "0x7f.0.0.1", forma curta "127.1")
+ * para a forma pontilhada canônica. Retorna null se não for um literal IPv4.
+ * Sem isso, `127.0.0.1` seria bloqueado mas `2130706433` passaria.
+ */
+function canonicalizeIpv4(host: string): string | null {
+  const parts = host.split('.');
+  if (parts.length === 0 || parts.length > 4) return null;
+
+  const nums: number[] = [];
+  for (const p of parts) {
+    if (p === '') return null;
+    let n: number;
+    if (/^0x[0-9a-f]+$/i.test(p)) n = parseInt(p, 16);
+    else if (/^0[0-7]+$/.test(p)) n = parseInt(p, 8);
+    else if (/^\d+$/.test(p)) n = parseInt(p, 10);
+    else return null;
+    if (!Number.isFinite(n) || n < 0) return null;
+    nums.push(n);
+  }
+
+  // Formas curtas: a.b.c -> a.b.0.c ; a.b -> a.0.0.b ; a -> inteiro de 32 bits
+  let value: number;
+  const last = nums[nums.length - 1];
+  const maxLast = 2 ** (8 * (4 - (nums.length - 1)));
+  if (last >= maxLast) return null;
+  if (nums.slice(0, -1).some(n => n > 255)) return null;
+  value = last;
+  for (let i = nums.length - 2; i >= 0; i--) {
+    value += nums[i] * 2 ** (8 * (3 - i));
+  }
+  if (value > 0xffffffff) return null;
+
+  return [24, 16, 8, 0].map(shift => (value >>> shift) & 255).join('.');
+}
+
+/** true se o IPv4 pontilhado pertence a faixa privada/loopback/link-local/reservada. */
+function isPrivateIpv4(dotted: string): boolean {
+  const [a, b] = dotted.split('.').map(Number);
+  if (a === 10) return true;                        // 10.0.0.0/8
+  if (a === 127) return true;                       // loopback
+  if (a === 0) return true;                         // 0.0.0.0/8
+  if (a === 169 && b === 254) return true;          // link-local (inclui metadata 169.254.169.254)
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true;          // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true;// CGNAT 100.64.0.0/10
+  if (a >= 224) return true;                        // multicast/reservado
+  return false;
+}
+
+/**
+ * SSRF guard para URLs de webhook: exige http(s) e bloqueia destinos internos
+ * (loopback, faixas privadas, link-local/metadata, IPv6 interno), incluindo
+ * codificações alternativas de IP.
+ * ponytail: não resolve DNS — um hostname público que resolva para IP interno
+ * (DNS rebinding) não é detectável aqui; o bloqueio é por destino literal.
+ */
+export function isValidWebhookUrl(urlStr: string): boolean {
+  let url: URL;
   try {
-    const url = new URL(urlStr);
-    const hostname = url.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') return false;
-    if (hostname.includes('169.254.169.254')) return false;
-    return ['http:', 'https:'].includes(url.protocol);
+    url = new URL(urlStr);
   } catch {
     return false;
   }
+  if (!['http:', 'https:'].includes(url.protocol)) return false;
+
+  let hostname = url.hostname.toLowerCase();
+
+  // IPv6 literal chega entre colchetes na URL: [::1]
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    hostname = hostname.slice(1, -1);
+  }
+  if (hostname.includes(':')) {
+    const v6 = hostname.replace(/%.*$/, ''); // remove zone id
+    if (v6 === '::1' || v6 === '::') return false;              // loopback / unspecified
+    if (/^fe[89ab][0-9a-f]:/i.test(v6)) return false;           // link-local fe80::/10
+    if (/^f[cd][0-9a-f]{2}:/i.test(v6)) return false;           // unique local fc00::/7
+    // IPv4 mapeado. O parser de URL normaliza ::ffff:127.0.0.1 para a forma
+    // hexadecimal ::ffff:7f00:1, então tratamos as duas representações.
+    const mappedDotted = v6.match(/(\d+\.\d+\.\d+\.\d+)$/);
+    if (mappedDotted) {
+      const canon = canonicalizeIpv4(mappedDotted[1]);
+      if (canon && isPrivateIpv4(canon)) return false;
+    } else {
+      const mappedHex = v6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+      if (mappedHex) {
+        const hi = parseInt(mappedHex[1], 16);
+        const lo = parseInt(mappedHex[2], 16);
+        const dotted = [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255].join('.');
+        if (isPrivateIpv4(dotted)) return false;
+      }
+    }
+    return true;
+  }
+
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return false;
+
+  const canon = canonicalizeIpv4(hostname);
+  if (canon) return !isPrivateIpv4(canon);
+
+  return true;
 }
 
 /** Previne CSV Injection (Formula Injection) e escapa aspas */
@@ -42,7 +134,16 @@ integrations.get('/api/v1/projects/:id/webhooks', async (c) => {
 
 integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
   const projectId = c.req.param('id');
-  const body = await c.req.json();
+  const valid = await validateBody(c, createWebhookSchema);
+  if (!valid.success) return valid.response;
+  const body = valid.data;
+
+  // SSRF guard também na CRIAÇÃO (antes só o /test validava, então destinos
+  // internos podiam ser persistidos e disparados por outros caminhos).
+  if (!isValidWebhookUrl(body.url)) {
+    return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);
+  }
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
@@ -92,7 +193,9 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
 
 integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
   const projectId = c.req.param('id');
-  const body = await c.req.json();
+  const valid = await validateBody(c, createApiKeySchema);
+  if (!valid.success) return valid.response;
+  const body = valid.data;
   const id = crypto.randomUUID();
   const plainKey = crypto.randomUUID() + '-' + crypto.randomUUID();
   const keyBytes = new TextEncoder().encode(plainKey);

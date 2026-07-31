@@ -22,3 +22,5 @@ export async function validateBody<T>(c: Context, schema: ZodSchema<T>): Promise
 
 export * from './auth';
 export * from './users';
+export * from './integrations';
+export * from './resources';

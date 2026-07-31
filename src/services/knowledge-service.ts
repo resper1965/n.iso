@@ -1,4 +1,5 @@
 import { Bindings } from '../index';
+import { EMBEDDING_MODEL } from './embeddings';
 
 export type KnowledgeType = 'interview' | 'procedure' | 'policy' | 'evidence' | 'other';
 
@@ -51,7 +52,7 @@ Responda APENAS um JSON no formato:
 
     // 3. Vectorize (pode ser async no futuro, aqui fazemos sync para simplicidade)
     try {
-      const embedding = await this.env.AI.run('@cf/baai/bge-small-en-v1.5', { text: [content.substring(0, 1000)] });
+      const embedding = await this.env.AI.run(EMBEDDING_MODEL, { text: [content.substring(0, 1000)] });
       await this.env.VECTOR_INDEX.upsert([{
         id: `knowledge_${id}`,
         values: embedding.data[0],
@@ -73,7 +74,7 @@ Responda APENAS um JSON no formato:
   }
 
   async search(projectId: string, query: string, limit = 5) {
-    const embedding = await this.env.AI.run('@cf/baai/bge-small-en-v1.5', { text: [query] });
+    const embedding = await this.env.AI.run(EMBEDDING_MODEL, { text: [query] });
     const matches = await this.env.VECTOR_INDEX.query(embedding.data[0], {
       filter: { project_id: projectId },
       topK: limit,

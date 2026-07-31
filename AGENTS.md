@@ -97,6 +97,12 @@ Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA fronten
 - authMiddleware roda antes das rotas /api/v1/*; projectAccessMiddleware roda logo apos, em /api/v1/projects/:projectId/*. Rotas realmente publicas (auth, public) sao montadas antes do authMiddleware.
 - SETUP_KEY e um segredo (wrangler secret put SETUP_KEY); sem ele /auth/setup fica desabilitado (falha fechada). Nunca commitar segredos em wrangler.jsonc.
 - Segredos/tokens de seguranca usam CSPRNG (genToken/genNumericCode), nunca Math.random/genId.
+- Embedding do RAG: use SEMPRE a constante EMBEDDING_MODEL (src/services/embeddings.ts) —
+  MemoryService e KnowledgeService precisam do mesmo modelo (vetores de modelos
+  diferentes nao sao comparaveis). O modelo atual e bge-m3 (multilingue, PT-BR),
+  1024 dimensoes. Trocar de modelo exige RECRIAR o indice Vectorize com a nova
+  dimensao e reingerir o conteudo (runbook no topo de embeddings.ts).
+- Antes de aplicar migrations em producao: `npm run db:backup` (ver backups/README.md).
 - Frontend: sem modulos ES em runtime, tudo no escopo window. State global S.
 - Schema: alinhar com schema.sql antes de adicionar colunas.
 - Ponytail mode: YAGNI, reusar patterns, menor diff possivel, boring over clever.

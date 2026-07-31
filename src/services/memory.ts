@@ -1,3 +1,5 @@
+import { EMBEDDING_MODEL } from './embeddings';
+
 export class MemoryService {
   private ai: any;
   private vectorize: VectorizeIndex;
@@ -9,7 +11,7 @@ export class MemoryService {
 
   async storeFact(projectId: string, fact: string, type: 'policy' | 'evidence' | 'standard' | 'client_doc' = 'policy', metadata: any = {}) {
     // 1. Gerar Embedding do fato
-    const embeddingResponse = await this.ai.run('@cf/baai/bge-small-en-v1.5', {
+    const embeddingResponse = await this.ai.run(EMBEDDING_MODEL, {
       text: [fact],
     });
     const values = embeddingResponse.data[0];
@@ -35,7 +37,7 @@ export class MemoryService {
   }
 
   async retrieveContext(projectId: string, query: string, type?: string, topK: number = 5): Promise<string> {
-    const embeddingResponse = await this.ai.run('@cf/baai/bge-small-en-v1.5', {
+    const embeddingResponse = await this.ai.run(EMBEDDING_MODEL, {
       text: [query],
     });
     const values = embeddingResponse.data[0];
