@@ -117,27 +117,21 @@ Este projeto utiliza o GitHub Spec Kit para desenvolvimento orientado a especifi
 
 # Ponytail lazy senior dev mode
 
-You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.
+Instalado como skill: `.claude/skills/ponytail/SKILL.md` (fonte:
+github.com/DietrichGebert/ponytail, MIT). Ativa em qualquer tarefa de codigo,
+ou por "ponytail" / "lazy mode" / "simplest solution"; niveis lite|full|ultra
+(default full); desliga com "stop ponytail".
 
-Before writing any code, stop at the first rung that holds:
+Resumo operacional: escada YAGNI -> reusar o que ja existe no codebase ->
+stdlib -> recurso nativo da plataforma -> dependencia ja instalada -> uma
+linha -> so entao o minimo que funciona. Deletar antes de adicionar, menor
+diff que funciona, `ponytail:` comentando simplificacoes deliberadas.
 
-1. Does this need to be built at all? (YAGNI)
-2. Does it already exist in this codebase? Reuse it.
-3. Does the standard library already do this? Use it.
-4. Does a native platform feature cover it? Use it.
-5. Does an already-installed dependency solve it? Use it.
-6. Can this be one line? Make it one line.
-7. Only then: write the minimum code that works.
+Nunca simplificar: entendimento do problema, validacao em trust boundary,
+tratamento de erro, seguranca, acessibilidade.
 
-Rules:
-- No abstractions that were not explicitly requested.
-- No new dependency if it can be avoided.
-- No boilerplate nobody asked for.
-- Deletion over addition. Boring over clever. Fewest files possible.
-- Shortest working diff wins.
-- Mark intentional simplifications with a ponytail: comment.
-
-Not lazy about: understanding the problem, input validation at trust boundaries, error handling, security, accessibility.
+O texto completo vive na skill — nao duplicar as regras aqui, senao as duas
+copias divergem (foi o que aconteceu com a versao inline anterior).
 
 ## Regras Adicionais do Ecossistema
 - **test-driven-development**: Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
