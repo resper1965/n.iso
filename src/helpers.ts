@@ -184,3 +184,56 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return constantTimeEqual(rehash, stored);
 }
 
+
+// ─── Paginação ───────────────────────────────────────────────────────────────
+
+/** Teto de linhas por listagem. Cliente que precisa de mais usa `offset`. */
+export const MAX_PAGE_SIZE = 500;
+export const DEFAULT_PAGE_SIZE = 200;
+
+/**
+ * Lê `?limit` e `?offset` da query e devolve valores seguros.
+ *
+ * As listagens não tinham LIMIT nenhum: 4 de 67 consultas. Num projeto com
+ * milhares de evidências, `SELECT * FROM evidence WHERE project_id = ?` carrega
+ * tudo na memória do worker e estoura o limite de CPU antes de responder.
+ *
+ * ponytail: o formato da resposta continua sendo array. Paginação com envelope
+ * (`{items, total, page}`) quebraria as 67 chamadas do frontend de uma vez —
+ * o teto protege o servidor sem exigir mudança no cliente. Quem quiser paginar
+ * de fato passa `?limit=&offset=`, e o header `X-Has-More` diz se sobrou.
+ */
+export function pageParams(c: any): { limit: number; offset: number } {
+  const bruto = Number(c.req.query('limit'));
+  const limit = Number.isFinite(bruto) && bruto > 0 ? Math.min(bruto, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+  const off = Number(c.req.query('offset'));
+  const offset = Number.isFinite(off) && off > 0 ? Math.floor(off) : 0;
+  return { limit, offset };
+}
+
+/**
+ * Executa uma listagem com teto. Pede uma linha a mais que o limite para saber
+ * se há continuação, sem pagar um COUNT(*) separado.
+ */
+export async function listPaged<T = any>(
+  c: any,
+  sql: string,
+  binds: unknown[] = []
+): Promise<{ results: T[]; hasMore: boolean; limit: number; offset: number }> {
+  const { limit, offset } = pageParams(c);
+  const { results } = await c.env.DB.prepare(`${sql} LIMIT ? OFFSET ?`)
+    .bind(...binds, limit + 1, offset)
+    .all();
+  const linhas = (results || []) as T[];
+  const hasMore = linhas.length > limit;
+  return { results: hasMore ? linhas.slice(0, limit) : linhas, hasMore, limit, offset };
+}
+
+/** Resposta de listagem: array puro (contrato antigo) + metadados no header. */
+export function pagedJson(c: any, p: { results: unknown[]; hasMore: boolean; limit: number; offset: number }) {
+  return c.json(p.results, 200, {
+    'X-Has-More': String(p.hasMore),
+    'X-Page-Limit': String(p.limit),
+    'X-Page-Offset': String(p.offset),
+  });
+}
