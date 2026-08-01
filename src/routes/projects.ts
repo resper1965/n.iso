@@ -662,7 +662,7 @@ const handleControlApprove = async (c: any) => {
     const controlId = c.req.param('id');
     const v = await validateBody(c, assinaturaSchema);
     if (!v.success) return v.response;
-    const { password, role, project_id } = v.data as any;
+    const { password, project_id } = v.data as any;
     const user = c.get('user');
 
     if (!password) {

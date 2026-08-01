@@ -89,15 +89,9 @@ projectTrainingApp.get('/summary', async (c) => {
 projectTrainingApp.post('/import-external', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const { records } = await c.req.json<{
-      records: Array<{
-        employee_name: string;
-        training_name: string;
-        completion_date?: string;
-        score?: number;
-        status?: string;
-      }>;
-    }>();
+    const v = await validateBody(c, trainingImportSchema);
+    if (!v.success) return v.response;
+    const { records } = v.data as any;
 
     if (!Array.isArray(records) || records.length === 0) {
       return c.json({ error: 'Nenhum registro fornecido' }, 400);
