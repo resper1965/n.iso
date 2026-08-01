@@ -94,6 +94,17 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       return c.json({ error: 'Unauthorized: Session revoked, please sign in again' }, 401);
     }
 
+    // Sessão pendente de segundo fator: só pode falar com /auth/mfa/*. Sem esta
+    // trava o MFA seria decorativo — o token devolvido pelo login já daria
+    // acesso a tudo, e conferir o código seria opcional na prática.
+    if ((user as any).mfa_pending && !path.startsWith('/api/v1/auth/mfa/')) {
+      return c.json({ error: 'Unauthorized: Second factor required', mfa_required: true }, 401);
+    }
+
+    // Guarda o identificador para que /auth/mfa/verify possa reescrever a
+    // própria sessão ao confirmar o código.
+    c.set('sessionId', sessionId);
+
     // Legacy role mapping for backward compatibility.
     // Keep consistent with the login handler (routes/auth.ts): 'admin' is a
     // platform-level admin, not a project-scoped org_admin.

@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL,
     client_project_id TEXT,
     requires_password_change INTEGER DEFAULT 0,
+    -- Segundo fator (TOTP). Desligado por padrão; habilitar é ação do usuário.
+    totp_secret TEXT,
+    totp_enabled INTEGER DEFAULT 0,
+    totp_recovery_hashes TEXT,
+    totp_last_window INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

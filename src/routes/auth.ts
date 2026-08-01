@@ -51,7 +51,7 @@ authApp.post('/login', async (c) => {
     const { email, password } = valid.data;
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change FROM users WHERE email = ?'
+      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
     
@@ -65,9 +65,11 @@ authApp.post('/login', async (c) => {
     }
     
     const requiresChange = user.requires_password_change === 1;
-    
+    const exigeMfa = user.totp_enabled === 1;
+
     delete user.password_hash;
     delete user.requires_password_change;
+    delete user.totp_enabled;
     
     if (user.role === 'admin') {
       user.role = 'platform_admin';
@@ -78,11 +80,14 @@ authApp.post('/login', async (c) => {
     const token = genToken();
     // `iat` é o que permite revogar a sessão depois: o middleware compara com o
     // marco de invalidação do usuário. Sessão sem `iat` é tratada como revogada.
-    const sessao = { ...user, iat: Date.now() };
+    // Sessão nasce PENDENTE quando o usuário tem segundo fator: o
+    // authMiddleware só libera /auth/mfa/* até o código ser conferido. Sem
+    // isto o MFA seria decorativo — o token do login já daria acesso a tudo.
+    const sessao = { ...user, iat: Date.now(), ...(exigeMfa ? { mfa_pending: true } : {}) };
     await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     
-    return c.json({ token, user, requiresPasswordChange: requiresChange });
+    return c.json({ token, user, requiresPasswordChange: requiresChange, requiresMfa: exigeMfa });
   } catch (e: any) {
     return c.json({ error: 'Login failed', detail: e.message }, 500);
   }
