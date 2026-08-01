@@ -184,3 +184,40 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return constantTimeEqual(rehash, stored);
 }
 
+
+// ─── Webhook: assinatura HMAC ────────────────────────────────────────────────
+
+/**
+ * Assina o corpo de um webhook com HMAC-SHA256.
+ *
+ * Sem assinatura, quem recebe não tem como distinguir um evento nosso de um
+ * POST forjado por qualquer um que descubra a URL — e a URL vai em texto puro
+ * em log, proxy e histórico de navegador. O receptor age sobre o conteúdo
+ * (cria ticket, notifica auditor), então forjar evento é forjar fato.
+ *
+ * Formato `t=<epoch>,v1=<hex>`, e o timestamp entra no que é assinado. Sem ele,
+ * uma requisição legítima capturada pode ser reenviada indefinidamente — a
+ * assinatura continuaria válida. Cabe ao receptor recusar `t` antigo.
+ */
+export async function signWebhook(secret: string, payload: string, timestampSec?: number): Promise<string> {
+  const t = timestampSec ?? Math.floor(Date.now() / 1000);
+  const enc = new TextEncoder();
+  const chave = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const assinatura = await crypto.subtle.sign('HMAC', chave, enc.encode(`${t}.${payload}`));
+  const hex = Array.from(new Uint8Array(assinatura)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `t=${t},v1=${hex}`;
+}
+
+/**
+ * Confere uma assinatura. Existe para o teste e para quem for escrever o
+ * receptor do outro lado — a verificação real acontece fora daqui.
+ * Usa comparação de tempo constante.
+ */
+export async function verifyWebhookSignature(secret: string, payload: string, header: string): Promise<boolean> {
+  const t = header.match(/t=(\d+)/)?.[1];
+  if (!t) return false;
+  const esperado = await signWebhook(secret, payload, Number(t));
+  return constantTimeEqual(esperado, header);
+}

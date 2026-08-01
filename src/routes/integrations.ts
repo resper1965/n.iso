@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { requireResourceAccess } from '../helpers';
+import { requireResourceAccess, genToken, signWebhook } from '../helpers';
 import { validateBody, createWebhookSchema, createApiKeySchema } from '../schemas';
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -146,13 +146,19 @@ integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  // Segredo opcional na API significava, na prática, webhook sem assinatura —
+  // ninguém preenche campo opcional. Gera um se não vier.
+  const secret = body.secret || genToken();
   await c.env.DB.prepare(
     `INSERT INTO webhooks (id, project_id, url, events, secret, status, failure_count, created_at)
      VALUES (?, ?, ?, ?, ?, 'Active', 0, ?)`
-  ).bind(id, projectId, body.url, body.events, body.secret || '', now).run();
+  ).bind(id, projectId, body.url, body.events, secret, now).run();
   const user = c.get('user');
   await c.env.DB.prepare('INSERT INTO audit_logs (id, action, actor, details, project_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'webhook_created', user.email, `Webhook ${id} created for ${body.url}`, projectId).run();
-  return c.json({ ok: true, id }, 201);
+  // ponytail: segredo devolvido UMA vez, como a chave de API. Quem recebe
+  // precisa dele para conferir a assinatura, e não há endpoint que o leia de
+  // volta — se perder, recria o webhook.
+  return c.json({ ok: true, id, secret, gerado: !body.secret }, 201);
 });
 
 integrations.delete('/api/v1/webhooks/:id', async (c) => {
@@ -176,11 +182,19 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
   }
 
   try {
-    const resp = await fetch(webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'test', project_id: webhook.project_id, timestamp: new Date().toISOString() }),
+    const corpo = JSON.stringify({
+      event: 'test',
+      event_id: crypto.randomUUID(),
+      project_id: webhook.project_id,
+      timestamp: new Date().toISOString(),
     });
+    const cabecalhos: Record<string, string> = { 'Content-Type': 'application/json' };
+    // Webhook antigo pode não ter segredo (a coluna aceitava ''); nesse caso
+    // segue sem assinatura em vez de quebrar a integração existente.
+    if (webhook.secret) {
+      cabecalhos['X-nISO-Signature'] = await signWebhook(webhook.secret, corpo);
+    }
+    const resp = await fetch(webhook.url, { method: 'POST', headers: cabecalhos, body: corpo });
     await c.env.DB.prepare('UPDATE webhooks SET last_triggered_at = ? WHERE id = ?').bind(new Date().toISOString(), id).run();
     return c.json({ ok: true, status: resp.status });
   } catch (e: any) {
