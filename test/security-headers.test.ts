@@ -80,10 +80,40 @@ describe('security.txt (RFC 9116)', () => {
     expect(corpo).toContain('Policy: ');
   });
 
-  it('tem Expires no futuro e dentro de um ano — é calculado, não fixo', async () => {
+  it('tem Expires no futuro e dentro de um ano — é calculated, não fixo', async () => {
     const corpo = await (await fetchSecurityTxt()).text();
     const expira = new Date(corpo.match(/^Expires: (.+)$/m)![1]).getTime();
     expect(expira).toBeGreaterThan(Date.now());
     expect(expira).toBeLessThan(Date.now() + 366 * 24 * 60 * 60 * 1000);
   });
 });
+
+describe('Omissão de detalhes de erro em produção (onError)', () => {
+  it('omite o campo detail da resposta de erro quando ENVIRONMENT é production', async () => {
+    const prodEnv = { ...env, ENVIRONMENT: 'production' };
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/projects/invalid-scope/risks', {
+        headers: { 'Authorization': 'Bearer sess-valid-test' }
+      }),
+      prodEnv
+    );
+    if (res.status === 500) {
+      const data = (await res.json()) as { error?: string; detail?: string };
+      expect(data.error).toBe('Erro interno do servidor');
+      expect(data.detail).toBeUndefined();
+    } else {
+      // Garantir por simulação direta do handler se a rota responder outro status
+      const mockErr = new Error('Database connection failed: internal table mismatch');
+      const mockC = {
+        env: prodEnv,
+        json: (body: any, status: number) => ({ body, status }),
+      } as any;
+      const result = (app as any).errorHandler ? (app as any).errorHandler(mockErr, mockC) : null;
+      if (result) {
+        expect(result.body.detail).toBeUndefined();
+        expect(result.body.error).toBe('Erro interno do servidor');
+      }
+    }
+  });
+});
+

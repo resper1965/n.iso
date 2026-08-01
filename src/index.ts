@@ -194,12 +194,11 @@ app.get('/*', async (c) => {
 });
 
 // 8. Handler de erro global: garante corpo JSON consistente em erros não capturados
-// e evita vazar detalhes internos ao cliente (o stack fica apenas nos logs).
+// e evita vazar detalhes internos ao cliente (o detalhe só é incluído se ENVIRONMENT for EXPLICITAMENTE 'development' ou 'test').
 app.onError((err, c) => {
   console.error('[nISO] Unhandled error:', err);
-  const detail = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'test'
-    ? (err as Error).message
-    : undefined;
+  const isDevOrTest = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'test';
+  const detail = isDevOrTest ? (err as Error).message : undefined;
   return c.json({ error: 'Erro interno do servidor', ...(detail ? { detail } : {}) }, 500);
 });
 
