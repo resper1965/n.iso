@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 
 import { authMiddleware } from './middleware/auth';
 import { projectAccessMiddleware } from './middleware/project-access';
+import { log, requestId, metrica, resumoErro } from './observability';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
@@ -42,9 +43,13 @@ export type Bindings = {
   AI_GATEWAY_ID?: string;
   AI_GATEWAY_TOKEN?: string;
   RESEND_API_KEY?: string;
+  /** Analytics Engine. Opcional: sem o binding, a métrica é ignorada. */
+  ANALYTICS?: AnalyticsEngineDataset;
 };
 
 export type Variables = {
+  /** Correlaciona log de acesso e log de erro da mesma requisição. */
+  requestId?: string;
   user: {
     id: string;
     email: string;
@@ -113,6 +118,29 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Session-ID'],
 }));
+
+// 1b. Log de acesso estruturado. Uma linha JSON por requisição, filtrável no
+// `wrangler tail` — antes não havia nenhuma, e o erro só aparecia quando o
+// cliente ligava. Nunca inclui corpo nem valor de campo (PII sob LGPD).
+app.use('*', async (c, next) => {
+  const inicio = Date.now();
+  const rid = requestId(c);
+  c.set('requestId', rid);
+  await next();
+  const duracao = Date.now() - inicio;
+  const rota = new URL(c.req.url).pathname;
+  const nivel = c.res.status >= 500 ? 'error' : c.res.status >= 400 ? 'warn' : 'info';
+  log(nivel, {
+    msg: 'request',
+    request_id: rid,
+    metodo: c.req.method,
+    rota,
+    status: c.res.status,
+    duracao_ms: duracao,
+    ator: c.get('user')?.email,
+  });
+  metrica(c.env, [String(c.res.status)], [c.req.method, rota], [duracao]);
+});
 
 // 2. Health check (público)
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -196,7 +224,21 @@ app.get('/*', async (c) => {
 // 8. Handler de erro global: garante corpo JSON consistente em erros não capturados
 // e evita vazar detalhes internos ao cliente (o detalhe só é incluído se ENVIRONMENT for EXPLICITAMENTE 'development' ou 'test').
 app.onError((err, c) => {
-  console.error('[nISO] Unhandled error:', err);
+  // Tudo aqui é defensivo de propósito: um handler de erro que estoura
+  // substitui um 500 informativo por um erro sem corpo. O contexto pode estar
+  // incompleto justamente porque a falha aconteceu cedo.
+  try {
+    log('error', {
+      msg: 'erro_nao_tratado',
+      request_id: (c as any).get?.('requestId'),
+      metodo: c.req?.method,
+      rota: c.req?.url ? new URL(c.req.url).pathname : undefined,
+      ator: (c as any).get?.('user')?.email,
+      erro: resumoErro(err),
+    });
+  } catch {
+    console.error('[nISO] erro nao tratado (log estruturado indisponivel):', resumoErro(err));
+  }
   const isDevOrTest = c.env?.ENVIRONMENT === 'development' || c.env?.ENVIRONMENT === 'test';
   const detail = isDevOrTest ? (err as Error).message : undefined;
   return c.json({ error: 'Erro interno do servidor', ...(detail ? { detail } : {}) }, 500);
