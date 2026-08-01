@@ -1,0 +1,31 @@
+name: Melhoria ou funcionalidade
+description: Algo que o nISO deveria fazer e ainda não faz.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qual o problema
+      description: |
+        A necessidade real, não a solução. "Consultor perde 2h por projeto
+        montando o SoA na mão" diz mais do que "quero um botão de exportar".
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você imagina
+      description: Se já tem uma ideia de solução. Opcional.
+
+  - type: input
+    id: norma
+    attributes:
+      label: Cláusula ISO 27001 / 27701 ou artigo da LGPD relacionado
+      description: Se aplicável. Requisito normativo muda a prioridade.
+
+  - type: textarea
+    id: hoje
+    attributes:
+      label: Como isso é resolvido hoje
+      description: Contorno manual, planilha, outra ferramenta, ou simplesmente não é.

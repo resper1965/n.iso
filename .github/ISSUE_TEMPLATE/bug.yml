@@ -1,0 +1,52 @@
+name: Defeito
+description: Algo que deveria funcionar e não funciona.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vulnerabilidade de segurança **não** vai aqui — veja `SECURITY.md`.
+        Nunca cole chave, token, ID de conta ou dado pessoal de cliente.
+
+  - type: textarea
+    id: comportamento
+    attributes:
+      label: O que acontece
+      description: O comportamento observado, e o que você esperava no lugar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Como reproduzir
+      description: Passos, ou a requisição (método + rota + corpo, sem segredos).
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ambiente
+    attributes:
+      label: Onde
+      options:
+        - Produção
+        - Desenvolvimento local (wrangler dev)
+        - Servidor MCP
+        - Não sei
+    validations:
+      required: true
+
+  - type: input
+    id: versao
+    attributes:
+      label: Commit ou data do deploy
+      description: Se souber. Ajuda a saber se já foi corrigido.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Erro no console, resposta da API, ou qualquer outra pista
+      render: text

@@ -1,4 +1,4 @@
-# nISO — Agentic GRC System 🚀
+# nISO — Agentic GRC System
 
 O **nISO** é a evolução do sistema de adequação ISO 27001 da **ness.**, migrado para uma arquitetura agêntica e serverless sobre a stack da Cloudflare.
 
@@ -9,9 +9,9 @@ O **nISO** é a evolução do sistema de adequação ISO 27001 da **ness.**, mig
 3.  **Banco de Dados (Local)**:
     ```bash
     npx wrangler d1 execute niso-db --local --file=./schema.sql
-    npx wrangler d1 execute niso-db --local --file=./seed_blueprint.sql
+    npx wrangler d1 migrations apply niso-db --local
     ```
-4.  **Deploy**: `npm run deploy`
+4.  **Deploy**: `npm run deploy` — faça backup antes (`npm run db:backup`, runbook em `backups/README.md`).
 
 ## Features
 
@@ -29,6 +29,18 @@ O **nISO** é a evolução do sistema de adequação ISO 27001 da **ness.**, mig
 - **Memory**: Vectorize (RAG) para contexto organizacional e normativo.
 - **Storage**: Cloudflare R2 para documentos e evidências.
 - **AI**: Cloudflare Workers AI (Llama 3.1).
+
+## Integração com agentes (MCP)
+
+O `mcp-server-niso/` expõe o nISO a clientes MCP (Claude Desktop, Claude Code)
+com filtro de ferramentas por papel — o auditor não escreve implementação, o
+consultor não registra achado de auditoria. Instalação, variáveis de ambiente e
+diagnóstico em [`mcp-server-niso/README.md`](mcp-server-niso/README.md).
+
+## Contribuindo
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — ambiente, verificação antes do PR, regras de schema e teste
+- [`SECURITY.md`](SECURITY.md) — como reportar vulnerabilidade e quais invariantes não podem regredir
 
 ## Configuration
 

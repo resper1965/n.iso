@@ -1,0 +1,12 @@
+# Revisor padrão de tudo.
+*                           @resper1965
+
+# Caminhos sensíveis: mudanças aqui alteram a postura de segurança do produto
+# ou o contrato com o banco. Revisão explícita, não por hábito.
+/src/middleware/            @resper1965
+/src/routes/auth.ts         @resper1965
+/schema.sql                 @resper1965
+/migrations/                @resper1965
+/wrangler.jsonc             @resper1965
+/SECURITY.md                @resper1965
+/.github/                   @resper1965

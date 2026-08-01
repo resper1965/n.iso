@@ -1,139 +1,136 @@
-# nISO - Manifesto do Agente
+# nISO — Manifesto do Agente
 
-Se voce esta lendo isto, voce e o agente responsavel por continuar o desenvolvimento do **nISO** (Agentic GRC System da ness.).
+Se voce esta lendo isto, voce e o agente responsavel por continuar o
+desenvolvimento do **nISO** (Agentic GRC System da ness.).
 
-## Contexto Atual
-Stack Cloudflare: Workers (Hono) + D1 + R2 + Vectorize + AI. Vanilla SPA frontend (sem framework). Deploy via wrangler deploy.
+Este arquivo descreve o que **existe hoje**. Historico de sprint vive no
+`CHANGELOG.md` — nao acrescente narrativa de entrega aqui, ela envelhece e
+passa a mentir para o proximo agente.
 
-## Stack Tecnica
-- **Backend**: src/index.ts e o composition root (~140 linhas) que monta os sub-routers de dominio em src/routes/*.ts (auth, users, leads, proposals, assessments, projects, evidence, vendors, training, ropa, audits, capa, certifications, public, ai, governance, auditor, platform, risks, policies, integrations). Cobre risk, vendor, training, ROPA, audit calendar, CAPA, portfolio, webhooks, API keys, CSV exports, certification tracker, AI chat, onboarding, marketplace, public pricing/stats.
-- **Middleware**: src/middleware/auth.ts (sessao + RBAC write-guard method+rota) e src/middleware/project-access.ts (isolamento multi-tenant em /api/v1/projects/:projectId/*).
-- **Services**: src/services/pricing.ts (~17KB), memory.ts (Vectorize RAG), soa-logic.ts (93 regras), migration-service.ts (2013→2022), policy-generator.ts (templates via binding ASSETS).
-- **Agents**: src/agents/ - PolicyAgent (GPT-4.1 via Gateway com fallback Llama 3.3), EvidenceAgent, AssessmentAgent.
-- **Frontend**: SPA Vanilla JS modular em frontend/src/ (bundle via Vite -> frontend/dist, servido pelo binding ASSETS). Entrada frontend/index.html + src/main.js; router.js, state.js (global S), api.js, ui.js (utils compartilhados), globals.js e src/views/*.js. politicas.html e o portal publico de politicas.
-- **Schema**: schema.sql - D1 tables (23): assessments, assessment_answers, projects, project_phases, leads, proposals, contracts, users, compliance_controls, evidence, audit_logs, auditor_tokens, notifications, risks, vendors, training_records, ropa_records, audit_schedule, corrective_actions, api_keys, webhooks, organizations, certification_tracking, ai_chat_history.
-- **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2), AI.
+## Stack
 
-## O que ja esta feito (Sprint 1 + Sprint 2 + Sprint 3 completas):
+Cloudflare Workers (Hono) + D1 + KV + R2 + Vectorize + Workers AI. Frontend SPA
+Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
-### Sprint 1:
-1. Assessment Pre-Sales: 10 blocos, 92 perguntas com tipos (text, select, multi, yesno).
-2. Pricing Engine: 4 tiers (Foundation R, Standard R, Enterprise R, Critical R).
-3. Auto-Proposta: POST /api/v1/assessments/:id/generate-proposal gera HTML branded.
-4. Auto-Projeto: Assinar proposta cria projeto + 41 fases automaticamente.
-5. Phase Checklists: 41 fases com 204 itens (task/document/evidence).
-6. Smart Dashboard: CTA context-aware, stats, activity feed.
-7. UI/UX Redesign: Inter body, Montserrat headings, glassmorphism, sem icones.
-8. Auth: Login com email/senha, sessoes via KV, 3 roles.
-9. i18n: PT/EN/ES no frontend.
+- **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
+  dominio em `src/routes/*.ts` (auth, users, leads, proposals, assessments,
+  projects, evidence, vendors, training, ropa, audits, capa, certifications,
+  public, ai, governance, auditor, platform, risks, policies, integrations).
+- **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
+  write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
+  multi-tenant em `/api/v1/projects/:projectId/*`).
+- **Services**: `pricing.ts`, `memory.ts` (RAG Vectorize), `soa-logic.ts`
+  (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
+  `policy-generator.ts`, `embeddings.ts`, `project-setup.ts`.
+- **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
+- **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
+  Entrada `frontend/index.html` + `src/main.js`; `router.js`, `state.js`
+  (estado global `S`), `api.js`, `ui.js`, `globals.js`, `src/views/*.js`.
+  `politicas.html` e o portal publico de politicas.
+- **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
+  `migrations/` (ultima aplicada localmente: 0018).
+- **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
+  AI, ASSETS.
+- **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
+  ferramenta por papel. Ver `mcp-server-niso/README.md`.
 
-### Sprint 2:
-10. PolicyAgent: POST /api/v1/projects/:id/generate-policy - gera politicas ISO via Cloudflare AI (Llama 3).
-11. EvidenceAgent: POST /api/v1/evidence/:id/evaluate - avalia evidencias com AI (CONFORME/PARCIAL/NAO CONFORME).
-12. Auditor Portal: frontend/dist/auditor.html - pagina publica read-only com token temporario.
-13. Notifications: tabela + endpoints GET/PUT + triggers automaticos + badge/dropdown + polling 60s.
-14. Bindings Fix: AI, STORAGE, VECTOR_INDEX adicionados ao type Bindings.
-15. Frontend: Botao "Gerar Politica" no project-detail com modal de resultado AI.
+## Decisoes de produto ja tomadas — nao reabrir
 
-### Sprint 3:
-16. Evidence Upload: POST /api/v1/projects/:id/evidence/upload - multipart R2 + SHA-256 real via crypto.subtle.digest.
-17. MemoryService RAG: PolicyAgent agora busca contexto anterior via Vectorize (retrieveContext) e armazena politicas geradas (storeFact).
-18. SoA Logic Engine: soa-logic.ts expandido de 3 para 93 regras (todos os controles ISO 27001:2022 Annex A). Data-driven com RULES array.
-19. SoA Generator: POST /api/v1/projects/:id/generate-soa - gera SoA, cria compliance_controls automaticamente.
-20. Client Portal: GET /api/v1/client/dashboard + renderClientDashboard expandido com journeys, progress %, next milestone, notificacoes.
-21. Audit Readiness Pack: GET /api/v1/projects/:id/audit-pack - download JSON com projeto, fases, controles, evidencias, audit trail.
-22. Evidence List: GET /api/v1/projects/:id/evidence - listar evidencias do projeto.
-
-### Sprint 4:
-23. Risk Assessment Module: CRUD completo (risks table, GET/POST/PUT/DELETE, risk matrix com scoring 5x5).
-24. KYV (Know Your Vendor): CRUD completo (vendors table, trust score, diligence level auto-calc, DPA tracking, certificacoes).
-25. Security Awareness Tracker: CRUD (training_records table) + summary endpoint (cobertura %, compliance status).
-26. Bulk Policy Generation: POST /api/v1/projects/:id/generate-policies-bulk - gera multiplas politicas sequencialmente via AI.
-27. ISO 27701 Migration: POST /api/v1/projects/:id/migrate-27701 - migra SoA 2013→2022, identifica gaps, cria controles novos.
-28. Frontend: 3 novas views sidebar (Riscos, Fornecedores, Treinamento) + modais CRUD + botoes Bulk Politicas e Migrar 27701.
-### Sprint 5:
-29. Policy Templates: 10 templates ISO (ISP, AUP, ACP, IRP, BCP, DPP, CMP, SDP, VMP, SAP) in-code.
-30. Traceability: GET /api/v1/projects/:id/traceability - vincula riscos → controles → evidencias.
-31. ROPA Module: CRUD completo (ropa_records table) para ISO 27701.
-32. Gap Analysis: GET /api/v1/projects/:id/gap-analysis - cobertura %, by_status, gaps.
-33. Control Maturity: PUT /api/v1/controls/:id/maturity - scoring CMM 0-5.
-34. Frontend: nova view ROPA + modal CRUD + botao Gap Analysis no project-detail.
-
-### Sprint 6:
-35. Executive Report: GET /api/v1/projects/:id/executive-report - JSON agregado completo.
-36. Portfolio: GET /api/v1/portfolio - visao multi-projeto com progress bars.
-37. Audit Calendar: CRUD (audit_schedule table) + frontend view Auditorias.
-38. CAPA: CRUD (corrective_actions table) + frontend view Acoes Corretivas.
-39. Frontend: views Portfolio, Auditorias, CAPA + botao Report Executivo.
-
-### Sprint 7:
-40. Webhooks: CRUD + test trigger (webhooks table).
-41. API Keys: generate/list/revoke com SHA-256 hash (api_keys table).
-42. CSV Exports: riscos, vendors, training, audit-log como CSV download.
-43. Frontend: botoes Export CSV no Portfolio.
-
-### Sprint 8:
-44. Certification Tracker: CRUD (certification_tracking table, 7 estagios de Gap Assessment ate Certified).
-45. AI Compliance Assistant: POST /api/v1/projects/:id/chat - chatbot contextual via Llama 3.1 com historico.
-46. Onboarding Status: GET /api/v1/onboarding-status - verificacao de completude do setup.
-47. Template Marketplace: GET /api/v1/marketplace/templates - templates com categorias, dificuldade, tempo estimado.
-48. Public Endpoints: GET /api/v1/public/pricing + /api/v1/public/stats - dados publicos sem auth.
-49. Landing Page: frontend/dist/landing.html - pagina publica com features, pricing, how-it-works.
-50. Frontend: views Certificacao + AI Assistant no sidebar.
-
-## Produto Completo — 8 Sprints, 50 Features, 98+ Endpoints, 23 Tabelas D1
-
-## Regras da ness.
-- Marca: ness. (sempre minusculo, com ponto).
-- Layout: Enterprise Grade, header 56px com backdrop-filter.
-- Cores: #070b14 (fundo), #00ade8 (accent), #f5f5f7 (texto), rgba(229,235,255,0.6) (muted).
-- Tipografia: Inter 300/400 para body, Montserrat 500/700 apenas headings.
-- Proibido: italicos, emojis/icones, peso 600 Montserrat, accent como background de area.
-- Inputs: border-radius 10px, glassmorphism surfaces com backdrop-filter blur(24px).
-- Login: split-screen (branding esquerda, form direita).
+- **Sem i18n.** O produto e PT-BR. Comentario, mensagem de erro e texto de UI em
+  portugues. A camada de traducao foi removida por decisao explicita.
+- **Sem alternancia de tema.** Um tema so, o escuro da marca.
+- **Sem framework no frontend.** Vanilla e decisao, nao divida.
+- **Responsividade fora de escopo** ate segunda ordem.
 
 ## Restricoes Tecnicas
-- O catch-all estatico (c.env.ASSETS.fetch) DEVE ser a ultima rota em src/index.ts.
-- authMiddleware roda antes das rotas /api/v1/*; projectAccessMiddleware roda logo apos, em /api/v1/projects/:projectId/*. Rotas realmente publicas (auth, public) sao montadas antes do authMiddleware.
-- SETUP_KEY e um segredo (wrangler secret put SETUP_KEY); sem ele /auth/setup fica desabilitado (falha fechada). Nunca commitar segredos em wrangler.jsonc.
-- Segredos/tokens de seguranca usam CSPRNG (genToken/genNumericCode), nunca Math.random/genId.
-- Embedding do RAG: use SEMPRE a constante EMBEDDING_MODEL (src/services/embeddings.ts) —
-  MemoryService e KnowledgeService precisam do mesmo modelo (vetores de modelos
-  diferentes nao sao comparaveis). O modelo atual e bge-m3 (multilingue, PT-BR),
-  1024 dimensoes. Trocar de modelo exige RECRIAR o indice Vectorize com a nova
-  dimensao e reingerir o conteudo (runbook no topo de embeddings.ts).
-- Antes de aplicar migrations em producao: `npm run db:backup` (ver backups/README.md).
-- Frontend: sem modulos ES em runtime, tudo no escopo window. State global S.
-- Schema: alinhar com schema.sql antes de adicionar colunas.
-- Ponytail mode: YAGNI, reusar patterns, menor diff possivel, boring over clever.
+
+- O catch-all estatico (`c.env.ASSETS.fetch`) DEVE ser a ultima rota em
+  `src/index.ts`.
+- `authMiddleware` roda antes das rotas `/api/v1/*`; `projectAccessMiddleware`
+  logo apos, em `/api/v1/projects/:projectId/*`. Rotas realmente publicas (auth,
+  public) sao montadas antes do `authMiddleware`.
+- Chave de API autoriza escrita pelo campo `permissions` (`write`/`admin`), nao
+  pelo allow-list — este existe para papeis **humanos** read-only. Ver o
+  comentario em `auth.ts` antes de mexer.
+- `SETUP_KEY` e segredo (`wrangler secret put SETUP_KEY`); sem ele `/auth/setup`
+  fica desabilitado (falha fechada). Nunca commitar segredo em `wrangler.jsonc`.
+- Segredos e tokens usam CSPRNG (`genToken`/`genNumericCode`), nunca
+  `Math.random`.
+- Embedding do RAG: use SEMPRE a constante `EMBEDDING_MODEL`
+  (`src/services/embeddings.ts`). MemoryService e KnowledgeService precisam do
+  mesmo modelo — vetores de modelos diferentes nao sao comparaveis. Hoje e
+  bge-m3 (multilingue, PT-BR), 1024 dimensoes. Trocar de modelo exige RECRIAR o
+  indice Vectorize com a nova dimensao e reingerir (runbook no topo do arquivo).
+- Schema muda em **dois** lugares: `schema.sql` e uma migration. Em `schema.sql`,
+  indice **depois** da tabela — `CREATE INDEX` antes do `CREATE TABLE` derruba a
+  criacao de banco novo e so aparece em banco novo.
+- Antes de migration em producao: `npm run db:backup` (ver `backups/README.md`).
+- Frontend: sem modulos ES em runtime, tudo no escopo `window`. Estado global `S`.
+
+## Divida conhecida — nao finja que nao existe
+
+Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
+
+- **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
+  tocar e melhoria barata; nao precisa de permissao.
+- **4 de 14 arquivos de teste ainda mockam o D1.** Teste mockado nao pega deriva
+  de schema — foi exatamente assim que o codebase acumulou consulta a tabela
+  inexistente. Caminho novo de banco: teste de integracao real, no estilo de
+  `test/schema-contract.test.ts`.
+- **Frontend sem nenhum teste** (~12k linhas).
+- **31 arquivos markdown na raiz**, a maioria plano morto. Nao adicione mais um;
+  prefira editar o que ja existe.
+- **Sem pipeline de deploy automatizado ate 2026-07.** `.github/workflows/deploy.yml`
+  existe mas exige `CLOUDFLARE_API_TOKEN` configurado e disparo manual.
+
+## Regras da ness.
+
+- Marca: ness. (sempre minusculo, com ponto).
+- Layout: Enterprise Grade, header 56px com backdrop-filter.
+- Cores: #070b14 (fundo), #00ade8 (accent), #f5f5f7 (texto),
+  rgba(229,235,255,0.6) (muted).
+- Tipografia: Inter 300/400 para body, Montserrat 500/700 apenas headings.
+- Proibido: italicos, emojis/icones, peso 600 Montserrat, accent como background
+  de area.
+- Inputs: border-radius 10px, glassmorphism com backdrop-filter blur(24px).
+- Login: split-screen (branding esquerda, form direita).
+
+## Documentos que valem a leitura
+
+- `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
+- `SECURITY.md` — invariantes de seguranca que nao podem regredir
+- `backups/README.md` — runbook de backup e restauracao
+- `CONSTITUTION.md`, `design.md`, `specs/` — Spec Kit
 
 <!-- SPECKIT START -->
 ## Contexto Spec Kit
-Este projeto utiliza o GitHub Spec Kit para desenvolvimento orientado a especificacoes.
+Este projeto utiliza o GitHub Spec Kit para desenvolvimento orientado a
+especificacoes.
 - Constituicao: CONSTITUTION.md
 - Design: design.md
 - Especificacoes: Localizadas em specs/
 <!-- SPECKIT END -->
 
-# Ponytail lazy senior dev mode
+## Skills instaladas
 
-Instalado como skill: `.claude/skills/ponytail/SKILL.md` (fonte:
-github.com/DietrichGebert/ponytail, MIT). Ativa em qualquer tarefa de codigo,
-ou por "ponytail" / "lazy mode" / "simplest solution"; niveis lite|full|ultra
-(default full); desliga com "stop ponytail".
+`.agents/skills/`, simlinkadas em `.claude/skills/`. O texto completo vive em
+cada skill — nao duplicar as regras aqui, senao as duas copias divergem (foi o
+que aconteceu com a copia inline do ponytail).
 
-Resumo operacional: escada YAGNI -> reusar o que ja existe no codebase ->
-stdlib -> recurso nativo da plataforma -> dependencia ja instalada -> uma
-linha -> so entao o minimo que funciona. Deletar antes de adicionar, menor
-diff que funciona, `ponytail:` comentando simplificacoes deliberadas.
+| Skill | Quando atua |
+|---|---|
+| `ponytail` | Toda tarefa de codigo. Escada YAGNI, menor diff que funciona, reusar antes de escrever. Nunca simplifica: entendimento do problema, validacao em trust boundary, tratamento de erro, seguranca, acessibilidade. |
+| `security-threat-model` | Modelagem de ameaca de uma area do codigo, sob pedido explicito |
+| `security-audit` | Caca a vulnerabilidade exploravel |
+| `code-review` | Review de diff contra padrao do repo e contra a spec |
+| `requesting-code-review` | Entre tarefas; achado critico bloqueia |
+| `test-driven-development` | RED-GREEN-REFACTOR durante implementacao |
+| `finishing-a-development-branch` | Fechamento de branch |
+| `webapp-testing` | Teste de UI via navegador |
+| `iso27001` / `iso27701` | Referencia normativa: Annex A, clausulas, SoA, DPIA, ROPA |
+| `find-skills` | Descobrir e instalar skill nova |
 
-Nunca simplificar: entendimento do problema, validacao em trust boundary,
-tratamento de erro, seguranca, acessibilidade.
-
-O texto completo vive na skill — nao duplicar as regras aqui, senao as duas
-copias divergem (foi o que aconteceu com a versao inline anterior).
-
-## Regras Adicionais do Ecossistema
-- **test-driven-development**: Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
-- **requesting-code-review**: Activates between tasks. Reviews against plan, reports issues by severity. Critical issues block progress.
-- **finishing-a-development-branch**: Activates when tasks complete. Verifies tests, presents options (merge/PR/keep/discard), cleans up worktree.
+**Aviso sobre `iso27001` / `iso27701`:** sao material de terceiro (Socket e Snyk
+limpos, so markdown, sem script). Os scanners verificam malware, **nao** a
+exatidao do texto normativo. Nao emita documento de conformidade para cliente com
+base so nessas skills sem conferir contra a norma publicada.
