@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 
 export const evidenceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -267,6 +267,11 @@ projectEvidenceApp.post('/upload', async (c) => {
     if (!file) {
       return c.json({ error: 'No file provided' }, 400);
     }
+
+    // Recusa antes de ler o arquivo na memória: sem isto qualquer cliente
+    // autenticado enche o R2, e HTML/SVG voltariam ao navegador como XSS.
+    const invalido = validateUpload(file);
+    if (invalido) return c.json({ error: invalido }, 400);
 
     const id = genId();
     const r2Key = `evidence/${projectId}/${id}-${file.name}`;

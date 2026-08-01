@@ -1,6 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { sha256Hex } from '../helpers';
+import { sha256Hex, sessionRevoked } from '../helpers';
 
 /**
  * Resolve o usuário a partir de uma API key (X-API-Key). Retorna o contexto de
@@ -84,6 +84,14 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       user = JSON.parse(sessionData);
     } catch (e) {
       return c.json({ error: 'Unauthorized: Malformed session data' }, 401);
+    }
+
+    // Sessão pode ter sido revogada depois de emitida (troca de senha, mudança
+    // de papel, exclusão do usuário). Sem esta checagem, uma sessão roubada
+    // sobrevive à troca de senha por até 24h — a sessão vive no KV sob um token
+    // aleatório e não há como enumerá-la para apagar.
+    if (await sessionRevoked(c.env.SESSIONS, (user as any).id, (user as any).iat)) {
+      return c.json({ error: 'Unauthorized: Session revoked, please sign in again' }, 401);
     }
 
     // Legacy role mapping for backward compatibility.
