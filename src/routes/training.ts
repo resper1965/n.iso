@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, trainingSchema, trainingImportSchema } from '../schemas';
 
 export const trainingApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectTrainingApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -47,7 +48,9 @@ projectTrainingApp.get('/', async (c) => {
 projectTrainingApp.post('/', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, trainingSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const id = genId();
 
     await c.env.DB.prepare(

@@ -24,3 +24,4 @@ export * from './auth';
 export * from './users';
 export * from './integrations';
 export * from './resources';
+export * from './domain';

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, requireResourceAccess, verifyPassword, escapeHtml } from '../helpers';
+import { validateBody, ropaSchema, ropaApprovalSchema } from '../schemas';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -18,7 +19,7 @@ ropaApp.put('/:id', async (c) => {
       body.processing_purpose, body.data_categories, body.data_subjects,
       body.legal_basis, body.consent_details || null, body.data_subject_rights_details || null,
       body.retention_period, body.recipients, body.international_transfers,
-      body.transfer_safeguards, body.dpia_required ? 1 : 0, body.status || 'Draft', body.owner, now, id
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.status || 'Draft', body.owner, now, id
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
@@ -53,7 +54,9 @@ projectRopaApp.get('/', async (c) => {
 projectRopaApp.post('/', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, ropaSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
@@ -63,7 +66,7 @@ projectRopaApp.post('/', async (c) => {
       id, projectId, body.processing_purpose, body.data_categories, body.data_subjects,
       body.legal_basis, body.consent_details || null, body.data_subject_rights_details || null,
       body.retention_period, body.recipients, body.international_transfers,
-      body.transfer_safeguards, body.dpia_required ? 1 : 0, body.owner, now, now
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner, now, now
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_created', user?.email || 'system', `ROPA ${id} created`);
@@ -77,7 +80,9 @@ projectRopaApp.post('/:recordId/approve', async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const recordId = c.req.param('recordId');
-    const { role } = await c.req.json<{ role: 'ciso' | 'ceo' }>();
+    const valid = await validateBody(c, ropaApprovalSchema);
+    if (!valid.success) return valid.response;
+    const { role } = valid.data;
     const user = c.get('user');
 
     if (role !== 'ciso' && role !== 'ceo') {
