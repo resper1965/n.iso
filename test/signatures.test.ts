@@ -1,193 +1,155 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { env } from 'cloudflare:test';
 import worker from '../src/index';
+import { hashPassword } from '../src/helpers';
+import { applySchema, sessionFor } from './helpers/d1';
 
-// Mock static content manifest
-// @ts-ignore
-global.__STATIC_CONTENT_MANIFEST = '{}';
-// @ts-ignore
-global.__STATIC_CONTENT = {};
+/**
+ * Assinatura eletrônica (aprovação de controle e de evidência) contra D1 REAL.
+ *
+ * A versão anterior mockava o D1 com um `first()` que devolvia o MESMO objeto
+ * para qualquer query — o mesmo blob servia de usuário, de controle e de
+ * evidência. Isso significa que o teste afirmava `ok:true` sem que nada fosse
+ * gravado, e não distinguia "assinou" de "respondeu que assinou".
+ *
+ * Aqui cada asserção de sucesso confere a LINHA no banco. É a diferença entre
+ * testar a resposta e testar a assinatura — que, num sistema de conformidade,
+ * é o registro que um auditor vai pedir.
+ *
+ * `hashPassword` é importado do próprio `src/helpers`, não reimplementado: se o
+ * algoritmo mudar (iterações, formato do salt), o teste acompanha em vez de
+ * validar contra uma cópia que envelheceu.
+ */
+describe('Assinatura eletrônica (D1 real)', () => {
+  let headers: Record<string, string>;
 
-// Helper to generate the exact same PBKDF2 hash style as the backend
-async function hashPassword(password: string, salt?: string): Promise<string> {
-  const s = salt || 'test-salt-12345';
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode(s), iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
-  const hash = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return `${s}:${hash}`;
-}
-
-let password123Hash = '';
-
-const mockEnv = {
-  DB: {
-    prepare: vi.fn().mockReturnThis(),
-    bind: vi.fn().mockReturnThis(),
-    first: vi.fn(),
-    all: vi.fn().mockResolvedValue({ results: [] }),
-    run: vi.fn().mockResolvedValue({ success: true }),
-    batch: vi.fn().mockResolvedValue([]),
-  },
-  SESSIONS: {
-    get: vi.fn().mockResolvedValue(JSON.stringify({
-      id: 'usr-1',
-      email: '44273656+resper1965@users.noreply.github.com',
-      name: 'Ricardo Esper',
-      role: 'ciso'
-    })),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-  STORAGE: {
-    get: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-    list: vi.fn(),
-  },
-  AI: {
-    run: vi.fn(),
-  },
-  VECTOR_INDEX: {
-    query: vi.fn(),
-    upsert: vi.fn(),
-  },
-  ENVIRONMENT: 'test',
-};
-
-describe('nISO Private Signatures Unit Tests', () => {
   beforeAll(async () => {
-    password123Hash = await hashPassword('password123');
+    await applySchema();
+    const hash = await hashPassword('password123');
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('proj-1','Cliente Um','ISO 27001','controller','Active')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','44273656+resper1965@users.noreply.github.com',?,'Ricardo Esper','platform_admin','proj-1')`
+      ).bind(hash),
+      env.DB.prepare(
+        `INSERT INTO compliance_controls (id, project_id, standard, title, description, status) VALUES ('ctrl-a51','proj-1','ISO 27001:2022','Política','Requisito universal','Missing')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
+         VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'44273656+resper1965@users.noreply.github.com','pending')`
+      ),
+    ]);
+    headers = {
+      ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'platform_admin' })),
+      'Content-Type': 'application/json',
+    };
   });
 
-  describe('Policy Signatures (controls approve)', () => {
-    it('should block controls approve without authentication token', async () => {
-      const request = new Request('http://localhost/api/v1/controls/A.5.1/approve', {
-        method: 'POST',
-        body: JSON.stringify({ role: 'ciso', password: 'password123' })
+  async function post(path: string, body: unknown, h: Record<string, string> = headers) {
+    return worker.fetch(
+      new Request(`http://localhost${path}`, { method: 'POST', headers: h, body: JSON.stringify(body) }),
+      env as any
+    );
+  }
+
+  describe('Aprovação de controle', () => {
+    it('exige sessão', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { password: 'password123' }, {
+        'Content-Type': 'application/json',
       });
-      const envWithoutSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(null)
-        }
-      };
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithoutSession);
-      expect(response.status).toBe(401);
+      expect(res.status).toBe(401);
     });
 
-    it('should fail controls approve with incorrect password', async () => {
-      const request = new Request('http://localhost/api/v1/controls/A.5.1/approve', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer test-token' },
-        body: JSON.stringify({ role: 'ciso', password: 'wrongpassword' })
-      });
-      const localEnv = { ...mockEnv };
-      localEnv.DB.first = vi.fn().mockResolvedValue({
-        id: 'ctrl-a51',
-        project_id: 'proj-1',
-        control_id: 'A.5.1',
-        title: 'Policy',
-        description: 'Universal requirement',
-        password_hash: password123Hash,
-        name: 'Ricardo Esper',
-        email: '44273656+resper1965@users.noreply.github.com',
-        role: 'ciso'
-      });
-      // @ts-ignore
-      const response = await worker.fetch(request, localEnv);
-      expect(response.status).toBe(401);
-      const data = await response.json() as any;
-      expect(data.error).toContain('Senha incorreta');
+    it('exige a senha no corpo', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso' });
+      expect(res.status).toBe(400);
     });
 
-    it('should succeed controls approve with correct password', async () => {
-      const request = new Request('http://localhost/api/v1/controls/A.5.1/approve', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer test-token' },
-        body: JSON.stringify({ role: 'ciso', password: 'password123' })
-      });
-      const localEnv = { ...mockEnv };
-      localEnv.DB.first = vi.fn().mockResolvedValue({
-        id: 'ctrl-a51',
+    it('recusa senha incorreta e NÃO altera o controle', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'senhaerrada' });
+      expect(res.status).toBe(401);
+      expect((await res.json() as any).error).toContain('Senha incorreta');
+
+      const ctrl = await env.DB.prepare("SELECT status FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.status).toBe('Missing');
+    });
+
+    it('aprova com a senha correta e grava o status no banco', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', {
+        role: 'ciso',
+        password: 'password123',
         project_id: 'proj-1',
-        control_id: 'A.5.1',
-        title: 'Policy',
-        description: 'Universal requirement',
-        password_hash: password123Hash,
-        name: 'Ricardo Esper',
-        email: '44273656+resper1965@users.noreply.github.com',
-        role: 'ciso'
       });
-      // @ts-ignore
-      const response = await worker.fetch(request, localEnv);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
-      expect(data).toHaveProperty('ok', true);
+      const data = await res.json() as any;
+      expect(res.status, JSON.stringify(data)).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.approved_by).toBe('Ricardo Esper');
+
+      const ctrl = await env.DB.prepare("SELECT status FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.status).toBe('Approved');
+
+      // A trilha é conferida aqui dentro, não num `it` seguinte: o pool isola o
+      // storage por teste, então escrita feita num teste não existe no próximo.
+      // Um teste que dependesse disso passaria por engano com a base vazia.
+      const log = await env.DB.prepare(
+        "SELECT actor, details FROM audit_logs WHERE action = 'control.approved' ORDER BY rowid DESC LIMIT 1"
+      ).first<any>();
+      expect(log).not.toBeNull();
+      expect(log.actor).toBe('44273656+resper1965@users.noreply.github.com');
+      expect(log.details).toContain('ctrl-a51');
     });
   });
 
-  describe('Evidence Signatures (evidence approve)', () => {
-    it('should block evidence approve without authentication token', async () => {
-      const request = new Request('http://localhost/api/v1/evidence/ev-1/approve', {
-        method: 'PUT',
-        body: JSON.stringify({ role: 'ciso', password: 'password123' })
+  describe('Aprovação de evidência', () => {
+    it('exige sessão', async () => {
+      const res = await post('/api/v1/evidence/ev-1/approve', { password: 'password123' }, {
+        'Content-Type': 'application/json',
       });
-      const envWithoutSession = {
-        ...mockEnv,
-        SESSIONS: {
-          ...mockEnv.SESSIONS,
-          get: vi.fn().mockResolvedValue(null)
-        }
-      };
-      // @ts-ignore
-      const response = await worker.fetch(request, envWithoutSession);
-      expect(response.status).toBe(401);
+      expect(res.status).toBe(401);
     });
 
-    it('should fail evidence approve with incorrect password', async () => {
-      const request = new Request('http://localhost/api/v1/evidence/ev-1/approve', {
-        method: 'PUT',
-        headers: { 'Authorization': 'Bearer test-token' },
-        body: JSON.stringify({ role: 'ciso', password: 'wrongpassword' })
-      });
-      const localEnv = { ...mockEnv };
-      localEnv.DB.first = vi.fn().mockResolvedValue({
-        id: 'ev-1',
-        project_id: 'proj-1',
-        password_hash: password123Hash,
-        name: 'Ricardo Esper',
-        email: '44273656+resper1965@users.noreply.github.com',
-        role: 'ciso'
-      });
-      // @ts-ignore
-      const response = await worker.fetch(request, localEnv);
-      expect(response.status).toBe(401);
-      const data = await response.json() as any;
-      expect(data.error).toContain('Senha incorreta');
+    it('404 para evidência inexistente', async () => {
+      const res = await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' });
+      expect(res.status).toBe(404);
     });
 
-    it('should succeed evidence approve with correct password', async () => {
-      const request = new Request('http://localhost/api/v1/evidence/ev-1/approve', {
-        method: 'PUT',
-        headers: { 'Authorization': 'Bearer test-token' },
-        body: JSON.stringify({ role: 'ciso', password: 'password123' })
-      });
-      const localEnv = { ...mockEnv };
-      localEnv.DB.first = vi.fn().mockResolvedValue({
-        id: 'ev-1',
-        project_id: 'proj-1',
-        password_hash: password123Hash,
-        name: 'Ricardo Esper',
-        email: '44273656+resper1965@users.noreply.github.com',
-        role: 'ciso'
-      });
-      // @ts-ignore
-      const response = await worker.fetch(request, localEnv);
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
-      expect(data).toHaveProperty('ok', true);
+    it('recusa senha incorreta e NÃO grava assinatura', async () => {
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'senhaerrada' });
+      expect(res.status).toBe(401);
+
+      const ev = await env.DB.prepare("SELECT ciso_approved_by FROM evidence WHERE id='ev-1'").first<any>();
+      expect(ev.ciso_approved_by).toBeNull();
+    });
+
+    it('assina como CISO e grava assinante, data, IP e user-agent', async () => {
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      const data = await res.json() as any;
+      expect(res.status, JSON.stringify(data)).toBe(200);
+      expect(data.role).toBe('ciso');
+
+      // Uma assinatura sem quem/quando/de onde não serve de evidência para auditor.
+      const ev = await env.DB.prepare(
+        "SELECT ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua FROM evidence WHERE id='ev-1'"
+      ).first<any>();
+      expect(ev.ciso_approved_by).toBe('Ricardo Esper');
+      expect(ev.ciso_approved_at).toBeTruthy();
+      expect(ev.ciso_approved_ip).toBeTruthy();
+      expect(ev.ciso_approved_ua).toBeTruthy();
+    });
+
+    it('assinatura do CEO é campo separado — uma não sobrescreve a outra', async () => {
+      // As duas assinaturas acontecem dentro do mesmo teste porque o storage é
+      // isolado por teste. Segregação de funções depende de as duas coexistirem.
+      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
+      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' })).status).toBe(200);
+
+      const ev = await env.DB.prepare(
+        "SELECT ciso_approved_by, ceo_approved_by FROM evidence WHERE id='ev-1'"
+      ).first<any>();
+      expect(ev.ciso_approved_by).toBe('Ricardo Esper');
+      expect(ev.ceo_approved_by).toBe('Ricardo Esper');
     });
   });
 });
