@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 
 import { authMiddleware } from './middleware/auth';
 import { projectAccessMiddleware } from './middleware/project-access';
@@ -56,6 +57,55 @@ export type Variables = {
 
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// 0. Cabecalhos de seguranca. Vem antes de tudo para valer inclusive nos erros
+// e no catch-all estatico. O middleware ja aplica por padrao nosniff,
+// X-Frame-Options, Referrer-Policy e Cross-Origin-*; abaixo so o que diverge.
+app.use('*', secureHeaders({
+  // 1 ano, o minimo exigido para elegibilidade a lista de preload do HSTS.
+  // Nao emitimos a diretiva `preload`: entrar na lista e um caminho so de ida
+  // (remocao leva meses) e e decisao de quem opera o dominio, nao do codigo.
+  strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    // ponytail: 'unsafe-inline' em script-src e uma concessao real, nao um
+    // descuido. O frontend tem ~324 handlers `onclick=` inline; sem ela a
+    // aplicacao inteira para. Com ela, o CSP NAO protege contra XSS injetado —
+    // as diretivas abaixo e que entregam valor hoje. Caminho de upgrade:
+    // migrar os onclick para addEventListener e trocar por nonce.
+    scriptSrc: ["'self'", "'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+    imgSrc: ["'self'", 'data:', 'blob:'],
+    connectSrc: ["'self'"],
+    // Estas valem mesmo com 'unsafe-inline': fecham injecao de <base>, de
+    // plugin, exfiltracao por <form action> e clickjacking por iframe.
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+  },
+}));
+
+// 0b. security.txt (RFC 9116). `Expires` e calculado, nao fixo: arquivo com data
+// vencida e o modo de falha classico aqui, e ninguem lembra de renovar.
+app.get('/.well-known/security.txt', (c) => {
+  const expira = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return c.text(
+    [
+      'Contact: mailto:security@ness.lat',
+      'Contact: https://github.com/resper1965/nISO/security/advisories/new',
+      `Expires: ${expira}`,
+      'Preferred-Languages: pt-BR, en',
+      'Canonical: https://niso.ness.workers.dev/.well-known/security.txt',
+      'Policy: https://github.com/resper1965/nISO/blob/main/SECURITY.md',
+      '',
+    ].join('\n'),
+    200,
+    { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }
+  );
+});
 
 // 1. CORS
 app.use('*', cors({
