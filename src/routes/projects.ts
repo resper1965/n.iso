@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, genToken, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -201,6 +201,11 @@ projectsApp.post('/:id/documents/upload', async (c) => {
     const body = await c.req.parseBody();
     const file = body['file'] as File;
     if (!file) return c.json({ error: 'No file provided' }, 400);
+
+    // Recusa antes de ler o arquivo na memória: sem isto qualquer cliente
+    // autenticado enche o R2, e HTML/SVG voltariam ao navegador como XSS.
+    const invalido = validateUpload(file);
+    if (invalido) return c.json({ error: invalido }, 400);
 
     const docId = genId();
     const r2Key = `docs/${projectId}/${docId}-${file.name}`;
