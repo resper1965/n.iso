@@ -59,6 +59,43 @@ describe('Guarda global de corpo', () => {
     expect(res.status).toBe(400);
   });
 
+  it('corta o corpo grande SEM Content-Length, sem bufferizar tudo', async () => {
+    // Achado P1 do Codex: a versão anterior usava c.req.text(), que bufferiza o
+    // corpo INTEIRO antes da checagem de tamanho. Numa requisição chunked o teto
+    // não protegia nada. Aqui o stream é enviado sem Content-Length.
+    const pedaco = new TextEncoder().encode('x'.repeat(64 * 1024));
+    let enviados = 0;
+    const stream = new ReadableStream({
+      pull(ctrl) {
+        if (enviados >= 32) return ctrl.close(); // 2 MB no total
+        enviados++;
+        ctrl.enqueue(pedaco);
+      },
+    });
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/projects/p1/ropa', {
+        method: 'POST', headers, body: stream, duplex: 'half',
+      } as any),
+      env as any
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it('não confia no Content-Type declarado para decidir se inspeciona', async () => {
+    // Achado P1 do Codex: os handlers chamam c.req.json() independentemente do
+    // cabeçalho. Se a guarda só agisse com application/json, bastaria declarar
+    // text/plain para escapar de todas as verificações.
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/projects/p1/ropa', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'text/plain' },
+        body: '{"__proto__":{"admin":true},"processing_purpose":"x"}',
+      }),
+      env as any
+    );
+    expect(res.status).toBe(400);
+  });
+
   it('deixa passar corpo vazio — rota de ação não recebe corpo', async () => {
     // Se a guarda recusasse isto, quebraria toda rota de "executar" sem payload.
     const res = await post('/api/v1/projects/p1/generate-soa', '');
