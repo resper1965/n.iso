@@ -126,11 +126,24 @@ a 0014** e me diga qual é.
 ## FASE 4 — Aplicar
 
 Somente as migrations que a FASE 3 concluir que faltam de verdade. Uma por vez,
-conferindo o resultado entre elas:
+conferindo o resultado entre elas.
+
+**A 0019 já foi aplicada** — o `PRAGMA table_info(users)` mostrou as 4 colunas
+`totp_*`. Não reaplique: `ALTER TABLE ADD COLUMN` não é idempotente.
+
+**A 0020 é nova** e nasceu da revisão de segurança do PR #31. Ela adiciona o
+contador atômico de tentativas do segundo fator, sem o qual o limite de 10
+tentativas não é respeitado sob adivinhação concorrente:
 
 ```powershell
-npx wrangler d1 execute niso-db --remote --file migrations/0019_mfa_totp.sql
+npx wrangler d1 execute niso-db --remote --file migrations/0020_mfa_rate_limit.sql
 npx wrangler d1 execute niso-db --remote --command "PRAGMA table_info(users);"
+```
+
+Espere ver `totp_fail_count` e `totp_fail_window` na saída. Registre depois:
+
+```sql
+INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0020_mfa_rate_limit.sql');
 ```
 
 Prefira `execute --file` a `migrations apply` enquanto a `d1_migrations` estiver
@@ -147,8 +160,10 @@ npx wrangler d1 execute niso-db --remote --command "PRAGMA table_info(users);"
 npx wrangler d1 migrations list niso-db --remote
 ```
 
-Com `totp_enabled` presente em produção, **eu mergeio o PR #31** e o deploy roda.
-Nessa ordem, nunca na inversa.
+Com `totp_enabled` **e** `totp_fail_count` presentes em produção, **eu mergeio o
+PR #31** e o deploy roda. Nessa ordem, nunca na inversa: `deploy.yml` dispara em
+`push: main`, e `src/routes/auth.ts` consulta `totp_enabled` no login. Código na
+frente da migration derruba o login de todo mundo.
 
 ---
 
