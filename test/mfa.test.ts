@@ -44,7 +44,8 @@ describe('TOTP (RFC 6238)', () => {
     const agora = 1_700_000_000;
     const c = Math.floor(agora / 30);
     for (const delta of [-1, 0, 1]) {
-      expect(await verificarCodigoTotp(s, await gerarCodigoTotp(s, c + delta), agora), `delta ${delta}`).toBe(true);
+      // Devolve a janela QUE CASOU, não `true`: é ela que precisa ser gravada.
+      expect(await verificarCodigoTotp(s, await gerarCodigoTotp(s, c + delta), agora), `delta ${delta}`).toBe(c + delta);
     }
   });
 
@@ -52,13 +53,13 @@ describe('TOTP (RFC 6238)', () => {
     const s = gerarSegredoTotp();
     const agora = 1_700_000_000;
     const antigo = await gerarCodigoTotp(s, Math.floor(agora / 30) - 10);
-    expect(await verificarCodigoTotp(s, antigo, agora)).toBe(false);
+    expect(await verificarCodigoTotp(s, antigo, agora)).toBeNull();
   });
 
   it('recusa entrada que não é 6 dígitos, em vez de tentar mesmo assim', async () => {
     const s = gerarSegredoTotp();
     for (const ruim of ['', '12345', '1234567', 'abcdef', '12 34 56 78']) {
-      expect(await verificarCodigoTotp(s, ruim), ruim).toBe(false);
+      expect(await verificarCodigoTotp(s, ruim), ruim).toBeNull();
     }
   });
 
@@ -102,7 +103,7 @@ describe('Fluxo de MFA', () => {
   }
 
   it('setup gera segredo e QR mas NÃO ativa', async () => {
-    const res = await post('/api/v1/auth/mfa/setup');
+    const res = await post('/api/v1/auth/mfa/setup', { password: 'password123' });
     const body = await res.json() as any;
     expect(res.status, JSON.stringify(body)).toBe(200);
     expect(body.secret).toBeTruthy();
@@ -114,7 +115,7 @@ describe('Fluxo de MFA', () => {
   });
 
   it('activate com código errado não ativa', async () => {
-    await post('/api/v1/auth/mfa/setup');
+    await post('/api/v1/auth/mfa/setup', { password: 'password123' });
     const res = await post('/api/v1/auth/mfa/activate', { codigo: '000000' });
     expect(res.status).toBe(401);
     const row = await env.DB.prepare("SELECT totp_enabled FROM users WHERE id='u1'").first<any>();
@@ -122,7 +123,7 @@ describe('Fluxo de MFA', () => {
   });
 
   it('activate com código válido ativa e entrega os códigos de recuperação', async () => {
-    const { secret } = await (await post('/api/v1/auth/mfa/setup')).json() as any;
+    const { secret } = await (await post('/api/v1/auth/mfa/setup', { password: 'password123' })).json() as any;
     const res = await post('/api/v1/auth/mfa/activate', { codigo: await codigoValido(secret) });
     const body = await res.json() as any;
     expect(res.status, JSON.stringify(body)).toBe(200);
@@ -136,7 +137,7 @@ describe('Fluxo de MFA', () => {
   });
 
   it('verify aceita o código, e o MESMO código não vale duas vezes', async () => {
-    const { secret } = await (await post('/api/v1/auth/mfa/setup')).json() as any;
+    const { secret } = await (await post('/api/v1/auth/mfa/setup', { password: 'password123' })).json() as any;
     const codigo = await codigoValido(secret);
     await post('/api/v1/auth/mfa/activate', { codigo });
 
@@ -149,7 +150,7 @@ describe('Fluxo de MFA', () => {
   });
 
   it('código de recuperação funciona e é de uso único', async () => {
-    const { secret } = await (await post('/api/v1/auth/mfa/setup')).json() as any;
+    const { secret } = await (await post('/api/v1/auth/mfa/setup', { password: 'password123' })).json() as any;
     const { recovery_codes } = await (await post('/api/v1/auth/mfa/activate', { codigo: await codigoValido(secret) })).json() as any;
 
     const primeiro = await post('/api/v1/auth/mfa/verify', { codigo: recovery_codes[0] });
@@ -162,7 +163,7 @@ describe('Fluxo de MFA', () => {
   });
 
   it('desativar exige a senha — sessão roubada não desliga o segundo fator', async () => {
-    const { secret } = await (await post('/api/v1/auth/mfa/setup')).json() as any;
+    const { secret } = await (await post('/api/v1/auth/mfa/setup', { password: 'password123' })).json() as any;
     await post('/api/v1/auth/mfa/activate', { codigo: await codigoValido(secret) });
 
     expect((await post('/api/v1/auth/mfa/disable', { password: 'errada' })).status).toBe(401);
@@ -176,17 +177,26 @@ describe('Fluxo de MFA', () => {
   });
 
   it('setup é recusado quando o MFA já está ativo', async () => {
-    const { secret } = await (await post('/api/v1/auth/mfa/setup')).json() as any;
+    const { secret } = await (await post('/api/v1/auth/mfa/setup', { password: 'password123' })).json() as any;
     await post('/api/v1/auth/mfa/activate', { codigo: await codigoValido(secret) });
-    expect((await post('/api/v1/auth/mfa/setup')).status).toBe(409);
+    expect((await post('/api/v1/auth/mfa/setup', { password: 'password123' })).status).toBe(409);
   });
 
   it('status nunca devolve o segredo', async () => {
-    await post('/api/v1/auth/mfa/setup');
+    await post('/api/v1/auth/mfa/setup', { password: 'password123' });
     const res = await app.fetch(new Request('http://localhost/api/v1/auth/mfa/status', { headers }), env as any);
     const body = await res.json() as any;
     expect(res.status).toBe(200);
     expect(JSON.stringify(body)).not.toMatch(/secret/i);
+  });
+
+  it('setup exige a senha — sessão roubada não vincula o próprio autenticador', async () => {
+    // Sem isto, quem rouba uma sessão de conta ainda SEM MFA gera um segredo,
+    // ativa com o próprio autenticador e vira dono do segundo fator; o
+    // legítimo perde o acesso quando as sessões dele expiram.
+    expect((await post('/api/v1/auth/mfa/setup', { password: 'errada' })).status).toBe(401);
+    const semSenha = await post('/api/v1/auth/mfa/setup', {});
+    expect(semSenha.status).toBe(400);
   });
 
   it('MFA exige sessão — não é rota pública', async () => {
@@ -235,7 +245,7 @@ describe('MFA imposto no login', () => {
     // Ativa o MFA de u9.
     const primeiro = await login('mfa@ness.io');
     const setup = await app.fetch(
-      new Request('http://localhost/api/v1/auth/mfa/setup', { method: 'POST', headers: h(primeiro.body.token), body: '{}' }),
+      new Request('http://localhost/api/v1/auth/mfa/setup', { method: 'POST', headers: h(primeiro.body.token), body: JSON.stringify({ password: 'password123' }) }),
       env as any
     );
     const { secret } = await setup.json() as any;
@@ -270,5 +280,126 @@ describe('MFA imposto no login', () => {
     // ...e a MESMA sessão passa a valer.
     const liberado = await app.fetch(new Request('http://localhost/api/v1/projects', { headers: h(body.token) }), env as any);
     expect(liberado.status).toBe(200);
+  });
+
+  it('sessão pendente NÃO alcança /disable — senão a senha derruba o próprio fator', async () => {
+    // Quem tem só a senha consegue a sessão pendente. Se ela chegasse a
+    // /disable, a MESMA senha desligaria o segundo fator e o login seguinte
+    // passaria sem código: o fator seria contornável com aquilo que ele existe
+    // para complementar. Liberar todo o /auth/mfa/* para a sessão pendente era
+    // exatamente esse buraco.
+    // Storage isolado por teste: o MFA ativado no teste anterior não sobrevive.
+    const inicial = await login('mfa@ness.io');
+    const setup = await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/setup', {
+        method: 'POST', headers: h(inicial.body.token),
+        body: JSON.stringify({ password: 'password123' }),
+      }),
+      env as any
+    );
+    const { secret } = await setup.json() as any;
+    await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/activate', {
+        method: 'POST', headers: h(inicial.body.token),
+        body: JSON.stringify({ codigo: await gerarCodigoTotp(secret, Math.floor(Date.now() / 1000 / 30)) }),
+      }),
+      env as any
+    );
+
+    const { body } = await login('mfa@ness.io');
+    expect(body.requiresMfa).toBe(true);
+
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/disable', {
+        method: 'POST', headers: h(body.token),
+        body: JSON.stringify({ password: 'password123' }),
+      }),
+      env as any
+    );
+    expect(res.status).toBe(401);
+    expect((await res.json() as any).mfa_required).toBe(true);
+
+    const row = await env.DB.prepare("SELECT totp_enabled FROM users WHERE id='u9'").first<any>();
+    expect(row.totp_enabled).toBe(1);
+  });
+
+  it('org_user com MFA consegue confirmar o código — não fica trancado para fora', async () => {
+    // O allow-list de escrita de papéis read-only vale para TODO POST sob
+    // /api/v1. Sem uma entrada para o auto-serviço de MFA, /verify devolvia 403
+    // e a conta ficava sem caminho nenhum de login — não é vazamento, é
+    // lockout permanente, e nenhum teste pegava porque todos usavam admin.
+    const hash = await hashPassword('password123');
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, password_hash, name, role) VALUES ('u7','leitor@ness.io',?,'Leitor','org_user')`
+    ).bind(hash).run();
+
+    const inicial = await login('leitor@ness.io');
+    const setup = await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/setup', {
+        method: 'POST', headers: h(inicial.body.token),
+        body: JSON.stringify({ password: 'password123' }),
+      }),
+      env as any
+    );
+    expect(setup.status, await setup.clone().text()).toBe(200);
+    const { secret } = await setup.json() as any;
+
+    const ativar = await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/activate', {
+        method: 'POST', headers: h(inicial.body.token),
+        body: JSON.stringify({ codigo: await gerarCodigoTotp(secret, Math.floor(Date.now() / 1000 / 30)) }),
+      }),
+      env as any
+    );
+    expect(ativar.status, await ativar.clone().text()).toBe(200);
+
+    const { body } = await login('leitor@ness.io');
+    expect(body.requiresMfa).toBe(true);
+    const verify = await app.fetch(
+      new Request('http://localhost/api/v1/auth/mfa/verify', {
+        method: 'POST', headers: h(body.token),
+        body: JSON.stringify({ codigo: await gerarCodigoTotp(secret, Math.floor(Date.now() / 1000 / 30)) }),
+      }),
+      env as any
+    );
+    expect(verify.status, await verify.clone().text()).toBe(200);
+  });
+});
+
+describe('Reuso de código na janela tolerada', () => {
+  beforeAll(async () => {
+    await applySchema();
+  });
+
+  it('grava a janela que casou, não a atual do servidor', async () => {
+    // Com tolerância de ±1 o código aceito pode ser o da janela seguinte. Ao
+    // gravar a janela ATUAL, o servidor cruzava o limite e o MESMO código
+    // passava de novo, porque o contador novo era maior que o gravado.
+    const s = gerarSegredoTotp();
+    const agora = 1_700_000_000;
+    const atual = Math.floor(agora / 30);
+
+    const casou = await verificarCodigoTotp(s, await gerarCodigoTotp(s, atual + 1), agora);
+    expect(casou).toBe(atual + 1);
+
+    // Trinta segundos depois, o servidor está em `atual + 1`. Se tivéssemos
+    // gravado `atual`, a comparação `janela <= gravado` deixaria passar.
+    expect(casou! <= (atual + 1)).toBe(true);
+  });
+
+  it('aceitar o código da janela anterior não bloqueia o código legítimo da atual', async () => {
+    // O outro lado do mesmo defeito: gravar `atual` depois de aceitar um código
+    // de `atual - 1` fazia o código legítimo de `atual` ser recusado como
+    // "já utilizado" pelo resto da janela.
+    const s = gerarSegredoTotp();
+    const agora = 1_700_000_000;
+    const atual = Math.floor(agora / 30);
+
+    const anterior = await verificarCodigoTotp(s, await gerarCodigoTotp(s, atual - 1), agora);
+    expect(anterior).toBe(atual - 1);
+
+    const legitimo = await verificarCodigoTotp(s, await gerarCodigoTotp(s, atual), agora);
+    expect(legitimo).toBe(atual);
+    expect(legitimo! > anterior!).toBe(true);
   });
 });

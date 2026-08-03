@@ -1,6 +1,9 @@
-# Antigravity — reconciliar o estado das migrations em produção
+# Migrations — runbook
 
 Não aplique nada antes de terminar a FASE 1. Este documento é sequencial.
+
+Companheiro de `backups/README.md` (backup e restauração). Este trata do estado
+das migrations em produção, que hoje diverge do repositório.
 
 ## O problema
 

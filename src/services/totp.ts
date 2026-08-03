@@ -84,18 +84,25 @@ export async function verificarCodigoTotp(
   codigo: string,
   agoraSec = Math.floor(Date.now() / 1000),
   tolerancia = 1
-): Promise<boolean> {
+): Promise<number | null> {
   const limpo = (codigo || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(limpo)) return false;
+  if (!/^\d{6}$/.test(limpo)) return null;
 
   const contador = Math.floor(agoraSec / 30);
   for (let d = -tolerancia; d <= tolerancia; d++) {
     const esperado = await gerarCodigoTotp(segredo, contador + d);
     // Comparação de tempo constante: são 6 dígitos, mas vazar por timing um
     // segredo de autenticação é o tipo de detalhe que só aparece no pentest.
-    if (comparacaoConstante(esperado, limpo)) return true;
+    //
+    // Devolve a JANELA QUE CASOU, não um booleano: com tolerância de ±1 o
+    // código aceito pode ser o da janela anterior ou da seguinte, e é essa
+    // janela — não a atual do servidor — que precisa ser gravada para o
+    // bloqueio de reuso funcionar nos dois sentidos. Gravar a atual deixava um
+    // código da janela c+1 valer de novo ao chegar em c+1, e um código da
+    // janela c-1 bloqueava indevidamente o código legítimo de c.
+    if (comparacaoConstante(esperado, limpo)) return contador + d;
   }
-  return false;
+  return null;
 }
 
 function comparacaoConstante(a: string, b: string): boolean {

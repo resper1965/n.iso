@@ -47,6 +47,20 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
 // Obs.: '/api/v1/auditor/' NÃO casa com '/api/v1/auditor-notes/...' (rota interna autenticada).
 const PUBLIC_TOKEN_PREFIXES = ['/api/v1/assessments/public/', '/api/v1/auditor/'];
 
+// Único conjunto que uma sessão AINDA pendente de segundo fator pode alcançar.
+// Lista fechada, não prefixo: `/setup`, `/activate` e sobretudo `/disable` não
+// entram — ver o comentário na checagem, abaixo.
+const MFA_PENDENTE_PERMITIDO = new Set([
+  '/api/v1/auth/mfa/verify',
+  '/api/v1/auth/mfa/status',
+]);
+
+// Auto-serviço de MFA do próprio usuário. Não toca dado de tenant nenhum, e é o
+// caminho que um papel read-only PRECISA percorrer para conseguir entrar: sem
+// esta entrada no allow-list, um `org_user` com MFA ativo recebe 403 em
+// /verify e fica trancado para fora em definitivo, mesmo com o código correto.
+const MFA_AUTO_SERVICO = /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable)$/;
+
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (PUBLIC_TOKEN_PREFIXES.some(p => path.startsWith(p))) {
@@ -94,10 +108,13 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       return c.json({ error: 'Unauthorized: Session revoked, please sign in again' }, 401);
     }
 
-    // Sessão pendente de segundo fator: só pode falar com /auth/mfa/*. Sem esta
-    // trava o MFA seria decorativo — o token devolvido pelo login já daria
-    // acesso a tudo, e conferir o código seria opcional na prática.
-    if ((user as any).mfa_pending && !path.startsWith('/api/v1/auth/mfa/')) {
+    // Sessão pendente de segundo fator: só pode falar com /verify e /status.
+    // Sem esta trava o MFA seria decorativo — o token do login já daria acesso
+    // a tudo. E liberar todo o /auth/mfa/* era quase tão ruim: quem tem a senha
+    // obtém a sessão pendente e a usa em /disable, apresentando a MESMA senha
+    // para desligar o segundo fator. O fator caía com exatamente aquilo que ele
+    // existe para complementar.
+    if ((user as any).mfa_pending && !MFA_PENDENTE_PERMITIDO.has(path.replace(/\/+$/, ''))) {
       return c.json({ error: 'Unauthorized: Second factor required', mfa_required: true }, 401);
     }
 
@@ -135,6 +152,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       { methods: ['POST', 'PUT'], test: p => p.endsWith('/policies/ack') },
       { methods: ['POST'], test: p => p.endsWith('/mcp/execute') },
       { methods: ['POST'], test: p => p.endsWith('/chat') },
+      { methods: ['POST'], test: p => MFA_AUTO_SERVICO.test(p) },
     ];
     const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
     if (!isAllowed) {
