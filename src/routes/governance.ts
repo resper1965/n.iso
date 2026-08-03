@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -16,7 +17,9 @@ governanceApp.get('/projects/:id/stakeholders', async (c) => {
 governanceApp.post('/projects/:id/stakeholders', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { name, type, category, requirements, influence, communication_method } = await c.req.json();
+    const v = await validateBody(c, stakeholderSchema);
+    if (!v.success) return v.response;
+    const { name, type, category, requirements, influence, communication_method } = v.data as any;
     if (!name) return c.json({ error: 'name is required' }, 400);
     await c.env.DB.prepare(`INSERT INTO stakeholders (id, project_id, name, type, category, requirements, influence, communication_method)
       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)`).bind(
@@ -66,7 +69,9 @@ governanceApp.get('/projects/:id/governance', async (c) => {
 governanceApp.post('/projects/:id/governance', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { id, name, email, role_category, job_title, is_primary } = await c.req.json();
+    const v = await validateBody(c, governanceMemberSchema);
+    if (!v.success) return v.response;
+    const { id, name, email, role_category, job_title, is_primary } = v.data as any;
     if (!name) return c.json({ error: 'name is required' }, 400);
     if (!role_category) return c.json({ error: 'role_category is required' }, 400);
     if (!job_title) return c.json({ error: 'job_title is required' }, 400);
@@ -107,7 +112,9 @@ governanceApp.delete('/projects/:id/governance/:memberId', async (c) => {
 governanceApp.put('/projects/:id/company-profile', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { cnpj, employee_count, scope, sector, client_name } = await c.req.json();
+    const v = await validateBody(c, companyProfileSchema);
+    if (!v.success) return v.response;
+    const { cnpj, employee_count, scope, sector, client_name } = v.data as any;
     
     await c.env.DB.prepare(`
       UPDATE projects 
@@ -115,7 +122,9 @@ governanceApp.put('/projects/:id/company-profile', async (c) => {
       WHERE id = ?
     `).bind(
       cnpj || null, 
-      employee_count ? parseInt(employee_count) : null, 
+      // `0` é valor legítimo: o truthy check gravava null para empresa sem
+      // funcionários declarados. E `parseInt` é redundante — o schema já valida número.
+      employee_count ?? null, 
       scope || null, 
       sector || null, 
       client_name || '', 
@@ -138,7 +147,9 @@ governanceApp.get('/projects/:id/context', async (c) => {
 governanceApp.put('/projects/:id/context', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { internal_strengths, internal_weaknesses, external_opportunities, external_threats, legal_requirements, contractual_requirements, notes } = await c.req.json();
+    const v = await validateBody(c, contextSchema);
+    if (!v.success) return v.response;
+    const { internal_strengths, internal_weaknesses, external_opportunities, external_threats, legal_requirements, contractual_requirements, notes } = v.data as any;
     
     await c.env.DB.prepare(`INSERT INTO context_analysis (id, project_id, internal_strengths, internal_weaknesses, external_opportunities, external_threats, legal_requirements, contractual_requirements, notes)
       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?)
@@ -171,7 +182,9 @@ governanceApp.get('/audits/:auditId/findings', async (c) => {
 governanceApp.post('/audits/:auditId/findings', async (c) => {
   try {
     const auditId = c.req.param('auditId');
-    const { project_id, control_id, finding_type, description, evidence_reviewed, auditor_notes } = await c.req.json();
+    const v = await validateBody(c, auditFindingSchema);
+    if (!v.success) return v.response;
+    const { project_id, control_id, finding_type, description, evidence_reviewed, auditor_notes } = v.data as any;
     if (!description) return c.json({ error: 'description is required' }, 400);
     
     const findingId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
@@ -209,7 +222,9 @@ governanceApp.put('/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
   await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
-    const { description, auditor_notes, status } = await c.req.json();
+    const v = await validateBody(c, auditFindingUpdateSchema);
+    if (!v.success) return v.response;
+    const { description, auditor_notes, status } = v.data as any;
     await c.env.DB.prepare(`
       UPDATE audit_findings 
       SET description = COALESCE(?, description), 

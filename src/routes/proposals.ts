@@ -3,13 +3,16 @@ import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
+import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
 
 export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 
 proposalsApp.post('/', async (c) => {
   try {
-    const body = await c.req.json<{ lead_id: string; assessment_id: string; total_price: number; content_html: string }>();
+    const v = await validateBody(c, proposalSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
     if (!body.lead_id || !body.assessment_id) return c.json({ error: 'lead_id e assessment_id obrigatórios' }, 400);
 
     const id = genId();
@@ -84,7 +87,9 @@ proposalsApp.get('/:id', async (c) => {
 proposalsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ content_html?: string; status?: string }>();
+    const v = await validateBody(c, proposalUpdateSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
     const proposal = await c.env.DB.prepare('SELECT id FROM proposals WHERE id = ?').bind(id).first();
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
 

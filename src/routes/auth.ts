@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, genNumericCode, rateLimit, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+import { genId, genToken, genNumericCode, rateLimit, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, SESSION_TTL_SEC } from '../helpers';
 
 /** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
 function clientIp(c: any): string {
@@ -76,8 +76,11 @@ authApp.post('/login', async (c) => {
     }
     
     const token = genToken();
-    await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(user), { expirationTtl: 86400 });
-    await c.env.SESSIONS.put(token, JSON.stringify(user), { expirationTtl: 86400 });
+    // `iat` é o que permite revogar a sessão depois: o middleware compara com o
+    // marco de invalidação do usuário. Sessão sem `iat` é tratada como revogada.
+    const sessao = { ...user, iat: Date.now() };
+    await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
+    await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     
     return c.json({ token, user, requiresPasswordChange: requiresChange });
   } catch (e: any) {
@@ -98,6 +101,8 @@ authApp.post('/reset-password-first', async (c) => {
     await c.env.DB.prepare(
       'UPDATE users SET password_hash = ?, requires_password_change = 0 WHERE id = ?'
     ).bind(newHash, user.id).run();
+
+    await invalidateUserSessions(c.env.SESSIONS, user.id);
 
     await logAudit(c.env.DB, 'auth.password_changed_first', user.email, `Senha do primeiro acesso redefinida com sucesso`);
     return c.json({ ok: true, message: 'Senha redefinida com sucesso' });
@@ -178,6 +183,12 @@ authApp.post('/reset-password', async (c) => {
 
     await c.env.DB.prepare('UPDATE users SET password_hash = ?, requires_password_change = 0 WHERE email = ?')
       .bind(newHash, email).run();
+
+    // Trocar a senha precisa derrubar as sessões abertas — é justamente o caso
+    // de "minha conta foi comprometida". Sem isto, quem roubou a sessão continua
+    // dentro por até 24h mesmo depois da troca.
+    const dono = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<any>();
+    if (dono) await invalidateUserSessions(c.env.SESSIONS, dono.id);
 
     await c.env.SESSIONS.delete(`reset_token:${token}`);
 

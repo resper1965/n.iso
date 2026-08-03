@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, requireResourceAccess, verifyPassword } from '../helpers';
+import { genId, genToken, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
+import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema } from '../schemas';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const controlsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -138,7 +139,9 @@ projectsApp.put('/:id/phases/:num', async (c) => {
   try {
     const projectId = c.req.param('id');
     const num = c.req.param('num');
-    const { status, notes } = await c.req.json<{ status?: string; notes?: string }>();
+    const v = await validateBody(c, projectPhaseSchema);
+    if (!v.success) return v.response;
+    const { status, notes } = v.data as any;
     const updates: string[] = [];
     const values: any[] = [];
     if (status) { updates.push('status = ?'); values.push(status); }
@@ -164,14 +167,15 @@ projectsApp.get('/:id/interviews/:track', async (c) => {
 projectsApp.post('/:id/interviews', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { answers } = await c.req.json<{ answers: Array<{ track: string; question: string; answer: string; interviewee?: string; gap_detected?: boolean; notes?: string }> }>();
-    if (!answers || !Array.isArray(answers)) return c.json({ error: 'Array answers é obrigatório' }, 400);
+    const v = await validateBody(c, interviewSchema);
+    if (!v.success) return v.response;
+    const { answers } = v.data as any;
     
     const stmt = c.env.DB.prepare(
       `INSERT INTO project_interviews (id, project_id, track, question, answer, interviewee, gap_detected, notes, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     );
-    const batch = answers.map(a => stmt.bind(genId(), projectId, a.track, a.question, a.answer, a.interviewee || null, a.gap_detected ? 1 : 0, a.notes || null));
+    const batch = answers.map((a: any) => stmt.bind(genId(), projectId, a.track, a.question, a.answer, a.interviewee || null, a.gap_detected ? 1 : 0, a.notes || null));
     await c.env.DB.batch(batch);
     await logAudit(c.env.DB, 'interviews.saved', c.get('user')?.email ?? 'system', `Salvas ${answers.length} respostas de entrevista para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, count: answers.length });
@@ -202,6 +206,11 @@ projectsApp.post('/:id/documents/upload', async (c) => {
     const file = body['file'] as File;
     if (!file) return c.json({ error: 'No file provided' }, 400);
 
+    // Recusa antes de ler o arquivo na memória: sem isto qualquer cliente
+    // autenticado enche o R2, e HTML/SVG voltariam ao navegador como XSS.
+    const invalido = validateUpload(file);
+    if (invalido) return c.json({ error: invalido }, 400);
+
     const docId = genId();
     const r2Key = `docs/${projectId}/${docId}-${file.name}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -231,7 +240,9 @@ projectsApp.put('/:id/documents/:docId', async (c) => {
   try {
     const projectId = c.req.param('id');
     const docId = c.req.param('docId');
-    const { file_name, evaluation_notes } = await c.req.json<{ file_name?: string; evaluation_notes?: string }>();
+    const v = await validateBody(c, evidenceMetaSchema);
+    if (!v.success) return v.response;
+    const { file_name, evaluation_notes } = v.data as any;
 
     const doc = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ? AND project_id = ?').bind(docId, projectId).first();
     if (!doc) return c.json({ error: 'Document not found' }, 404);
@@ -310,7 +321,9 @@ projectsApp.get('/:id/scope-changes', async (c) => {
 projectsApp.post('/:id/scope-changes', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { change_description, reason, impact_analysis, requested_by } = await c.req.json();
+    const v = await validateBody(c, scopeChangeSchema);
+    if (!v.success) return v.response;
+    const { change_description, reason, impact_analysis, requested_by } = v.data as any;
     if (!change_description) return c.json({ error: 'change_description is required' }, 400);
 
     const changeId = genId();
@@ -548,7 +561,9 @@ projectsApp.get('/:id/audit-trail', async (c) => {
 projectsApp.post('/:id/auditor-token', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const body = await c.req.json<{ days_valid?: number }>();
+    const v = await validateBody(c, auditorTokenSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     const days = body.days_valid ?? 30;
     const token = genToken();
     const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
@@ -583,7 +598,9 @@ controlsApp.get('/', async (c) => {
 controlsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const { status, title, description } = await c.req.json<{ status?: string; title?: string; description?: string }>();
+    const v = await validateBody(c, controlUpdateSchema);
+    if (!v.success) return v.response;
+    const { status, title, description } = v.data as any;
     const updates: string[] = [];
     const values: any[] = [];
     if (status) { updates.push('status = ?'); values.push(status); }
@@ -605,7 +622,9 @@ controlsApp.put('/:id/maturity', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
-    const { maturity } = await c.req.json<{ maturity: number }>();
+    const v = await validateBody(c, maturitySchema);
+    if (!v.success) return v.response;
+    const { maturity } = v.data;
     
     if (maturity < 0 || maturity > 5) {
       return c.json({ error: 'Maturidade deve ser entre 0 e 5' }, 400);
@@ -627,7 +646,9 @@ controlsApp.put('/:id/maturity', async (c) => {
 controlsApp.put('/:id/status', async (c) => {
   try {
     const id = c.req.param('id');
-    const { status } = await c.req.json<{ status: string }>();
+    const v = await validateBody(c, statusSchema);
+    if (!v.success) return v.response;
+    const { status } = v.data;
     
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -644,7 +665,9 @@ controlsApp.put('/:id/status', async (c) => {
 const handleControlApprove = async (c: any) => {
   try {
     const controlId = c.req.param('id');
-    const { password, role, project_id } = (await c.req.json()) as any;
+    const v = await validateBody(c, assinaturaSchema);
+    if (!v.success) return v.response;
+    const { password, project_id } = v.data as any;
     const user = c.get('user');
 
     if (!password) {

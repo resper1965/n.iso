@@ -28,8 +28,17 @@ describe('Integration Tests', () => {
     vi.restoreAllMocks();
   });
 
-  const validSession = { id: 1, email: 'test@example.com', role: 'consultor' };
-  const mockAuthKV = { ...mockKV, get: async (key: string) => JSON.stringify(validSession) };
+  // `iat` é obrigatório desde a revogação de sessão: o middleware trata sessão
+  // sem ele como revogada quando existe marco de invalidação para o usuário.
+  const validSession = { id: 1, email: 'test@example.com', role: 'consultor', iat: Date.now() };
+  // O mock devolve a sessão só para a chave de sessão. Antes devolvia o MESMO
+  // objeto para qualquer chave, inclusive a de revogação — um KV que responde
+  // a tudo não testa nada, e mascarava o comportamento do middleware.
+  const mockAuthKV = {
+    ...mockKV,
+    get: async (key: string) =>
+      key.startsWith('session') || !key.includes(':') ? JSON.stringify(validSession) : null,
+  };
 
   describe('Group 1: Public routes (no auth needed)', () => {
     it('GET /api/v1/public/pricing returns tiers array', async () => {
