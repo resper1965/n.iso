@@ -117,7 +117,10 @@ export const leadSchema = z.object({
   cep: z.string().trim().max(20).optional().nullable(),
   telefone: curtoOpcional,
   // Quadro societário: nomes de sócios, dado pessoal. Teto no tamanho da lista.
-  qsa: z.array(z.record(z.unknown())).max(200).optional().nullable(),
+  // `z.record` com chave E valor: a forma de um argumento só não deixou de
+  // existir no zod 4, e esta assinatura vale nas duas versões. Sem isto, o
+  // bump para o zod 4 não compila.
+  qsa: z.array(z.record(z.string(), z.unknown())).max(200).optional().nullable(),
 }).passthrough();
 
 export const leadStatusSchema = z.object({ status: curto }).passthrough();
