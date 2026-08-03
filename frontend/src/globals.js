@@ -128,7 +128,23 @@ window.doLogin = async function doLogin() {
             localStorage.setItem('niso_token', res.token);
             localStorage.setItem('niso_user', JSON.stringify(res.user));
             
-            if (res.requiresPasswordChange) {
+            if (res.requiresMfa) {
+                // A sessão nasce PENDENTE: o token já está no S/localStorage, mas o
+                // authMiddleware só libera /auth/mfa/verify e /status até o código
+                // ser conferido. Chamar initApp() aqui daria 401 em tudo.
+                document.getElementById('standard-login-box').style.display = 'none';
+                document.getElementById('first-login-reset-box').style.display = 'none';
+                document.getElementById('forgot-password-box').style.display = 'none';
+                document.getElementById('mfa-login-box').style.display = 'block';
+                document.getElementById('mfa-login-error').textContent = '';
+                document.getElementById('mfa-login-code').value = '';
+                document.getElementById('mfa-login-code').focus();
+                // Uma conta pode exigir as DUAS coisas: segundo fator e troca de
+                // senha temporária. O segundo fator vem primeiro, mas a troca não
+                // pode se perder no caminho — senão a senha provisória vira
+                // definitiva e a tela obrigatória nunca mais aparece.
+                window._pendenteTrocaSenha = !!res.requiresPasswordChange;
+            } else if (res.requiresPasswordChange) {
                 document.getElementById('standard-login-box').style.display = 'none';
                 document.getElementById('first-login-reset-box').style.display = 'block';
                 document.getElementById('forgot-password-box').style.display = 'none';
@@ -141,6 +157,55 @@ window.doLogin = async function doLogin() {
             err.style.display = 'block';
             err.textContent = e.message;
         }
+    }
+
+/**
+ * Confere o segundo fator logo após o login com senha.
+ *
+ * Aceita tanto o código de 6 dígitos do autenticador quanto um código de
+ * recuperação — o backend tenta o TOTP primeiro e cai para a lista de
+ * recuperação, então aqui é um campo só.
+ */
+window.doMfaLogin = async function doMfaLogin() {
+        const codigo = (document.getElementById('mfa-login-code').value || '').trim();
+        const err = document.getElementById('mfa-login-error');
+        err.textContent = '';
+        if (!codigo) { err.textContent = 'Informe o código.'; return; }
+        try {
+            await api('POST', '/api/v1/auth/mfa/verify', { codigo });
+            // O backend reescreveu a sessão removendo `mfa_pending`; o token é o
+            // mesmo, então não há nada a regravar no localStorage.
+            document.getElementById('mfa-login-box').style.display = 'none';
+
+            // Retoma a troca obrigatória de senha, se havia. Entrar direto aqui
+            // deixaria a conta usando a senha temporária para sempre.
+            if (window._pendenteTrocaSenha) {
+                window._pendenteTrocaSenha = false;
+                document.getElementById('standard-login-box').style.display = 'none';
+                document.getElementById('first-login-reset-box').style.display = 'block';
+                document.getElementById('first-reset-error').style.display = 'none';
+                document.getElementById('first-new-password').focus();
+                return;
+            }
+
+            document.getElementById('standard-login-box').style.display = 'block';
+            document.getElementById('login-overlay').classList.add('hidden');
+            initApp();
+        } catch(e) {
+            err.textContent = e.message;
+            document.getElementById('mfa-login-code').select();
+        }
+    }
+
+/** Volta do segundo fator para o login: a sessão pendente não serve para nada. */
+window.cancelMfaLogin = function cancelMfaLogin() {
+        S.token = null; S.user = null;
+        window._pendenteTrocaSenha = false;
+        localStorage.removeItem('niso_token');
+        localStorage.removeItem('niso_user');
+        document.getElementById('mfa-login-box').style.display = 'none';
+        document.getElementById('standard-login-box').style.display = 'block';
+        document.getElementById('login-password').value = '';
     }
 
 window.doLogout = function doLogout() {
@@ -504,7 +569,21 @@ window.handleNotificationClick = async function handleNotificationClick(id) {
 
 window.openProfileModal = function openProfileModal() {
         var u = S.user || {};
-        openModal('<div style="padding:1.5rem"><h3 style="font-family:Montserrat;margin-bottom:1rem">' + escapeHTML(u.name || 'Usuario') + '</h3><p style="color:var(--text-dim);font-size:0.8rem">' + escapeHTML(u.email || '') + '</p><p style="color:var(--text-dim);font-size:0.8rem;margin-top:0.5rem">Role: ' + escapeHTML(u.role || 'consultor') + '</p><button class="btn" onclick="forceCloseModal()" style="margin-top:1.5rem">Fechar</button></div>');
+        // A entrada da autenticação em duas etapas vive AQUI, e não em
+        // Configurações: aquela página é escondida para papéis de cliente
+        // (`nav-settings` some para org_admin, org_user e client), e segurança da
+        // própria conta é de todo usuário. Este cartão todo papel enxerga.
+        openModal('<div style="padding:1.5rem;max-width:380px">'
+            + '<h3 style="font-family:Montserrat;margin-bottom:1rem">' + escapeHTML(u.name || 'Usuario') + '</h3>'
+            + '<p style="color:var(--text-dim);font-size:0.8rem">' + escapeHTML(u.email || '') + '</p>'
+            + '<p style="color:var(--text-dim);font-size:0.8rem;margin-top:0.5rem">Role: ' + escapeHTML(u.role || 'consultor') + '</p>'
+            + '<div style="border-top:1px solid var(--border,rgba(255,255,255,0.08));margin:1.25rem 0 1rem"></div>'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;gap:1rem">'
+            + '<div><div style="font-size:0.8rem">Autenticação em duas etapas</div>'
+            + '<div style="font-size:0.7rem;color:var(--muted)">Exige um código do celular ao entrar</div></div>'
+            + '<button class="btn btn-primary" onclick="openSecurityModal()">Gerenciar</button>'
+            + '</div>'
+            + '<button class="btn" onclick="forceCloseModal()" style="margin-top:1.5rem">Fechar</button></div>');
     }
 
 window.openActiveProjectModal = function openActiveProjectModal() {

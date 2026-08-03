@@ -18,6 +18,7 @@ import './views/dashboard.js';
 import './views/admin.js';
 import './views/ai.js';
 import './views/privacy.js';
+import './views/security.js';
 
 // The rest of the app code will be migrated in subsequent phases
 // For now, import remaining inline code below

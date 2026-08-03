@@ -62,6 +62,23 @@
                 </form>
             </div>
 
+            <!-- Segundo Fator (TOTP) -->
+            <div class="login-box" id="mfa-login-box" style="display:none">
+                <form onsubmit="doMfaLogin(); return false;">
+                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Verificação em duas etapas</h2>
+                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Digite o código de 6 dígitos do seu autenticador. Se perdeu o acesso ao aparelho, use um dos seus códigos de recuperação.</p>
+                    <div style="margin-bottom:2rem">
+                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Código</label>
+                        <input type="text" id="mfa-login-code" class="form-input" placeholder="000000" inputmode="numeric" maxlength="20" autocomplete="one-time-code" style="text-align:center;letter-spacing:6px;font-weight:600" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%">Verificar</button>
+                    <div style="margin-top:1.5rem; text-align:center;">
+                        <a href="#" onclick="cancelMfaLogin(); return false;" style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Entrar com outra conta</a>
+                    </div>
+                    <p id="mfa-login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;min-height:1rem"></p>
+                </form>
+            </div>
+
             <!-- Forgot Password Box -->
             <div class="login-box" id="forgot-password-box" style="display:none">
                 <form onsubmit="return false;">

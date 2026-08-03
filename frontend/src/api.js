@@ -17,9 +17,15 @@ async function api(m, p, b) {
         if (e.name === 'AbortError') throw new Error(`Requisição cancelada (${p})`);
         throw new Error(`Falha de rede ao chamar ${p}`);
     }
-    if (r.status === 401 && p !== '/api/v1/auth/login') { 
-        if (window.doLogout) window.doLogout(); 
-        throw new Error('Unauthorized'); 
+    // 401 nas rotas de MFA é resposta ESPERADA a erro do usuário: senha errada
+    // em /setup e /disable, código errado em /activate e /verify. Deslogar aqui
+    // punia quem errou um dígito — no /verify chegava a destruir a sessão e
+    // jogar o usuário de volta ao login. Estas rotas tratam o próprio erro e
+    // precisam da mensagem real do servidor, não de "Unauthorized".
+    const autoatendimentoMfa = p.startsWith('/api/v1/auth/mfa/');
+    if (r.status === 401 && p !== '/api/v1/auth/login' && !autoatendimentoMfa) {
+        if (window.doLogout) window.doLogout();
+        throw new Error('Unauthorized');
     }
     const contentType = r.headers.get('content-type') || '';
     let data;
