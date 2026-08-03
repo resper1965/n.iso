@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
+import { validateBody, evidenceContentSchema } from '../schemas';
 
 export const evidenceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectEvidenceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -68,7 +69,9 @@ evidenceApp.put('/:id/content', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
-    const { content } = await c.req.json<{ content: string }>();
+    const v = await validateBody(c, evidenceContentSchema);
+    if (!v.success) return v.response;
+    const { content } = v.data;
     if (content === undefined) return c.json({ error: 'Campo "content" é obrigatório' }, 400);
 
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();

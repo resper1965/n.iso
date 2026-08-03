@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 import { logAudit } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
+import { validateBody, chatSchema } from '../schemas';
 
 export const aiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -10,7 +11,9 @@ export const aiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 aiApp.post('/projects/:id/chat', async (c) => {
   const projectId = c.req.param('id');
   const user = c.get('user');
-  const body = await c.req.json<{ message: string }>();
+  const v = await validateBody(c, chatSchema);
+  if (!v.success) return v.response;
+  const body = v.data;
   if (!body.message?.trim()) return c.json({ error: 'Message is required' }, 400);
 
   const project = await c.env.DB.prepare('SELECT client_name, scope, sector FROM projects WHERE id = ?').bind(projectId).first<any>();

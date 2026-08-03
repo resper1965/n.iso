@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, auditorNoteSchema, auditorResponseSchema } from '../schemas';
 
 export const auditorApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -29,7 +30,9 @@ auditorApp.post('/auditor/:token/notes', async (c) => {
     const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
     if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
     
-    const { control_id, note_type, content } = await c.req.json();
+    const v = await validateBody(c, auditorNoteSchema);
+    if (!v.success) return v.response;
+    const { control_id, note_type, content } = v.data as any;
     if (!content) return c.json({ error: 'content is required' }, 400);
     
     const id = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
@@ -51,7 +54,9 @@ auditorApp.put('/auditor-notes/:id/respond', async (c) => {
   try {
     const id = c.req.param('id');
     const user = c.get('user');
-    const { response } = await c.req.json();
+    const v = await validateBody(c, auditorResponseSchema);
+    if (!v.success) return v.response;
+    const { response } = v.data;
     if (!response) return c.json({ error: 'response is required' }, 400);
     
     await c.env.DB.prepare(`

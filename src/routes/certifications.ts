@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, requireResourceAccess } from '../helpers';
+import { validateBody, certificationSchema } from '../schemas';
 
 export const certificationsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectCertificationsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -11,7 +12,9 @@ certificationsApp.put('/:id', async (c) => {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'certification_tracking', id, c.get('user'));
     const user = c.get('user');
-    const body = await c.req.json<any>();
+    const v = await validateBody(c, certificationSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
     const existing = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first() as any;
     if (!existing) return c.json({ error: 'Certification record not found' }, 404);
     await c.env.DB.prepare(
