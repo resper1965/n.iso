@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions } from '../helpers';
 import { validateBody, createUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -137,6 +137,14 @@ usersApp.put('/:id', async (c) => {
     if (updates.length > 0) {
       values.push(id);
       await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+
+      // Papel, senha ou projeto mudou: a sessão em curso carrega os valores
+      // ANTIGOS (o middleware lê o papel do KV, não do banco). Sem derrubar a
+      // sessão, rebaixar alguém de admin para leitor só passa a valer em 24h.
+      if (role !== undefined || password !== undefined || client_project_id !== undefined) {
+        await invalidateUserSessions(c.env.SESSIONS, id);
+      }
+
       await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${id} atualizado`);
     }
 
@@ -165,6 +173,9 @@ usersApp.delete('/:id', async (c) => {
     }
 
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+    // Usuário excluído com sessão aberta continuaria navegando: o middleware
+    // valida a sessão contra o KV, e a linha em `users` já não existe.
+    await invalidateUserSessions(c.env.SESSIONS, id);
     await logAudit(c.env.DB, 'user.deleted', admin.email, `Usuário ${user.email} excluído`);
 
     return c.json({ ok: true, message: 'Usuário excluído com sucesso' });

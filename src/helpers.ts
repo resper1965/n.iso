@@ -221,3 +221,73 @@ export async function verifyWebhookSignature(secret: string, payload: string, he
   const esperado = await signWebhook(secret, payload, Number(t));
   return constantTimeEqual(esperado, header);
 }
+
+// ─── Invalidação de sessão ───────────────────────────────────────────────────
+// Sessões vivem no KV sob um token aleatório, então não dá para enumerar as de
+// um usuário e apagá-las. Em vez disso guardamos um marco por usuário: toda
+// sessão emitida ANTES dele deixa de valer. O TTL é o mesmo da sessão mais
+// longa (24h), então a chave some sozinha quando não pode mais barrar nada.
+
+/** TTL de sessão (24h). Marco de invalidação não precisa durar mais que isso. */
+export const SESSION_TTL_SEC = 86400;
+
+/**
+ * Invalida todas as sessões já emitidas para um usuário. Chame ao trocar senha,
+ * mudar papel ou excluir o usuário — sem isso, uma sessão roubada sobrevive à
+ * troca de senha por até 24h, e um rebaixamento de papel demora o mesmo tanto.
+ */
+export async function invalidateUserSessions(kv: KVNamespace, userId: string | number): Promise<void> {
+  if (!userId) return;
+  await kv.put(`sessions_invalid_before:${userId}`, String(Date.now()), { expirationTtl: SESSION_TTL_SEC });
+}
+
+/** True se a sessão (emitida em `iat`) foi invalidada depois de emitida. */
+export async function sessionRevoked(kv: KVNamespace, userId: string | number | undefined, iat: number | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const marco = await kv.get(`sessions_invalid_before:${userId}`);
+  if (!marco) return false;
+  // Sessão sem `iat` é anterior a esta mudança: trate como revogada (falha fechada).
+  return !iat || iat < Number(marco);
+}
+
+// ─── Upload ──────────────────────────────────────────────────────────────────
+
+/** Teto de upload. R2 aceita muito mais; o limite existe para conter abuso. */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Tipos aceitos como evidência. Allow-list, não deny-list: o que não está aqui
+ * é recusado. `text/html` e `image/svg+xml` ficam de fora de propósito — são
+ * servidos de volta ao navegador e viram XSS armazenado.
+ */
+export const ALLOWED_UPLOAD_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/json',
+  'application/zip',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
+
+/** Valida tamanho e tipo do arquivo. Devolve a mensagem de erro, ou null se ok. */
+export function validateUpload(file: File): string | null {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `Arquivo excede o limite de ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`;
+  }
+  if (file.size === 0) return 'Arquivo vazio';
+  const tipo = (file.type || '').split(';')[0].trim().toLowerCase();
+  if (!ALLOWED_UPLOAD_TYPES.has(tipo)) {
+    return `Tipo de arquivo não aceito: ${tipo || 'desconhecido'}`;
+  }
+  return null;
+}

@@ -2,13 +2,15 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification, escapeHtml } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
+import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
 export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 leadsApp.post('/', async (c) => {
   try {
-    const body = await c.req.json<any>();
-    if (!body.company_name) return c.json({ error: 'company_name é obrigatório' }, 400);
+    const valid = await validateBody(c, leadSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
 
     const id = genId();
     await c.env.DB.prepare(
@@ -70,7 +72,9 @@ leadsApp.delete('/:id', async (c) => {
 leadsApp.put('/:id/status', async (c) => {
   try {
     const id = c.req.param('id');
-    const { status } = await c.req.json<{ status: string }>();
+    const valid = await validateBody(c, leadStatusSchema);
+    if (!valid.success) return valid.response;
+    const { status } = valid.data;
     await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?').bind(status, id).run();
     return c.json({ ok: true, status });
   } catch (e: any) {
@@ -81,7 +85,9 @@ leadsApp.put('/:id/status', async (c) => {
 leadsApp.post('/:id/enrich-cnpj', async (c) => {
   try {
     const id = c.req.param('id');
-    const { cnpj } = await c.req.json<{ cnpj: string }>();
+    const valid = await validateBody(c, cnpjSchema);
+    if (!valid.success) return valid.response;
+    const { cnpj } = valid.data;
     const cleanCnpj = (cnpj || '').replace(/\D/g, '');
     if (cleanCnpj.length !== 14) return c.json({ error: 'CNPJ inválido (14 dígitos)' }, 400);
 
