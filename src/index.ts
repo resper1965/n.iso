@@ -4,6 +4,8 @@ import { secureHeaders } from 'hono/secure-headers';
 
 import { authMiddleware } from './middleware/auth';
 import { projectAccessMiddleware } from './middleware/project-access';
+import { queryCapMiddleware } from './middleware/query-cap';
+import { bodyGuard } from './middleware/body-guard';
 import { rateLimitMiddleware } from './middleware/rate-limit';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
@@ -24,6 +26,7 @@ import { governanceApp } from './routes/governance';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
 import { mfaApp } from './routes/mfa';
+import { dataSubjectApp } from './routes/data-subject';
 
 
 import risks from './routes/risks';
@@ -125,6 +128,12 @@ app.use('*', cors({
 // 2. Health check (público)
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+// 2c. Teto automático de linhas em SELECT sem LIMIT. Antes de tudo que consulta.
+app.use('*', queryCapMiddleware);
+// 2b. Guarda genérica de corpo: teto de 1 MB, recusa corpo que não é objeto e
+// bloqueia poluição de protótipo. Vem antes do auth para valer também no login.
+app.use('*', bodyGuard);
+
 // 3. Auth sub-router (público)
 app.route('/api/v1/auth', authApp);
 
@@ -171,6 +180,8 @@ app.route('/api/v1/projects/:projectId/audits', projectAuditsApp);
 
 app.route('/api/v1/capa', capaApp);
 app.route('/api/v1/projects/:projectId/capa', projectCapaApp);
+
+app.route('/api/v1/projects/:projectId/data-subject', dataSubjectApp);
 
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
