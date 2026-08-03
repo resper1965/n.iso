@@ -134,3 +134,21 @@ que aconteceu com a copia inline do ponytail).
 limpos, so markdown, sem script). Os scanners verificam malware, **nao** a
 exatidao do texto normativo. Nao emita documento de conformidade para cliente com
 base so nessas skills sem conferir contra a norma publicada.
+
+## Portões de revisão — o que existe e o que não existe
+
+O repositório ficou **privado** em 2026-08-03. Consequências que não são óbvias
+e que já custaram uma execução de CI falhando em silêncio:
+
+- **CodeQL foi removido.** `.github/workflows/codeql.yml` passou a falhar com
+  `Code scanning is not enabled for this repository` — em repositório privado,
+  code scanning exige GitHub Advanced Security (pago). O job continuava rodando
+  ~4 min por execução e falhava no upload. Se o repo voltar a ser público, ou se
+  houver GHAS, o arquivo está no histórico do git.
+- **CodeRabbit caiu para o plano Free**, que só gera resumo — sem revisão linha
+  a linha. Não existe plano gratuito para repositório privado.
+- **Codex continua funcionando**, atrelado à assinatura e não à visibilidade do
+  repo. Hoje é o único revisor automático que lê o diff de verdade.
+
+Ao configurar proteção de branch, **exija apenas o check `test`**. Exigir
+`CodeQL` ou `Analyze JavaScript/TypeScript` travaria todo merge para sempre.
