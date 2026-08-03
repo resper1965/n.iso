@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { authMiddleware } from './middleware/auth';
 import { projectAccessMiddleware } from './middleware/project-access';
 import { bodyGuard } from './middleware/body-guard';
+import { rateLimitMiddleware } from './middleware/rate-limit';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
@@ -133,6 +134,10 @@ app.use('/api/v1/*', authMiddleware);
 
 // 5b. Isolamento multi-tenant: reforça acesso ao projeto em rotas com escopo de projeto
 app.use('/api/v1/projects/:projectId/*', projectAccessMiddleware);
+
+// 5c. Rate limit das rotas caras (IA, upload, export). Depois do authMiddleware
+// porque o limite é por usuário, não por IP.
+app.use('/api/v1/*', rateLimitMiddleware);
 
 // 6. Sub-rotas montadas
 app.route('/api/v1/users', usersApp);
