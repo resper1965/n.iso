@@ -67,6 +67,13 @@ mfaApp.post('/setup', async (c) => {
 /** Etapa 2: confirma um código e ativa. Devolve os códigos de recuperação. */
 mfaApp.post('/activate', async (c) => {
   const user = c.get('user');
+  // Mesmo limite do /verify: aqui também se adivinha um código de 6 dígitos, e
+  // quem sequestrou uma sessão antes da ativação pode martelar até casar — o
+  // resultado seria MFA ligado com códigos de recuperação que só o atacante viu.
+  if (!(await limiteTentativas(c, user.id))) {
+    return c.json({ error: 'Muitas tentativas. Aguarde alguns minutos.' }, 429);
+  }
+
   const valid = await validateBody(c, codigoSchema);
   if (!valid.success) return valid.response;
 
@@ -83,7 +90,7 @@ mfaApp.post('/activate', async (c) => {
   const codigos = gerarCodigosRecuperacao();
   const hashes = (await Promise.all(codigos.map(cod => sha256Hex(cod)))).join(',');
 
-  await c.env.DB.prepare('UPDATE users SET totp_enabled = 1, totp_recovery_hashes = ? WHERE id = ?')
+  await c.env.DB.prepare('UPDATE users SET totp_enabled = 1, totp_recovery_hashes = ?, totp_fail_count = 0 WHERE id = ?')
     .bind(hashes, user.id).run();
   await logAudit(c.env.DB, 'auth.mfa_ativado', user.email, 'Segundo fator TOTP ativado');
 
@@ -173,10 +180,19 @@ mfaApp.post('/verify', async (c) => {
     if (row.totp_last_window !== null && janela <= row.totp_last_window) {
       return c.json({ error: 'Código já utilizado. Aguarde o próximo.' }, 401);
     }
-    // Zera o contador de tentativas: quem provou posse do fator não deve
-    // carregar as falhas de digitação anteriores.
-    await c.env.DB.prepare('UPDATE users SET totp_last_window = ?, totp_fail_count = 0 WHERE id = ?')
-      .bind(janela, user.id).run();
+    // Escrita condicional, não `WHERE id = ?` puro: entre o teste acima e este
+    // UPDATE cabem duas requisições com o MESMO código, e as duas passariam.
+    // A condição `totp_last_window < janela` faz o banco decidir quem chegou
+    // primeiro; a segunda altera 0 linhas e é recusada como reuso.
+    // Zera também o contador de tentativas — quem provou posse do fator não
+    // deve carregar as falhas de digitação anteriores.
+    const avanco = await c.env.DB.prepare(
+      `UPDATE users SET totp_last_window = ?, totp_fail_count = 0
+        WHERE id = ? AND (totp_last_window IS NULL OR totp_last_window < ?)`
+    ).bind(janela, user.id, janela).run();
+    if (avanco.meta?.changes !== 1) {
+      return c.json({ error: 'Código já utilizado. Aguarde o próximo.' }, 401);
+    }
     await promoverSessao(c);
     return c.json({ ok: true, metodo: 'totp' });
   }
@@ -216,6 +232,13 @@ mfaApp.post('/verify', async (c) => {
  */
 mfaApp.post('/disable', async (c) => {
   const user = c.get('user');
+  // O /auth/login limita por IP; aqui não passava por lá. Uma sessão roubada
+  // que não traz a senha teria neste endpoint um oráculo de senha sem
+  // throttling nenhum — e acertar a senha aqui desliga o segundo fator.
+  if (!(await limiteTentativas(c, user.id))) {
+    return c.json({ error: 'Muitas tentativas. Aguarde alguns minutos.' }, 429);
+  }
+
   const valid = await validateBody(c, senhaSchema);
   if (!valid.success) return valid.response;
 

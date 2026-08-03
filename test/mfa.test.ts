@@ -199,6 +199,30 @@ describe('Fluxo de MFA', () => {
     expect(semSenha.status).toBe(400);
   });
 
+  it('activate é limitado — não dá para martelar 6 dígitos até casar', async () => {
+    // Quem sequestra uma sessão ANTES da ativação e adivinha um código liga o
+    // MFA com códigos de recuperação que só ele viu. O /verify já era limitado;
+    // o /activate ficara de fora.
+    await post('/api/v1/auth/mfa/setup', { password: 'password123' });
+    let bloqueou = 0;
+    for (let i = 0; i < 14; i++) {
+      const r = await post('/api/v1/auth/mfa/activate', { codigo: '000000' });
+      if (r.status === 429) bloqueou++;
+    }
+    expect(bloqueou).toBeGreaterThan(0);
+  });
+
+  it('disable é limitado — não vira oráculo de senha', async () => {
+    // O /auth/login limita por IP; este endpoint não passava por lá. E acertar
+    // a senha aqui desliga o segundo fator.
+    let bloqueou = 0;
+    for (let i = 0; i < 14; i++) {
+      const r = await post('/api/v1/auth/mfa/disable', { password: `tentativa${i}` });
+      if (r.status === 429) bloqueou++;
+    }
+    expect(bloqueou).toBeGreaterThan(0);
+  });
+
   it('MFA exige sessão — não é rota pública', async () => {
     const res = await app.fetch(
       new Request('http://localhost/api/v1/auth/mfa/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
