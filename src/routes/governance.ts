@@ -122,7 +122,9 @@ governanceApp.put('/projects/:id/company-profile', async (c) => {
       WHERE id = ?
     `).bind(
       cnpj || null, 
-      employee_count ? parseInt(employee_count) : null, 
+      // `0` é valor legítimo: o truthy check gravava null para empresa sem
+      // funcionários declarados. E `parseInt` é redundante — o schema já valida número.
+      employee_count ?? null, 
       scope || null, 
       sector || null, 
       client_name || '', 

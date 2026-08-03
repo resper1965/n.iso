@@ -11,7 +11,9 @@ ropaApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, ropaSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       `UPDATE ropa_records SET processing_purpose=?, data_categories=?, data_subjects=?, legal_basis=?, consent_details=?, data_subject_rights_details=?, retention_period=?, recipients=?, international_transfers=?, transfer_safeguards=?, dpia_required=?, status=?, owner=?, updated_at=? WHERE id=?`

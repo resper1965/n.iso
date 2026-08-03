@@ -231,6 +231,31 @@ describe('Schemas por rota', () => {
     })).status).toBe(400);
   });
 
+  it('"false" e "0" como string NÃO viram verdadeiro no banco', async () => {
+    // Achado do CodeRabbit: boolLike aceitava string sem normalizar, e todo
+    // consumidor faz `valor ? 1 : 0`. Como "false" e "0" são strings NÃO-VAZIAS,
+    // eram truthy — quem respondeu "não" ficava gravado como "sim".
+    for (const [entrada, esperado] of [['false', 0], ['0', 0], ['true', 1], ['1', 1]] as const) {
+      const res = await req('/api/v1/projects/p1/ropa', 'POST', {
+        processing_purpose: `Teste ${entrada}`,
+        dpia_required: entrada,
+      });
+      expect(res.status, `${entrada}: ${await res.clone().text()}`).toBe(201);
+      const { id } = await res.json() as any;
+      const linha = await env.DB.prepare('SELECT dpia_required FROM ropa_records WHERE id = ?').bind(id).first<any>();
+      expect(linha.dpia_required, `entrada "${entrada}"`).toBe(esperado);
+    }
+  });
+
+  it('employee_count 0 é gravado como 0, não como null', async () => {
+    // Achado do CodeRabbit: `employee_count ? parseInt(...) : null` tratava o
+    // zero como ausência. Empresa sem funcionários declarados virava "não sei".
+    const res = await req('/api/v1/projects/p1/company-profile', 'PUT', { employee_count: 0 });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const p = await env.DB.prepare("SELECT employee_count FROM projects WHERE id='p1'").first<any>();
+    expect(p.employee_count).toBe(0);
+  });
+
   it('nota de auditor externo vazia é recusada', async () => {
     const res = await app.fetch(
       new Request('http://localhost/api/v1/auditor/tok-valido/notes', {

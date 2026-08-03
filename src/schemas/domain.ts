@@ -19,7 +19,24 @@ const curtoOpcional = z.string().trim().max(500).optional().nullable();
 const longo = z.string().max(50_000);
 const longoOpcional = z.string().max(50_000).optional().nullable();
 const idOpcional = z.string().max(200).optional().nullable();
-const boolLike = z.union([z.boolean(), z.number(), z.string()]).optional().nullable();
+/**
+ * Aceita o que os clientes de fato mandam para um booleano — o formulário envia
+ * 0/1 numérico, o MCP envia true/false, e alguns campos chegam como string.
+ *
+ * A normalização é o ponto: sem ela, `"false"` e `"0"` são strings NÃO-VAZIAS e
+ * portanto truthy, então `valor ? 1 : 0` gravava 1 para quem respondeu "não".
+ */
+const boolLike = z
+  .union([z.boolean(), z.number(), z.string()])
+  .optional()
+  .nullable()
+  .transform(v => {
+    if (v === undefined || v === null) return v;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    const t = v.trim().toLowerCase();
+    return t === 'true' || t === '1' || t === 'sim' || t === 'yes';
+  });
 
 // ─── ROPA (LGPD / ISO 27701) ─────────────────────────────────────────────────
 // A tabela guarda dado pessoal de titulares dos clientes. Campo obrigatório que
@@ -76,9 +93,31 @@ export const trainingImportSchema = z.object({
 export const leadSchema = z.object({
   company_name: curto,
   contact_name: curtoOpcional,
-  contact_email: z.string().email().max(320).optional().nullable(),
+  contact_email: z.string().email().max(320).or(z.literal('')).optional().nullable(),
   source: curtoOpcional,
   cnpj: z.string().max(20).optional().nullable(),
+  // Dados cadastrais vindos da consulta de CNPJ. O INSERT gravava todos sem
+  // teto: são identidade de empresa e endereço, exatamente o que este PR diz
+  // priorizar.
+  razao_social: curtoOpcional,
+  nome_fantasia: curtoOpcional,
+  natureza_juridica: curtoOpcional,
+  porte: curtoOpcional,
+  capital_social: z.number().nonnegative().optional().nullable(),
+  cnae_fiscal: z.union([z.number(), z.string().max(20)]).optional().nullable(),
+  cnae_fiscal_descricao: curtoOpcional,
+  data_inicio_atividade: curtoOpcional,
+  situacao_cadastral: curtoOpcional,
+  logradouro: curtoOpcional,
+  numero: curtoOpcional,
+  complemento: curtoOpcional,
+  bairro: curtoOpcional,
+  municipio: curtoOpcional,
+  uf: z.string().trim().max(2).optional().nullable(),
+  cep: z.string().trim().max(20).optional().nullable(),
+  telefone: curtoOpcional,
+  // Quadro societário: nomes de sócios, dado pessoal. Teto no tamanho da lista.
+  qsa: z.array(z.record(z.unknown())).max(200).optional().nullable(),
 }).passthrough();
 
 export const leadStatusSchema = z.object({ status: curto }).passthrough();
@@ -92,7 +131,9 @@ export const cnpjSchema = z.object({
 
 export const proposalSchema = z.object({
   lead_id: curto,
-  assessment_id: curtoOpcional,
+  // Exigido pelo handler; declarar opcional aqui produziria duas mensagens de
+  // erro diferentes para a mesma falta.
+  assessment_id: curto,
   total_price: z.number().nonnegative(),
   content_html: longoOpcional,
 }).passthrough();
@@ -118,8 +159,10 @@ export const governanceMemberSchema = z.object({
   // `email || null`. O formulário manda string vazia quando não preenchido —
   // por isso `.or(literal(''))` e não só `.optional()`.
   email: z.string().email().max(320).or(z.literal('')).optional().nullable(),
-  role_category: curtoOpcional,
-  job_title: curtoOpcional,
+  // O handler já recusa a ausência destes; deixá-los opcionais no schema faria
+  // o schema mentir sobre o contrato real.
+  role_category: curto,
+  job_title: curto,
   is_primary: boolLike,
 }).passthrough();
 
@@ -207,6 +250,16 @@ export const certificationSchema = z.object({
   status: curtoOpcional,
   target_date: curtoOpcional,
   notes: longoOpcional,
+  // Estes o handler grava e o schema não declarava: com `.passthrough()` eles
+  // chegavam ao UPDATE sem teto de tamanho nenhum.
+  standard: curtoOpcional,
+  stage1_date: curtoOpcional,
+  stage1_status: curtoOpcional,
+  stage2_date: curtoOpcional,
+  stage2_status: curtoOpcional,
+  certificate_number: curtoOpcional,
+  certificate_expiry: curtoOpcional,
+  registrar: curtoOpcional,
 }).passthrough();
 
 // ─── Projetos ────────────────────────────────────────────────────────────────
@@ -235,7 +288,9 @@ export const evidenceMetaSchema = z.object({
 
 export const scopeChangeSchema = z.object({
   change_description: longo.min(1),
-  reason: longo.min(1),
+  // `scope_changes.reason` é nullable e o handler grava `reason || null`;
+  // exigir aqui recusaria requisição que sempre funcionou.
+  reason: longoOpcional,
   impact_analysis: longoOpcional,
   requested_by: curtoOpcional,
 }).passthrough();
