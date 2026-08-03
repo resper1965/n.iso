@@ -16,10 +16,10 @@ ropaApp.put('/:id', async (c) => {
     await c.env.DB.prepare(
       `UPDATE ropa_records SET processing_purpose=?, data_categories=?, data_subjects=?, legal_basis=?, consent_details=?, data_subject_rights_details=?, retention_period=?, recipients=?, international_transfers=?, transfer_safeguards=?, dpia_required=?, status=?, owner=?, updated_at=? WHERE id=?`
     ).bind(
-      body.processing_purpose, body.data_categories, body.data_subjects,
-      body.legal_basis, body.consent_details || null, body.data_subject_rights_details || null,
-      body.retention_period, body.recipients, body.international_transfers,
-      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.status || 'Draft', body.owner, now, id
+      body.processing_purpose ?? null, body.data_categories ?? null, body.data_subjects ?? null,
+      body.legal_basis ?? null, body.consent_details ?? null, body.data_subject_rights_details ?? null,
+      body.retention_period ?? null, body.recipients ?? null, body.international_transfers ? 1 : 0,
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.status || 'Draft', body.owner ?? null, now, id
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
@@ -63,10 +63,10 @@ projectRopaApp.post('/', async (c) => {
       `INSERT INTO ropa_records (id, project_id, processing_purpose, data_categories, data_subjects, legal_basis, consent_details, data_subject_rights_details, retention_period, recipients, international_transfers, transfer_safeguards, dpia_required, status, owner, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`
     ).bind(
-      id, projectId, body.processing_purpose, body.data_categories, body.data_subjects,
-      body.legal_basis, body.consent_details || null, body.data_subject_rights_details || null,
-      body.retention_period, body.recipients, body.international_transfers,
-      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner, now, now
+      id, projectId, body.processing_purpose, body.data_categories ?? null, body.data_subjects ?? null,
+      body.legal_basis ?? null, body.consent_details ?? null, body.data_subject_rights_details ?? null,
+      body.retention_period ?? null, body.recipients ?? null, body.international_transfers ? 1 : 0,
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner ?? null, now, now
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_created', user?.email || 'system', `ROPA ${id} created`);

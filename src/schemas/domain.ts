@@ -26,18 +26,23 @@ const boolLike = z.union([z.boolean(), z.number(), z.string()]).optional().nulla
 // chega vazio produz registro de tratamento incompleto — e um ROPA incompleto é
 // não conformidade em auditoria, não só um bug.
 export const ropaSchema = z.object({
+  // Só este é obrigatório: as demais colunas são NULLABLE em schema.sql e o
+  // formulário do produto (privacy.js) só barra a ausência desta. Exigir as
+  // outras devolveria 400 em submissão que sempre funcionou.
   processing_purpose: curto,
-  data_categories: curto,
-  data_subjects: curto,
-  legal_basis: curto,
-  retention_period: curto,
-  recipients: curto,
-  international_transfers: curto,
+  data_categories: curtoOpcional,
+  data_subjects: curtoOpcional,
+  legal_basis: curtoOpcional,
+  retention_period: curtoOpcional,
+  recipients: curtoOpcional,
+  // INTEGER no banco; o frontend manda 0 ou 1. Exigir string aqui fazia TODA
+  // criação de ROPA pela UI falhar com 400 antes de chegar ao INSERT.
+  international_transfers: boolLike,
   transfer_safeguards: curtoOpcional,
   consent_details: longoOpcional,
   data_subject_rights_details: longoOpcional,
   dpia_required: boolLike,
-  owner: curto,
+  owner: curtoOpcional,
   status: curtoOpcional,
 }).passthrough();
 
@@ -79,7 +84,10 @@ export const leadSchema = z.object({
 export const leadStatusSchema = z.object({ status: curto }).passthrough();
 
 export const cnpjSchema = z.object({
-  cnpj: z.string().trim().regex(/^\d{14}$/, 'CNPJ deve ter 14 dígitos'),
+  // Aceita com ou sem pontuação: o handler normaliza com replace(/\D/g,'')
+  // logo em seguida, e o formato 12.345.678/0001-90 é o que o usuário digita.
+  // Validar o valor normalizado, não o texto cru.
+  cnpj: z.string().trim().refine(v => v.replace(/\D/g, '').length === 14, 'CNPJ deve ter 14 dígitos'),
 }).passthrough();
 
 export const proposalSchema = z.object({
@@ -106,7 +114,10 @@ export const stakeholderSchema = z.object({
 
 export const governanceMemberSchema = z.object({
   name: curto,
-  email: z.string().email().max(320),
+  // Opcional no formulário (monitor.js), nullable no banco, e o handler grava
+  // `email || null`. O formulário manda string vazia quando não preenchido —
+  // por isso `.or(literal(''))` e não só `.optional()`.
+  email: z.string().email().max(320).or(z.literal('')).optional().nullable(),
   role_category: curtoOpcional,
   job_title: curtoOpcional,
   is_primary: boolLike,

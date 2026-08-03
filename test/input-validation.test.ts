@@ -91,9 +91,10 @@ describe('Schemas por rota', () => {
     );
   }
 
-  it('ROPA sem campo obrigatório responde 400, não 500', async () => {
-    // Antes: NOT NULL constraint failed -> 500. Erro de cliente virando incidente.
-    const res = await req('/api/v1/projects/p1/ropa', 'POST', { processing_purpose: 'Folha' });
+  it('ROPA sem a finalidade responde 400, não 500', async () => {
+    // Antes: erro do banco -> 500, ou seja, erro de cliente virando incidente.
+    // Só `processing_purpose` é obrigatório — ver o teste do payload real da UI.
+    const res = await req('/api/v1/projects/p1/ropa', 'POST', { data_categories: 'CPF' });
     expect(res.status).toBe(400);
     expect((await res.json() as any).error).toBe('Payload inválido');
   });
@@ -141,6 +142,56 @@ describe('Schemas por rota', () => {
   it('CNPJ com formato inválido é recusado antes de chamar a API externa', async () => {
     const res = await req('/api/v1/leads/qualquer/enrich-cnpj', 'POST', { cnpj: '123' });
     expect(res.status).toBe(400);
+  });
+
+  // Os casos abaixo vêm da revisão do Codex no PR #27: a primeira versão dos
+  // schemas foi escrita contra a MINHA suposição do payload, não contra o que a
+  // UI manda. Cada um destes teria quebrado um fluxo que já funcionava.
+
+  it('aceita exatamente o payload que o formulário de ROPA envia', async () => {
+    // privacy.js manda international_transfers como 0/1 numérico (a coluna é
+    // INTEGER) e só barra a ausência de processing_purpose. A versão anterior
+    // do schema exigia string e mais seis campos: TODA criação pela UI dava 400.
+    const res = await req('/api/v1/projects/p1/ropa', 'POST', {
+      processing_purpose: 'Folha de pagamento',
+      data_categories: '', data_subjects: '', legal_basis: '',
+      retention_period: '', recipients: '', transfer_safeguards: '',
+      owner: '', status: 'Draft',
+      international_transfers: 0,
+      dpia_required: 1,
+    });
+    expect(res.status, await res.clone().text()).toBe(201);
+  });
+
+  it('ROPA ainda exige a finalidade do tratamento', async () => {
+    // O que continua obrigatório: sem finalidade, o registro não serve de ROPA.
+    expect((await req('/api/v1/projects/p1/ropa', 'POST', { data_categories: 'CPF' })).status).toBe(400);
+  });
+
+  it('aceita CNPJ com pontuação, como o usuário digita', async () => {
+    // O handler normaliza com replace(/\D/g,'') logo depois; recusar o formato
+    // pontuado antes disso quebraria cliente que sempre funcionou.
+    const formatado = await req('/api/v1/leads/x/enrich-cnpj', 'POST', { cnpj: '12.345.678/0001-90' });
+    expect(formatado.status).not.toBe(400);
+    const limpo = await req('/api/v1/leads/x/enrich-cnpj', 'POST', { cnpj: '12345678000190' });
+    expect(limpo.status).not.toBe(400);
+    // Mas 13 dígitos continua sendo recusado.
+    expect((await req('/api/v1/leads/x/enrich-cnpj', 'POST', { cnpj: '1234567800019' })).status).toBe(400);
+  });
+
+  it('aceita membro de governança sem e-mail — o campo é opcional no formulário', async () => {
+    // monitor.js manda string vazia quando o campo não é preenchido, a coluna é
+    // nullable e o handler grava `email || null`.
+    const vazio = await req('/api/v1/projects/p1/governance', 'POST', {
+      name: 'Ricardo', email: '', role_category: 'executivo', job_title: 'CEO',
+    });
+    // O handler faz upsert e responde 200, não 201.
+    expect(vazio.status, await vazio.clone().text()).toBe(200);
+
+    // E-mail malformado continua recusado.
+    expect((await req('/api/v1/projects/p1/governance', 'POST', {
+      name: 'X', email: 'nao-e-email', role_category: 'tech', job_title: 'CTO',
+    })).status).toBe(400);
   });
 
   it('nota de auditor externo vazia é recusada', async () => {

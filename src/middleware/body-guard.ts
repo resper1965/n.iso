@@ -4,21 +4,18 @@ import { Bindings, Variables } from '../index';
 /**
  * Guarda genérica de corpo de requisição.
  *
- * Só 14 das 218 escritas tinham schema. Escrever schema para todas é o trabalho
- * certo, mas leva tempo; enquanto isso, três defeitos valem para TODAS as rotas
- * e se resolvem num lugar só:
+ * Três defeitos valem para TODAS as rotas e se resolvem num lugar só:
  *
  * 1. Corpo sem limite — o worker lê o JSON inteiro na memória antes de qualquer
- *    handler. Um POST de 100 MB derruba a requisição por OOM.
- * 2. Poluição de protótipo — `{"__proto__": {...}}` num JSON que depois é
- *    espalhado com `{...body}` contamina Object.prototype do isolate, que é
- *    compartilhado entre requisições no mesmo worker.
- * 3. Corpo que não é objeto — `[1,2,3]` ou `"texto"` passa pelo `c.req.json()`
- *    e só quebra lá na frente, como 500 em vez de 400.
+ *    handler. Um POST grande derruba a requisição por OOM.
+ * 2. Poluição de protótipo — `{"__proto__": {...}}` num JSON depois espalhado
+ *    com `{...body}` contamina Object.prototype do isolate, que é compartilhado
+ *    entre requisições no mesmo worker.
+ * 3. Corpo que não é objeto — `[1,2,3]` passa pelo `c.req.json()` e só quebra
+ *    lá na frente, como 500 em vez de 400.
  *
  * ponytail: isto NÃO substitui schema por rota. Não valida campo obrigatório
- * nem tipo — só fecha o que é igual em toda rota. Schemas continuam sendo
- * adicionados por domínio.
+ * nem tipo — só fecha o que é igual em toda rota.
  */
 
 /** 1 MB. Nenhum payload JSON legítimo do produto chega perto; upload é multipart. */
@@ -36,38 +33,80 @@ function temChavePerigosa(valor: unknown, profundidade = 0): boolean {
   return false;
 }
 
+/**
+ * Lê o corpo com teto, cancelando o stream assim que o limite é ultrapassado.
+ *
+ * `c.req.text()` bufferizaria o corpo INTEIRO antes de qualquer verificação de
+ * tamanho. Numa requisição chunked (sem Content-Length) isso significa que o
+ * teto não protegia nada: a memória já teria sido consumida quando a checagem
+ * rodasse. Aqui o stream morre no primeiro byte além do limite.
+ *
+ * Devolve `null` quando estourou.
+ */
+async function lerComTeto(req: Request, max: number): Promise<string | null> {
+  if (!req.body) return '';
+  const leitor = req.body.getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > max) {
+      await leitor.cancel().catch(() => {});
+      return null;
+    }
+    partes.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of partes) { buf.set(p, off); off += p.byteLength; }
+  return new TextDecoder().decode(buf);
+}
+
 export const bodyGuard = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
   const metodo = c.req.method.toUpperCase();
   if (metodo !== 'POST' && metodo !== 'PUT' && metodo !== 'PATCH') return next();
 
   const tipo = (c.req.header('Content-Type') || '').toLowerCase();
-  // multipart é upload; o teto de tamanho de arquivo é validado em validateUpload.
-  if (!tipo.includes('application/json')) return next();
 
-  const tamanho = Number(c.req.header('Content-Length') || 0);
-  if (tamanho > MAX_JSON_BYTES) {
+  // Upload multipart é o ÚNICO caso isento: o corpo é binário e o teto por
+  // arquivo é validado em `validateUpload`.
+  //
+  // A isenção é por lista fechada, e não por confiar no Content-Type
+  // declarado. `c.req.json()` dos handlers analisa o corpo independentemente do
+  // cabeçalho — então um cliente que mandasse JSON como `text/plain`, ou sem
+  // Content-Type nenhum, escaparia de todas as verificações abaixo se a guarda
+  // só agisse quando o cabeçalho dissesse `application/json`.
+  if (tipo.includes('multipart/form-data')) return next();
+
+  // Content-Length serve para recusar cedo, mas não dá para confiar nele:
+  // chunked não tem, e cliente hostil mente. O teto real é o do stream.
+  const declarado = Number(c.req.header('Content-Length') || 0);
+  if (declarado > MAX_JSON_BYTES) {
     return c.json({ error: 'Corpo da requisição excede o limite de 1 MB' }, 413);
   }
 
-  // Hono cacheia o corpo lido, então o handler adiante ainda consegue
-  // `c.req.json()` — não estamos consumindo o stream duas vezes.
-  const texto = await c.req.text();
+  // Lê de um clone: o corpo original continua disponível para o handler.
+  const texto = await lerComTeto(c.req.raw.clone(), MAX_JSON_BYTES);
+  if (texto === null) {
+    return c.json({ error: 'Corpo da requisição excede o limite de 1 MB' }, 413);
+  }
 
-  // Corpo vazio com content-type JSON é comum e legítimo: várias rotas de ação
-  // (gerar documento, aprovar) não recebem corpo. Deixa passar — quem precisa
-  // do campo reclama no schema, não aqui.
+  // Corpo vazio é comum e legítimo: várias rotas de ação (gerar documento,
+  // aprovar) não recebem payload. Deixa passar — quem precisa do campo reclama
+  // no schema, não aqui.
   if (!texto.trim()) return next();
-
-  // Sem Content-Length (chunked), o tamanho só se sabe depois de ler.
-  if (texto.length > MAX_JSON_BYTES) {
-    return c.json({ error: 'Corpo da requisição excede o limite de 1 MB' }, 413);
-  }
 
   let corpo: unknown;
   try {
     corpo = JSON.parse(texto);
   } catch {
-    return c.json({ error: 'Formato JSON inválido' }, 400);
+    // Não é JSON. Pode ser formulário codificado ou texto que o handler nem lê;
+    // recusar aqui quebraria rota legítima. Se o handler tentar `c.req.json()`,
+    // ele mesmo devolve 400.
+    return next();
   }
 
   if (corpo === null || typeof corpo !== 'object' || Array.isArray(corpo)) {
