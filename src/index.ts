@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 
 import { authMiddleware } from './middleware/auth';
 import { projectAccessMiddleware } from './middleware/project-access';
+import { queryCapMiddleware } from './middleware/query-cap';
 import { bodyGuard } from './middleware/body-guard';
 import { rateLimitMiddleware } from './middleware/rate-limit';
 import { authApp } from './routes/auth';
@@ -119,6 +120,8 @@ app.use('*', cors({
 // 2. Health check (público)
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+// 2c. Teto automático de linhas em SELECT sem LIMIT. Antes de tudo que consulta.
+app.use('*', queryCapMiddleware);
 // 2b. Guarda genérica de corpo: teto de 1 MB, recusa corpo que não é objeto e
 // bloqueia poluição de protótipo. Vem antes do auth para valer também no login.
 app.use('*', bodyGuard);
