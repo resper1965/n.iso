@@ -25,6 +25,7 @@ import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
+import { dataSubjectApp } from './routes/data-subject';
 
 
 import risks from './routes/risks';
@@ -169,6 +170,8 @@ app.route('/api/v1/projects/:projectId/audits', projectAuditsApp);
 
 app.route('/api/v1/capa', capaApp);
 app.route('/api/v1/projects/:projectId/capa', projectCapaApp);
+
+app.route('/api/v1/projects/:projectId/data-subject', dataSubjectApp);
 
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
