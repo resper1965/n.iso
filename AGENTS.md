@@ -7,6 +7,48 @@ Este arquivo descreve o que **existe hoje**. Historico de sprint vive no
 `CHANGELOG.md` — nao acrescente narrativa de entrega aqui, ela envelhece e
 passa a mentir para o proximo agente.
 
+## Regra numero um: nao afirme sem evidencia
+
+Em 2026-08-03, tres resumos diferentes afirmaram que PRs estavam mergeados e
+que migrations 0013–0018 tinham sido aplicadas. Nenhuma das duas coisas era
+verdade. O custo foi real: cinco funcionalidades quebradas em producao
+(criar ativo, criar webhook, criar e revogar API key, criar DPIA, mudanca de
+escopo) e ninguem percebeu, porque os relatorios diziam que estava tudo bem.
+
+Entao:
+
+- **Mergeado** so depois de `git cat-file -e origin/main:<arquivo>` responder.
+- **Aplicado** so depois de `PRAGMA table_info(...)` mostrar a coluna.
+- **Em producao** so depois de uma sonda contra a API viva. Nem `/health` nem
+  401 em rota inexistente distinguem versao — os dois respondem igual com codigo
+  velho. A sonda que distingue hoje:
+
+  ```
+  curl -s -X POST -H "Content-Type: application/json" -d "{}" \
+    https://niso.ness.workers.dev/api/v1/auth/login
+  ```
+
+  Codigo atual devolve o envelope completo:
+
+  ```json
+  {"error":"Payload invalido","details":[
+    {"path":"email","message":"Invalid input: expected string, received undefined"},
+    {"path":"password","message":"Invalid input: expected string, received undefined"}]}
+  ```
+
+  Formato anterior ao #34 devolvia os `issues` crus do zod dentro de `details`,
+  com `"code"`, `"expected"`, `"received":"undefined"` e `"message":"Required"`.
+  O que distingue e a forma de cada item, nao o envelope — `error` e `details`
+  existem nos dois. `test/validation-contract.test.ts` fixa esse contrato.
+
+Cole a saida. Sem saida colada, a afirmacao nao conta.
+
+E vale para contagem tambem: o PR que introduziu esta regra afirmou "46 tabelas"
+porque `grep -c 'CREATE TABLE'` contou duas linhas de COMENTARIO, e "7 de 23
+testes mockam o D1" porque `grep vi.fn()` casa mock de qualquer coisa. Os
+numeros certos eram 44 e 2 de 22. `grep` conveniente nao e evidencia — confira o
+que o padrao realmente casou antes de escrever o numero.
+
 ## Stack
 
 Cloudflare Workers (Hono) + D1 + KV + R2 + Vectorize + Workers AI. Frontend SPA
@@ -28,7 +70,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   (estado global `S`), `api.js`, `ui.js`, `globals.js`, `src/views/*.js`.
   `politicas.html` e o portal publico de politicas.
 - **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
-  `migrations/` (ultima aplicada localmente: 0018).
+  `migrations/`, ultima a **0020**. O estado real de producao e o historico da
+  reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
+  tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
   AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
@@ -73,15 +117,50 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
 - **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
   tocar e melhoria barata; nao precisa de permissao.
-- **4 de 14 arquivos de teste ainda mockam o D1.** Teste mockado nao pega deriva
-  de schema — foi exatamente assim que o codebase acumulou consulta a tabela
-  inexistente. Caminho novo de banco: teste de integracao real, no estilo de
-  `test/schema-contract.test.ts`.
-- **Frontend sem nenhum teste** (~12k linhas).
-- **31 arquivos markdown na raiz**, a maioria plano morto. Nao adicione mais um;
-  prefira editar o que ja existe.
-- **Sem pipeline de deploy automatizado ate 2026-07.** `.github/workflows/deploy.yml`
-  existe mas exige `CLOUDFLARE_API_TOKEN` configurado e disparo manual.
+- **2 de 22 arquivos de teste ainda mockam o D1**: `test/integration.test.ts` e
+  `test/mcp-integration.test.ts`. Os outros 14 que tocam banco usam o D1 real do
+  `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
+  assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
+  banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
+- **Frontend com quase nenhum teste** (~12k linhas). `test/e2e/` cobre so o fluxo
+  de MFA, roda fora do `npm test` e exige servidor e navegador. Todo o resto da
+  interface nao tem cobertura nenhuma.
+- **~46 leituras de corpo sem schema semantico** (`projects`, `policies`,
+  `assessments`, `platform`, `public`). O `bodyGuard` global cobre teto de
+  tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
+- **324 handlers `onclick=` inline** no frontend. E por isso que o CSP tem
+  `'unsafe-inline'` em `script-src` — com ele, o CSP nao protege contra XSS
+  injetado. Migrar para `addEventListener` destrava trocar por nonce.
+- **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
+  em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
+- **9 vulnerabilidades no `npm audit`** (2 criticas), todas na cadeia de teste e
+  build — nenhuma chega no bundle do Worker. A correcao e o PR #22
+  (`vitest` 4 + TypeScript 7), que exige migrar o isolamento de storage dos
+  testes: a opcao `isolatedStorage` nao existe mais no pool 0.19.
+
+## Segundo fator (MFA) — e como destravar alguem
+
+O MFA e opcional e nasce desligado (`totp_enabled = 0`). Ativar e acao do
+proprio usuario, pelo cartao de perfil no rodape da barra lateral — nao pela
+pagina de Configuracoes, que e escondida para papeis de cliente.
+
+Quem perde o autenticador cai numa sessao `mfa_pending`, que so alcanca
+`/auth/mfa/verify` e `/status`. Sem os codigos de recuperacao, o unico caminho
+e o banco:
+
+```
+npx wrangler d1 execute niso-db --remote --command \
+  "UPDATE users SET totp_enabled=0, totp_secret=NULL, totp_recovery_hashes=NULL, \
+   totp_last_window=NULL WHERE email='alguem@exemplo.com';"
+```
+
+Acesso ao D1 sempre vence o segundo fator — em qualquer sistema. E por isso que
+esse acesso e o que precisa ser protegido, nao o MFA.
+
+Ao mexer nas rotas de MFA, lembre: **401 ali e resposta esperada a erro do
+usuario**, nao sessao expirada. `frontend/src/api.js` isenta
+`/api/v1/auth/mfa/*` do logout automatico justamente por isso — sem a isencao,
+errar um digito destruia a sessao.
 
 ## Regras da ness.
 
@@ -100,6 +179,9 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 - `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
 - `SECURITY.md` — invariantes de seguranca que nao podem regredir
 - `backups/README.md` — runbook de backup e restauracao
+- `migrations/README.md` — estado real das migrations em producao e como
+  reconciliar quando a `d1_migrations` divergir do banco
+- `test/e2e/README.md` — como rodar os testes de navegador
 - `CONSTITUTION.md`, `design.md`, `specs/` — Spec Kit
 
 <!-- SPECKIT START -->
@@ -150,5 +232,18 @@ e que já custaram uma execução de CI falhando em silêncio:
 - **Codex continua funcionando**, atrelado à assinatura e não à visibilidade do
   repo. Hoje é o único revisor automático que lê o diff de verdade.
 
-Ao configurar proteção de branch, **exija apenas o check `test`**. Exigir
-`CodeQL` ou `Analyze JavaScript/TypeScript` travaria todo merge para sempre.
+### Protecao da `main` e deploy — ja configurados
+
+- **Ruleset "main protegida"**: exige PR, exige o check `test`, exige branch
+  atualizado com a base, bloqueia delecao e force-push. `bypass_actors` vazio —
+  em rulesets, admin do repo **nao** tem bypass automatico.
+- **Exija apenas o check `test`.** `CodeQL` foi removido; exigir um check
+  inexistente trava todo merge para sempre.
+- **Deploy e automatico** desde 2026-08-03: merge na `main` dispara
+  `.github/workflows/deploy.yml`, que roda `npm ci`, `tsc --noEmit`, a suite,
+  o build do frontend, **recusa se houver migration pendente**, e so entao
+  publica. O secret `CLOUDFLARE_API_TOKEN` e **environment secret** de
+  `production`, nao repository secret — assim so jobs que declaram
+  `environment: production` o enxergam.
+- `wrangler secret put` grava no **Worker**, nao no Actions. Sao lugares
+  diferentes; o Worker nao precisa do token de deploy e nao deve carrega-lo.
