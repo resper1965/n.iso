@@ -180,3 +180,57 @@ frente da migration derruba o login de todo mundo.
 
 `RESEND_API_KEY` vazou em saída de deploy e no chat. Rotacione no painel do Resend e
 regrave com `npx wrangler secret put RESEND_API_KEY`. Confirme que foi feito.
+
+---
+
+## Estado real de produção (apurado em 2026-08-03)
+
+As sondas da FASE 1 foram rodadas. O que elas mostraram:
+
+| Migration | Situação em produção |
+|---|---|
+| 0002…0006, 0019 | aplicadas **e** registradas |
+| 0002_policy_templates, 0007…0012 | objetos existem (vieram do `schema.sql`), **não** registradas |
+| **0013, 0014, 0016, 0017, 0018** | **nunca aplicadas** |
+| 0015 | aplicada (`project_knowledge` existe), não registrada |
+
+A `d1_migrations` tem 7 linhas e o banco tem objetos de 12 migrations: ele foi
+criado a partir do `schema.sql` da época, não pela sequência de migrations. Por
+isso a lista de pendentes do wrangler não descreve o banco.
+
+**As faltantes quebram funcionalidade que está no ar hoje**, não são dívida
+abstrata:
+
+| Falta | Quebra |
+|---|---|
+| `assets.type`, `assets.criticality` | criar ativo (`projects.ts:291`, `platform.ts:22`) |
+| `audit_logs.project_id` | criar webhook, criar/revogar API key (`integrations.ts:157,226,246`) |
+| tabela `scope_changes` | mudança de escopo (`projects.ts:317,331`) |
+| `dpia_assessments.processing_name`, `system_name` NOT NULL | criar DPIA (`projects.ts:511`) |
+| triggers da 0018 | `audit_logs` **não** é append-only em produção |
+
+### Como corrigir
+
+`ops/reconcile-2026-08.sql` aplica exatamente o que falta — sem os dois
+statements que abortariam o lote (`assets.description` já existe, e
+`project_knowledge` também). Depois, `ops/reconcile-2026-08-registro.sql`
+acerta a `d1_migrations`.
+
+Os dois arquivos ficam em `ops/` e não em `migrations/` porque o wrangler varre
+`migrations/*.sql` e os aplicaria junto com as migrations reais.
+
+### Os 4 arquivos fora do git
+
+`git status --porcelain migrations/` confirmou que estes existem **só na máquina
+de desenvolvimento**, como untracked:
+
+```
+?? migrations/0012_evidence_controls_link.sql
+?? migrations/0012_stakeholder_requirement_type.sql
+?? migrations/0013_add_performance_indexes.sql
+?? migrations/0013_translate_controls_ptbr.sql
+```
+
+Enquanto estiverem ali, `wrangler d1 migrations apply` aplicaria DDL que nunca
+passou por revisão. Guarde uma cópia fora de `migrations/` antes de removê-los —
+podem ser a única pista de alguma alteração feita à mão em produção.
