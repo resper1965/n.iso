@@ -26,6 +26,7 @@ import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
+import { mfaApp } from './routes/mfa';
 import { dataSubjectApp } from './routes/data-subject';
 
 
@@ -52,6 +53,8 @@ export type Bindings = {
 };
 
 export type Variables = {
+  /** Token bruto da sessão, para que /auth/mfa/verify reescreva a própria sessão. */
+  sessionId?: string;
   /** Correlaciona log de acesso e log de erro da mesma requisição. */
   requestId?: string;
   user: {
@@ -61,6 +64,10 @@ export type Variables = {
     role: string;
     client_lead_id?: string | null;
     client_project_id?: string | null;
+    /** Sessão autenticada por senha mas ainda sem o segundo fator. */
+    mfa_pending?: boolean;
+    /** Instante de emissão, usado para revogação. */
+    iat?: number;
   };
 };
 
@@ -174,6 +181,9 @@ app.use('/api/v1/*', rateLimitMiddleware);
 // 6. Sub-rotas montadas
 app.route('/api/v1/users', usersApp);
 app.route('/api/v1/admin/users', usersApp);
+
+// MFA fica DEPOIS do authMiddleware: exige sessão de senha já estabelecida.
+app.route('/api/v1/auth/mfa', mfaApp);
 
 app.route('/api/v1/leads', leadsApp);
 app.route('/api/v1/proposals', proposalsApp);
