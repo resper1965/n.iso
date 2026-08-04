@@ -689,17 +689,50 @@ controlsApp.put('/:id', async (c) => {
     const v = await validateBody(c, controlUpdateSchema);
     if (!v.success) return v.response;
     const { status, title, description } = v.data as any;
+
+    const atual = await c.env.DB.prepare(
+      'SELECT project_id, description FROM compliance_controls WHERE id = ?'
+    ).bind(id).first() as any;
+    // requireResourceAccess devolve true sem checar existência para papéis de
+    // staff, então o 404 precisa ser explícito.
+    if (!atual) return c.json({ error: 'Controle não encontrado' }, 404);
+
     const updates: string[] = [];
     const values: any[] = [];
     if (status) { updates.push('status = ?'); values.push(status); }
     if (title) { updates.push('title = ?'); values.push(title); }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+
+    // `description` é onde mora o texto da política do controle. Um documento
+    // aprovado cujo conteúdo mudou não está mais aprovado — manter o carimbo do
+    // CISO/CEO sobre texto que eles nunca leram é falsear a trilha de auditoria.
+    // O endpoint de edição de política (routes/policies.ts) já zerava; esta rota
+    // não, e era por aqui que dava para contornar a invalidação.
+    //
+    // Compara com o valor gravado de propósito: reenviar o MESMO texto não é
+    // mudança de conteúdo e não deve custar a aprovação de quem já assinou.
+    const textoMudou = description !== undefined && description !== atual.description;
+    if (textoMudou) {
+      updates.push(
+        'ciso_approved_by = NULL', 'ciso_approved_at = NULL',
+        'ciso_approved_ip = NULL', 'ciso_approved_ua = NULL',
+        'ceo_approved_by = NULL', 'ceo_approved_at = NULL',
+        'ceo_approved_ip = NULL', 'ceo_approved_ua = NULL',
+      );
+    }
+
     updates.push("updated_at = datetime('now')");
     values.push(id);
     await c.env.DB.prepare(`UPDATE compliance_controls SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
-    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
-    await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`, '', '', projRow?.project_id);
+
+    const ator = c.get('user')?.email ?? 'system';
+    await logAudit(c.env.DB, 'control.updated', ator, `Controle ${id} atualizado`, '', '', atual.project_id);
+    // Evento próprio: a perda da aprovação é o que o auditor precisa enxergar,
+    // e ela ficaria invisível dentro de um "controle atualizado" genérico.
+    if (textoMudou) {
+      await logAudit(c.env.DB, 'control.approvals_invalidated', ator, `Aprovações do controle ${id} invalidadas: o texto da política mudou`, '', '', atual.project_id);
+    }
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);

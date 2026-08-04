@@ -65,7 +65,7 @@ policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
     // Save policy markdown directly to compliance_controls.description
     const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(result.content, normId, controlId, projectId).run();
 
     // Insert new version in policy_versions
@@ -374,7 +374,7 @@ policies.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
 
           // Salvar markdown da política e limpar assinaturas de demonstração
           await c.env.DB.prepare(
-            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
           ).bind(result.content, normId, controlId, projectId).run();
 
           // Registrar histórico de versão
@@ -505,7 +505,7 @@ policies.post('/api/v1/projects/:id/controls/:controlId/policy', async (c) => {
 
     // Atualiza o texto "atual" e zera aprovações — o conteúdo mudou, aprovações anteriores não valem mais
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
     ).bind(text, canonicalId, projectId).run();
 
     // Registra a nova versão no histórico
@@ -581,7 +581,7 @@ policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) 
     // Save policy markdown directly to compliance_controls.description
     const normId = 'ctrl-' + control_id.toLowerCase().replace(/[^a-z0-9]/g, '');
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(markdown, normId, control_id, projectId).run();
 
     // Insert new version in policy_versions
