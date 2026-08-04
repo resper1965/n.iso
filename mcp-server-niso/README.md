@@ -61,7 +61,7 @@ Variável | Default | O que faz
 `NISO_BASE_URL` | `https://niso.ness.workers.dev` | Base da API. Aponte para `http://localhost:8787` em desenvolvimento.
 `NISO_API_KEY` | — | Chave de API do projeto. Sem ela o servidor sobe, mas toda chamada volta 401.
 `NISO_ROLE` | vazio (todas as ferramentas) | `consultant` ou `auditor`. Ver abaixo.
-`NISO_READONLY` | `false` | `1`/`true` → só as 8 ferramentas de leitura, ignorando `NISO_ROLE`. Observador puro.
+`NISO_READONLY` | `false` | `1`/`true` → só as 9 ferramentas de leitura, ignorando `NISO_ROLE`. Observador puro.
 `NISO_PROJECT_ID` | vazio | Fixa a sessão num projeto: chamada com outro `projectId` é recusada antes de sair da máquina.
 
 ## Papéis: independência de auditoria na camada MCP
@@ -72,8 +72,8 @@ agente recebe:
 
 Papel | Enxerga
 ---|---
-`auditor` | 8 ferramentas de leitura + `niso_create_audit_finding`, `niso_create_auditor_note`
-`consultant` | 8 ferramentas de leitura + todas as demais escritas (política, SoA, risco, ativo, 27701, treinamento)
+`auditor` | 9 ferramentas de leitura + `niso_create_audit_finding`, `niso_create_auditor_note`
+`consultant` | 9 ferramentas de leitura + todas as demais escritas (política, SoA, risco, ativo, evidência, 27701, treinamento)
 vazio | tudo — use só em desenvolvimento
 
 O filtro é aplicado **duas vezes**: em `ListTools` (o agente não vê o que não é
@@ -89,8 +89,8 @@ agente lê isso antes de decidir chamar.
 O nISO cria chaves com `permissions: 'read'` por padrão. Uma chave `read` recebe
 **403 em qualquer POST/PUT/PATCH/DELETE** — não importa o papel MCP configurado.
 
-Para um agente consultor que precisa criar risco, ativo ou gerar política, a
-chave tem que ser criada com `write`:
+Para um agente consultor que precisa criar risco, ativo, registrar evidência ou
+gerar política, a chave tem que ser criada com `write`:
 
 ```bash
 curl -X POST "$NISO_BASE_URL/api/v1/projects/$PROJECT_ID/api-keys" \
@@ -113,16 +113,56 @@ numa máquina de desenvolvedor — trate como tal.
 
 ## Ferramentas
 
-**Leitura (8)** — `niso_list_projects`, `niso_get_project`, `niso_list_controls`,
+**Leitura (9)** — `niso_list_projects`, `niso_get_project`, `niso_list_controls`,
 `niso_list_risks`, `niso_gap_analysis`, `niso_traceability`, `niso_list_evidence`,
-`niso_audit_pack`
+`niso_audit_pack`, `niso_coherence_check`
 
-**Escrita do consultor (9)** — `niso_create_risk`, `niso_create_asset`,
-`niso_generate_policy`, `niso_generate_policies_bulk`, `niso_generate_soa`,
-`niso_evaluate_evidence`, `niso_migrate_27701`, `niso_import_training`,
+**Escrita do consultor (12)** — `niso_create_risk`, `niso_create_asset`,
+`niso_create_evidence`, `niso_generate_policy`, `niso_generate_policies_bulk`,
+`niso_generate_soa`, `niso_evaluate_evidence`, `niso_update_policy`,
+`niso_update_control`, `niso_migrate_27701`, `niso_import_training`,
 `niso_respond_auditor_note`
 
 **Escrita do auditor (2)** — `niso_create_audit_finding`, `niso_create_auditor_note`
+
+### `niso_create_evidence`: evidência textual, e só
+
+Registrar evidência sem sair do chat é o caminho que faltava — o líder técnico
+extrai o achado com o agente e precisa que aquilo vire registro auditável no
+mesmo movimento. A ferramenta recebe o **texto** do documento (política,
+procedimento, ata, trecho de log, dump de configuração) e o envia como
+`multipart/form-data` para `POST /api/v1/projects/:projectId/evidence/upload` —
+o **mesmo** endpoint da UI. Nenhuma rota nova foi criada.
+
+Reusar o endpoint é o ponto: quem calcula o SHA-256, grava no R2, insere em
+`evidence` e escreve na trilha de auditoria continua sendo o worker. Evidência
+criada por agente e evidência criada por humano são o mesmo registro, com o mesmo
+hash e a mesma validação.
+
+O que ela deliberadamente **não** faz:
+
+- **Não sobe binário.** `contentType` é um enum fechado: `text/markdown`,
+  `text/plain`, `text/csv`, `application/json`. PDF, DOCX, ZIP e imagem estão na
+  allow-list do worker, mas não aqui — por MCP eles só chegariam como blob
+  codificado dentro de um JSON de stdio, e a ferramenta viraria um caminho de
+  subir arquivo arbitrário atrás de uma chave de API.
+- **Não lê arquivo do disco.** Não recebe caminho local. O que o agente registra
+  é o texto que ele mesmo produziu ou que a pessoa colou na conversa — e é isso
+  que a descrição da ferramenta diz ao modelo, para ele não fingir o contrário.
+- **Não transcreve documento binário.** A descrição instrui explicitamente a não
+  redigitar um PDF para contornar o limite: transcrição não é o documento, e
+  evidência transcrita por IA não sobrevive a uma auditoria.
+- **Não aprova nem avalia.** O registro nasce `evaluation_status = 'pending'`,
+  sem assinatura de CISO ou de direção. Avaliar é `niso_evaluate_evidence`
+  (rascunho de IA, não veredito); assinar continua sendo ato humano com senha.
+
+Ela é **escrita do consultor**: registrar evidência é implementação do SGSI, não
+achado de auditoria. Um auditor que pudesse depositar evidência no projeto que
+audita estaria produzindo a prova que ele mesmo vai avaliar — exatamente o que a
+cláusula 9.2 separa. O auditor não vê a ferramenta na lista.
+
+O teto de 25 MB e a allow-list de tipos continuam sendo os de `validateUpload`
+(`src/helpers.ts`), fonte única — a ferramenta restringe mais, nunca menos.
 
 ## Verificação
 

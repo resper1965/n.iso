@@ -18,7 +18,7 @@ if (!NISO_API_KEY) {
 }
 const server = new Server({
     name: "niso-server",
-    version: "1.2.0",
+    version: "1.3.0",
 }, {
     capabilities: {
         tools: {},
@@ -35,6 +35,7 @@ const READ_TOOLS = new Set([
     "niso_traceability",
     "niso_list_evidence",
     "niso_audit_pack",
+    "niso_coherence_check",
 ]);
 // Escrita exclusiva do auditor (achados e notas de auditoria).
 const AUDITOR_WRITE_TOOLS = new Set([
@@ -55,6 +56,20 @@ function toolAllowed(name) {
         return READ_TOOLS.has(name) || isConsultantWrite(name);
     return true; // sem papel definido → todas as ferramentas
 }
+// Tipos que `niso_create_evidence` aceita. Subconjunto FECHADO de
+// ALLOWED_UPLOAD_TYPES (src/helpers.ts): só o que é texto puro e que o agente
+// consegue de fato produzir dentro do chat. PDF, DOCX, ZIP e imagem ficam de
+// fora de propósito — o worker aceita esses tipos no upload da UI, mas por MCP
+// eles só chegariam como blob codificado, e aí a ferramenta viraria um caminho
+// de subir binário arbitrário atrás de uma chave de API. `text/html` e
+// `image/svg+xml` não estão na allow-list do worker (XSS armazenado) e também
+// não entram aqui.
+const EVIDENCE_TEXT_TYPES = [
+    "text/markdown",
+    "text/plain",
+    "text/csv",
+    "application/json",
+];
 const TOOLS = [
     {
         name: "niso_list_projects",
@@ -158,6 +173,17 @@ const TOOLS = [
         },
     },
     {
+        name: "niso_coherence_check",
+        description: "Cross-reference check between the project's ISMS/PIMS phases: risks in mitigation without a linked control, and Approved/Implemented controls missing evidence or a written policy. Returns ok:false if any error-severity issue is found.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                projectId: { type: "string", description: "The project ID" },
+            },
+            required: ["projectId"],
+        },
+    },
+    {
         name: "niso_generate_policy",
         description: `Generate a policy document for a control via the nISO PolicyAgent (AI draft — must be reviewed before approval). ${WRITE_GUARDRAIL}`,
         inputSchema: {
@@ -193,6 +219,31 @@ const TOOLS = [
                 text: { type: "string", description: "Extracted text content of the evidence document" },
             },
             required: ["evidenceId", "text"],
+        },
+    },
+    {
+        name: "niso_create_evidence",
+        description: `Register a TEXTUAL evidence document (policy, procedure, meeting minutes, log excerpt, configuration dump) in a project's evidence repository, from text supplied in this call. The text is stored verbatim and its SHA-256 is recorded. TEXT ONLY: this tool cannot upload PDFs, images, spreadsheets, or any binary or pre-existing file — those go through the nISO web UI. Do not transcribe or re-type a binary document to work around this; a transcription is not the document. ${WRITE_GUARDRAIL}`,
+        inputSchema: {
+            type: "object",
+            properties: {
+                projectId: { type: "string", description: "The project ID" },
+                fileName: {
+                    type: "string",
+                    description: "File name to record, with extension (e.g. politica-acesso.md). No directory separators.",
+                },
+                content: { type: "string", description: "Full textual content of the evidence document" },
+                contentType: {
+                    type: "string",
+                    enum: [...EVIDENCE_TEXT_TYPES],
+                    description: "MIME type of the content. Defaults to text/markdown",
+                },
+                controlId: {
+                    type: "string",
+                    description: "Optional Annex A control ID to link the evidence to (e.g. ctrl-a51)",
+                },
+            },
+            required: ["projectId", "fileName", "content"],
         },
     },
     {
@@ -265,6 +316,34 @@ const TOOLS = [
         },
     },
     {
+        name: "niso_update_policy",
+        description: `Manually edit the text of a control's policy (NOT AI generation — the exact text provided replaces the current one and creates a new version in the history). Invalidates any prior CISO/CEO approval on that control, since the content changed. ${WRITE_GUARDRAIL}`,
+        inputSchema: {
+            type: "object",
+            properties: {
+                projectId: { type: "string", description: "The project ID" },
+                controlId: { type: "string", description: "The control ID (e.g. A.5.1 or ctrl-a51)" },
+                text: { type: "string", description: "Full policy text (markdown) to save as the new current version" },
+            },
+            required: ["projectId", "controlId", "text"],
+        },
+    },
+    {
+        name: "niso_update_control",
+        description: `Update fields of an existing SoA control (status, title and/or description). At least one of the three must be provided. This does NOT reset prior CISO/CEO approvals — to rewrite the policy text and invalidate approvals, use niso_update_policy instead. ${WRITE_GUARDRAIL}`,
+        inputSchema: {
+            type: "object",
+            properties: {
+                projectId: { type: "string", description: "The project ID" },
+                controlId: { type: "string", description: "The control ID (e.g. ctrl-a51)" },
+                status: { type: "string", description: "New control status" },
+                title: { type: "string", description: "New control title" },
+                description: { type: "string", description: "New control description/policy text" },
+            },
+            required: ["projectId", "controlId"],
+        },
+    },
+    {
         name: "niso_create_audit_finding",
         description: `Create a new audit finding. If non-conforming, it automatically creates a linked Corrective Action (CAPA). ${WRITE_GUARDRAIL}`,
         inputSchema: {
@@ -318,15 +397,45 @@ async function nisoGet(path) {
     const data = await response.json();
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
-async function nisoPost(path, body) {
+async function nisoPost(path, body, method = "POST") {
     const response = await fetch(`${NISO_BASE_URL}${path}`, {
-        method: "POST",
+        method,
         headers: {
             Authorization: `Bearer ${NISO_API_KEY}`,
             "x-api-key": NISO_API_KEY || "",
             "Content-Type": "application/json",
         },
         body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await response.json();
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+/**
+ * Envia texto como `multipart/form-data` para o endpoint de upload que a UI já
+ * usa (`POST /api/v1/projects/:projectId/evidence/upload`).
+ *
+ * O worker não ganhou rota nova para isto: o handler existente já calcula o
+ * SHA-256, grava no R2, insere em `evidence` e registra na trilha de auditoria,
+ * e `validateUpload` já impõe o teto de 25 MB e a allow-list de tipos. Reusar é
+ * o que garante que evidência criada pelo agente e evidência criada por humano
+ * sejam o MESMO registro, com o mesmo hash e a mesma validação — evidência de
+ * segunda classe não serviria para auditoria.
+ *
+ * `Content-Type` NÃO é definido aqui de propósito: quem monta o boundary do
+ * multipart é o fetch, a partir do FormData.
+ */
+async function nisoUploadText(path, campos) {
+    const form = new FormData();
+    form.append("file", new Blob([campos.content], { type: campos.contentType }), campos.fileName);
+    if (campos.controlId)
+        form.append("control_id", campos.controlId);
+    const response = await fetch(`${NISO_BASE_URL}${path}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${NISO_API_KEY}`,
+            "x-api-key": NISO_API_KEY || "",
+        },
+        body: form,
     });
     const data = await response.json();
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -396,6 +505,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 assertProject(projectId);
                 return await nisoGet(`/api/v1/projects/${projectId}/evidence`);
             }
+            case "niso_coherence_check": {
+                const { projectId } = projectIdSchema.parse(args);
+                assertProject(projectId);
+                return await nisoGet(`/api/v1/projects/${projectId}/coherence`);
+            }
             case "niso_audit_pack": {
                 const { projectId } = projectIdSchema.parse(args);
                 assertProject(projectId);
@@ -420,6 +534,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     .object({ evidenceId: z.string(), text: z.string() })
                     .parse(args);
                 return await nisoPost(`/api/v1/evidence/${evidenceId}/evaluate`, { text });
+            }
+            case "niso_create_evidence": {
+                const schema = z.object({
+                    projectId: z.string(),
+                    // Nome vai direto para a chave do R2 (`evidence/<projeto>/<id>-<nome>`).
+                    // Separador de caminho e caractere de controle são recusados aqui para
+                    // que a chave não vire outra coisa que não um nome de arquivo.
+                    fileName: z
+                        .string()
+                        .min(1)
+                        .max(120)
+                        .refine((v) => !/[/\\]/.test(v), "fileName não pode conter barra")
+                        .refine((v) => ![...v].some((ch) => ch < " " || ch === "\u007f"), "fileName não pode conter caractere de controle")
+                        .refine((v) => v.trim() !== "" && !/^\.+$/.test(v), "fileName inválido"),
+                    content: z.string().min(1, "content não pode ser vazio"),
+                    contentType: z.enum(EVIDENCE_TEXT_TYPES).optional(),
+                    controlId: z.string().optional(),
+                });
+                const validated = schema.parse(args);
+                assertProject(validated.projectId);
+                return await nisoUploadText(`/api/v1/projects/${validated.projectId}/evidence/upload`, {
+                    fileName: validated.fileName,
+                    content: validated.content,
+                    contentType: validated.contentType || "text/markdown",
+                    controlId: validated.controlId,
+                });
             }
             case "niso_generate_policies_bulk": {
                 const { projectId, controlIds } = z
@@ -464,6 +604,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const validated = schema.parse(args);
                 assertProject(validated.projectId);
                 return await nisoPost(`/api/v1/projects/${validated.projectId}/assets`, validated);
+            }
+            case "niso_update_policy": {
+                const schema = z.object({
+                    projectId: z.string(),
+                    controlId: z.string(),
+                    text: z.string(),
+                });
+                const validated = schema.parse(args);
+                assertProject(validated.projectId);
+                return await nisoPost(`/api/v1/projects/${validated.projectId}/controls/${validated.controlId}/policy`, { text: validated.text });
+            }
+            case "niso_update_control": {
+                const schema = z
+                    .object({
+                    projectId: z.string(),
+                    controlId: z.string(),
+                    status: z.string().optional(),
+                    title: z.string().optional(),
+                    description: z.string().optional(),
+                })
+                    .refine((v) => v.status !== undefined || v.title !== undefined || v.description !== undefined, {
+                    message: "Informe ao menos um de status, title ou description",
+                });
+                const validated = schema.parse(args);
+                assertProject(validated.projectId);
+                return await nisoPost(`/api/v1/controls/${validated.controlId}`, {
+                    status: validated.status,
+                    title: validated.title,
+                    description: validated.description,
+                }, "PUT");
             }
             case "niso_create_audit_finding": {
                 const schema = z.object({
