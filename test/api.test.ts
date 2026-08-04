@@ -225,6 +225,117 @@ describe('nISO API (D1 e KV reais)', () => {
       expect((await req(`/api/v1/projects/${OUTRO}/assets`, { headers: orgAdmin })).status).toBe(403);
     });
 
+    it('assets: PUT atualiza campos parciais e recusa asset de outro projeto ou inexistente', async () => {
+      const criar = await req(`/api/v1/projects/${PROJ}/assets`, {
+        method: 'POST',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Servidor de Arquivos', type: 'Hardware', category: 'Hardware', criticality: 'Medium', owner: 'TI' }),
+      });
+      const { id: assetId } = await criar.json() as any;
+
+      const atualizar = await req(`/api/v1/projects/${PROJ}/assets/${assetId}`, {
+        method: 'PUT',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criticality: 'Critical', owner: 'Infraestrutura' }),
+      });
+      expect(atualizar.status, await atualizar.clone().text()).toBe(200);
+      const atualizado = await env.DB.prepare('SELECT criticality, owner, name FROM assets WHERE id = ?').bind(assetId).first<any>();
+      expect(atualizado.criticality).toBe('Critical');
+      expect(atualizado.owner).toBe('Infraestrutura');
+      // Campo não enviado permanece intacto — atualização é parcial.
+      expect(atualizado.name).toBe('Servidor de Arquivos');
+
+      // Ativo de outro projeto: mesmo asset id, mas na URL do projeto errado.
+      const assetAlheioId = 'asset-alheio';
+      await env.DB.prepare(
+        `INSERT INTO assets (id, project_id, name, type, category, owner, criticality) VALUES (?,?,?,?,?,?,?)`
+      ).bind(assetAlheioId, OUTRO, 'Ativo Alheio', 'Hardware', 'Hardware', 'Terceiros', 'Low').run();
+      const cruzado = await req(`/api/v1/projects/${PROJ}/assets/${assetAlheioId}`, {
+        method: 'PUT',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criticality: 'Critical' }),
+      });
+      expect(cruzado.status).toBe(404);
+      const intacto = await env.DB.prepare('SELECT criticality FROM assets WHERE id = ?').bind(assetAlheioId).first<any>();
+      expect(intacto.criticality).toBe('Low');
+
+      const inexistente = await req(`/api/v1/projects/${PROJ}/assets/nao-existe`, {
+        method: 'PUT',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criticality: 'Critical' }),
+      });
+      expect(inexistente.status).toBe(404);
+    });
+
+    it('assets: DELETE é soft delete (status Removido) e some da listagem', async () => {
+      const criar = await req(`/api/v1/projects/${PROJ}/assets`, {
+        method: 'POST',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Notebook Corporativo', type: 'Hardware', category: 'Hardware' }),
+      });
+      const { id: assetId } = await criar.json() as any;
+
+      const remover = await req(`/api/v1/projects/${PROJ}/assets/${assetId}`, { method: 'DELETE', headers: orgAdmin });
+      expect(remover.status, await remover.clone().text()).toBe(200);
+
+      const linha = await env.DB.prepare('SELECT status FROM assets WHERE id = ?').bind(assetId).first<any>();
+      expect(linha.status).toBe('Removido');
+
+      const listar = await req(`/api/v1/projects/${PROJ}/assets`, { headers: orgAdmin });
+      const lista = await listar.json() as any;
+      const itens = Array.isArray(lista) ? lista : lista.assets || lista.results;
+      expect(itens.some((a: any) => a.id === assetId)).toBe(false);
+
+      // Ativo de outro projeto não pode ser removido pela URL do projeto do atacante.
+      const assetOutroId = 'asset-outro-delete';
+      await env.DB.prepare(
+        `INSERT INTO assets (id, project_id, name, type, category) VALUES (?,?,?,?,?)`
+      ).bind(assetOutroId, OUTRO, 'Ativo do Outro Tenant', 'Hardware', 'Hardware').run();
+      const cruzado = await req(`/api/v1/projects/${PROJ}/assets/${assetOutroId}`, { method: 'DELETE', headers: orgAdmin });
+      expect(cruzado.status).toBe(404);
+      const aindaAtivo = await env.DB.prepare('SELECT status FROM assets WHERE id = ?').bind(assetOutroId).first<any>();
+      expect(aindaAtivo.status).toBe('Active');
+    });
+
+    it('certificação: DELETE remove de verdade, loga auditoria, e 404 se já não existir ou for de outro projeto', async () => {
+      const criar = await req(`/api/v1/projects/${PROJ}/certification`, {
+        method: 'POST',
+        headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ standard: 'ISO 27001:2022', stage: 'Gap Assessment' }),
+      });
+      expect(criar.status, await criar.clone().text()).toBe(201);
+      const { certification } = await criar.json() as any;
+      const certId = certification.id as string;
+
+      const remover = await req(`/api/v1/certification/${certId}`, { method: 'DELETE', headers: orgAdmin });
+      expect(remover.status, await remover.clone().text()).toBe(200);
+
+      const sumiu = await env.DB.prepare('SELECT id FROM certification_tracking WHERE id = ?').bind(certId).first();
+      expect(sumiu).toBeNull();
+
+      const log = await env.DB.prepare(
+        "SELECT * FROM audit_logs WHERE action = 'certification.deleted' AND project_id = ? ORDER BY created_at DESC LIMIT 1"
+      ).bind(PROJ).first<any>();
+      expect(log).not.toBeNull();
+
+      // Repetir a remoção não encontra mais o registro. Usa papel de staff
+      // (platform_admin) porque requireResourceAccess só chega ao 404 do
+      // handler quando não é um org_admin/client barrado antes por não achar
+      // project_id nenhum para comparar — mesmo comportamento do PUT.
+      const denovo = await req(`/api/v1/certification/${certId}`, { method: 'DELETE', headers: admin });
+      expect(denovo.status).toBe(404);
+
+      // Registro de outro projeto: org_admin do PROJ não pode remover (IDOR).
+      const certOutroId = 'cert-outro-tenant';
+      await env.DB.prepare(
+        `INSERT INTO certification_tracking (id, project_id, standard, stage) VALUES (?,?,?,?)`
+      ).bind(certOutroId, OUTRO, 'ISO 27701:2019', 'Gap Assessment').run();
+      const cruzado = await req(`/api/v1/certification/${certOutroId}`, { method: 'DELETE', headers: orgAdmin });
+      expect(cruzado.status).toBe(403);
+      const aindaExiste = await env.DB.prepare('SELECT id FROM certification_tracking WHERE id = ?').bind(certOutroId).first();
+      expect(aindaExiste).not.toBeNull();
+    });
+
     it('client acessa riscos do próprio projeto e é bloqueado no alheio', async () => {
       expect((await req(`/api/v1/projects/${PROJ}/risks`, { headers: client })).status).toBe(200);
       expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: client })).status).toBe(403);

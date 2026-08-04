@@ -275,7 +275,12 @@ projectsApp.get('/:id/assets', async (c) => {
       return c.json({ error: 'Forbidden: Access denied to assets of another project' }, 403);
     }
   }
-  const result = await c.env.DB.prepare('SELECT * FROM assets WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  // Ativos removidos (soft delete) ficam de fora da listagem padrão.
+  // COALESCE porque `status` é nullable: `status != 'Removido'` é NULL (falso)
+  // para linhas antigas sem status, e elas sumiriam da listagem.
+  const result = await c.env.DB.prepare(
+    "SELECT * FROM assets WHERE project_id = ? AND COALESCE(status, '') != 'Removido' ORDER BY created_at DESC"
+  ).bind(projectId).all();
   return c.json({ ok: true, assets: result.results });
 });
 
@@ -297,6 +302,75 @@ projectsApp.post('/:id/assets', async (c) => {
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao criar ativo', detail: e.message }, 500);
+  }
+});
+
+const ASSET_UPDATABLE_FIELDS = [
+  'name', 'type', 'category', 'classification', 'criticality', 'description',
+  'owner', 'location', 'confidentiality_rating', 'integrity_rating', 'availability_rating',
+] as const;
+
+projectsApp.put('/:id/assets/:assetId', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const assetId = c.req.param('assetId');
+    const user = c.get('user');
+    if (user && (user.role === 'org_user' || (user.client_project_id && user.client_project_id !== projectId))) {
+      return c.json({ error: 'Forbidden: Cannot update asset in this project' }, 403);
+    }
+    const body = await c.req.json<any>();
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    for (const field of ASSET_UPDATABLE_FIELDS) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(body[field]);
+      }
+    }
+    if (!updates.length) return c.json({ error: 'Nenhum campo para atualizar' }, 400);
+    updates.push("updated_at = datetime('now')");
+    values.push(assetId, projectId);
+
+    const result = await c.env.DB.prepare(
+      `UPDATE assets SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`
+    ).bind(...values).run();
+    if (!result.meta?.changes) {
+      return c.json({ error: 'Ativo não encontrado neste projeto' }, 404);
+    }
+
+    await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Ativo ${assetId} atualizado no projeto ${projectId}`, '', '', projectId);
+    const updated = await c.env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(assetId).first();
+    return c.json({ ok: true, asset: updated });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao atualizar ativo', detail: e.message }, 500);
+  }
+});
+
+projectsApp.delete('/:id/assets/:assetId', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const assetId = c.req.param('assetId');
+    const user = c.get('user');
+    if (user && (user.role === 'org_user' || (user.client_project_id && user.client_project_id !== projectId))) {
+      return c.json({ error: 'Forbidden: Cannot remove asset from this project' }, 403);
+    }
+
+    // Soft delete: plataforma de GRC precisa preservar o histórico do ativo
+    // para trilha de auditoria, então não há DELETE físico aqui. Remover um
+    // ativo já removido também responde 404 (não é idempotente de propósito,
+    // pra deixar claro no cliente que não havia nada a remover).
+    const result = await c.env.DB.prepare(
+      "UPDATE assets SET status = 'Removido', updated_at = datetime('now') WHERE id = ? AND project_id = ? AND status != 'Removido'"
+    ).bind(assetId, projectId).run();
+    if (!result.meta?.changes) {
+      return c.json({ error: 'Ativo não encontrado neste projeto' }, 404);
+    }
+
+    await logAudit(c.env.DB, 'asset.removed', user?.email || 'system', `Ativo ${assetId} removido do projeto ${projectId}`, '', '', projectId);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao remover ativo', detail: e.message }, 500);
   }
 });
 

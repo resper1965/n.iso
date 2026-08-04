@@ -35,6 +35,26 @@ certificationsApp.put('/:id', async (c) => {
   }
 });
 
+certificationsApp.delete('/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'certification_tracking', id, c.get('user'));
+    const user = c.get('user');
+    const existing = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first() as any;
+    if (!existing) return c.json({ error: 'Certification record not found' }, 404);
+
+    // Hard delete: é um registro de acompanhamento mutável, sem conteúdo
+    // versionado nem retenção legal — o POST de upsert do projeto recria a
+    // qualquer momento, então não há necessidade de soft delete aqui.
+    await logAudit(c.env.DB, 'certification.deleted', user?.email || 'system', `Deleted certification ${id}`, '', '', existing.project_id);
+    await c.env.DB.prepare('DELETE FROM certification_tracking WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Falha ao remover certificação', detail: e.message }, 500);
+  }
+});
+
 // Project Certification operations (/api/v1/projects/:projectId/certification)
 projectCertificationsApp.get('/', async (c) => {
   const projectId = c.req.param('projectId');
