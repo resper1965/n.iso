@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura } from '../helpers';
+import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
 import { validateBody, evidenceContentSchema } from '../schemas';
@@ -205,38 +206,26 @@ async function handleApprove(c: any) {
     let targetRole = body.role;
     let approvedBy = dbUser.name;
 
-    // A isenção por e-mail (`user.email !== 'admin@ness.io'`) saiu daqui: a
-    // conta em questão tem papel `platform_admin`, que a primeira condição já
-    // isenta. Era identidade fixa no código fazendo o que o papel já fazia — e
-    // que passaria a conceder acesso sozinha no dia em que o papel mudasse.
-    if (user.role !== 'platform_admin' && user.role !== 'ciso' && user.role !== 'ceo') {
-      const govMember = (await c.env.DB.prepare(
-        'SELECT * FROM project_governance WHERE project_id = ? AND email = ?'
-      ).bind(evidence.project_id, email).first()) as any;
+    // A matriz de governança vale para TODO MUNDO, inclusive `platform_admin`.
+    // Antes, papel de plataforma pulava esta checagem inteira e assinava como
+    // Líder SGSI em qualquer projeto — mas papel de plataforma diz o que a
+    // pessoa OPERA, não quem ela É num projeto específico. A mesma pessoa é DPO
+    // num cliente, consultor noutro e nada num terceiro; é a matriz que sabe
+    // disso, e por isso ela é a única fonte de autoridade de assinatura.
+    const autoridade = await autoridadeDeAssinatura(c.env.DB, evidence.project_id, email);
 
-
-      if (!govMember) {
-        return c.json({ error: 'Operação proibida: Usuário não cadastrado na matriz de Governança do Projeto' }, 403);
-      }
-
-      const jobTitle = (govMember.job_title || '').toLowerCase();
-      const isCiso = jobTitle.includes('ciso') || jobTitle.includes('sgsi') || jobTitle.includes('dpo');
-      const isCeo = jobTitle.includes('ceo') || jobTitle.includes('diretor') || jobTitle.includes('execut');
-
-      if (!targetRole) {
-        if (isCiso) targetRole = 'ciso';
-        else if (isCeo) targetRole = 'ceo';
-      }
-
-      if (targetRole === 'ciso' && !isCiso) {
-        return c.json({ error: 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura.' }, 403);
-      }
-      if (targetRole === 'ceo' && !isCeo) {
-        return c.json({ error: 'Apenas a Direção Executiva designada pode realizar esta assinatura.' }, 403);
-      }
+    // Sem papel explícito no corpo, deduz do cargo designado.
+    if (!targetRole) {
+      if (autoridade.ehLiderSgsi) targetRole = 'ciso';
+      else if (autoridade.ehDirecao) targetRole = 'ceo';
+      else targetRole = 'ciso';
     }
 
-    if (!targetRole) targetRole = 'ciso';
+    const recusa = recusaDeAssinatura(autoridade, targetRole as PapelAssinatura);
+    if (recusa) return c.json({ error: recusa }, 403);
+
+    // O carimbo leva o nome da matriz: é sob aquela designação que se assina.
+    approvedBy = autoridade.nome || approvedBy;
 
     const now = new Date().toISOString();
     const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';

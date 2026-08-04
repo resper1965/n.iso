@@ -22,6 +22,7 @@ import { applySchema, sessionFor } from './helpers/d1';
  */
 describe('Assinatura eletrônica (D1 real)', () => {
   let headers: Record<string, string>;
+  let headersDirecao: Record<string, string>;
 
   beforeAll(async () => {
     await applySchema();
@@ -40,9 +41,31 @@ describe('Assinatura eletrônica (D1 real)', () => {
         `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
          VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'44273656+resper1965@users.noreply.github.com','pending')`
       ),
+
+      // Direção Executiva do projeto: pessoa DIFERENTE do Líder SGSI. É o que
+      // torna a dupla aprovação uma dupla aprovação.
+      env.DB.prepare(
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-ceo','direcao@cliente.com',?,'Direcao Executiva','org_admin','proj-1')`
+      ).bind(hash),
+
+      // A matriz de governança deste projeto. Quem assina o quê sai daqui — o
+      // papel de plataforma (`platform_admin`) não concede assinatura nenhuma,
+      // porque o papel de alguém MUDA de projeto para projeto.
+      env.DB.prepare(
+        `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
+         VALUES ('gov-sgsi','proj-1','Ricardo Esper','44273656+resper1965@users.noreply.github.com','tech','DPO / Líder do SGSI')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
+         VALUES ('gov-exec','proj-1','Direcao Executiva','direcao@cliente.com','exec','Diretora Executiva')`
+      ),
     ]);
     headers = {
       ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'platform_admin' })),
+      'Content-Type': 'application/json',
+    };
+    headersDirecao = {
+      ...(await sessionFor({ id: 'usr-ceo', email: 'direcao@cliente.com', name: 'Direcao Executiva', role: 'org_admin', client_project_id: 'proj-1' })),
       'Content-Type': 'application/json',
     };
   });
@@ -139,17 +162,41 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(ev.ciso_approved_ua).toBeTruthy();
     });
 
-    it('assinatura do CEO é campo separado — uma não sobrescreve a outra', async () => {
-      // As duas assinaturas acontecem dentro do mesmo teste porque o storage é
-      // isolado por teste. Segregação de funções depende de as duas coexistirem.
+    it('as duas assinaturas coexistem — mas vêm de DUAS pessoas designadas', async () => {
+      // As duas acontecem no mesmo teste porque o storage é isolado por `it`.
+      // O que a versão anterior deste teste afirmava era que a MESMA pessoa
+      // assinava os dois papéis — o oposto de segregação de funções.
       expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
-      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' })).status).toBe(200);
+      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' }, headersDirecao)).status).toBe(200);
 
       const ev = await env.DB.prepare(
         "SELECT ciso_approved_by, ceo_approved_by FROM evidence WHERE id='ev-1'"
       ).first<any>();
       expect(ev.ciso_approved_by).toBe('Ricardo Esper');
-      expect(ev.ceo_approved_by).toBe('Ricardo Esper');
+      expect(ev.ceo_approved_by).toBe('Direcao Executiva');
+      expect(ev.ciso_approved_by).not.toBe(ev.ceo_approved_by);
+    });
+
+    it('o Líder SGSI não assina como Direção — nem sendo platform_admin', async () => {
+      // `platform_admin` diz o que a pessoa opera na plataforma; quem ela é
+      // NESTE projeto está na matriz, e lá ela é o DPO.
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Segregação de Funções');
+
+      const ev = await env.DB.prepare("SELECT ceo_approved_by FROM evidence WHERE id='ev-1'").first<any>();
+      expect(ev.ceo_approved_by).toBeNull();
+    });
+
+    it('quem não está na matriz deste projeto não assina, qualquer que seja o papel de plataforma', async () => {
+      await env.DB.prepare("DELETE FROM project_governance WHERE email = '44273656+resper1965@users.noreply.github.com'").run();
+
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('não designado na matriz');
+
+      const ev = await env.DB.prepare("SELECT ciso_approved_by FROM evidence WHERE id='ev-1'").first<any>();
+      expect(ev.ciso_approved_by).toBeNull();
     });
   });
 });

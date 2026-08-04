@@ -116,6 +116,81 @@ export function requireProjectAccess(user: any, projectId: string): true {
   throw new Error('Forbidden: No access to this project');
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AUTORIDADE DE ASSINATURA — sai de project_governance, e só de lá
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * `users.role` diz o que a pessoa OPERA na plataforma; `project_governance` diz
+ * quem ela É naquele projeto. Só o segundo pode decidir o que ela ASSINA — a
+ * mesma pessoa é DPO num cliente, consultor noutro e nada num terceiro, e é
+ * exatamente por isso que a matriz de governança existe.
+ *
+ * Antes, cada caminho de assinatura respondia isso do seu jeito, e os dois
+ * erravam em direções opostas:
+ *
+ *   - `evidence.ts` isentava `platform_admin`/`ciso`/`ceo` da matriz inteira,
+ *     então um papel de plataforma assinava como Líder SGSI em QUALQUER projeto;
+ *   - `ropa.ts` não olhava papel nenhum, mas só checava cargo `if (userGov)` —
+ *     quem não estava na matriz passava sem checagem alguma, e assinava os DOIS
+ *     papéis do mesmo registro.
+ *
+ * Nos dois casos o resultado é o mesmo para a auditoria: `ciso_approved_by` e
+ * `ceo_approved_by` com o mesmo nome. Aprovação dupla assinada pela mesma
+ * pessoa é aprovação simples com dois carimbos.
+ */
+export type PapelAssinatura = 'ciso' | 'ceo';
+
+export interface AutoridadeAssinatura {
+  /** A pessoa está designada na matriz DESTE projeto. */
+  designado: boolean;
+  ehLiderSgsi: boolean;
+  ehDirecao: boolean;
+  /** Nome como consta na matriz, para o carimbo da assinatura. */
+  nome: string | null;
+}
+
+export async function autoridadeDeAssinatura(
+  db: D1Database,
+  projectId: string,
+  email: string
+): Promise<AutoridadeAssinatura> {
+  const gov = await db
+    .prepare('SELECT name, job_title FROM project_governance WHERE project_id = ? AND email = ?')
+    .bind(projectId, email)
+    .first<any>();
+
+  const cargo = (gov?.job_title || '').toLowerCase();
+  return {
+    designado: !!gov,
+    ehLiderSgsi: cargo.includes('sgsi') || cargo.includes('dpo') || cargo.includes('ciso'),
+    ehDirecao: cargo.includes('ceo') || cargo.includes('diret') || cargo.includes('execut'),
+    nome: gov?.name ?? null,
+  };
+}
+
+/**
+ * Motivo da recusa, ou `null` se a assinatura é legítima. Falha fechado: sem
+ * designação na matriz não há assinatura, para ninguém.
+ */
+export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatura): string | null {
+  if (!a.designado) {
+    return 'Operação proibida: usuário não designado na matriz de Governança deste projeto.';
+  }
+  // Segregação antes da checagem de cargo: quem acumula os dois títulos ainda
+  // assim não assina os dois papéis.
+  if (papel === 'ceo' && a.ehLiderSgsi) {
+    return 'Operação proibida: o Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).';
+  }
+  if (papel === 'ciso' && !a.ehLiderSgsi) {
+    return 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.';
+  }
+  if (papel === 'ceo' && !a.ehDirecao) {
+    return 'Apenas a Direção Executiva designada pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.';
+  }
+  return null;
+}
+
 /** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
 const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
 
