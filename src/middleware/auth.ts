@@ -17,6 +17,19 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
     return c.json({ error: 'Unauthorized: Invalid or expired API key' }, 401);
   }
 
+  // Todo o isolamento de tenant de uma chave se apoia no `project_id` que ela
+  // carrega — é ele que vira `client_project_id` logo abaixo. A coluna é
+  // nullable no schema (`project_id TEXT REFERENCES projects(id)`), e uma chave
+  // sem projeto passaria daqui como `client` sem escopo: o filtro do portfólio
+  // (routes/platform.ts) só restringe quando `client_project_id` é truthy, então
+  // ela enxergaria os projetos de TODOS os tenants. Hoje o único caminho de
+  // criação tira o id do path e nunca grava nulo, mas isso é garantia de
+  // chamador, não do schema — falha fechado aqui, no ponto onde a chave vira
+  // identidade.
+  if (!row.project_id) {
+    return c.json({ error: 'Unauthorized: API key is not scoped to a project' }, 401);
+  }
+
   // Enforce permissions: chaves 'read' (o default) não podem executar mutações.
   const method = c.req.method.toUpperCase();
   const writeCapable = row.permissions === 'write' || row.permissions === 'admin';

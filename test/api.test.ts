@@ -389,6 +389,19 @@ describe('nISO API (D1 e KV reais)', () => {
       expect(comPermissao.status, await comPermissao.clone().text()).toBe(201);
     });
 
+    it('chave sem projeto não autentica — senão enxergaria o portfólio inteiro', async () => {
+      // `api_keys.project_id` é nullable no schema. Se uma chave assim passasse
+      // pela autenticação, viraria um `client` sem `client_project_id`, e o
+      // filtro do portfólio (que só restringe quando esse campo é truthy)
+      // devolveria os projetos de todos os tenants.
+      await env.DB.prepare(
+        `INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`
+      ).bind('key-sem-proj', null, await sha256Hex('chave-sem-projeto'), 'orfa', 'read', 'Active').run();
+
+      const r = await req('/api/v1/portfolio', { headers: { 'X-API-Key': 'chave-sem-projeto' } });
+      expect(r.status).toBe(401);
+    });
+
     it('chave revogada não autentica', async () => {
       await env.DB.prepare("UPDATE api_keys SET status='Revoked' WHERE id='key-ro'").run();
       expect((await req(`/api/v1/projects/${PROJ}/risks`, { headers: { 'X-API-Key': CHAVE_LEITURA } })).status).toBe(401);
