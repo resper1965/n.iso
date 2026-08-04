@@ -5,6 +5,7 @@ import { genId, genToken, logAudit, requireResourceAccess, verifyPassword, valid
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
+import { checkCoherence } from '../services/coherence';
 import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema } from '../schemas';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -492,6 +493,14 @@ projectsApp.get('/:id/traceability', async (c) => {
   }));
 
   return c.json({ ok: true, controls: linked });
+});
+
+// Coerência entre fases do SGSI/SGPI: referências órfãs entre risks, compliance_controls,
+// evidence e policy_versions (ver src/services/coherence.ts).
+projectsApp.get('/:id/coherence', async (c) => {
+  const projectId = c.req.param('id');
+  const report = await checkCoherence(c.env.DB, projectId);
+  return c.json(report);
 });
 
 // DPIA Assessments inside Project

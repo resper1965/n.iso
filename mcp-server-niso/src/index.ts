@@ -51,6 +51,7 @@ const READ_TOOLS = new Set([
   "niso_traceability",
   "niso_list_evidence",
   "niso_audit_pack",
+  "niso_coherence_check",
 ]);
 // Escrita exclusiva do auditor (achados e notas de auditoria).
 const AUDITOR_WRITE_TOOLS = new Set([
@@ -169,6 +170,18 @@ const TOOLS = [
     name: "niso_audit_pack",
     description:
       "Download the audit readiness pack (consolidated JSON: project, phases, controls, evidence, audit trail)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "niso_coherence_check",
+    description:
+      "Cross-reference check between the project's ISMS/PIMS phases: risks in mitigation without a linked control, and Approved/Implemented controls missing evidence or a written policy. Returns ok:false if any error-severity issue is found.",
     inputSchema: {
       type: "object",
       properties: {
@@ -435,6 +448,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { projectId } = projectIdSchema.parse(args);
         assertProject(projectId);
         return await nisoGet(`/api/v1/projects/${projectId}/evidence`);
+      }
+
+      case "niso_coherence_check": {
+        const { projectId } = projectIdSchema.parse(args);
+        assertProject(projectId);
+        return await nisoGet(`/api/v1/projects/${projectId}/coherence`);
       }
 
       case "niso_audit_pack": {
