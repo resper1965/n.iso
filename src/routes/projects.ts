@@ -681,6 +681,11 @@ controlsApp.get('/', async (c) => {
 controlsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    // Este router está montado em /api/v1/controls, FORA de
+    // /api/v1/projects/:projectId/*, então o projectAccessMiddleware nunca roda
+    // aqui: sem esta linha o UPDATE abaixo casa por id apenas e um org_admin
+    // reescreve controle de outro tenant.
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
     const v = await validateBody(c, controlUpdateSchema);
     if (!v.success) return v.response;
     const { status, title, description } = v.data as any;
@@ -697,6 +702,7 @@ controlsApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'control.updated', c.get('user')?.email ?? 'system', `Controle ${id} atualizado`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -729,6 +735,9 @@ controlsApp.put('/:id/maturity', async (c) => {
 controlsApp.put('/:id/status', async (c) => {
   try {
     const id = c.req.param('id');
+    // Mesma exposição do PUT /:id — e aqui o estrago é pior, porque marcar
+    // controle alheio como "Implemented" falseia o SGSI do outro tenant.
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
     const v = await validateBody(c, statusSchema);
     if (!v.success) return v.response;
     const { status } = v.data;
@@ -741,6 +750,7 @@ controlsApp.put('/:id/status', async (c) => {
     await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`, '', '', projRow?.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao atualizar status do controle', detail: e.message }, 500);
   }
 });
@@ -750,12 +760,29 @@ const handleControlApprove = async (c: any) => {
     const controlId = c.req.param('id');
     const v = await validateBody(c, assinaturaSchema);
     if (!v.success) return v.response;
-    const { password, project_id } = v.data as any;
+    const { password } = v.data as any;
     const user = c.get('user');
 
     if (!password) {
       return c.json({ error: 'Senha é obrigatória para assinatura eletrônica' }, 400);
     }
+
+    // O escopo do UPDATE saía de `project_id` — um campo do CORPO da requisição.
+    // O `AND project_id = ?` parecia isolamento de tenant mas não era: o valor
+    // era do próprio chamador, então mandar o projeto alheio bastava para
+    // assinar controle de outro tenant com a própria senha. E quando nem havia
+    // `project_id`, o UPDATE caía no ramo sem escopo nenhum.
+    //
+    // Agora o projeto sai do próprio controle e a autorização é uma checagem
+    // explícita, não um WHERE que se parecia com uma. O `project_id` do corpo
+    // continua sendo aceito pelo schema para não quebrar quem já o envia, mas
+    // não decide mais nada.
+    const controlRow = await c.env.DB.prepare(
+      'SELECT project_id FROM compliance_controls WHERE id = ?'
+    ).bind(controlId).first() as any;
+    if (!controlRow) return c.json({ error: 'Controle não encontrado' }, 404);
+    await requireResourceAccess(c.env.DB, 'compliance_controls', controlId, user);
+    const targetProjectId = controlRow.project_id;
 
     const dbUser = (await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first()) as any;
 
@@ -763,16 +790,9 @@ const handleControlApprove = async (c: any) => {
       return c.json({ error: 'Senha incorreta' }, 401);
     }
 
-    const targetProjectId = project_id || dbUser?.client_project_id;
-    if (targetProjectId) {
-      await c.env.DB.prepare(
-        `UPDATE compliance_controls SET status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
-      ).bind(controlId, targetProjectId).run();
-    } else {
-      await c.env.DB.prepare(
-        `UPDATE compliance_controls SET status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).bind(controlId).run();
-    }
+    await c.env.DB.prepare(
+      `UPDATE compliance_controls SET status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(controlId).run();
 
 
 
@@ -784,6 +804,7 @@ const handleControlApprove = async (c: any) => {
     await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`, '', '', targetProjectId);
     return c.json({ ok: true, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao assinar controle', detail: e.message }, 500);
   }
 };

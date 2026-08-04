@@ -133,6 +133,66 @@ describe('nISO API (D1 e KV reais)', () => {
       expect((await req(`/api/v1/projects/${OUTRO}`, { headers: client })).status).toBe(403);
     });
 
+    // /api/v1/controls está montado FORA de /api/v1/projects/:projectId/*, então o
+    // projectAccessMiddleware não passa por aqui. Sem checagem explícita em cada
+    // rota, o UPDATE casa só por id e atravessa o tenant.
+    describe('controles de outro tenant não são alcançáveis por id', () => {
+      it('PUT /controls/:id não reescreve controle alheio', async () => {
+        const r = await req('/api/v1/controls/ctrl-alheio', {
+          method: 'PUT',
+          headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'INVADIDO' }),
+        });
+        expect(r.status).toBe(403);
+        const l = await env.DB.prepare('SELECT title FROM compliance_controls WHERE id = ?').bind('ctrl-alheio').first<any>();
+        expect(l.title).toBe('Controle alheio');
+      });
+
+      it('PUT /controls/:id/status não falseia o SGSI alheio', async () => {
+        const r = await req('/api/v1/controls/ctrl-alheio/status', {
+          method: 'PUT',
+          headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Implemented' }),
+        });
+        expect(r.status).toBe(403);
+        const l = await env.DB.prepare('SELECT status FROM compliance_controls WHERE id = ?').bind('ctrl-alheio').first<any>();
+        expect(l.status).toBe('Missing');
+      });
+
+      it('PUT /controls/:id/approve não assina controle alheio, nem com project_id no corpo', async () => {
+        // O `project_id` do corpo era o que definia o escopo do UPDATE — mandar o
+        // projeto alheio bastava para assinar o controle do outro tenant.
+        const r = await req('/api/v1/controls/ctrl-alheio/approve', {
+          method: 'PUT',
+          headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: 'password123', project_id: OUTRO }),
+        });
+        expect(r.status).toBe(403);
+        const l = await env.DB.prepare('SELECT status FROM compliance_controls WHERE id = ?').bind('ctrl-alheio').first<any>();
+        expect(l.status).toBe('Missing');
+      });
+
+      it('mas o controle do próprio projeto continua editável e assinável', async () => {
+        const edicao = await req('/api/v1/controls/ctrl-proprio', {
+          method: 'PUT',
+          headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Título novo' }),
+        });
+        expect(edicao.status, await edicao.clone().text()).toBe(200);
+
+        const assinatura = await req('/api/v1/controls/ctrl-proprio/approve', {
+          method: 'PUT',
+          headers: { ...orgAdmin, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: 'password123' }),
+        });
+        expect(assinatura.status, await assinatura.clone().text()).toBe(200);
+
+        const l = await env.DB.prepare('SELECT title, status FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
+        expect(l.title).toBe('Título novo');
+        expect(l.status).toBe('Approved');
+      });
+    });
+
     it('platform_admin altera e remove usuário, e a linha some do banco', async () => {
       const put = await req('/api/v1/users/usr-alvo', {
         method: 'PUT',
