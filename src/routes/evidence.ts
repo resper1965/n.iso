@@ -212,7 +212,7 @@ async function handleApprove(c: any) {
     // pessoa OPERA, não quem ela É num projeto específico. A mesma pessoa é DPO
     // num cliente, consultor noutro e nada num terceiro; é a matriz que sabe
     // disso, e por isso ela é a única fonte de autoridade de assinatura.
-    const autoridade = await autoridadeDeAssinatura(c.env.DB, evidence.project_id, email);
+    const autoridade = await autoridadeDeAssinatura(c.env.DB, evidence.project_id, user);
 
     // Sem papel explícito no corpo, deduz do cargo designado.
     if (!targetRole) {

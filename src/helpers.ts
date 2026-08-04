@@ -141,6 +141,9 @@ export function requireProjectAccess(user: any, projectId: string): true {
  */
 export type PapelAssinatura = 'ciso' | 'ceo';
 
+/** Papéis que ADMINISTRAM a plataforma. Operar não é aprovar. */
+const PAPEIS_DE_PLATAFORMA = new Set(['platform_admin', 'admin']);
+
 export interface AutoridadeAssinatura {
   /** A pessoa está designada na matriz DESTE projeto. */
   designado: boolean;
@@ -148,16 +151,18 @@ export interface AutoridadeAssinatura {
   ehDirecao: boolean;
   /** Nome como consta na matriz, para o carimbo da assinatura. */
   nome: string | null;
+  /** A conta administra a plataforma — e por isso não assina nada nela. */
+  papelDePlataforma: boolean;
 }
 
 export async function autoridadeDeAssinatura(
   db: D1Database,
   projectId: string,
-  email: string
+  user: { email?: string; role?: string }
 ): Promise<AutoridadeAssinatura> {
   const gov = await db
     .prepare('SELECT name, job_title FROM project_governance WHERE project_id = ? AND email = ?')
-    .bind(projectId, email)
+    .bind(projectId, user.email || '')
     .first<any>();
 
   const cargo = (gov?.job_title || '').toLowerCase();
@@ -166,6 +171,7 @@ export async function autoridadeDeAssinatura(
     ehLiderSgsi: cargo.includes('sgsi') || cargo.includes('dpo') || cargo.includes('ciso'),
     ehDirecao: cargo.includes('ceo') || cargo.includes('diret') || cargo.includes('execut'),
     nome: gov?.name ?? null,
+    papelDePlataforma: PAPEIS_DE_PLATAFORMA.has(user.role || ''),
   };
 }
 
@@ -174,6 +180,15 @@ export async function autoridadeDeAssinatura(
  * designação na matriz não há assinatura, para ninguém.
  */
 export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatura): string | null {
+  // Quem administra o sistema não carimba conformidade nele. Sem esta regra, a
+  // separação entre operar e aprovar depende de a conta de administração nunca
+  // ser designada numa matriz — ou seja, de disciplina. Aqui ela é do código.
+  //
+  // Consultor NÃO entra nesta lista: entregar serviço a cliente e assinar como
+  // DPO daquele cliente é a mesma pessoa exercendo o papel que a matriz lhe deu.
+  if (a.papelDePlataforma) {
+    return 'Operação proibida: conta de administração da plataforma não assina documentos de conformidade. Use a conta profissional designada na matriz de Governança.';
+  }
   if (!a.designado) {
     return 'Operação proibida: usuário não designado na matriz de Governança deste projeto.';
   }

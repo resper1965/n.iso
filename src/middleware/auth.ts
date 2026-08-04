@@ -157,9 +157,20 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     // Legacy role mapping for backward compatibility.
     // Keep consistent with the login handler (routes/auth.ts): 'admin' is a
     // platform-level admin, not a project-scoped org_admin.
+    //
+    // `consultant` → `consultor`, e NÃO `platform_admin`. Esta linha era a única
+    // das três que traduzia a palavra assim: o login (routes/auth.ts) e a
+    // listagem (routes/users.ts) sempre mandaram para `consultor`. Como o
+    // middleware roda em toda requisição, uma sessão que ainda carregasse
+    // `consultant` — emitida antes daquela normalização, ou reescrita por outro
+    // caminho — era promovida a administrador de plataforma a cada chamada.
+    //
+    // Consultor entrega serviço a cliente; administrador opera a plataforma.
+    // São coisas diferentes, e uma letra de diferença entre as duas grafias não
+    // pode ser o que decide qual delas a conta é.
     if (user.role === 'admin') user.role = 'platform_admin';
     else if (user.role === 'user') user.role = 'org_user';
-    else if (user.role === 'consultant') user.role = 'platform_admin';
+    else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
   }
 

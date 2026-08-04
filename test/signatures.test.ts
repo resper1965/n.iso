@@ -32,7 +32,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
         `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('proj-1','Cliente Um','ISO 27001','controller','Active')`
       ),
       env.DB.prepare(
-        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','44273656+resper1965@users.noreply.github.com',?,'Ricardo Esper','platform_admin','proj-1')`
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','44273656+resper1965@users.noreply.github.com',?,'Ricardo Esper','consultor','proj-1')`
       ).bind(hash),
       env.DB.prepare(
         `INSERT INTO compliance_controls (id, project_id, standard, title, description, status) VALUES ('ctrl-a51','proj-1','ISO 27001:2022','Política','Requisito universal','Missing')`
@@ -61,7 +61,10 @@ describe('Assinatura eletrônica (D1 real)', () => {
       ),
     ]);
     headers = {
-      ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'platform_admin' })),
+      // Consultor: entrega serviço ao cliente e assina o papel que a matriz do
+      // projeto lhe der. NÃO é `platform_admin` — esse opera a plataforma e,
+      // por isso mesmo, não assina conformidade nela.
+      ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'consultor' })),
       'Content-Type': 'application/json',
     };
     headersDirecao = {
@@ -177,15 +180,29 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(ev.ciso_approved_by).not.toBe(ev.ceo_approved_by);
     });
 
-    it('o Líder SGSI não assina como Direção — nem sendo platform_admin', async () => {
-      // `platform_admin` diz o que a pessoa opera na plataforma; quem ela é
-      // NESTE projeto está na matriz, e lá ela é o DPO.
+    it('o Líder SGSI não assina como Direção', async () => {
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' });
       expect(res.status).toBe(403);
       expect(await res.text()).toContain('Segregação de Funções');
 
       const ev = await env.DB.prepare("SELECT ceo_approved_by FROM evidence WHERE id='ev-1'").first<any>();
       expect(ev.ceo_approved_by).toBeNull();
+    });
+
+    it('conta de administração da plataforma não assina, mesmo designada na matriz', async () => {
+      // O caso que a separação existe para impedir: a MESMA pessoa, com a MESMA
+      // designação de DPO, mas entrando pela conta que administra o sistema.
+      // Quem opera a plataforma não carimba conformidade nela.
+      const admin = {
+        ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'platform_admin' })),
+        'Content-Type': 'application/json',
+      };
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' }, admin);
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('administração da plataforma');
+
+      const ev = await env.DB.prepare("SELECT ciso_approved_by FROM evidence WHERE id='ev-1'").first<any>();
+      expect(ev.ciso_approved_by).toBeNull();
     });
 
     it('quem não está na matriz deste projeto não assina, qualquer que seja o papel de plataforma', async () => {

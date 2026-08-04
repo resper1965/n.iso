@@ -94,7 +94,7 @@ projectRopaApp.post('/:recordId/approve', async (c) => {
     // A autoridade sai da matriz de governança DESTE projeto — nunca do papel
     // de plataforma. Antes, quem não estava na matriz caía num `if (userGov)`
     // e passava sem checagem nenhuma: assinava os dois papéis do mesmo ROPA.
-    const autoridade = await autoridadeDeAssinatura(c.env.DB, projectId || '', user.email || '');
+    const autoridade = await autoridadeDeAssinatura(c.env.DB, projectId || '', user);
     const recusa = recusaDeAssinatura(autoridade, role);
     if (recusa) return c.json({ error: recusa }, 403);
 
