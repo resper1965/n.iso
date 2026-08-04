@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
 export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Lead é registro comercial da ness., não de projeto de cliente: não existe
+// `project_id` aqui para o isolamento multi-tenant comparar. Sonda: o
+// `org_admin` de um cliente listava todos os leads (com contato e CNPJ) e
+// mudava o status de lead alheio com 200.
+leadsApp.use('*', somenteNess);
 
 leadsApp.post('/', async (c) => {
   try {

@@ -116,6 +116,7 @@ evidenceApp.delete('/:id', async (c) => {
     await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`);
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Erro ao excluir evidência', detail: e.message }, 500);
   }
 });
@@ -170,6 +171,7 @@ evidenceApp.post('/:id/evaluate', async (c) => {
       metadata: result.metadata
     });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao avaliar evidência', detail: e.message }, 500);
   }
 });
@@ -177,6 +179,13 @@ evidenceApp.post('/:id/evaluate', async (c) => {
 async function handleApprove(c: any) {
   try {
     const id = c.req.param('id');
+    // Isolamento de tenant ANTES de qualquer coisa. A checagem da matriz de
+    // governança logo abaixo parece cobrir isto, mas não cobre: ela é pulada
+    // inteira para `platform_admin`, `ciso` e `ceo`, e `users.role` é TEXT
+    // livre (`createUserSchema.role` é `z.string()`). Um usuário com papel
+    // `ciso` escopado ao projeto A assinava evidência do projeto B — sonda
+    // devolveu 200 e gravou `ciso_approved_by` na linha do outro cliente.
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = (await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first()) as any;
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
 
@@ -243,6 +252,7 @@ async function handleApprove(c: any) {
 
     return c.json({ ok: true, role: targetRole, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao assinar evidência', detail: e.message }, 500);
   }
 }

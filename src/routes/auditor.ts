@@ -54,6 +54,10 @@ auditorApp.put('/auditor-notes/:id/respond', async (c) => {
   try {
     const id = c.req.param('id');
     const user = c.get('user');
+    // A nota carrega o projeto do auditor externo. Sem esta checagem, qualquer
+    // sessão autenticada respondia a nota de qualquer cliente só com o id dela
+    // — a sonda gravou uma resposta na nota do outro tenant e recebeu 200.
+    await requireResourceAccess(c.env.DB, 'auditor_notes', id, user);
     const v = await validateBody(c, auditorResponseSchema);
     if (!v.success) return v.response;
     const { response } = v.data;
@@ -68,6 +72,7 @@ auditorApp.put('/auditor-notes/:id/respond', async (c) => {
     await logAudit(c.env.DB, 'auditor_note.responded', user.email, `Nota de auditor ${id} respondida`);
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao responder nota de auditor', detail: e.message }, 500);
   }
 });

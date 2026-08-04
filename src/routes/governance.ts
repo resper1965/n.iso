@@ -34,8 +34,8 @@ governanceApp.post('/projects/:id/stakeholders', async (c) => {
 
 governanceApp.put('/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
     const { name, type, category, requirements, influence, communication_method } = await c.req.json();
     await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
       requirements = COALESCE(?, requirements), influence = COALESCE(?, influence), communication_method = COALESCE(?, communication_method),
@@ -44,17 +44,19 @@ governanceApp.put('/stakeholders/:id', async (c) => {
       ).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao atualizar stakeholder', detail: e.message }, 500);
   }
 });
 
 governanceApp.delete('/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
     await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao deletar stakeholder', detail: e.message }, 500);
   }
 });
@@ -174,19 +176,38 @@ governanceApp.put('/projects/:id/context', async (c) => {
 
 // Audit Findings & Management Reviews
 governanceApp.get('/audits/:auditId/findings', async (c) => {
-  const auditId = c.req.param('auditId');
-  const rows = await c.env.DB.prepare('SELECT * FROM audit_findings WHERE audit_id = ? ORDER BY created_at DESC').bind(auditId).all();
-  return c.json(rows.results || []);
+  try {
+    const auditId = c.req.param('auditId');
+    // A auditoria é o que carrega o tenant aqui: sem esta checagem, qualquer
+    // sessão autenticada lia os achados de qualquer projeto só sabendo o id da
+    // auditoria (sonda: 200 com o achado do outro cliente no corpo).
+    await requireResourceAccess(c.env.DB, 'audit_schedule', auditId, c.get('user'));
+    const rows = await c.env.DB.prepare('SELECT * FROM audit_findings WHERE audit_id = ? ORDER BY created_at DESC').bind(auditId).all();
+    return c.json(rows.results || []);
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Falha ao listar achados de auditoria', detail: e.message }, 500);
+  }
 });
 
 governanceApp.post('/audits/:auditId/findings', async (c) => {
   try {
     const auditId = c.req.param('auditId');
+    await requireResourceAccess(c.env.DB, 'audit_schedule', auditId, c.get('user'));
     const v = await validateBody(c, auditFindingSchema);
     if (!v.success) return v.response;
-    const { project_id, control_id, finding_type, description, evidence_reviewed, auditor_notes } = v.data as any;
+    const { control_id, finding_type, description, evidence_reviewed, auditor_notes } = v.data as any;
     if (!description) return c.json({ error: 'description is required' }, 400);
-    
+
+    // O projeto vem da auditoria, NUNCA do corpo. O `project_id` do payload
+    // parecia escopo, mas era um valor escolhido pelo próprio chamador: a sonda
+    // enviou o id do outro cliente e o achado foi gravado no projeto dele.
+    // O campo continua no schema por compatibilidade e é deliberadamente
+    // ignorado.
+    const audit = await c.env.DB.prepare('SELECT project_id FROM audit_schedule WHERE id = ?').bind(auditId).first<any>();
+    if (!audit) return c.json({ error: 'Auditoria não encontrada' }, 404);
+    const project_id = audit.project_id;
+
     const findingId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
     let capaId: string | null = null;
     
@@ -214,14 +235,15 @@ governanceApp.post('/audits/:auditId/findings', async (c) => {
     await logAudit(c.env.DB, 'audit_finding.created', c.get('user')?.email || 'system', `Achado ${findingId} criado para auditoria ${auditId}`);
     return c.json({ ok: true, id: findingId, capa_id: capaId });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao criar achado de auditoria', detail: e.message }, 500);
   }
 });
 
 governanceApp.put('/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
     const v = await validateBody(c, auditFindingUpdateSchema);
     if (!v.success) return v.response;
     const { description, auditor_notes, status } = v.data as any;
@@ -234,17 +256,19 @@ governanceApp.put('/audit-findings/:id', async (c) => {
     `).bind(description || null, auditor_notes || null, status || null, id).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao atualizar achado de auditoria', detail: e.message }, 500);
   }
 });
 
 governanceApp.delete('/audit-findings/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'audit_findings', id, c.get('user'));
     await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao deletar achado de auditoria', detail: e.message }, 500);
   }
 });
@@ -301,8 +325,8 @@ governanceApp.post('/projects/:id/management-reviews', async (c) => {
 
 governanceApp.put('/management-reviews/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'management_reviews', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'management_reviews', id, c.get('user'));
     const { decisions, action_items, status, minutes_url, attendees } = await c.req.json();
     await c.env.DB.prepare(`
       UPDATE management_reviews 
@@ -323,6 +347,7 @@ governanceApp.put('/management-reviews/:id', async (c) => {
     ).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao atualizar reunião de análise crítica', detail: e.message }, 500);
   }
 });
@@ -355,8 +380,8 @@ governanceApp.post('/projects/:id/metrics', async (c) => {
 
 governanceApp.put('/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
     const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
     
     await c.env.DB.prepare(
@@ -365,17 +390,19 @@ governanceApp.put('/metrics/:id', async (c) => {
 
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Error updating metric', detail: e.message }, 500);
   }
 });
 
 governanceApp.delete('/metrics/:id', async (c) => {
   const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
   try {
+    await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
     await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Error deleting metric', detail: e.message }, 500);
   }
 });

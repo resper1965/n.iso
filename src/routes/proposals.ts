@@ -1,11 +1,18 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification } from '../helpers';
+import { genId, logAudit, createNotification, somenteNess } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
 
 export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Proposta também não tem `project_id`. Sonda: o `org_admin` de um cliente lia
+// `content_html` e `total_price` da proposta de outro, marcava como aprovada e
+// excluía a linha — tudo com 200. O caminho legítimo do cliente para a própria
+// proposta é `/api/v1/client/proposal` (routes/platform.ts), filtrado por
+// `client_lead_id`, e continua aberto.
+proposalsApp.use('*', somenteNess);
 
 
 proposalsApp.post('/', async (c) => {

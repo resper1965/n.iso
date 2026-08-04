@@ -56,10 +56,15 @@ vendorsApp.put('/:id', async (c) => {
 });
 
 vendorsApp.delete('/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
-  await c.env.DB.prepare('DELETE FROM vendors WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
+    await c.env.DB.prepare('DELETE FROM vendors WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Falha ao excluir vendor', detail: e.message }, 500);
+  }
 });
 
 // ─── Project Vendor Operations (/api/v1/projects/:projectId/vendors) ──────

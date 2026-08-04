@@ -40,7 +40,7 @@ const ALLOWED_TABLES = [
   'risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions',
   'compliance_controls', 'evidence', 'assets', 'stakeholders', 'dpia_assessments',
   'audit_schedule', 'certification_tracking', 'audit_findings', 'management_reviews',
-  'performance_metrics', 'webhooks', 'api_keys'
+  'performance_metrics', 'webhooks', 'api_keys', 'auditor_notes'
 ];
 
 export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: any) {
@@ -65,6 +65,30 @@ export function requireProjectAccess(user: any, projectId: string): true {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
   throw new Error('Forbidden: No access to this project');
+}
+
+/** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
+const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
+
+/**
+ * Guarda de papel para o pipeline comercial da ness. (lead → assessment →
+ * proposta). Estes registros não pertencem a projeto nenhum: não existe
+ * `project_id` para comparar, então `requireResourceAccess` não alcança essas
+ * rotas e o isolamento tem de ser por PAPEL.
+ *
+ * Sem esta guarda, o `org_admin` de um cliente — que o RBAC global deixa
+ * escrever, porque a lista read-only só cobre `org_user` e `client` — lia a
+ * carteira comercial inteira (contato, CNPJ, preço, HTML da proposta) de TODOS
+ * os outros clientes e ainda aprovava ou excluía proposta alheia. Confirmado
+ * por sonda: `GET /api/v1/proposals/:id` devolvia 200 com o `content_html` de
+ * outro cliente e `DELETE` removia a linha.
+ */
+export async function somenteNess(c: any, next: () => Promise<void>) {
+  const user = c.get('user');
+  if (!user || !PAPEIS_NESS.has(user.role)) {
+    return c.json({ error: 'Forbidden: Área comercial restrita à equipe ness.' }, 403);
+  }
+  await next();
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */

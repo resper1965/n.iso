@@ -29,10 +29,15 @@ trainingApp.put('/:id', async (c) => {
 });
 
 trainingApp.delete('/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
-  await c.env.DB.prepare('DELETE FROM training_records WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
+    await c.env.DB.prepare('DELETE FROM training_records WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Falha ao excluir treinamento', detail: e.message }, 500);
+  }
 });
 
 // ─── Project Training Operations (/api/v1/projects/:projectId/training) ────

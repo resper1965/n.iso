@@ -1,11 +1,22 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
 export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Assessment é pré-venda e não tem `project_id`. Sonda: o `org_admin` de um
+// cliente lia e renomeava o assessment de outro com 200.
+//
+// `/public/:token` é a exceção: o token no caminho é a credencial e
+// `authMiddleware` já isenta esse prefixo — não há sessão para checar papel,
+// e o handler valida o `access_token` por conta própria.
+assessmentsApp.use('*', async (c, next) => {
+  if (c.req.path.startsWith('/api/v1/assessments/public/')) return next();
+  return somenteNess(c, next);
+});
 
 /** Traduz respostas do assessment para as chaves esperadas pelo SCORE_MAP */
 function mapAnswerToScore(field: string, value: string): string {

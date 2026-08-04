@@ -154,10 +154,15 @@ risks.put('/api/v1/risks/:id', async (c) => {
 });
 
 risks.delete('/api/v1/risks/:id', async (c) => {
-  const id = c.req.param('id');
-  await requireResourceAccess(c.env.DB, 'risks', id, c.get('user'));
-  await c.env.DB.prepare('DELETE FROM risks WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'risks', id, c.get('user'));
+    await c.env.DB.prepare('DELETE FROM risks WHERE id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e.message?.startsWith('Forbidden')) return c.json({ ok: false, error: e.message }, 403);
+    return c.json({ error: 'Falha ao excluir risco', detail: e.message }, 500);
+  }
 });
 
 risks.get('/api/v1/projects/:id/risks/history', async (c) => {
