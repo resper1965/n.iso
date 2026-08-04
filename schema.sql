@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
+    -- NULLABLE de propósito: `platform_admin` e `consultor` não pertencem a
+    -- projeto nenhum. Endurecer aqui trancaria a plataforma para fora dela mesma.
     client_project_id TEXT,
     requires_password_change INTEGER DEFAULT 0,
     -- Segundo fator (TOTP). Desligado por padrão; habilitar é ação do usuário.
@@ -190,6 +192,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT,
     justification TEXT,
     ip_address TEXT,
+    -- NULLABLE de propósito: a maioria das chamadas de `logAudit` registra ação
+    -- de plataforma (login, user.created, MFA) que não pertence a projeto algum.
+    -- NOT NULL aqui derrubaria o registro dessas ações — perder trilha para
+    -- ganhar constraint é o inverso do objetivo.
     project_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -264,7 +270,11 @@ CREATE TABLE IF NOT EXISTS evidence (
 
 CREATE TABLE IF NOT EXISTS auditor_tokens (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id),
+    -- NOT NULL (migration 0021): o token é o único fator de um caminho público
+    -- (`/api/v1/auditor/:token/*`, isento do authMiddleware). Sem projeto ele é
+    -- concessão de acesso sem escopo — não é dado válido. Ver o cabeçalho da
+    -- 0021 para o critério de quais tabelas foram endurecidas e quais não.
+    project_id TEXT NOT NULL REFERENCES projects(id),
     token TEXT UNIQUE NOT NULL,
     expires_at DATETIME NOT NULL,
     created_by TEXT,
@@ -464,7 +474,12 @@ CREATE TABLE IF NOT EXISTS corrective_actions (
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id),
+    -- NOT NULL (migration 0021): todo o isolamento de tenant de uma chave se
+    -- apoia neste campo — é ele que vira `client_project_id` em
+    -- `src/middleware/auth.ts`. Chave sem projeto era chave sem escopo, com
+    -- visão dos projetos de todos os tenants (PR #41). A guarda de runtime
+    -- continua lá; aqui o caso deixa de ser representável.
+    project_id TEXT NOT NULL REFERENCES projects(id),
     key_hash TEXT NOT NULL,
     name TEXT NOT NULL,
     permissions TEXT DEFAULT 'read',
@@ -476,7 +491,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 CREATE TABLE IF NOT EXISTS webhooks (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES projects(id),
+    -- NOT NULL (migration 0021): webhook sem projeto não aparece em nenhuma
+    -- listagem (`WHERE project_id = ?`) e ainda assim passa em
+    -- `requireResourceAccess` para usuário com `client_project_id` nulo —
+    -- `null !== null` é falso em JS. Linha órfã aqui é só buraco de acesso.
+    project_id TEXT NOT NULL REFERENCES projects(id),
     url TEXT NOT NULL,
     events TEXT NOT NULL,
     secret TEXT,

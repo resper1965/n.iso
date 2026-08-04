@@ -491,15 +491,32 @@ describe('nISO API (D1 e KV reais)', () => {
     });
 
     it('chave sem projeto não autentica — senão enxergaria o portfólio inteiro', async () => {
-      // `api_keys.project_id` é nullable no schema. Se uma chave assim passasse
-      // pela autenticação, viraria um `client` sem `client_project_id`, e o
-      // filtro do portfólio (que só restringe quando esse campo é truthy)
-      // devolveria os projetos de todos os tenants.
-      await env.DB.prepare(
-        `INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`
-      ).bind('key-sem-proj', null, await sha256Hex('chave-sem-projeto'), 'orfa', 'read', 'Active').run();
+      // Se uma chave assim passasse pela autenticação, viraria um `client` sem
+      // `client_project_id`, e o filtro do portfólio (que só restringe quando
+      // esse campo é truthy) devolveria os projetos de todos os tenants.
+      //
+      // A linha órfã deixou de ser inserível: `api_keys.project_id` virou NOT NULL
+      // (migration 0021). O que continua precisando de cobertura é a guarda de
+      // RUNTIME — ela é a última linha enquanto houver banco sem a migration
+      // aplicada. Daí o D1 legado abaixo, que devolve a chave sem projeto.
+      const dbLegado = {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => ({
+              id: 'key-sem-proj', project_id: null, name: 'orfa',
+              permissions: 'read', status: 'Active', expires_at: null,
+            }),
+            run: async () => ({ success: true }),
+            all: async () => ({ results: [] }),
+          }),
+        }),
+      };
 
-      const r = await req('/api/v1/portfolio', { headers: { 'X-API-Key': 'chave-sem-projeto' } });
+      const r = await req(
+        '/api/v1/portfolio',
+        { headers: { 'X-API-Key': 'chave-sem-projeto' } },
+        testEnv({ DB: dbLegado })
+      );
       expect(r.status).toBe(401);
     });
 

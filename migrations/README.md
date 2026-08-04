@@ -146,6 +146,34 @@ Espere ver `totp_fail_count` e `totp_fail_window` na saída. Registre depois:
 INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0020_mfa_rate_limit.sql');
 ```
 
+**A 0021 é nova** e endurece `project_id` para `NOT NULL` em `api_keys`,
+`webhooks` e `auditor_tokens` — as três tabelas cuja linha órfã é credencial sem
+dono (contexto no PR #41 e no cabeçalho do arquivo). É rebuild de tabela
+(`DROP` + `RENAME`), então tem pré-voo **obrigatório**: rode a contagem abaixo e
+só aplique com `orfas = 0` nas três linhas.
+
+```powershell
+npx wrangler d1 execute niso-db --remote --command "
+  SELECT 'api_keys' AS tabela, count(*) AS orfas FROM api_keys WHERE project_id IS NULL
+  UNION ALL SELECT 'webhooks',       count(*) FROM webhooks       WHERE project_id IS NULL
+  UNION ALL SELECT 'auditor_tokens', count(*) FROM auditor_tokens WHERE project_id IS NULL;"
+
+npx wrangler d1 execute niso-db --remote --file migrations/0021_project_scope_not_null.sql
+npx wrangler d1 execute niso-db --remote --command "PRAGMA table_info(api_keys);"
+```
+
+Espere ver `notnull = 1` em `project_id`. Registre depois:
+
+```sql
+INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0021_project_scope_not_null.sql');
+```
+
+Se alguma contagem vier > 0, **não aplique**: uma credencial sem projeto é
+achado de segurança, não linha a descartar em silêncio. Registre, revogue
+(`DELETE ... WHERE project_id IS NULL`) e só então rode. O `INSERT..SELECT` da
+migration copia tudo de propósito — com órfã, ele aborta **antes** do `DROP`, e
+nada se perde.
+
 Prefira `execute --file` a `migrations apply` enquanto a `d1_migrations` estiver
 divergente — `apply` decide sozinho o conjunto, e é justamente esse conjunto que
 está errado. Depois de aplicar por arquivo, registre na tabela de controle com o

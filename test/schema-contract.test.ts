@@ -123,6 +123,47 @@ describe('schema contract (real D1)', () => {
     expect(row.action).toBe('test.action');
   });
 
+  it('recusa credencial sem projeto — api_keys, webhooks e auditor_tokens', async () => {
+    // O caso do PR #41: chave sem `project_id` virava identidade `client` sem
+    // escopo e enxergava projeto de todos os tenants. A guarda de runtime
+    // (`src/middleware/auth.ts`) continua sendo a última linha; aqui o schema
+    // recusa a linha órfã antes de ela existir. Migration 0021.
+    await expect(
+      env.DB.prepare(`INSERT INTO api_keys (id, project_id, key_hash, name) VALUES (?, NULL, ?, ?)`)
+        .bind('ak-sem-projeto', 'hash-orfao', 'sem escopo').run()
+    ).rejects.toThrow(/NOT NULL/i);
+
+    await expect(
+      env.DB.prepare(`INSERT INTO webhooks (id, url, events) VALUES (?, ?, ?)`)
+        .bind('wh-sem-projeto', 'https://x/y', 'evidence.uploaded').run()
+    ).rejects.toThrow(/NOT NULL/i);
+
+    await expect(
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, token, expires_at) VALUES (?, ?, ?)`)
+        .bind('at-sem-projeto', 'tok-orfao', '2099-01-01T00:00:00Z').run()
+    ).rejects.toThrow(/NOT NULL/i);
+  });
+
+  it('mantém nullable onde a ausência é legítima — users e audit_logs', async () => {
+    // Contraprova do teste acima: endurecer indiscriminadamente quebraria o
+    // `platform_admin` (não pertence a projeto) e o registro de ação de
+    // plataforma na trilha (login, user.created). Os dois casos são de projeto,
+    // não descuido — se alguém colocar NOT NULL aqui, este teste avisa.
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, password_hash, name, role, client_project_id)
+       VALUES ('u-admin','admin@ness.io','hash','Admin','platform_admin', NULL)`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO audit_logs (id, action, actor, details, project_id, created_at)
+       VALUES ('al-plataforma','user.created','admin@ness.io','sem projeto', NULL, datetime('now'))`
+    ).run();
+
+    const u = await env.DB.prepare("SELECT client_project_id FROM users WHERE id='u-admin'").first<any>();
+    const l = await env.DB.prepare("SELECT project_id FROM audit_logs WHERE id='al-plataforma'").first<any>();
+    expect(u.client_project_id).toBeNull();
+    expect(l.project_id).toBeNull();
+  });
+
   it('enforces unique api_keys.key_hash', async () => {
     await env.DB.prepare(
       `INSERT INTO api_keys (id, project_id, key_hash, name) VALUES (?, ?, ?, ?)`
