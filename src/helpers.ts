@@ -1,5 +1,54 @@
+import { log, requestId, resumoErro } from './observability';
+
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+/**
+ * Resposta 500 sem vazar o interior do banco.
+ *
+ * `e.message` num Worker com D1 é a mensagem crua do SQLite: nome de tabela,
+ * nome de coluna, constraint violada, às vezes um fragmento do SQL. Devolver
+ * isso ao cliente entrega o schema de graça a quem sonda a API — e sonda é
+ * exatamente o que acontece com uma API de conformidade exposta na internet.
+ *
+ * A troca é vazamento por correlação: o detalhe vai para o log estruturado, o
+ * cliente recebe o `request_id` para citar no suporte. É o MESMO id que o
+ * middleware de acesso em `src/index.ts` põe na linha `{"msg":"request",...}`,
+ * então uma reclamação ("deu erro, request_id X") encontra a linha do erro e a
+ * linha de acesso da mesma requisição num `wrangler tail` filtrado por campo.
+ *
+ * A mensagem de negócio ('Falha ao criar assessment') continua indo ao cliente:
+ * ela diz qual operação falhou sem dizer nada sobre como o banco é feito.
+ *
+ * Não use para 403 nem para 400 — autorização e validação respondem sobre o
+ * pedido do cliente, não sobre o estado interno, e a mensagem delas é útil.
+ */
+export function erro500(c: any, mensagem: string, e: unknown) {
+  return c.json({ error: mensagem, request_id: registraErro(c, e) }, 500);
+}
+
+/**
+ * Registra a exceção no log estruturado e devolve o `request_id` da requisição.
+ *
+ * Existe separado do `erro500` para as poucas rotas que respondem HTML em vez
+ * de JSON (relatório DPIA, relatório ROPA) e para falha por item dentro de uma
+ * resposta 200 — elas precisam do mesmo par log/id sem o envelope JSON.
+ */
+export function registraErro(c: any, e: unknown): string {
+  const rid = c.get?.('requestId') || requestId(c);
+  log('error', {
+    msg: 'erro_handler',
+    request_id: rid,
+    metodo: c.req?.method,
+    rota: c.req?.url ? new URL(c.req.url).pathname : undefined,
+    ator: c.get?.('user')?.email,
+    // resumoErro traz mensagem + primeira linha do stack: o suficiente para
+    // localizar a falha sem despejar stack inteiro (ruído e, às vezes, valor
+    // de variável — este produto trata PII sob LGPD).
+    erro: resumoErro(e),
+  });
+  return rid;
 }
 
 export async function logAudit(

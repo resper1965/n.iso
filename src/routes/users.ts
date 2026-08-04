@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, erro500 } from '../helpers';
 import { validateBody, createUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -27,7 +27,7 @@ usersApp.get('/', async (c) => {
     });
     return c.json(mapped);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar usuários', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar usuários', e);
   }
 });
 
@@ -81,7 +81,7 @@ usersApp.post('/', async (c) => {
     return c.json({ id, email, name, role: targetRole, client_project_id: targetProject }, 201);
   } catch (e: any) {
     if (e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
-    return c.json({ error: 'Falha ao criar usuário', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar usuário', e);
   }
 });
 
@@ -151,7 +151,7 @@ usersApp.put('/:id', async (c) => {
     return c.json({ ok: true, message: 'Usuário atualizado com sucesso' });
   } catch (e: any) {
     if (e.message && e.message.includes('UNIQUE')) return c.json({ error: 'Email já cadastrado' }, 400);
-    return c.json({ error: 'Falha ao atualizar usuário', detail: e.message || String(e) }, 500);
+    return erro500(c, 'Falha ao atualizar usuário', e);
   }
 });
 
@@ -180,6 +180,6 @@ usersApp.delete('/:id', async (c) => {
 
     return c.json({ ok: true, message: 'Usuário excluído com sucesso' });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao excluir usuário', detail: e.message || String(e) }, 500);
+    return erro500(c, 'Falha ao excluir usuário', e);
   }
 });

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
-import { logAudit, genNumericCode } from '../helpers';
+import { logAudit, genNumericCode, erro500 } from '../helpers';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -59,7 +59,7 @@ publicApp.post('/policies/request-otp', async (c) => {
       demo_otp: otp
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar código OTP', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar código OTP', e);
   }
 });
 
@@ -103,7 +103,7 @@ publicApp.post('/policies/verify-otp', async (c) => {
       project_id
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao verificar OTP', detail: e.message }, 500);
+    return erro500(c, 'Falha ao verificar OTP', e);
   }
 });
 
@@ -142,7 +142,7 @@ publicApp.get('/policies/list', async (c) => {
       acknowledgments: acks || []
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao carregar políticas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao carregar políticas', e);
   }
 });
 
@@ -182,6 +182,6 @@ publicApp.post('/policies/ack', async (c) => {
       ip_address: ipAddress
     });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao registrar ciência eletrônica', detail: e.message }, 500);
+    return erro500(c, 'Erro ao registrar ciência eletrônica', e);
   }
 });

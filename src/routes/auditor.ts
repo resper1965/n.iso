@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, erro500 } from '../helpers';
 import { validateBody, auditorNoteSchema, auditorResponseSchema } from '../schemas';
 
 export const auditorApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -20,7 +20,7 @@ auditorApp.get('/auditor/:token/notes', async (c) => {
     `).bind(t.project_id).all();
     return c.json({ ok: true, notes: notes.results || [] });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar notas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar notas', e);
   }
 });
 
@@ -46,7 +46,7 @@ auditorApp.post('/auditor/:token/notes', async (c) => {
     await logAudit(c.env.DB, 'auditor_note.created', 'auditor', `Nota de auditor ${id} criada para o projeto ${t.project_id}`);
     return c.json({ ok: true, id });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar nota de auditor', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar nota de auditor', e);
   }
 });
 
@@ -73,7 +73,7 @@ auditorApp.put('/auditor-notes/:id/respond', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao responder nota de auditor', detail: e.message }, 500);
+    return erro500(c, 'Falha ao responder nota de auditor', e);
   }
 });
 
@@ -89,7 +89,7 @@ auditorApp.get('/projects/:id/auditor-notes', async (c) => {
     `).bind(projectId).all();
     return c.json({ ok: true, notes: notes.results || [] });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar notas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar notas', e);
   }
 });
 
@@ -114,6 +114,6 @@ auditorApp.get('/auditor/:token/evidence/:evidenceId/download', async (c) => {
       } 
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha no download', detail: e.message }, 500);
+    return erro500(c, 'Falha no download', e);
   }
 });

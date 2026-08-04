@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { PHASE_CHECKLISTS, ChecklistItem } from '../checklists';
-import { genId, logAudit, escapeHtml } from '../helpers';
+import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
 import { PolicyGeneratorService } from '../services/policy-generator';
@@ -92,7 +92,7 @@ policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
       metadata: result.metadata
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar política', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar política', e);
   }
 });
 
@@ -177,7 +177,7 @@ REQUISITOS:
 
     return c.json({ ok: true, content });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
+    return erro500(c, 'Erro ao gerar documento', e);
   }
 });
 
@@ -238,7 +238,7 @@ policies.post('/api/v1/projects/:id/approve-document', async (c) => {
 
     return c.json({ ok: true, evidence_id: evidenceId, file_name: fileName });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao aprovar documento', detail: e.message }, 500);
+    return erro500(c, 'Erro ao aprovar documento', e);
   }
 });
 
@@ -317,7 +317,7 @@ policies.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
       r2_key: r2Key
     });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao gerar documento', detail: e.message }, 500);
+    return erro500(c, 'Erro ao gerar documento', e);
   }
 });
 
@@ -402,13 +402,16 @@ policies.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
         policies.push({ control_id: controlId, success: result.success, content_preview: result.content?.substring(0, 200) ?? '' });
       } catch (e: any) {
         failed++;
-        policies.push({ control_id: controlId, success: false, content_preview: e.message });
+        // `content_preview` é prévia de política; devolver a exceção aqui punha a
+        // mensagem crua do D1 dentro de uma resposta 200. O detalhe vai ao log.
+        registraErro(c, e);
+        policies.push({ control_id: controlId, success: false, content_preview: '' });
       }
     }
 
     return c.json({ ok: true, total: controlIds.length, successful, failed, policies });
   } catch (e: any) {
-    return c.json({ error: 'Falha na geração em lote', detail: e.message }, 500);
+    return erro500(c, 'Falha na geração em lote', e);
   }
 });
 
@@ -522,7 +525,7 @@ policies.post('/api/v1/projects/:id/controls/:controlId/policy', async (c) => {
 
     return c.json({ ok: true, control_id: canonicalId, version: nextVer });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao editar política', detail: e.message }, 500);
+    return erro500(c, 'Falha ao editar política', e);
   }
 });
 
@@ -533,7 +536,7 @@ policies.get('/api/v1/policies/templates', async (c) => {
     const templates = await generator.listAvailableTemplates('v2022');
     return c.json({ ok: true, templates });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar templates', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar templates', e);
   }
 });
 
@@ -550,7 +553,7 @@ policies.get('/api/v1/policies/templates/:templateName', async (c) => {
     });
     return c.json({ ok: true, markdown });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao obter conteúdo do template', detail: e.message }, 500);
+    return erro500(c, 'Falha ao obter conteúdo do template', e);
   }
 });
 
@@ -606,7 +609,7 @@ policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) 
       control: control_id
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar política a partir de template', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar política a partir de template', e);
   }
 });
 

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 
@@ -26,7 +26,7 @@ platformApp.put('/assets/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar ativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar ativo', e);
   }
 });
 
@@ -43,7 +43,7 @@ platformApp.delete('/assets/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao deletar ativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao deletar ativo', e);
   }
 });
 
@@ -61,7 +61,7 @@ platformApp.put('/dpia/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar DPIA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar DPIA', e);
   }
 });
 
@@ -82,7 +82,7 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado pelo DPO (${approvedBy})`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao aprovar DPIA', detail: e.message }, 500);
+    return erro500(c, 'Erro ao aprovar DPIA', e);
   }
 });
 
@@ -143,7 +143,11 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
     `;
     return c.html(html);
   } catch (e: any) {
-    return c.html(`<h3>Erro ao gerar relatório DPIA: ${e.message}</h3>`, 500);
+    // Relatório é HTML, então a correlação vai no corpo HTML em vez de JSON.
+    return c.html(
+      `<h3>Erro ao gerar relatório DPIA</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`,
+      500
+    );
   }
 });
 
@@ -222,7 +226,7 @@ platformApp.get('/dashboard/stats', async (c) => {
       critical_risks: stats[4].results?.[0]?.count || 0
     });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao obter estatísticas do dashboard', detail: e.message }, 500);
+    return erro500(c, 'Erro ao obter estatísticas do dashboard', e);
   }
 });
 
@@ -255,7 +259,7 @@ platformApp.get('/client/dashboard', async (c) => {
       controls: controlList
     });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao carregar dashboard do cliente', detail: e.message }, 500);
+    return erro500(c, 'Erro ao carregar dashboard do cliente', e);
   }
 });
 
@@ -271,7 +275,7 @@ platformApp.get('/client/assessment', async (c) => {
     }
     return c.json({ assessment_id: assessment.id });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao buscar assessment do cliente', detail: e.message }, 500);
+    return erro500(c, 'Erro ao buscar assessment do cliente', e);
   }
 });
 
@@ -287,7 +291,7 @@ platformApp.get('/client/proposal', async (c) => {
     }
     return c.json({ proposal_id: proposal.id, status: proposal.status });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao buscar proposta do cliente', detail: e.message }, 500);
+    return erro500(c, 'Erro ao buscar proposta do cliente', e);
   }
 });
 
@@ -316,7 +320,7 @@ platformApp.get('/portfolio', async (c) => {
     const { results } = await stmt.all();
     return c.json({ ok: true, portfolio: results || [], projects: results || [] });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao buscar portfólio', detail: e.message }, 500);
+    return erro500(c, 'Erro ao buscar portfólio', e);
   }
 });
 
@@ -353,7 +357,7 @@ platformApp.put('/pricing-config', async (c) => {
     await logAudit(c.env.DB, 'pricing_config.updated', c.get('user')?.email ?? 'system', 'Config de precificação atualizada');
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar config', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar config', e);
   }
 });
 

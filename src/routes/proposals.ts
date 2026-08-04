@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteNess } from '../helpers';
+import { genId, logAudit, createNotification, somenteNess, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
@@ -32,7 +32,7 @@ proposalsApp.post('/', async (c) => {
 
     return c.json({ id, status: 'Draft' }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar proposta', e);
   }
 });
 
@@ -62,7 +62,7 @@ proposalsApp.put('/config/pricing', async (c) => {
     await logAudit(c.env.DB, 'pricing_config.updated', c.get('user')?.email ?? 'system', 'Config de precificação atualizada');
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar config', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar config', e);
   }
 });
 
@@ -76,7 +76,7 @@ proposalsApp.get('/', async (c) => {
     ).all();
     return c.json(results || []);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar propostas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar propostas', e);
   }
 });
 
@@ -87,7 +87,7 @@ proposalsApp.get('/:id', async (c) => {
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     return c.json(proposal);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar proposta', e);
   }
 });
 
@@ -113,7 +113,7 @@ proposalsApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'proposal.updated', c.get('user')?.email ?? 'system', `Proposta ${id} atualizada`);
     return c.json(updated);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar proposta', e);
   }
 });
 
@@ -124,7 +124,7 @@ proposalsApp.delete('/:id', async (c) => {
     await logAudit(c.env.DB, 'proposal.deleted', c.get('user')?.email ?? 'system', `Proposta ${id} excluída`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao excluir proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao excluir proposta', e);
   }
 });
 
@@ -174,6 +174,6 @@ proposalsApp.post('/:id/sign', async (c) => {
 
     return c.json({ ok: true, contract_id: contractId, project_id: projectId, proposal_status: 'Signed', lead_status: 'Won' });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao assinar proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao assinar proposta', e);
   }
 });

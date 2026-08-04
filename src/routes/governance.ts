@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, erro500 } from '../helpers';
 import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -28,7 +28,7 @@ governanceApp.post('/projects/:id/stakeholders', async (c) => {
     await logAudit(c.env.DB, 'stakeholder.created', c.get('user')?.email || 'system', `Stakeholder ${name} criado para projeto ${projectId}`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar stakeholder', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar stakeholder', e);
   }
 });
 
@@ -45,7 +45,7 @@ governanceApp.put('/stakeholders/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar stakeholder', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar stakeholder', e);
   }
 });
 
@@ -57,7 +57,7 @@ governanceApp.delete('/stakeholders/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao deletar stakeholder', detail: e.message }, 500);
+    return erro500(c, 'Falha ao deletar stakeholder', e);
   }
 });
 
@@ -94,7 +94,7 @@ governanceApp.post('/projects/:id/governance', async (c) => {
     }
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar governança', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar governança', e);
   }
 });
 
@@ -106,7 +106,7 @@ governanceApp.delete('/projects/:id/governance/:memberId', async (c) => {
     await logAudit(c.env.DB, 'governance.deleted', c.get('user')?.email || 'system', `Membro da governança id ${memberId} deletado do projeto ${projectId}`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao deletar governança', detail: e.message }, 500);
+    return erro500(c, 'Falha ao deletar governança', e);
   }
 });
 
@@ -136,7 +136,7 @@ governanceApp.put('/projects/:id/company-profile', async (c) => {
     await logAudit(c.env.DB, 'company_profile.updated', c.get('user')?.email || 'system', `Perfil corporativo do projeto ${projectId} atualizado`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar perfil corporativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar perfil corporativo', e);
   }
 });
 
@@ -170,7 +170,7 @@ governanceApp.put('/projects/:id/context', async (c) => {
     await logAudit(c.env.DB, 'context.updated', c.get('user')?.email || 'system', `Contexto atualizado para projeto ${projectId}`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar contexto', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar contexto', e);
   }
 });
 
@@ -186,7 +186,7 @@ governanceApp.get('/audits/:auditId/findings', async (c) => {
     return c.json(rows.results || []);
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao listar achados de auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar achados de auditoria', e);
   }
 });
 
@@ -236,7 +236,7 @@ governanceApp.post('/audits/:auditId/findings', async (c) => {
     return c.json({ ok: true, id: findingId, capa_id: capaId });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao criar achado de auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar achado de auditoria', e);
   }
 });
 
@@ -257,7 +257,7 @@ governanceApp.put('/audit-findings/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar achado de auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar achado de auditoria', e);
   }
 });
 
@@ -269,7 +269,7 @@ governanceApp.delete('/audit-findings/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao deletar achado de auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao deletar achado de auditoria', e);
   }
 });
 
@@ -319,7 +319,7 @@ governanceApp.post('/projects/:id/management-reviews', async (c) => {
     await logAudit(c.env.DB, 'management_review.created', c.get('user')?.email || 'system', `Reunião de análise crítica registrada para o projeto ${projectId}`);
     return c.json({ ok: true, id });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar reunião de análise crítica', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar reunião de análise crítica', e);
   }
 });
 
@@ -348,7 +348,7 @@ governanceApp.put('/management-reviews/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar reunião de análise crítica', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar reunião de análise crítica', e);
   }
 });
 
@@ -374,7 +374,7 @@ governanceApp.post('/projects/:id/metrics', async (c) => {
 
     return c.json({ ok: true, id: metricId });
   } catch (e: any) {
-    return c.json({ error: 'Error creating metric', detail: e.message }, 500);
+    return erro500(c, 'Error creating metric', e);
   }
 });
 
@@ -391,7 +391,7 @@ governanceApp.put('/metrics/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Error updating metric', detail: e.message }, 500);
+    return erro500(c, 'Error updating metric', e);
   }
 });
 
@@ -403,7 +403,7 @@ governanceApp.delete('/metrics/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Error deleting metric', detail: e.message }, 500);
+    return erro500(c, 'Error deleting metric', e);
   }
 });
 
@@ -432,6 +432,6 @@ governanceApp.post('/projects/:id/policy-acknowledgments', async (c) => {
 
     return c.json({ ok: true, id: ackId });
   } catch (e: any) {
-    return c.json({ error: 'Error recording policy acknowledgment', detail: e.message }, 500);
+    return erro500(c, 'Error recording policy acknowledgment', e);
   }
 });

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
@@ -41,7 +41,7 @@ leadsApp.post('/', async (c) => {
     await logAudit(c.env.DB, 'lead.created', c.get('user')?.email ?? 'system', `Lead ${id} criado para ${body.company_name}`);
     return c.json({ id, ...body, status: 'New' }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar lead', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar lead', e);
   }
 });
 
@@ -50,7 +50,7 @@ leadsApp.get('/', async (c) => {
     const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
     return c.json(results);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar leads', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar leads', e);
   }
 });
 
@@ -65,7 +65,7 @@ leadsApp.get('/:id', async (c) => {
 
     return c.json({ ...lead, assessments, proposals });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar lead', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar lead', e);
   }
 });
 
@@ -84,7 +84,7 @@ leadsApp.put('/:id/status', async (c) => {
     await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?').bind(status, id).run();
     return c.json({ ok: true, status });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar lead', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar lead', e);
   }
 });
 
@@ -166,6 +166,6 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
     await logAudit(c.env.DB, 'lead.cnpj_enriched', c.get('user')?.email ?? 'system', `Lead ${id} enriquecido via CNPJ ${cleanCnpj}`);
     return c.json({ ok: true, lead: updated });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao enriquecer CNPJ', detail: e.message }, 500);
+    return erro500(c, 'Falha ao enriquecer CNPJ', e);
   }
 });

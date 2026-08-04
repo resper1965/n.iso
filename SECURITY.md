@@ -51,6 +51,7 @@ Invariantes de segurança que o código mantém e que **não devem regredir**:
 | Tokens de segurança com CSPRNG | `genToken` / `genNumericCode` em `src/helpers.ts` — nunca `Math.random` |
 | Trilha de auditoria imutável | Triggers `audit_logs_no_update` / `audit_logs_no_delete` |
 | Código bate com o schema | `test/schema-contract.test.ts` roda contra D1 real |
+| 500 não devolve o interior do banco | `erro500` em `src/helpers.ts`: detalhe do D1 vai ao log, cliente recebe `request_id` — `test/erro-sem-vazamento.test.ts` |
 
 Ao alterar qualquer um destes pontos, o PR precisa explicar por quê.
 

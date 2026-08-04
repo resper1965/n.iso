@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, erro500 } from '../helpers';
 import { validateBody, certificationSchema } from '../schemas';
 
 export const certificationsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -31,7 +31,7 @@ certificationsApp.put('/:id', async (c) => {
     return c.json({ ok: true, certification: updated });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar certificação', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar certificação', e);
   }
 });
 
@@ -51,7 +51,7 @@ certificationsApp.delete('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao remover certificação', detail: e.message }, 500);
+    return erro500(c, 'Falha ao remover certificação', e);
   }
 });
 
@@ -93,6 +93,6 @@ projectCertificationsApp.post('/', async (c) => {
     const created = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first();
     return c.json({ ok: true, certification: created }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar certificação', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar certificação', e);
   }
 });

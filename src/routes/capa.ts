@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, erro500 } from '../helpers';
 import { validateBody, createCapaSchema } from '../schemas';
 
 export const capaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -23,7 +23,7 @@ capaApp.put('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar CAPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar CAPA', e);
   }
 });
 
@@ -37,7 +37,7 @@ capaApp.delete('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao excluir CAPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao excluir CAPA', e);
   }
 });
 
@@ -64,6 +64,6 @@ projectCapaApp.post('/', async (c) => {
     await logAudit(c.env.DB, 'capa_created', user?.email || 'system', `CAPA ${id} created`);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar CAPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar CAPA', e);
   }
 });

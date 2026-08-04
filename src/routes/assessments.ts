@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -145,7 +145,7 @@ assessmentsApp.post('/', async (c) => {
     await logAudit(c.env.DB, 'assessment.created', c.get('user')?.email ?? 'system', `Assessment ${id} criado para ${body.client_name}`);
     return c.json({ id, client_name: body.client_name, lead_id: body.lead_id, status: 'in_progress', access_token: accessToken }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar assessment', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar assessment', e);
   }
 });
 
@@ -164,7 +164,7 @@ assessmentsApp.get('/public/:token', async (c) => {
 
     return c.json({ id: assessment.id, client_name: assessment.client_name, status: assessment.status, answers });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao buscar assessment público', e);
   }
 });
 
@@ -191,7 +191,7 @@ assessmentsApp.post('/public/:token/answers', async (c) => {
 
     return c.json({ ok: true, saved: batch.length });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao salvar respostas do assessment público', e);
   }
 });
 
@@ -202,7 +202,7 @@ assessmentsApp.get('/', async (c) => {
     ).all();
     return c.json(results);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar assessments', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar assessments', e);
   }
 });
 
@@ -222,7 +222,7 @@ assessmentsApp.get('/:id', async (c) => {
       total_blocks: 10,
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar assessment', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar assessment', e);
   }
 });
 
@@ -234,7 +234,7 @@ assessmentsApp.get('/:id/answers', async (c) => {
     ).bind(id).all();
     return c.json(results);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar respostas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar respostas', e);
   }
 });
 
@@ -261,7 +261,7 @@ assessmentsApp.get('/:id/block/:num', async (c) => {
 
     return c.json({ block: num, questions: questionsWithAnswers });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao buscar bloco', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar bloco', e);
   }
 });
 
@@ -305,7 +305,7 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
 
     return c.json({ ok: true, block: num, saved: body.answers.length });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar respostas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar respostas', e);
   }
 });
 
@@ -329,7 +329,7 @@ assessmentsApp.get('/:id/pricing', async (c) => {
     const pricing = calculatePricing(pricingAnswers, configOverrides);
     return c.json(pricing);
   } catch (e: any) {
-    return c.json({ error: 'Falha na precificação', detail: e.message }, 500);
+    return erro500(c, 'Falha na precificação', e);
   }
 });
 
@@ -347,7 +347,7 @@ assessmentsApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'assessment.updated', c.get('user')?.email ?? 'system', `Assessment ${id} atualizado: ${updates.join(', ')}`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar assessment', e);
   }
 });
 
@@ -366,7 +366,7 @@ assessmentsApp.put('/:id/pricing', async (c) => {
     await logAudit(c.env.DB, 'assessment.pricing_override', c.get('user')?.email ?? 'system', `Pricing ajustado no assessment ${id}`);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao ajustar precificação do assessment', e);
   }
 });
 
@@ -428,7 +428,7 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 
     return c.json({ ok: true, proposal_id: proposalId, proposal_num: meta.proposalNum, tier: pricing.tier.name, preco: pricing.precoFinal, html: contentHtml });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar proposta', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar proposta', e);
   }
 });
 
@@ -464,6 +464,6 @@ assessmentsApp.post('/:id/convert', async (c) => {
     await logAudit(c.env.DB, 'assessment.converted', c.get('user')?.email ?? 'system', `Assessment ${id} convertido em projeto ${projectId}`);
     return c.json({ ok: true, project_id: projectId }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao converter assessment', detail: e.message }, 500);
+    return erro500(c, 'Falha ao converter assessment', e);
   }
 });

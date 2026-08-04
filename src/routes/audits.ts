@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess } from '../helpers';
+import { logAudit, requireResourceAccess, erro500 } from '../helpers';
 
 export const auditsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectAuditsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -22,7 +22,7 @@ auditsApp.put('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar auditoria', e);
   }
 });
 
@@ -36,7 +36,7 @@ auditsApp.delete('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao excluir auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao excluir auditoria', e);
   }
 });
 
@@ -61,6 +61,6 @@ projectAuditsApp.post('/', async (c) => {
     await logAudit(c.env.DB, 'audit_scheduled', user?.email || 'system', `Audit ${id} scheduled`);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao agendar auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao agendar auditoria', e);
   }
 });

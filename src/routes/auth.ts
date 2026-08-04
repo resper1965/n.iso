@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, genNumericCode, rateLimit, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, SESSION_TTL_SEC } from '../helpers';
+import { genId, genToken, genNumericCode, rateLimit, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, SESSION_TTL_SEC, erro500 } from '../helpers';
 
 /** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
 function clientIp(c: any): string {
@@ -36,7 +36,7 @@ authApp.post('/setup', async (c) => {
     
     return c.json({ ok: true, message: 'Seed user created or already exists' }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Setup failed', detail: e.message }, 500);
+    return erro500(c, 'Setup failed', e);
   }
 });
 
@@ -89,7 +89,7 @@ authApp.post('/login', async (c) => {
     
     return c.json({ token, user, requiresPasswordChange: requiresChange, requiresMfa: exigeMfa });
   } catch (e: any) {
-    return c.json({ error: 'Login failed', detail: e.message }, 500);
+    return erro500(c, 'Login failed', e);
   }
 });
 
@@ -112,7 +112,7 @@ authApp.post('/reset-password-first', async (c) => {
     await logAudit(c.env.DB, 'auth.password_changed_first', user.email, `Senha do primeiro acesso redefinida com sucesso`);
     return c.json({ ok: true, message: 'Senha redefinida com sucesso' });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao redefinir senha', detail: e.message }, 500);
+    return erro500(c, 'Erro ao redefinir senha', e);
   }
 });
 
@@ -164,7 +164,7 @@ authApp.post('/forgot-password', async (c) => {
 
     return c.json({ ok: true, message: 'Código de recuperação enviado.' });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao solicitar recuperação', detail: e.message }, 500);
+    return erro500(c, 'Erro ao solicitar recuperação', e);
   }
 });
 
@@ -201,7 +201,7 @@ authApp.post('/reset-password', async (c) => {
 
     return c.json({ ok: true, message: 'Senha redefinida com sucesso.' });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao redefinir senha', detail: e.message }, 500);
+    return erro500(c, 'Erro ao redefinir senha', e);
   }
 });
 
@@ -237,6 +237,6 @@ authApp.post('/change-password', async (c) => {
     await logAudit(c.env.DB, 'auth.password_changed', user.email, 'Senha alterada com sucesso');
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao alterar senha', detail: e.message }, 500);
+    return erro500(c, 'Falha ao alterar senha', e);
   }
 });

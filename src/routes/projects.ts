@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, requireResourceAccess, verifyPassword, validateUpload } from '../helpers';
+import { genId, genToken, logAudit, requireResourceAccess, verifyPassword, validateUpload, erro500 } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -48,7 +48,7 @@ projectsApp.post('/', async (c) => {
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar projeto', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar projeto', e);
   }
 });
 
@@ -68,7 +68,7 @@ projectsApp.get('/', async (c) => {
     const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
     return c.json(results);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao listar projetos', detail: e.message }, 500);
+    return erro500(c, 'Falha ao listar projetos', e);
   }
 });
 
@@ -112,7 +112,7 @@ projectsApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'project.updated', user?.email ?? 'system', `Projeto ${id} atualizado: ${updates.join(', ')}`, '', '', id);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar projeto', e);
   }
 });
 
@@ -153,7 +153,7 @@ projectsApp.put('/:id/phases/:num', async (c) => {
     await logAudit(c.env.DB, 'phase.updated', c.get('user')?.email ?? 'system', `Fase ${num} do projeto ${projectId} atualizada`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar fase do projeto', e);
   }
 });
 
@@ -181,7 +181,7 @@ projectsApp.post('/:id/interviews', async (c) => {
     await logAudit(c.env.DB, 'interviews.saved', c.get('user')?.email ?? 'system', `Salvas ${answers.length} respostas de entrevista para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, count: answers.length });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao salvar entrevistas', detail: e.message }, 500);
+    return erro500(c, 'Falha ao salvar entrevistas', e);
   }
 });
 
@@ -233,7 +233,7 @@ projectsApp.post('/:id/documents/upload', async (c) => {
     await logAudit(c.env.DB, 'document.uploaded', user?.email || 'system', `Documento ${file.name} carregado para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: docId, sha256: realSha256 }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha no upload de documento', detail: e.message }, 500);
+    return erro500(c, 'Falha no upload de documento', e);
   }
 });
 
@@ -262,7 +262,7 @@ projectsApp.put('/:id/documents/:docId', async (c) => {
     await logAudit(c.env.DB, 'document.updated', user?.email || 'system', `Documento ${docId} atualizado no projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar documento', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar documento', e);
   }
 });
 
@@ -301,7 +301,7 @@ projectsApp.post('/:id/assets', async (c) => {
     await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar ativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar ativo', e);
   }
 });
 
@@ -343,7 +343,7 @@ projectsApp.put('/:id/assets/:assetId', async (c) => {
     const updated = await c.env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(assetId).first();
     return c.json({ ok: true, asset: updated });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao atualizar ativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar ativo', e);
   }
 });
 
@@ -370,7 +370,7 @@ projectsApp.delete('/:id/assets/:assetId', async (c) => {
     await logAudit(c.env.DB, 'asset.removed', user?.email || 'system', `Ativo ${assetId} removido do projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao remover ativo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao remover ativo', e);
   }
 });
 
@@ -410,7 +410,7 @@ projectsApp.post('/:id/scope-changes', async (c) => {
     await logAudit(c.env.DB, 'scope_change.created', c.get('user')?.email || 'system', `Solicitação de alteração de escopo ${changeId} criada para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: changeId });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao registrar alteração de escopo', detail: e.message }, 500);
+    return erro500(c, 'Falha ao registrar alteração de escopo', e);
   }
 });
 
@@ -478,7 +478,7 @@ projectsApp.post('/:id/migrate-27701', async (c) => {
       new_controls_created: created,
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha na migração 27701', detail: e.message }, 500);
+    return erro500(c, 'Falha na migração 27701', e);
   }
 });
 
@@ -521,7 +521,7 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
       new_controls_created: created,
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha na migração 27701:2025', detail: e.message }, 500);
+    return erro500(c, 'Falha na migração 27701:2025', e);
   }
 });
 
@@ -598,7 +598,7 @@ projectsApp.post('/:id/dpia', async (c) => {
     await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar DPIA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar DPIA', e);
   }
 });
 
@@ -628,7 +628,7 @@ projectsApp.get('/:id/audit-pack', async (c) => {
       }
     });
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar pacote de auditoria', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar pacote de auditoria', e);
   }
 });
 
@@ -659,7 +659,7 @@ projectsApp.post('/:id/auditor-token', async (c) => {
     await logAudit(c.env.DB, 'auditor_token.created', c.get('user')?.email ?? 'system', `Auditor token created for project ${projectId}, valid ${days} days`, '', '', projectId);
     return c.json({ ok: true, token, expires_at: expiresAt }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao gerar token de auditor', detail: e.message }, 500);
+    return erro500(c, 'Falha ao gerar token de auditor', e);
   }
 });
 
@@ -736,7 +736,7 @@ controlsApp.put('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar controle', e);
   }
 });
 
@@ -761,7 +761,7 @@ controlsApp.put('/:id/maturity', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar maturidade', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar maturidade', e);
   }
 });
 
@@ -784,7 +784,7 @@ controlsApp.put('/:id/status', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar status do controle', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar status do controle', e);
   }
 });
 
@@ -838,7 +838,7 @@ const handleControlApprove = async (c: any) => {
     return c.json({ ok: true, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao assinar controle', detail: e.message }, 500);
+    return erro500(c, 'Falha ao assinar controle', e);
   }
 };
 
