@@ -42,7 +42,8 @@ with sync_playwright() as p:
 
     print("\n1. Login sem MFA")
     # `networkidle` nunca chega: a aplicação faz polling de notificações.
-    page.goto(BASE, wait_until="domcontentloaded", timeout=30000)
+    # `/login`, não `/`: a raiz virou a landing pública.
+    page.goto(BASE + "/login", wait_until="domcontentloaded", timeout=30000)
     page.wait_for_selector("#login-email", timeout=20000)
     page.fill("#login-email", "teste@ness.io")
     page.fill("#login-password", "password123")

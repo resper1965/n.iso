@@ -224,7 +224,11 @@ app.route('', risks);
 app.route('', policies);
 app.route('', integrations);
 
-// 7. Static Files Fallback (catch-all — deve ser a última rota)
+// 7. Static Files Fallback (catch-all — deve ser a última rota).
+// `dist/index.html` é a landing pública; `dist/login.html` é o shell do app
+// (login + SPA). Rota desconhecida cai na landing (fallback abaixo), não no
+// login — mostrar a home pública para link quebrado é mais correto que
+// derrubar em uma tela de autenticação sem contexto.
 app.get('/*', async (c) => {
   const path = new URL(c.req.url).pathname;
   if (path.startsWith('/api/')) {

@@ -66,9 +66,23 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `policy-generator.ts`, `embeddings.ts`, `project-setup.ts`.
 - **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
 - **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
-  Entrada `frontend/index.html` + `src/main.js`; `router.js`, `state.js`
-  (estado global `S`), `api.js`, `ui.js`, `globals.js`, `src/views/*.js`.
-  `politicas.html` e o portal publico de politicas.
+  Duas páginas raiz, propósito diferente:
+  - `frontend/public/index.html` — landing pública (marketing + pricing ao
+    vivo via `/api/v1/public/pricing`), copiada verbatim pelo Vite. Serve `/`.
+  - `frontend/login.html` — o app de verdade (login + SPA), entrada do Vite
+    (`vite.config.js: rollupOptions.input`), com `src/main.js`, `router.js`,
+    `state.js` (estado global `S`), `api.js`, `ui.js`, `globals.js`,
+    `src/views/*.js`. Serve `/login`.
+  - `frontend/public/politicas.html` — portal público de confirmação de
+    leitura de política (LGPD art. 18 / ISO A.6.3). Serve `/politicas`
+    (`/politicas.html` redireciona, 307, via `html_handling` do Workers
+    Assets). Ficou fora de `dist/` por meses até 2026-08 — não estava na
+    lista de entradas do Vite, então nunca era copiado; qualquer link externo
+    para ele caía silenciosamente na tela de login. Confira antes de mexer:
+    `curl -sL <domínio>/politicas.html` deve devolver o título "Portal de
+    Ciência de Políticas", não o do app.
+  - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
+    `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
   `migrations/`, ultima a **0020**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de

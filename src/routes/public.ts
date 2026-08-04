@@ -5,11 +5,14 @@ import { logAudit, genNumericCode, erro500 } from '../helpers';
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
 publicApp.get('/pricing', async (c) => {
+  // Texto em PT-BR: "Sem i18n. O produto é PT-BR." (AGENTS.md). Nenhum outro
+  // consumidor no app lê este endpoint — só a landing pública — então
+  // traduzir aqui não quebra nenhuma outra tela.
   const tiers = [
-    { id: 'foundation', name: 'Foundation', price: 'R$25.000', features: ['Assessment Pre-Sales','Gap Analysis','Policy Templates','Basic Reporting'], max_controls: 30, max_users: 3 },
-    { id: 'standard', name: 'Standard', price: 'R$55.000', features: ['Everything in Foundation','AI Policy Generation','Risk Assessment','Vendor Management','ROPA Module','Audit Calendar'], max_controls: 93, max_users: 10 },
-    { id: 'enterprise', name: 'Enterprise', price: 'R$95.000', features: ['Everything in Standard','Bulk AI Generation','ISO 27701 Migration','Executive Reports','API Keys','Webhooks','CSV Exports'], max_controls: 93, max_users: 25 },
-    { id: 'critical', name: 'Critical Infrastructure', price: 'R$180.000', features: ['Everything in Enterprise','Dedicated Support','Custom Templates','CAPA Module','Certification Tracking','AI Compliance Assistant','SLA 99.9%'], max_controls: 93, max_users: 50 },
+    { id: 'foundation', name: 'Foundation', price: 'R$25.000', features: ['Assessment pré-venda','Análise de gaps','Templates de política','Relatório básico'], max_controls: 30, max_users: 3 },
+    { id: 'standard', name: 'Standard', price: 'R$55.000', features: ['Tudo do Foundation','Geração de política por IA','Avaliação de risco','Gestão de fornecedores','Módulo ROPA','Calendário de auditoria'], max_controls: 93, max_users: 10 },
+    { id: 'enterprise', name: 'Enterprise', price: 'R$95.000', features: ['Tudo do Standard','Geração de política em lote','Migração para ISO 27701','Relatórios executivos','Chaves de API','Webhooks','Exportação CSV'], max_controls: 93, max_users: 25 },
+    { id: 'critical', name: 'Critical Infrastructure', price: 'R$180.000', features: ['Tudo do Enterprise','Suporte dedicado','Templates customizados','Módulo CAPA','Acompanhamento de certificação','Assistente de compliance por IA','SLA 99,9%'], max_controls: 93, max_users: 50 },
   ];
   return c.json({ ok: true, tiers });
 });
