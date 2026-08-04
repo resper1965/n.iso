@@ -470,6 +470,62 @@ policies.post('/api/v1/projects/:id/controls/:controlId/restore-version', async 
   return c.json({ ok: true, version: nextVer, policy_markdown: row.policy_text });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EDIÇÃO MANUAL DE POLÍTICA — sem IA, texto fornecido diretamente pelo chamador
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/v1/projects/:id/controls/:controlId/policy
+policies.post('/api/v1/projects/:id/controls/:controlId/policy', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const controlIdRaw = c.req.param('controlId');
+    const body = await c.req.json<{ text?: string }>().catch(() => ({} as any));
+    const { text } = body;
+    if (!text || !text.trim()) return c.json({ error: 'text é obrigatório' }, 400);
+
+    // ponytail: mesmo limite de 2MB usado em approve-document, para evitar exaustão de memória na Edge
+    if (text.length > 2 * 1024 * 1024) {
+      return c.json({ error: 'Texto da política excede o limite de 2MB' }, 400);
+    }
+
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const control = await c.env.DB.prepare(
+      'SELECT * FROM compliance_controls WHERE (id = ? OR id = ?) AND project_id = ?'
+    ).bind(normId, controlIdRaw, projectId).first<any>();
+    if (!control) return c.json({ error: 'Controle não encontrado' }, 404);
+
+    const userEmail = c.get('user')?.email ?? 'system';
+    // control.id é o id canônico que de fato existe em compliance_controls — usar
+    // normId aqui quebraria a FK de policy_versions.control_id quando controlIdRaw
+    // já vier normalizado (ex.: "ctrl-a51"), pois normId dobraria o prefixo.
+    const canonicalId = control.id as string;
+
+    // Atualiza o texto "atual" e zera aprovações — o conteúdo mudou, aprovações anteriores não valem mais
+    await c.env.DB.prepare(
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+    ).bind(text, canonicalId, projectId).run();
+
+    // Registra a nova versão no histórico
+    const countRow = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND control_id = ?'
+    ).bind(projectId, canonicalId).first<{ count: number }>();
+    const nextVer = (countRow?.count || 0) + 1;
+    const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+    await c.env.DB.prepare(
+      'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(versionId, projectId, canonicalId, nextVer, text, userEmail).run();
+
+    await logAudit(c.env.DB, 'policy.manually_edited', userEmail, `Política do controle ${canonicalId} editada manualmente (versão ${nextVer}), projeto ${projectId}`);
+
+    return c.json({ ok: true, control_id: canonicalId, version: nextVer });
+  } catch (e: any) {
+    return c.json({ error: 'Falha ao editar política', detail: e.message }, 500);
+  }
+});
+
 // --- TEMPLATES DE POLÍTICAS ---
 policies.get('/api/v1/policies/templates', async (c) => {
   try {
