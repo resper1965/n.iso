@@ -389,6 +389,47 @@ describe('nISO API (D1 e KV reais)', () => {
       expect(comPermissao.status, await comPermissao.clone().text()).toBe(201);
     });
 
+    it('trilha de auditoria identifica a pessoa por trás da chave, não só o id', async () => {
+      const fd = new FormData();
+      fd.append('file', new File(['x'], 'auditoria.txt', { type: 'text/plain' }));
+      const envio = await req(`/api/v1/projects/${PROJ}/evidence/upload`, {
+        method: 'POST', headers: { 'X-API-Key': CHAVE_ESCRITA }, body: fd,
+      });
+      expect(envio.status, await envio.clone().text()).toBe(201);
+
+      const log = await env.DB.prepare(
+        "SELECT actor FROM audit_logs WHERE action = 'evidence.uploaded' ORDER BY created_at DESC"
+      ).first<any>();
+      // O nome da chave ('escrita', da fixture) é o que o auditor lê; o id fica
+      // junto porque é ele que identifica a chave sem ambiguidade.
+      expect(log.actor).toBe('apikey:key-rw (escrita)');
+
+      // Mesma identidade na evidência, senão o `uploaded_by` contradiz o log.
+      const ev = await env.DB.prepare(
+        'SELECT uploaded_by FROM evidence WHERE file_name = ?'
+      ).bind('auditoria.txt').first<any>();
+      expect(ev.uploaded_by).toBe('apikey:key-rw (escrita)');
+    });
+
+    it('nome da chave não falsifica ator no log: prefixo vem antes, e quebra de linha some', async () => {
+      await env.DB.prepare(
+        `INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`
+      ).bind('key-spoof', PROJ, await sha256Hex('chave-spoof'), 'admin@ness.io\nactor: admin@ness.io', 'write', 'Active').run();
+
+      const fd = new FormData();
+      fd.append('file', new File(['x'], 'spoof.txt', { type: 'text/plain' }));
+      await req(`/api/v1/projects/${PROJ}/evidence/upload`, {
+        method: 'POST', headers: { 'X-API-Key': 'chave-spoof' }, body: fd,
+      });
+
+      const log = await env.DB.prepare(
+        "SELECT actor FROM audit_logs WHERE action = 'evidence.uploaded' ORDER BY created_at DESC"
+      ).first<any>();
+      expect(log.actor).toBe('apikey:key-spoof (admin@ness.io actor: admin@ness.io)');
+      expect(log.actor.startsWith('apikey:')).toBe(true);
+      expect(log.actor).not.toContain('\n');
+    });
+
     it('chave sem projeto não autentica — senão enxergaria o portfólio inteiro', async () => {
       // `api_keys.project_id` é nullable no schema. Se uma chave assim passasse
       // pela autenticação, viraria um `client` sem `client_project_id`, e o

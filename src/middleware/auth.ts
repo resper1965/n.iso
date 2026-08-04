@@ -10,7 +10,7 @@ import { sha256Hex, sessionRevoked } from '../helpers';
 async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variables['user']; writeCapable: boolean } | Response> {
   const keyHash = await sha256Hex(apiKey);
   const row = await c.env.DB.prepare(
-    'SELECT id, project_id, permissions, status, expires_at FROM api_keys WHERE key_hash = ?'
+    'SELECT id, project_id, name, permissions, status, expires_at FROM api_keys WHERE key_hash = ?'
   ).bind(keyHash).first();
 
   if (!row || row.status !== 'Active' || (row.expires_at && new Date(row.expires_at) < new Date())) {
@@ -43,15 +43,34 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
   // API keys entram como papel `client` escopado ao projeto, herdando o isolamento
   // de tenant. `writeCapable` é devolvido porque a autorização de escrita de uma
   // chave é o campo `permissions` acima — não o allow-list de humano read-only.
+  //
+  // `id` continua sendo só `apikey:<id>`: é ele que o rate limit usa como conta
+  // (middleware/rate-limit.ts) e o nome não tem por que entrar nessa chave.
+  //
+  // `email` é o campo que vira `actor` no audit_logs e `uploaded_by` na evidência,
+  // então é onde a rastreabilidade humana precisa aparecer: `apikey:<id>` sozinho
+  // diz QUE chave agiu, mas o auditor quer QUEM. O prefixo vem antes do nome de
+  // propósito — o nome é texto que o criador da chave escolhe, e um nome como
+  // "admin@ness.io" passaria por usuário real se aparecesse primeiro. Com o
+  // prefixo na frente, todo ator de chave é inconfundível, escreva-se o que for
+  // no nome.
   return {
     user: {
       id: `apikey:${row.id}`,
-      email: `apikey:${row.id}`,
+      email: atorDaChave(row.id as string, row.name as string | null),
       role: 'client',
       client_project_id: row.project_id,
     },
     writeCapable,
   };
+}
+
+/** Identidade da chave para a trilha de auditoria: `apikey:<id> (<nome>)`. */
+function atorDaChave(id: string, name: string | null): string {
+  // Quebra de linha no nome viraria injeção de linha falsa num log lido como
+  // texto; o teto evita que um nome enorme inche cada registro de auditoria.
+  const limpo = (name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return limpo ? `apikey:${id} (${limpo})` : `apikey:${id}`;
 }
 
 // Rotas públicas validadas por token NO PRÓPRIO handler (não exigem sessão nISO):
