@@ -91,20 +91,34 @@ projectRopaApp.post('/:recordId/approve', async (c) => {
       return c.json({ error: 'Papel de aprovação inválido' }, 400);
     }
 
-    if (user.email === '44273656+resper1965@users.noreply.github.com' && role === 'ceo') {
-      return c.json({ error: 'Operação proibida: O Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).' }, 403);
-    }
-
     const userGov = await c.env.DB.prepare(
       'SELECT * FROM project_governance WHERE project_id = ? AND email = ?'
     ).bind(projectId, user.email).first<any>();
 
+    // Quem pode assinar cada papel sai do cargo declarado na matriz de
+    // governança do projeto — não de um e-mail no código. Havia dois endereços
+    // fixos aqui: um que PROIBIA aquela pessoa de assinar como Direção, e outro
+    // que a ISENTAVA da checagem de cargo do CISO. Os dois diziam a mesma coisa
+    // ("esta pessoa é o Líder SGSI"), e é isso que `project_governance` existe
+    // para dizer — com a diferença de que o dado acompanha troca de gente,
+    // enquanto o e-mail no código acompanha o deploy.
+    const cargo = (userGov?.job_title || '').toLowerCase();
+    const ehLiderSgsi = cargo.includes('sgsi') || cargo.includes('dpo') || cargo.includes('ciso');
+    const ehDirecao = cargo.includes('ceo') || cargo.includes('diret') || cargo.includes('execut');
+
+    // Segregação de funções: quem assina como Líder SGSI não assina também como
+    // Direção Executiva. Duas assinaturas da mesma pessoa não são duas
+    // aprovações — é a mesma aprovação carimbada duas vezes.
+    if (role === 'ceo' && ehLiderSgsi) {
+      return c.json({ error: 'Operação proibida: O Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).' }, 403);
+    }
+
     if (userGov) {
-      if (role === 'ciso' && !userGov.job_title.toLowerCase().includes('sgsi') && !userGov.job_title.toLowerCase().includes('dpo') && user.email !== '44273656+resper1965@users.noreply.github.com') {
-        return c.json({ error: 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura.' }, 403);
+      if (role === 'ciso' && !ehLiderSgsi) {
+        return c.json({ error: 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.' }, 403);
       }
-      if (role === 'ceo' && !userGov.job_title.toLowerCase().includes('ceo') && !userGov.job_title.toLowerCase().includes('diret') && !userGov.job_title.toLowerCase().includes('execut')) {
-        return c.json({ error: 'Apenas a Direção Executiva designada pode realizar esta assinatura.' }, 403);
+      if (role === 'ceo' && !ehDirecao) {
+        return c.json({ error: 'Apenas a Direção Executiva designada pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.' }, 403);
       }
     }
 

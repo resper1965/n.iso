@@ -205,7 +205,11 @@ async function handleApprove(c: any) {
     let targetRole = body.role;
     let approvedBy = dbUser.name;
 
-    if (user.role !== 'platform_admin' && user.role !== 'ciso' && user.role !== 'ceo' && user.email !== 'admin@ness.io') {
+    // A isenção por e-mail (`user.email !== 'admin@ness.io'`) saiu daqui: a
+    // conta em questão tem papel `platform_admin`, que a primeira condição já
+    // isenta. Era identidade fixa no código fazendo o que o papel já fazia — e
+    // que passaria a conceder acesso sozinha no dia em que o papel mudasse.
+    if (user.role !== 'platform_admin' && user.role !== 'ciso' && user.role !== 'ceo') {
       const govMember = (await c.env.DB.prepare(
         'SELECT * FROM project_governance WHERE project_id = ? AND email = ?'
       ).bind(evidence.project_id, email).first()) as any;
