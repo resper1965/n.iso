@@ -18,7 +18,7 @@ if (!NISO_API_KEY) {
 }
 const server = new Server({
     name: "niso-server",
-    version: "1.3.0",
+    version: "1.4.0",
 }, {
     capabilities: {
         tools: {},
@@ -390,8 +390,7 @@ const TOOLS = [
 async function nisoGet(path) {
     const response = await fetch(`${NISO_BASE_URL}${path}`, {
         headers: {
-            Authorization: `Bearer ${NISO_API_KEY}`,
-            "x-api-key": NISO_API_KEY || ""
+            "X-API-Key": NISO_API_KEY ?? ""
         },
     });
     const data = await response.json();
@@ -401,8 +400,7 @@ async function nisoPost(path, body, method = "POST") {
     const response = await fetch(`${NISO_BASE_URL}${path}`, {
         method,
         headers: {
-            Authorization: `Bearer ${NISO_API_KEY}`,
-            "x-api-key": NISO_API_KEY || "",
+            "X-API-Key": NISO_API_KEY ?? "",
             "Content-Type": "application/json",
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -432,8 +430,7 @@ async function nisoUploadText(path, campos) {
     const response = await fetch(`${NISO_BASE_URL}${path}`, {
         method: "POST",
         headers: {
-            Authorization: `Bearer ${NISO_API_KEY}`,
-            "x-api-key": NISO_API_KEY || "",
+            "X-API-Key": NISO_API_KEY ?? "",
         },
         body: form,
     });

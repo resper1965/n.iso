@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
 import { sha256Hex, sessionRevoked } from '../helpers';
+import { apiKeyRoleViolation } from '../auth-policy';
 
 /**
  * Resolve o usuário a partir de uma API key (X-API-Key). Retorna o contexto de
@@ -31,10 +32,23 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
   }
 
   // Enforce permissions: chaves 'read' (o default) não podem executar mutações.
+  // 'consultant' e 'auditor' escrevem, mas cada um só no seu conjunto de rotas
+  // (ver auth-policy.ts) — é a independência 9.2 aplicada no backend.
   const method = c.req.method.toUpperCase();
-  const writeCapable = row.permissions === 'write' || row.permissions === 'admin';
+  const writeCapable =
+    row.permissions === 'write' ||
+    row.permissions === 'admin' ||
+    row.permissions === 'consultant' ||
+    row.permissions === 'auditor';
   if (!writeCapable && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
     return c.json({ error: 'Forbidden: read-only API key cannot perform write operations' }, 403);
+  }
+
+  // Separação de papéis: consultor não registra achado; auditor não escreve
+  // implementação. Não afeta 'write'/'admin' (retrocompatível).
+  const roleViolation = apiKeyRoleViolation(row.permissions, method, new URL(c.req.url).pathname);
+  if (roleViolation) {
+    return c.json({ error: roleViolation }, 403);
   }
 
   // last_used_at é best-effort: não deve derrubar a request se falhar.

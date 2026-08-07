@@ -9,6 +9,8 @@ export const createWebhookSchema = z.object({
 export const createApiKeySchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   // Apenas papéis conhecidos: o middleware de auth decide escrita por este valor.
-  permissions: z.enum(['read', 'write', 'admin']).optional(),
+  // 'consultant' e 'auditor' escrevem, mas cada um só no seu conjunto de rotas
+  // (independência 9.2 — ver auth-policy.ts).
+  permissions: z.enum(['read', 'write', 'admin', 'consultant', 'auditor']).optional(),
   expires_at: z.string().optional().nullable()
 });
