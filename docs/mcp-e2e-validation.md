@@ -70,3 +70,51 @@ separação está furada — abrir issue.
 
 > Este teste cobre o loop que os testes unitários (`test/apikey-role.test.ts`) não
 > alcançam: a plataforma publicada + a chave real + o servidor MCP juntos.
+
+## 5. Caminho rápido: smoke por curl (a barreira que vale)
+
+O passo 3 exercita a camada MCP. Para provar a **camada backend** — a que segura
+mesmo um cliente adulterado — sem montar cliente nenhum, rode o script pronto. Ele
+bate direto na API publicada com as duas chaves e confere status + mensagem de
+cada caso, imprimindo ✅/❌ e saindo com código ≠ 0 se qualquer recusa falhar.
+
+A separação de papéis é checada no middleware **antes** do handler, então as
+recusas (casos 3 e 7) valem mesmo sem auditoria/controle real — bastam as chaves
+e o id do projeto.
+
+```bash
+NISO_BASE_URL=https://niso.ness.workers.dev \
+PROJ=<id-do-projeto-de-teste> \
+KEY_CONSULTANT=<chave-e2e-consultor> \
+KEY_AUDITOR=<chave-e2e-auditor> \
+scripts/mcp-e2e-smoke.sh
+# opcionais para os positivos completos:
+#   OTHER_PROJ=<outro-projeto>   → prova o escopo (caso 4)
+#   AUDIT_ID=<auditoria-do-proj> → prova a escrita de auditoria (caso 6)
+```
+
+Casos cobertos pelo script (espelham a tabela do passo 3):
+
+| # | Chave | Chamada | Esperado |
+|---|---|---|---|
+| 1 | consultor | `GET /api/v1/projects` | 200 |
+| 2 | consultor | `POST /projects/<proj>/generate-policy` | **sem** recusa de papel |
+| 3 | consultor | `POST /audits/<x>/findings` | **403** `consultor não registra achado` |
+| 4 | consultor | `GET /projects/<OTHER_PROJ>` | ≠ 200 (barrado por escopo) |
+| 5 | auditor | `GET /api/v1/projects` | 200 |
+| 6 | auditor | `POST /audits/<AUDIT_ID>/findings` | **sem** recusa de papel |
+| 7 | auditor | `POST /projects/<proj>/generate-policy` | **403** `auditor só registra achado` |
+
+Aprovação: o script termina com `APROVADO` e código 0. Qualquer `❌` = separação
+furada (abrir issue). A autenticação da chave é por header **`X-API-Key`** — a
+mesma que o `mcp-server-niso` usa.
+
+## Checklist
+
+- [ ] Chave `e2e-consultor` (papel **consultant**) emitida pela tela, presa ao projeto
+- [ ] Chave `e2e-auditor` (papel **auditor**) emitida pela tela, presa ao projeto
+- [ ] `scripts/mcp-e2e-smoke.sh` terminou com **APROVADO** (código 0)
+- [ ] (opcional) `OTHER_PROJ` conferiu o escopo de projeto (caso 4)
+- [ ] (opcional) `AUDIT_ID` conferiu a escrita de auditoria (caso 6)
+- [ ] (opcional) Os dois servidores MCP configurados e o passo 3 confirmado no cliente
+- [ ] Chaves de teste **revogadas** na tela ao fim
