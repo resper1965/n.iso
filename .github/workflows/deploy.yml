@@ -55,7 +55,7 @@ jobs:
       - name: Run Tests
         run: |
           set -o pipefail
-          run() { npm test -- --run 2>&1 | tee /tmp/niso-test.log; }
+          run() { npm run test:coverage 2>&1 | tee /tmp/niso-test.log; }
           if run; then exit 0; fi
           if grep -qE "other side closed|fetch failed" /tmp/niso-test.log; then
             echo "::warning::Falha casa a flakiness conhecida do pool no teardown; repetindo UMA vez."
@@ -67,8 +67,8 @@ jobs:
       - name: Build Frontend
         run: cd frontend && npm ci && npm run build
 
-      - name: Test Frontend
-        run: cd frontend && npm test
+      - name: Test Frontend (coverage)
+        run: cd frontend && npm run test:coverage
 
       - name: Recusar deploy com migration pendente
         env:

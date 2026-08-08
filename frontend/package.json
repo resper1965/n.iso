@@ -7,9 +7,11 @@
     "build": "vite build && node scripts/copy-templates.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^30.0.1",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"

@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "cf-typegen": "wrangler types",
     "db:backup": "wrangler d1 export niso-db --remote --output backups/niso-backup.sql",
     "db:backup:local": "wrangler d1 export niso-db --local --output backups/local-backup.sql"
@@ -19,5 +20,8 @@
     "vitest": "^1.5.0",
     "wrangler": "^4.107.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@vitest/coverage-istanbul": "^1.5.3"
   }
 }

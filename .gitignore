@@ -28,6 +28,10 @@ lib-cov
 coverage
 \*.lcov
 
+# Relatorios de teste (junit) gerados em CI
+
+test-results
+
 # nyc test coverage
 
 .nyc_output
