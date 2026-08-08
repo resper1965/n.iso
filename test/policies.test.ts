@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
 
 /**
  * Edição manual de política (POST /api/v1/projects/:id/controls/:controlId/policy)
@@ -33,8 +33,13 @@ describe('Edição manual de política (D1 real)', () => {
   const PROJ = 'proj-policy-1';
   const CONTROL_ID = 'ctrl-a51';
 
-  beforeAll(async () => {
+  // `beforeEach` + reset: um teste cria a versao 1 pela rota e o outro semeia a
+  // versao 1 e espera a 2 — cada um precisa comecar sem versoes previas (o pool
+  // novo isola storage so por arquivo).
+  beforeEach(async () => {
     await applySchema();
+    await resetData();
+    await resetSessions();
     await env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`
     ).bind(PROJ, 'Cliente Política', 'ISO 27001', 'controller', 'Active').run();

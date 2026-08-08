@@ -65,13 +65,30 @@ Base 2026-08 (com `all: true`, contando todo o `src/`):
 | Worker (backend) | ~49% | suíte de integração ampla (341 testes) |
 | Frontend | ~6,9% | baixo: as views grandes (dashboard, admin, project) não têm teste **unitário** — são exercitadas pela integração do worker; cobertura real delas viria de **E2E de navegador (Playwright)**, ainda não montado |
 
-## Trabalho à parte: upgrade da stack para vitest 4
+## Isolamento de storage entre testes (importante ao escrever teste novo)
 
-O worker roda hoje em `vitest` 1.5.x + `@cloudflare/vitest-pool-workers` 0.4.x.
-O upgrade para `vitest` 4 + pool 0.20.x é viável (a config migra de
-`defineWorkersConfig`/`poolOptions` para o plugin `cloudflareTest`), **mas não é
-pré-requisito da cobertura** — istanbul já funciona na stack atual. O upgrade fica
-para um PR próprio porque o pool novo muda o **isolamento de storage entre testes**
-(deixa de resetar a cada `it`), o que quebra ~10 testes em ~6 arquivos que contam
-com esse reset (mfa, signatures, policies, session-revocation, data-subject,
-input-validation) — cada um precisa ser migrado para semear/limpar por conta.
+O worker roda em `vitest` 4 + `@cloudflare/vitest-pool-workers` 0.20.x. A config
+usa o plugin `cloudflareTest` (não mais `defineWorkersConfig`/`poolOptions`).
+
+O ponto que pega: **o pool isola storage (D1/KV) apenas POR ARQUIVO, não por
+`it()`**. Um teste NÃO começa com o banco limpo — ele vê tudo que os testes
+anteriores do mesmo arquivo gravaram. (A stack antiga, 0.4.x, resetava a cada
+`it`; isso foi removido e não há config para trazer de volta.)
+
+Se os seus testes semeiam ids fixos ou acumulam mutação na mesma linha, use um
+`beforeEach` que restaura o estado, com os helpers de `test/helpers/d1.ts`:
+
+```ts
+import { applySchema, resetData, resetSessions } from './helpers/d1';
+
+beforeEach(async () => {
+  await applySchema();     // cria as tabelas (idempotente)
+  await resetData();       // apaga todas as linhas (menos audit_logs)
+  await resetSessions();   // limpa o KV de sessão
+  // ...semear o cenário do teste...
+});
+```
+
+- `resetData()` apaga com `PRAGMA defer_foreign_keys` (as FKs estão ativas) e
+  **pula `audit_logs`**, que é append-only por trigger no DB.
+- Testes read-only ou que já usam ids únicos por teste não precisam disso.

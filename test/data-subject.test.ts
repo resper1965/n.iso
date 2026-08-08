@@ -3,7 +3,7 @@ import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword } from '../src/helpers';
 import { interpretarRetencao, ropaVencidos } from '../src/services/data-subject';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, resetData, sessionFor } from './helpers/d1';
 
 /**
  * Direitos do titular (LGPD art. 18) e retenção (art. 16).
@@ -167,6 +167,9 @@ describe('Requisição de titular', () => {
 describe('Retenção vencida', () => {
   beforeAll(async () => {
     await applySchema();
+    // Limpa o que o describe anterior semeou (p1/u1) — o pool novo isola storage
+    // so por arquivo, entao os describes compartilham o mesmo D1.
+    await resetData();
     const hash = await hashPassword('password123');
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','C','ISO 27001','controller','Active')`),

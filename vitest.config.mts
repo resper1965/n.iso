@@ -1,7 +1,14 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
-import { configDefaults } from 'vitest/config';
+import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
+import { defineConfig, configDefaults } from 'vitest/config';
 
-export default defineWorkersConfig({
+// Migrado para vitest 4 + @cloudflare/vitest-pool-workers 0.20.x: a API de
+// `poolOptions.workers` saiu; o pool agora entra como PLUGIN `cloudflareTest`.
+export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.test.jsonc' },
+    }),
+  ],
   test: {
     // Esta suíte roda no runtime de Workers. `frontend/` tem a sua própria, sob
     // jsdom (`frontend/vitest.config.js`), e os testes de lá se penduram em
@@ -46,11 +53,6 @@ export default defineWorkersConfig({
         branches: 36,
         functions: 52,
         lines: 49,
-      },
-    },
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: './wrangler.test.jsonc' },
       },
     },
   },

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword } from '../src/helpers';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
 
 /**
  * Assinatura eletrônica (aprovação de controle e de evidência) contra D1 REAL.
@@ -24,8 +24,12 @@ describe('Assinatura eletrônica (D1 real)', () => {
   let headers: Record<string, string>;
   let headersDirecao: Record<string, string>;
 
-  beforeAll(async () => {
+  // `beforeEach` (nao `beforeAll`) porque o pool novo isola storage so por
+  // arquivo: cada teste de assinatura precisa de `ev-1` sem assinatura previa.
+  beforeEach(async () => {
     await applySchema();
+    await resetData();
+    await resetSessions();
     const hash = await hashPassword('password123');
     await env.DB.batch([
       env.DB.prepare(

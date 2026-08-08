@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword, sha256Hex } from '../src/helpers';
 import {
   gerarSegredoTotp, gerarCodigoTotp, verificarCodigoTotp, base32Encode, base32Decode, uriProvisionamento, gerarCodigosRecuperacao,
 } from '../src/services/totp';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
 
 /**
  * TOTP e o fluxo de MFA.
@@ -81,8 +81,12 @@ describe('TOTP (RFC 6238)', () => {
 describe('Fluxo de MFA', () => {
   let headers: Record<string, string>;
 
-  beforeAll(async () => {
+  // `beforeEach` + reset: o pool novo isola storage so por arquivo, e cada `it`
+  // aqui precisa de u1 com o MFA desligado (varios ativam/desativam o fator).
+  beforeEach(async () => {
     await applySchema();
+    await resetData();
+    await resetSessions();
     const hash = await hashPassword('password123');
     await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u1','a@b.c',?,'A','platform_admin')`).bind(hash).run();
     headers = {
@@ -235,8 +239,12 @@ describe('Fluxo de MFA', () => {
 describe('MFA imposto no login', () => {
   let senhaHash: string;
 
-  beforeAll(async () => {
+  // `beforeEach` + reset: cada `it` ativa o MFA de u9 inline e conta que o do
+  // teste anterior nao sobreviveu (storage isolado so por arquivo no pool novo).
+  beforeEach(async () => {
     await applySchema();
+    await resetData();
+    await resetSessions();
     senhaHash = await hashPassword('password123');
     await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u9','mfa@ness.io',?,'Com MFA','platform_admin')`).bind(senhaHash).run();
     await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u8','sem@ness.io',?,'Sem MFA','platform_admin')`).bind(senhaHash).run();
