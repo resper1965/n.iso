@@ -48,11 +48,27 @@ jobs:
       - name: TypeScript Check
         run: npx tsc --noEmit
 
+      # Retry GATEADO POR ASSINATURA: só re-tenta se a falha casar a flakiness
+      # conhecida do pool no teardown (`fetch failed / other side closed`).
+      # Qualquer outra falha propaga na hora — o retry não pode publicar um bug
+      # real atribuindo a primeira falha à flakiness.
       - name: Run Tests
-        run: npm test -- --run
+        run: |
+          set -o pipefail
+          run() { npm test -- --run 2>&1 | tee /tmp/niso-test.log; }
+          if run; then exit 0; fi
+          if grep -qE "other side closed|fetch failed" /tmp/niso-test.log; then
+            echo "::warning::Falha casa a flakiness conhecida do pool no teardown; repetindo UMA vez."
+            run && exit 0
+          fi
+          echo "::error::Falha de teste NÃO é a flakiness conhecida — não re-tento."
+          exit 1
 
       - name: Build Frontend
         run: cd frontend && npm ci && npm run build
+
+      - name: Test Frontend
+        run: cd frontend && npm test
 
       - name: Recusar deploy com migration pendente
         env:
