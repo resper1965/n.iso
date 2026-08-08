@@ -1,0 +1,72 @@
+# Validação E2E da integração MCP (consultor × auditor)
+
+> Roteiro para provar, contra o ambiente publicado, que a separação de papéis e o
+> escopo de projeto funcionam ponta-a-ponta. Precisa de: acesso **Platform Admin**
+> à plataforma (para emitir chaves) e Node instalado (para o `mcp-server-niso`).
+
+## 1. Emitir as chaves (tela nova, Platform Admin)
+
+Menu **API Keys** (visível só para Platform Admin) → selecione o **projeto de teste** → **+ Nova Chave**:
+
+1. Nome `e2e-consultor`, papel **consultant**, expiração 30 dias → copie a chave.
+2. Nome `e2e-auditor`, papel **auditor**, expiração 30 dias → copie a chave.
+
+(A chave aparece uma única vez. Ambas ficam presas ao projeto selecionado.)
+
+## 2. Configurar os dois servidores MCP
+
+No cliente MCP (Claude Code, Cursor, Antigravity…), com o `mcp-server-niso` já
+buildado (`cd mcp-server-niso && npm run build`):
+
+```json
+{
+  "mcpServers": {
+    "niso-consultant": {
+      "command": "node",
+      "args": ["<path>/mcp-server-niso/build/index.js"],
+      "env": {
+        "NISO_API_KEY": "<chave-e2e-consultor>",
+        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_ROLE": "consultant",
+        "NISO_PROJECT_ID": "<id-do-projeto-de-teste>"
+      }
+    },
+    "niso-auditor": {
+      "command": "node",
+      "args": ["<path>/mcp-server-niso/build/index.js"],
+      "env": {
+        "NISO_API_KEY": "<chave-e2e-auditor>",
+        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_ROLE": "auditor"
+      }
+    }
+  }
+}
+```
+
+## 3. Casos de teste e resultado esperado
+
+| # | Servidor | Ação | Esperado |
+|---|---|---|---|
+| 1 | consultant | "liste os projetos do nISO" | ✅ retorna o portfólio (ou só o projeto, se a chave for escopada) |
+| 2 | consultant | "gere o SoA do projeto \<id\>" | ✅ executa (escrita de implementação permitida) |
+| 3 | consultant | "registre um achado de auditoria no projeto \<id\>" | ❌ **recusado** — a ferramenta nem aparece (NISO_ROLE) **e** o backend responde 403 (papel consultor) |
+| 4 | consultant (pin) | pedir ação em **outro** projeto | ❌ **recusado** — `NISO_PROJECT_ID` barra antes de sair a request; e o backend 403 pelo escopo da chave |
+| 5 | auditor | "liste controles do projeto \<id\>" | ✅ leitura permitida |
+| 6 | auditor | "registre um achado de auditoria" (`POST /audits/:id/findings`) | ✅ executa (escrita de auditoria permitida) |
+| 7 | auditor | "gere uma política" | ❌ **recusado** — ferramenta ausente + backend 403 (papel auditor não escreve implementação) |
+
+**Critério de aprovação:** os casos 1, 2, 5, 6 passam; os casos 3, 4, 7 são
+recusados com a mensagem de papel/escopo. Se qualquer recusa **não** ocorrer, a
+separação está furada — abrir issue.
+
+## 4. Duas camadas, de propósito
+
+- **Camada MCP** (`NISO_ROLE`, `NISO_PROJECT_ID`): a ferramenta errada nem é
+  oferecida/enviada — falha cedo, boa UX.
+- **Camada backend** (`api_keys.permissions` + `auth-policy.ts` + escopo de
+  projeto): a barreira que vale, independente do cliente. Mesmo um cliente MCP
+  adulterado (sem os envs) é barrado aqui.
+
+> Este teste cobre o loop que os testes unitários (`test/apikey-role.test.ts`) não
+> alcançam: a plataforma publicada + a chave real + o servidor MCP juntos.
