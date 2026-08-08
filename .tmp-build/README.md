@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "niso" generated at 2026-07-03T17:35:56.714Z.

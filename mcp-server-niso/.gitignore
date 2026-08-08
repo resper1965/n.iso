@@ -1,0 +1,3 @@
+# Dependencias e saida de build — geradas por npm/tsc
+node_modules/
+build/

@@ -52,9 +52,11 @@
 - ✅ **Backup do D1**: `npm run db:backup` (runbook em `backups/README.md`).
 - ✅ **Migrations gated** no deploy (não aplica sozinho; recusa código à frente do schema).
 - ✅ **Log estruturado**: uma linha JSON por request (`wrangler tail`).
-- ⏳ **Analytics Engine**: o código tem o binding *opcional* e `metrica()` é no-op
-  quando ele falta — e `wrangler.jsonc` **não** define o dataset hoje. Configurar o
-  binding ou tratar métrica como pendente. Dono: **operação**.
+- ✅ **Analytics Engine**: binding `ANALYTICS` (dataset `niso_metrics`) ligado no
+  `wrangler.jsonc`; o dataset é criado no primeiro deploy. O código já era tolerante
+  (`registrarMetrica` no-op sem o binding), então a mudança é aditiva. *Se o plano
+  da conta não tiver Analytics Engine, o `wrangler deploy` falha nesse passo (deploy
+  é atômico — produção não cai); nesse caso, reverter só este binding.*
 - ⏳ **Alerta/monitoramento ativo** (erro 5xx, latência, falha de deploy): confirmar
   se há dashboard/alerta consumindo os logs/métricas. Dono: **operação**.
 - ⏳ **Plano de DR / teste de restore** do backup: validar restauração ao menos uma

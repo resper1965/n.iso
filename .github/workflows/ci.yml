@@ -32,22 +32,13 @@ jobs:
         run: cd frontend && npm run test:coverage
       - name: Build MCP Server
         run: cd mcp-server-niso && npm ci && npm run build
-      # Retry GATEADO POR ASSINATURA: só re-tenta se a falha casar a flakiness
-      # conhecida do @cloudflare/vitest-pool-workers no teardown
-      # (`fetch failed / other side closed`, erro do runtime, não do app).
-      # Qualquer outra falha — inclusive regressão intermitente do app — propaga
-      # imediatamente, para o retry não pintar um bug real de verde.
+      # Roda com cobertura (istanbul) + piso de catraca do worker.
+      # Sem retry: a flakiness de teardown (`fetch failed / other side closed`)
+      # era do pool 0.4.x; no 0.20 (pool reescrito) não reproduz. Se voltar a
+      # aparecer, re-adicionar o retry gateado por assinatura — um flake é
+      # não-destrutivo (basta re-rodar).
       - name: Run Tests
-        run: |
-          set -o pipefail
-          run() { npm run test:coverage 2>&1 | tee /tmp/niso-test.log; }
-          if run; then exit 0; fi
-          if grep -qE "other side closed|fetch failed" /tmp/niso-test.log; then
-            echo "::warning::Falha casa a flakiness conhecida do pool no teardown; repetindo UMA vez."
-            run && exit 0
-          fi
-          echo "::error::Falha de teste NÃO é a flakiness conhecida — não re-tento."
-          exit 1
+        run: npm run test:coverage
 
       # Publica os relatorios (junit dos dois suites + cobertura html/lcov do
       # frontend) como artefato do run. `always()` para sair MESMO em falha —
