@@ -8,7 +8,8 @@ caiu, em que linha, e quanto do código está coberto.
 | Suite | Runtime | Config | Nº de arquivos |
 |---|---|---|---|
 | Worker (backend) | runtime real do Cloudflare Workers (`@cloudflare/vitest-pool-workers`) | `vitest.config.mts` | ~34 |
-| Frontend | jsdom (DOM simulado) | `frontend/vitest.config.js` | 7 |
+| Frontend (unit) | jsdom (DOM simulado) | `frontend/vitest.config.js` | 7 |
+| Frontend (E2E) | Chromium REAL (Playwright), API mockada | `frontend/playwright.config.js` | `frontend/e2e/` |
 | MCP server | build (tsc) | `mcp-server-niso/` | — |
 
 ## Rodar local
@@ -18,11 +19,29 @@ caiu, em que linha, e quanto do código está coberto.
 npm test                        # rapido, sem cobertura
 npm run test:coverage           # com cobertura (istanbul) + piso de catraca
 
-# Frontend
+# Frontend (unit)
 cd frontend
 npm test                        # rapido, sem cobertura
 npm run test:coverage           # com cobertura (v8) + piso de catraca
+
+# Frontend (E2E, navegador real)
+cd frontend
+npm run test:e2e                # serve o build + roda o Chromium
 ```
+
+**E2E neste contêiner:** o Chromium já vem em `/opt/pw-browsers`, mas numa
+revisão diferente da que o Playwright espera — aponte com a env:
+
+```bash
+cd frontend
+PW_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e
+```
+
+No CI, `npx playwright install chromium` baixa a revisão certa e a env não é
+usada. O E2E serve o build na porta 8787 (a mesma origem que `api()` usa em
+localhost) e **mocka a API por interceptação** — não precisa de backend/D1. Cobre
+o que o jsdom não pega: render real, navegação, modais, o gate de papel e a
+jornada da tela de API Keys (criar chave exibida uma vez, revogar).
 
 Abra `coverage/index.html` (worker) ou `frontend/coverage/index.html` (frontend)
 no navegador para o relatório navegável — linha a linha, o que cada teste

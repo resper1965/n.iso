@@ -180,3 +180,7 @@ temp_grc_skills/
 
 # Snapshot de build do worker (gerado por wrangler) — nao versionar
 .tmp-build/
+
+# Playwright (E2E)
+playwright-report/
+.playwright/
