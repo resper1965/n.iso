@@ -398,10 +398,138 @@ import { navigate, render } from '../router.js';
         }
     };
 
-export { renderSettings, renderUsers, renderAuditTrail };
+    // ── API Keys (MCP / Integrações) — EXCLUSIVO Platform Admin ──────────────
+    async function renderApiKeys(c, h, a) {
+        h.textContent = 'API Keys (MCP / Integrações)';
+        a.innerHTML = '';
+        if (!S.user || S.user.role !== 'platform_admin') {
+            c.innerHTML = '<div class="error">Acesso restrito ao Platform Admin.</div>';
+            return;
+        }
+        c.innerHTML = '<div class="loading"></div>';
+        try {
+            if (!S.projects || S.projects.length === 0) { await loadProjects(); }
+            const projects = S.projects || [];
+            if (!S.apiKeysProjectId && projects.length) S.apiKeysProjectId = projects[0].id;
+            const pid = S.apiKeysProjectId;
+            const projOptions = projects.map(p =>
+                `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${escapeHTML(p.project_name || p.client_name || p.id)}</option>`
+            ).join('');
+
+            let keysRows = '';
+            if (pid) {
+                // api() desembrulha o envelope { ok, keys: [...] } e devolve o array direto.
+                // Deixar o erro propagar para o catch externo — não mascarar falha como "sem chaves".
+                const resp = await api('GET', `/api/v1/projects/${pid}/api-keys`);
+                const keys = Array.isArray(resp) ? resp : ((resp && resp.keys) || []);
+                keysRows = keys.length ? keys.map(k => {
+                    const active = k.status === 'Active';
+                    return `<tr>
+                        <td>${escapeHTML(k.name || '')}</td>
+                        <td><code style="font-size:0.75rem">${escapeHTML(k.permissions || 'read')}</code></td>
+                        <td>${window.renderStatusBadge(k.status, active ? 'success' : 'info')}</td>
+                        <td style="font-size:0.75rem;color:var(--muted)">${k.last_used_at ? escapeHTML(String(k.last_used_at)) : '—'}</td>
+                        <td style="font-size:0.75rem;color:var(--muted)">${escapeHTML(String(k.created_at || '').slice(0, 10))}</td>
+                        <td>${active ? `<button class="btn-inline-action" style="border-color:var(--danger);color:var(--danger)" onclick="revokeApiKey('${k.id}')">Revogar</button>` : ''}</td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Nenhuma chave para este projeto.</td></tr>`;
+            }
+
+            c.innerHTML = `
+            <div class="card fade-in" style="margin-bottom:1rem">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">Chaves de API para integrações e agentes MCP. Papéis: <strong>consultant</strong> (implementação), <strong>auditor</strong> (achados de auditoria), <strong>read</strong> (só leitura), <strong>write/admin</strong> (legado). A chave em texto puro aparece <strong>uma única vez</strong> na criação — só o hash é armazenado.</p>
+                <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+                    <div class="form-group" style="flex:1;min-width:220px;margin:0">
+                        <label class="form-label">Projeto</label>
+                        <select class="form-input" onchange="S.apiKeysProjectId=this.value; render();">${projOptions}</select>
+                    </div>
+                    <button class="btn btn-primary" onclick="openApiKeyModal()" ${pid ? '' : 'disabled'}>+ Nova Chave</button>
+                </div>
+            </div>
+            <div class="card fade-in" style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+                    <thead><tr style="text-align:left;color:var(--muted);font-size:0.72rem;text-transform:uppercase">
+                        <th style="padding:0.5rem">Nome</th><th style="padding:0.5rem">Papel</th><th style="padding:0.5rem">Status</th><th style="padding:0.5rem">Último uso</th><th style="padding:0.5rem">Criada</th><th></th>
+                    </tr></thead>
+                    <tbody>${keysRows}</tbody>
+                </table>
+            </div>`;
+        } catch (e) {
+            c.innerHTML = '<div class="error">Erro ao carregar API keys: ' + escapeHTML(e.message) + '</div>';
+        }
+    }
+
+    window.openApiKeyModal = function () {
+        if (!S.apiKeysProjectId) { showToast('Selecione um projeto', 'error'); return; }
+        openModal(`
+            <div class="modal-header"><span class="modal-title">Nova API Key</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            <div style="padding:1.25rem 0;text-align:left">
+                <div class="form-group"><label class="form-label">Nome</label><input id="apikey-name" class="form-input" placeholder="ex: consultor-clienteX"></div>
+                <div class="form-group"><label class="form-label">Papel</label>
+                    <select id="apikey-perm" class="form-input">
+                        <option value="consultant">consultant — implementação</option>
+                        <option value="auditor">auditor — achados de auditoria</option>
+                        <option value="read">read — só leitura</option>
+                        <option value="write">write — legado (escrita ampla)</option>
+                        <option value="admin">admin — legado</option>
+                    </select>
+                </div>
+                <div class="form-group"><label class="form-label">Expiração</label>
+                    <select id="apikey-exp" class="form-input">
+                        <option value="90">90 dias (recomendado)</option>
+                        <option value="30">30 dias</option>
+                        <option value="180">180 dias</option>
+                        <option value="365">1 ano</option>
+                        <option value="">Sem expiração (não recomendado)</option>
+                    </select>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:1rem">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" onclick="createApiKey()">Criar</button>
+                </div>
+            </div>`);
+    };
+
+    window.createApiKey = async function () {
+        const pid = S.apiKeysProjectId;
+        const name = (document.getElementById('apikey-name').value || '').trim();
+        const permissions = document.getElementById('apikey-perm').value;
+        const expDays = document.getElementById('apikey-exp').value;
+        if (!name) { showToast('Informe um nome', 'error'); return; }
+        try {
+            const body = { name, permissions };
+            if (expDays) body.expires_at = new Date(Date.now() + parseInt(expDays, 10) * 86400000).toISOString();
+            const res = await api('POST', `/api/v1/projects/${pid}/api-keys`, body);
+            const key = (res && res.key) || '';
+            openModal(`
+                <div class="modal-header"><span class="modal-title">Chave criada</span><button class="btn-ghost" onclick="forceCloseModal(); render();">Fechar</button></div>
+                <div style="padding:1.25rem 0;text-align:left">
+                    <p style="font-size:0.8rem;color:var(--danger);margin-bottom:0.75rem"><strong>Copie agora.</strong> Esta chave não será exibida novamente — só o hash é armazenado.</p>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input id="apikey-plain" class="form-input" readonly value="${escapeHTML(key)}" style="font-family:monospace;font-size:0.8rem">
+                        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('apikey-plain').value); showToast('Copiada');">Copiar</button>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+                        <button class="btn btn-primary" onclick="forceCloseModal(); render();">Concluir</button>
+                    </div>
+                </div>`);
+        } catch (e) { showToast('Erro ao criar chave: ' + e.message, 'error'); }
+    };
+
+    window.revokeApiKey = async function (id) {
+        if (!confirm('Revogar esta chave? A ação é permanente.')) return;
+        try {
+            await api('DELETE', `/api/v1/api-keys/${id}`);
+            showToast('Chave revogada');
+            render();
+        } catch (e) { showToast('Erro ao revogar: ' + e.message, 'error'); }
+    };
+
+export { renderSettings, renderUsers, renderAuditTrail, renderApiKeys };
 window.renderSettings = renderSettings;
 window.renderUsers = renderUsers;
 window.renderAuditTrail = renderAuditTrail;
+window.renderApiKeys = renderApiKeys;
 window.savePricingConfig = savePricingConfig;
 window.deleteUser = deleteUser;
 window.openUserModal = openUserModal;

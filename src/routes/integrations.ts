@@ -206,6 +206,9 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
 // ─── 7B. API Keys ───────────────────────────────────────────────────────────
 
 integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
+  if (c.get('user').role !== 'platform_admin') {
+    return c.json({ error: 'Forbidden: gestão de API keys é exclusiva do Platform Admin' }, 403);
+  }
   const projectId = c.req.param('id');
   const valid = await validateBody(c, createApiKeySchema);
   if (!valid.success) return valid.response;
@@ -230,6 +233,9 @@ integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
 });
 
 integrations.get('/api/v1/projects/:id/api-keys', async (c) => {
+  if (c.get('user').role !== 'platform_admin') {
+    return c.json({ error: 'Forbidden: gestão de API keys é exclusiva do Platform Admin' }, 403);
+  }
   const projectId = c.req.param('id');
   const result = await c.env.DB.prepare(
     'SELECT id, name, permissions, status, last_used_at, created_at FROM api_keys WHERE project_id = ? ORDER BY created_at DESC'
@@ -238,6 +244,9 @@ integrations.get('/api/v1/projects/:id/api-keys', async (c) => {
 });
 
 integrations.delete('/api/v1/api-keys/:id', async (c) => {
+  if (c.get('user').role !== 'platform_admin') {
+    return c.json({ error: 'Forbidden: gestão de API keys é exclusiva do Platform Admin' }, 403);
+  }
   const id = c.req.param('id');
   await requireResourceAccess(c.env.DB, 'api_keys', id, c.get('user'));
   const ak = await c.env.DB.prepare('SELECT project_id FROM api_keys WHERE id = ?').bind(id).first() as any;

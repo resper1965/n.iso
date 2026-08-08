@@ -57,6 +57,7 @@ export     function navigate(view, data) {
         else if (S.view === 'knowledge') renderKnowledge(c, h, a);
         else if (S.view === 'settings') renderSettings(c, h, a);
         else if (S.view === 'users') renderUsers(c, h, a);
+        else if (S.view === 'api-keys') renderApiKeys(c, h, a);
         else if (S.view === 'assessment-detail') renderAssessmentDetail(c, h, a);
         else if (S.view === 'self-service') renderSelfServiceAssessment(S.currentAssessmentId);
         else if (S.view === 'project-detail') renderProjectDetail(c, h, a);

@@ -352,12 +352,14 @@ window.updateHeaderUser = function updateHeaderUser() {
         const navAuditTrail = document.getElementById('nav-audit-trail');
         const navSettings = document.getElementById('nav-settings');
         const navUsers = document.getElementById('nav-users');
+        const navApiKeys = document.getElementById('nav-api-keys');
 
         if (isClient) {
             if (labelSystem) labelSystem.style.display = 'none';
             if (navAuditTrail) navAuditTrail.style.display = 'none';
             if (navSettings) navSettings.style.display = 'none';
-            
+            if (navApiKeys) navApiKeys.style.display = 'none';
+
             if (S.user.role === 'org_admin') {
                 if (groupSystem) {
                     groupSystem.style.display = 'block';
@@ -380,6 +382,8 @@ window.updateHeaderUser = function updateHeaderUser() {
             }
             if (navAuditTrail) navAuditTrail.style.display = '';
             if (navSettings) navSettings.style.display = '';
+            // API Keys: exclusivo do Platform Admin (nem consultor vê).
+            if (navApiKeys) navApiKeys.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
             if (navUsers) {
                 const canSeeUsers = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
                 navUsers.style.display = canSeeUsers ? '' : 'none';
