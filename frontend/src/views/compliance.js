@@ -27,10 +27,10 @@ import { navigate } from '../router.js';
     // Diagnóstico de Prontidão (F1): busca o raio-x determinístico e mostra num
     // painel agrupado por categoria, com severidade. É auto-diagnóstico, não
     // auditoria — o rótulo vem do próprio backend e é exibido aqui.
-    window.runReadinessCheck = async function (projectId) {
-        openModal(`<div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div><div style="padding:1.5rem 0;text-align:center"><div class="loading"></div></div>`);
+    window.runReadinessCheck = async function (projectId, comIA = false) {
+        openModal(`<div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div><div style="padding:1.5rem 0;text-align:center"><div class="loading"></div>${comIA ? '<p style="font-size:0.75rem;color:var(--muted);margin-top:8px">Analisando com IA…</p>' : ''}</div>`);
         try {
-            const r = await api('GET', `/api/v1/projects/${projectId}/readiness-check`);
+            const r = await api('GET', `/api/v1/projects/${projectId}/readiness-check${comIA ? '?ai=1' : ''}`);
             const cor = { critico: 'var(--danger)', alto: '#e0a800', medio: 'var(--muted)' };
             const rotuloCat = { doc_faltante: 'Documentos faltando', doc_inconsistente: 'Documentos inconsistentes', evidencia_faltante: 'Evidências faltando' };
             const porCat = {};
@@ -44,6 +44,16 @@ import { navigate } from '../router.js';
                         <div style="font-size:0.85rem;margin-top:2px">${escapeHTML(a.descricao)}</div>
                     </div>`).join('');
             }).join('');
+            // Seção de IA (F2): só aparece quando pedida. Marcada como assistida — revisar.
+            const obsIA = r.ai_observacoes || [];
+            const secaoIA = comIA ? `
+                <h4 style="margin:1.2rem 0 0.4rem;font-size:0.9rem">Assistido por IA <span style="font-size:0.65rem;color:var(--muted);text-transform:uppercase">— revisar</span></h4>
+                ${obsIA.length ? obsIA.map(a => `
+                    <div style="border-left:3px dashed ${cor[a.severidade] || 'var(--muted)'};padding:6px 10px;margin:6px 0;background:rgba(255,255,255,0.03)">
+                        <div style="font-size:0.68rem;text-transform:uppercase;color:${cor[a.severidade] || 'var(--muted)'}">${escapeHTML(a.severidade)} · ${escapeHTML(a.requisito)} · ${escapeHTML(String(a.referencia))}</div>
+                        <div style="font-size:0.85rem;margin-top:2px">${escapeHTML(a.descricao)}</div>
+                    </div>`).join('') : '<p style="color:var(--muted);font-size:0.85rem">Nenhuma inconsistência de conteúdo apontada pela IA.</p>'}` : '';
+            const botaoIA = comIA ? '' : `<button class="btn btn-secondary" style="margin-top:0.8rem" onclick="window.runReadinessCheck('${projectId}', true)">Analisar com IA</button>`;
             openModal(`
                 <div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div>
                 <div style="padding:0.5rem 0;text-align:left">
@@ -54,6 +64,8 @@ import { navigate } from '../router.js';
                         <span style="color:var(--muted)"><strong>${r.resumo.medio}</strong> médio</span>
                     </div>
                     ${r.resumo.total ? grupos : '<p style="color:var(--muted)">Nenhum gap encontrado nas verificações automáticas.</p>'}
+                    ${secaoIA}
+                    ${botaoIA}
                 </div>`);
         } catch (e) {
             closeModal();
