@@ -328,7 +328,7 @@ const ISO_GUIDELINES = {
 
                                             ${(S.phaseQuestions && S.phaseQuestions[ph.phase_number] && S.phaseQuestions[ph.phase_number].length) ? `
                                                 <div style="margin-bottom:1.25rem; padding:12px; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
-                                                    <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.keys((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
+                                                    <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
                                                     <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
                                                 </div>
                                             ` : ''}
