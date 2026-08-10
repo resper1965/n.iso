@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
+import { ReadinessAgent, parseObservacoes } from '../agents/readiness';
 
 // Diagnóstico de Prontidão ("gap em voo") — F1: camada DETERMINÍSTICA.
 //
@@ -35,8 +36,9 @@ readinessApp.get('/', async (c) => {
     if (user?.client_project_id && user.client_project_id !== projectId) {
       return c.json({ error: 'Forbidden: fora do escopo do projeto' }, 403);
     }
-    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?')
-      .bind(projectId).first();
+    const proj = await c.env.DB.prepare(
+      'SELECT id, scope, standards, org_role FROM projects WHERE id = ?'
+    ).bind(projectId).first<any>();
     if (!proj) return c.json({ error: 'Projeto não encontrado' }, 404);
 
     const achados: Achado[] = [];
@@ -120,13 +122,51 @@ readinessApp.get('/', async (c) => {
       total: achados.length,
     };
 
+    // Camada de IA (F2), só sob `?ai=1`. Nunca quebra o resultado determinístico:
+    // qualquer falha (sem binding, timeout, JSON inválido) devolve lista vazia.
+    let aiObservacoes: any[] = [];
+    if (c.req.query('ai') === '1' && c.env.AI) {
+      try {
+        const controles = await c.env.DB.prepare(
+          `SELECT c.id, c.title, c.status, c.maturity,
+                  (SELECT COUNT(*) FROM evidence e WHERE e.control_id = c.id) AS n_evid
+           FROM compliance_controls c WHERE c.project_id = ? LIMIT 200`
+        ).bind(projectId).all();
+        const ropa = await c.env.DB.prepare(
+          `SELECT processing_purpose, retention_period FROM ropa_records WHERE project_id = ? LIMIT 100`
+        ).bind(projectId).all();
+
+        const estado = [
+          `Escopo: ${proj.scope || '(não definido)'}`,
+          `Normas: ${proj.standards || '(não definido)'}`,
+          `Papel: ${proj.org_role || '(não definido)'}`,
+          '',
+          'Controles (id | título | status | maturidade | nº evidências):',
+          ...((controles.results ?? []) as any[]).map(
+            (r) => `- ${r.id} | ${r.title} | ${r.status} | ${r.maturity ?? 0} | ${r.n_evid}`
+          ),
+          '',
+          'Propósitos de tratamento (RoPA):',
+          ...((ropa.results ?? []) as any[]).map(
+            (r) => `- ${r.processing_purpose} (retenção: ${r.retention_period || 'n/d'})`
+          ),
+        ].join('\n');
+
+        const agent = new ReadinessAgent(c.env.AI, c.env.DB, c.env);
+        const resp = await agent.run(estado, { organizationId: String(projectId) });
+        if (resp.success) aiObservacoes = parseObservacoes(resp.content);
+      } catch {
+        aiObservacoes = []; // aterramento: IA é assistiva, nunca derruba o diagnóstico.
+      }
+    }
+
     return c.json({
       generated_at: new Date().toISOString(),
       project_id: projectId,
       rotulo: ROTULO,
       resumo,
       achados,
-      ai_observacoes: [], // F2 (?ai=1) preenche aqui, cada item citando evidência.
+      ai_observacoes: aiObservacoes, // assistidas por IA (origem:'ia') — revisar.
     });
   } catch (e: any) {
     return erro500(c, 'Falha no diagnóstico de prontidão', e);

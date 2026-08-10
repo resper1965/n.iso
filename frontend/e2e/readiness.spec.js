@@ -19,17 +19,22 @@ async function mockApi(page) {
     const p = new URL(route.request().url()).pathname;
     const json = (obj, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(obj) });
     if (p === '/api/v1/auth/me') return json({ user: USER });
-    if (/\/readiness-check$/.test(p)) return json({
-      generated_at: '2026-08-09T00:00:00Z',
-      project_id: 'proj-e2e',
-      rotulo: 'Auto-diagnóstico de prontidão (não é auditoria nem parecer de certificação)',
-      resumo: { critico: 1, alto: 1, medio: 0, total: 2 },
-      achados: [
-        { categoria: 'doc_inconsistente', severidade: 'critico', requisito: 'Assinatura sem lastro', referencia: 'c2', descricao: 'Controle "Acesso" está aprovado mas sem evidência.' },
-        { categoria: 'evidencia_faltante', severidade: 'alto', requisito: 'Evidência do controle', referencia: 'c1', descricao: 'Controle "Política" está "Implemented" mas sem evidência.' },
-      ],
-      ai_observacoes: [],
-    });
+    if (/\/readiness-check$/.test(p)) {
+      const comIA = new URL(route.request().url()).searchParams.get('ai') === '1';
+      return json({
+        generated_at: '2026-08-09T00:00:00Z',
+        project_id: 'proj-e2e',
+        rotulo: 'Auto-diagnóstico de prontidão (não é auditoria nem parecer de certificação)',
+        resumo: { critico: 1, alto: 1, medio: 0, total: 2 },
+        achados: [
+          { categoria: 'doc_inconsistente', severidade: 'critico', requisito: 'Assinatura sem lastro', referencia: 'c2', descricao: 'Controle "Acesso" está aprovado mas sem evidência.' },
+          { categoria: 'evidencia_faltante', severidade: 'alto', requisito: 'Evidência do controle', referencia: 'c1', descricao: 'Controle "Política" está "Implemented" mas sem evidência.' },
+        ],
+        ai_observacoes: comIA
+          ? [{ severidade: 'alto', requisito: 'Escopo × RoPA', referencia: 'c1', descricao: 'O escopo não cobre um propósito declarado na RoPA.', origem: 'ia' }]
+          : [],
+      });
+    }
     return json(route.request().method() === 'GET' ? [] : { ok: true });
   });
 }
@@ -51,4 +56,9 @@ test('abre o diagnóstico de prontidão e mostra os achados agrupados', async ({
   await expect(page.locator('.modal')).toContainText('Documentos inconsistentes');
   await expect(page.locator('.modal')).toContainText('Evidências faltando');
   await expect(page.locator('.modal')).toContainText('aprovado mas sem evidência');
+
+  // Camada de IA (F2): botão "Analisar com IA" traz a seção assistida.
+  await page.getByRole('button', { name: 'Analisar com IA', exact: true }).click();
+  await expect(page.locator('.modal')).toContainText('Assistido por IA');
+  await expect(page.locator('.modal')).toContainText('escopo não cobre um propósito');
 });
