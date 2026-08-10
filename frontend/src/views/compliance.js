@@ -5,6 +5,10 @@ import { navigate } from '../router.js';
 
     function renderControls(c, h, a) {
         h.textContent = 'Controles';
+        // Botão do Diagnóstico de Prontidão ("gap em voo") — só com projeto ativo.
+        a.innerHTML = S.currentProject
+            ? `<button class="btn btn-secondary" onclick="window.runReadinessCheck('${S.currentProject.id}')">Diagnóstico de prontidão</button>`
+            : '';
         if (!S.controls.length) {
             c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
             return;
@@ -19,6 +23,43 @@ import { navigate } from '../router.js';
                 <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${escapeHTML(ctrl.status)}</div>
             </div>`).join('')}</div>`;
     }
+
+    // Diagnóstico de Prontidão (F1): busca o raio-x determinístico e mostra num
+    // painel agrupado por categoria, com severidade. É auto-diagnóstico, não
+    // auditoria — o rótulo vem do próprio backend e é exibido aqui.
+    window.runReadinessCheck = async function (projectId) {
+        openModal(`<div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div><div style="padding:1.5rem 0;text-align:center"><div class="loading"></div></div>`);
+        try {
+            const r = await api('GET', `/api/v1/projects/${projectId}/readiness-check`);
+            const cor = { critico: 'var(--danger)', alto: '#e0a800', medio: 'var(--muted)' };
+            const rotuloCat = { doc_faltante: 'Documentos faltando', doc_inconsistente: 'Documentos inconsistentes', evidencia_faltante: 'Evidências faltando' };
+            const porCat = {};
+            (r.achados || []).forEach(a => { (porCat[a.categoria] = porCat[a.categoria] || []).push(a); });
+            const grupos = Object.keys(rotuloCat).map(cat => {
+                const itens = porCat[cat] || [];
+                if (!itens.length) return '';
+                return `<h4 style="margin:1rem 0 0.4rem;font-size:0.9rem">${rotuloCat[cat]} (${itens.length})</h4>` + itens.map(a => `
+                    <div style="border-left:3px solid ${cor[a.severidade] || 'var(--muted)'};padding:6px 10px;margin:6px 0;background:rgba(255,255,255,0.03)">
+                        <div style="font-size:0.68rem;text-transform:uppercase;color:${cor[a.severidade] || 'var(--muted)'}">${escapeHTML(a.severidade)} · ${escapeHTML(a.requisito)} · ${escapeHTML(String(a.referencia))}</div>
+                        <div style="font-size:0.85rem;margin-top:2px">${escapeHTML(a.descricao)}</div>
+                    </div>`).join('');
+            }).join('');
+            openModal(`
+                <div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div>
+                <div style="padding:0.5rem 0;text-align:left">
+                    <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.6rem">${escapeHTML(r.rotulo || '')}</p>
+                    <div style="display:flex;gap:16px;margin-bottom:0.4rem;font-size:0.85rem">
+                        <span style="color:var(--danger)"><strong>${r.resumo.critico}</strong> crítico</span>
+                        <span style="color:#e0a800"><strong>${r.resumo.alto}</strong> alto</span>
+                        <span style="color:var(--muted)"><strong>${r.resumo.medio}</strong> médio</span>
+                    </div>
+                    ${r.resumo.total ? grupos : '<p style="color:var(--muted)">Nenhum gap encontrado nas verificações automáticas.</p>'}
+                </div>`);
+        } catch (e) {
+            closeModal();
+            showToast('Falha no diagnóstico: ' + e.message, 'error');
+        }
+    };
 
     function openControlDetail(controlId) {
         const ctrl = S.controls.find(c => c.id === controlId);
