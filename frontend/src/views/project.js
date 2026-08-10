@@ -107,12 +107,20 @@ const ISO_GUIDELINES = {
         c.innerHTML = '<div class="loading"></div>';
         
         try {
-            const [phases, config, checklistProgress, governanceMembers] = await Promise.all([
+            const [phases, config, checklistProgress, governanceMembers, phaseQuestions, phaseAnswers] = await Promise.all([
                 api('GET', `/api/v1/projects/${p.id}/phases`),
                 S.checklistsConfig ? Promise.resolve(S.checklistsConfig) : api('GET', '/api/v1/phases/config'),
                 api('GET', `/api/v1/projects/${p.id}/checklist-progress`).catch(() => []),
-                api('GET', `/api/v1/projects/${p.id}/governance`).catch(() => [])
+                api('GET', `/api/v1/projects/${p.id}/governance`).catch(() => []),
+                S.phaseQuestions ? Promise.resolve(S.phaseQuestions) : api('GET', '/api/v1/phase-questions').catch(() => ({})),
+                api('GET', `/api/v1/projects/${p.id}/phase-answers`).catch(() => [])
             ]);
+            // Banco de perguntas por fase (cacheado) + respostas do projeto (mapa fase→{key:answer}).
+            S.phaseQuestions = phaseQuestions || {};
+            S.phaseAnswers = {};
+            (Array.isArray(phaseAnswers) ? phaseAnswers : []).forEach(r => {
+                (S.phaseAnswers[r.phase_number] = S.phaseAnswers[r.phase_number] || {})[r.question_key] = r.answer;
+            });
             console.log("[nISO Debug] phases:", phases);
             console.log("[nISO Debug] config:", config);
             console.log("[nISO Debug] checklistProgress:", checklistProgress);
@@ -317,7 +325,14 @@ const ISO_GUIDELINES = {
                                                     <div style="color:var(--text); line-height:1.4">${escapeHTML(window.PHASE_PLAYBOOKS[ph.phase_number].guideline)}</div>
                                                 </div>
                                             ` : ''}
-                                            
+
+                                            ${(S.phaseQuestions && S.phaseQuestions[ph.phase_number] && S.phaseQuestions[ph.phase_number].length) ? `
+                                                <div style="margin-bottom:1.25rem; padding:12px; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+                                                    <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.keys((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
+                                                    <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
+                                                </div>
+                                            ` : ''}
+
                                             <div class="checklist-title">Checklist de Conformidade (${phChecklist.length} itens)</div>
                                             ${filteredItems.length > 0 ? `
                                                 <div class="checklist-list">
@@ -877,6 +892,68 @@ const ISO_GUIDELINES = {
         if (!S.expandedChecklistDetails) S.expandedChecklistDetails = {};
         S.expandedChecklistDetails[itemId] = !S.expandedChecklistDetails[itemId];
         render();
+    };
+
+    // ── Questionário POR FASE (perguntas especializadas ancoradas na cláusula) ──
+    window.openPhaseQuestionnaire = function(phaseNumber, projectId) {
+        const questions = (S.phaseQuestions && S.phaseQuestions[phaseNumber]) || [];
+        if (!questions.length) { showToast('Sem perguntas para esta fase', 'error'); return; }
+        const saved = (S.phaseAnswers && S.phaseAnswers[phaseNumber]) || {};
+        const playbook = window.PHASE_PLAYBOOKS && window.PHASE_PLAYBOOKS[phaseNumber];
+        const titulo = playbook ? playbook.obj : `Fase ${phaseNumber}`;
+
+        const campos = questions.map(q => {
+            const cur = saved[q.key] || '';
+            let input = '';
+            if (q.type === 'text') {
+                input = `<textarea id="pq-${q.key}" class="form-input" rows="2" style="width:100%">${escapeHTML(cur)}</textarea>`;
+            } else if (q.type === 'multi') {
+                const marcados = String(cur).split('||');
+                input = `<div style="display:flex; flex-wrap:wrap; gap:8px">` + (q.options || []).map(opt =>
+                    `<label style="font-size:0.8rem; display:flex; align-items:center; gap:4px"><input type="checkbox" name="pq-${q.key}" value="${escapeHTML(opt)}" ${marcados.includes(opt) ? 'checked' : ''}> ${escapeHTML(opt)}</label>`
+                ).join('') + `</div>`;
+            } else {
+                input = `<select id="pq-${q.key}" class="form-input" style="width:100%"><option value="">— selecione —</option>` +
+                    (q.options || []).map(opt => `<option value="${escapeHTML(opt)}" ${cur === opt ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('') + `</select>`;
+            }
+            return `<div style="margin-bottom:1rem"><label style="font-size:0.78rem; color:var(--text-dim); display:block; margin-bottom:0.4rem">${escapeHTML(q.question)}</label>${input}</div>`;
+        }).join('');
+
+        openModal(`
+            <div class="modal-header"><span class="modal-title">Questionário — ${escapeHTML(titulo)}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            <div style="padding:1.25rem 0; text-align:left; max-height:60vh; overflow-y:auto">${campos}
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:0.5rem">
+                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" onclick="savePhaseQuestionnaire(${phaseNumber}, '${projectId}')">Salvar</button>
+                </div>
+            </div>`);
+    };
+
+    window.savePhaseQuestionnaire = async function(phaseNumber, projectId) {
+        const questions = (S.phaseQuestions && S.phaseQuestions[phaseNumber]) || [];
+        const answers = {};
+        questions.forEach(q => {
+            if (q.type === 'multi') {
+                const marcados = Array.from(document.querySelectorAll(`input[name="pq-${q.key}"]:checked`)).map(el => el.value);
+                answers[q.key] = marcados.join('||');
+            } else {
+                const el = document.getElementById(`pq-${q.key}`);
+                if (el) answers[q.key] = el.value;
+            }
+        });
+        try {
+            await api('PUT', `/api/v1/projects/${projectId}/phase-answers`, { phase_number: phaseNumber, answers });
+            if (!S.phaseAnswers) S.phaseAnswers = {};
+            // reflete localmente só o que tem valor (para o contador de respondidas)
+            const limpo = {};
+            Object.entries(answers).forEach(([k, v]) => { if (v) limpo[k] = v; });
+            S.phaseAnswers[phaseNumber] = limpo;
+            showToast('Respostas salvas!');
+            forceCloseModal();
+            render();
+        } catch (e) {
+            showToast('Falha ao salvar: ' + e.message, 'error');
+        }
     };
 
     window.openJornadaQuestionnaire = function(jIdx, projectId) {
