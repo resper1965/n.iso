@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { parseObservacoes } from '../src/agents/readiness';
 
 /**
  * Diagnóstico de Prontidão (F1, determinístico) — GET
@@ -111,5 +112,65 @@ describe('Diagnóstico de prontidão (D1 real)', () => {
   it('projeto inexistente → 404', async () => {
     const { status } = await check('nao-existe');
     expect(status).toBe(404);
+  });
+
+  // ── Camada de IA (F2), com o binding AI dublado ──────────────────────────
+  async function checkAi(aiRun: (m: string, o: any) => Promise<any>, query = '?ai=1') {
+    const res = await app.fetch(
+      new Request(`http://localhost/api/v1/projects/p1/readiness-check${query}`, { headers }),
+      { ...env, AI: { run: aiRun } } as any
+    );
+    return { status: res.status, body: (await res.json()) as any };
+  }
+
+  it('?ai=1: observações válidas do modelo entram em ai_observacoes (origem ia)', async () => {
+    const saida = JSON.stringify([
+      { severidade: 'alto', requisito: 'Escopo × RoPA', referencia: 'c1', descricao: 'Escopo não cobre um propósito da RoPA.' },
+    ]);
+    const { body } = await checkAi(async () => ({ response: saida }));
+    expect(body.ai_observacoes.length).toBe(1);
+    expect(body.ai_observacoes[0].origem).toBe('ia');
+    expect(body.ai_observacoes[0].referencia).toBe('c1');
+  });
+
+  it('?ai=1: saída não-JSON do modelo NÃO quebra — ai_observacoes vazio, determinístico intacto', async () => {
+    await env.DB.prepare(
+      `INSERT INTO compliance_controls (id, project_id, standard, title, status) VALUES ('cx','p1','ISO 27001:2022','X','Implemented')`
+    ).run();
+    const { status, body } = await checkAi(async () => ({ response: 'desculpe, não consegui...' }));
+    expect(status).toBe(200);
+    expect(body.ai_observacoes).toEqual([]);
+    expect(body.achados.find((a: any) => a.referencia === 'cx')).toBeTruthy(); // regra determinística segue valendo
+  });
+
+  it('sem ?ai=1: não chama IA — ai_observacoes vazio', async () => {
+    let chamou = false;
+    const { body } = await checkAi(async () => { chamou = true; return { response: '[]' }; }, '');
+    expect(chamou).toBe(false);
+    expect(body.ai_observacoes).toEqual([]);
+  });
+});
+
+describe('parseObservacoes (parser defensivo da saída do modelo)', () => {
+  it('aceita array cru e descarta item sem referência', () => {
+    const raw = JSON.stringify([
+      { severidade: 'critico', requisito: 'r', referencia: 'c1', descricao: 'ok' },
+      { severidade: 'alto', requisito: 'r', descricao: 'sem referencia' },
+    ]);
+    const out = parseObservacoes(raw);
+    expect(out.length).toBe(1);
+    expect(out[0].referencia).toBe('c1');
+    expect(out[0].origem).toBe('ia');
+  });
+
+  it('extrai JSON de dentro de cerca ```json e normaliza severidade inválida', () => {
+    const raw = '```json\n[{"severidade":"altíssimo","requisito":"r","referencia":"A.5","descricao":"x"}]\n```';
+    const out = parseObservacoes(raw);
+    expect(out.length).toBe(1);
+    expect(out[0].severidade).toBe('medio'); // severidade fora do enum vira 'medio'
+  });
+
+  it('texto sem JSON → lista vazia', () => {
+    expect(parseObservacoes('nenhuma inconsistência encontrada')).toEqual([]);
   });
 });
