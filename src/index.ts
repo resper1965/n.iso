@@ -31,6 +31,7 @@ import { dataSubjectApp } from './routes/data-subject';
 
 
 import { readinessApp } from './routes/readiness';
+import { phaseQuestionsApp, projectPhaseAnswersApp } from './routes/phase-questionnaire';
 import risks from './routes/risks';
 import policies from './routes/policies';
 import integrations from './routes/integrations';
@@ -191,6 +192,8 @@ app.route('/api/v1/proposals', proposalsApp);
 app.route('/api/v1/assessments', assessmentsApp);
 app.route('/api/v1/projects', projectsApp);
 app.route('/api/v1/projects/:projectId/readiness-check', readinessApp);
+app.route('/api/v1/phase-questions', phaseQuestionsApp);
+app.route('/api/v1/projects/:projectId/phase-answers', projectPhaseAnswersApp);
 app.route('/api/v1/controls', controlsApp);
 
 app.route('/api/v1/evidence', evidenceApp);

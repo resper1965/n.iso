@@ -126,6 +126,18 @@ CREATE TABLE IF NOT EXISTS assessment_answers (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Respostas do questionário POR FASE da jornada (PHASE_QUESTIONS). Ligado ao
+-- PROJETO (não ao assessment comercial). Uma linha por (projeto, fase, pergunta).
+CREATE TABLE IF NOT EXISTS project_phase_answers (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    phase_number INTEGER NOT NULL,
+    question_key TEXT NOT NULL,
+    answer TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, phase_number, question_key)
+);
+
 -- ═══════════════════════════════════════════════
 -- STREAM B: DELIVERY ENGINE
 -- ═══════════════════════════════════════════════
