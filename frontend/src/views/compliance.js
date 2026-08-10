@@ -516,7 +516,7 @@ import { navigate } from '../router.js';
             return;
         }
         
-        a.innerHTML = `<button class="btn btn-secondary" onclick="window.generateSoA('${proj.id}')" style="margin-right:8px">Gerar SoA (AI)</button><button class="btn btn-primary" onclick="window.migrate27701('${proj.id}')">Migrar 27701</button>`;
+        a.innerHTML = `<button class="btn btn-secondary" onclick="window.runReadinessCheck('${proj.id}')" style="margin-right:8px">Diagnóstico de prontidão</button><button class="btn btn-secondary" onclick="window.generateSoA('${proj.id}')" style="margin-right:8px">Gerar SoA (AI)</button><button class="btn btn-primary" onclick="window.migrate27701('${proj.id}')">Migrar 27701</button>`;
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando controles do SoA...</div>';
         
         try {
