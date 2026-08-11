@@ -466,6 +466,9 @@ const ISO_GUIDELINES = {
             c.innerHTML = `
                 <div style="margin-top: 0.5rem;">
                     ${metricsHtml}
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem">
+                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="generateJourneyDossier('${p.id}')">📖 Gerar Dossiê da Jornada</button>
+                    </div>
                     ${filtersHtml}
                     ${journeysHtml || '<div class="empty-state"><h3>Nenhuma fase correspondente aos filtros</h3></div>'}
                 </div>
@@ -1011,6 +1014,69 @@ const ISO_GUIDELINES = {
             forceCloseModal();
             showToast('Falha ao interpretar: ' + e.message, 'error');
         }
+    };
+
+    // Dossiê da Jornada (F3) — consolida as respostas por fase num documento
+    // apresentável e imprimível (Salvar como PDF) para compartilhar com stakeholders.
+    window.generateJourneyDossier = async function(projectId) {
+        openModal(`<div class="modal-header"><span class="modal-title">Gerando dossiê…</span></div>
+            <div style="padding:1.5rem 0; text-align:center; color:var(--text-dim)">Consolidando as respostas da jornada…</div>`);
+        try {
+            const d = await api('GET', `/api/v1/projects/${projectId}/journey-dossier`);
+            const pj = d.projeto || {};
+            const secoes = d.secoes || [];
+
+            const secoesHtml = secoes.length ? secoes.map(s => `
+                <section style="margin-bottom:1.5rem; page-break-inside:avoid">
+                    <h3 style="font-size:0.95rem; margin:0 0 0.25rem">Fase ${s.phase} — ${escapeHTML(s.titulo)}${s.clausula ? ` <span style="font-weight:400; color:var(--text-dim)">· cláusula ${escapeHTML(s.clausula)}</span>` : ''}</h3>
+                    <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:0.5rem">Status: ${escapeHTML(s.status)} · ${s.cobertura.respondidas}/${s.cobertura.total} respondidas</div>
+                    <dl style="margin:0">
+                        ${s.respostas.map(r => `
+                            <dt style="font-size:0.8rem; font-weight:600; margin-top:0.5rem">${escapeHTML(r.pergunta)}</dt>
+                            <dd style="font-size:0.82rem; margin:0 0 0.25rem; color:${r.resposta ? 'var(--text)' : 'var(--text-dim)'}">${r.resposta ? escapeHTML(r.resposta) : '— sem resposta —'}</dd>
+                        `).join('')}
+                    </dl>
+                </section>`).join('') : '<p style="color:var(--text-dim)">Nenhuma resposta registrada na jornada ainda.</p>';
+
+            const doc = `<div id="dossie-print" style="text-align:left">
+                <div style="border-bottom:2px solid var(--accent); padding-bottom:0.75rem; margin-bottom:1rem">
+                    <h2 style="margin:0 0 0.25rem">Dossiê da Jornada — ${escapeHTML(pj.client_name || '')}</h2>
+                    <div style="font-size:0.75rem; color:var(--text-dim)">
+                        Normas: ${escapeHTML(pj.standards || '')} · Papel: ${escapeHTML(pj.org_role || '')} · Status: ${escapeHTML(pj.status || '')}<br>
+                        ${pj.scope ? 'Escopo: ' + escapeHTML(pj.scope) + '<br>' : ''}
+                        Gerado em ${new Date(d.generated_at).toLocaleString('pt-BR')} · ${d.resumo.fases_iniciadas} fase(s) iniciada(s) · ${d.resumo.respondidas} resposta(s)
+                    </div>
+                </div>
+                ${secoesHtml}
+                <div style="font-size:0.68rem; color:var(--text-dim); border-top:1px solid var(--border); padding-top:0.5rem; margin-top:1rem">${escapeHTML(d.rotulo || '')}</div>
+            </div>`;
+
+            openModal(`<div class="modal-header"><span class="modal-title">Dossiê da Jornada</span>
+                    <div style="display:flex; gap:8px">
+                        <button class="btn btn-primary" onclick="printDossie()">Imprimir / PDF</button>
+                        <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                    </div>
+                </div>
+                <div style="padding:1.25rem 0; max-height:68vh; overflow-y:auto">${doc}</div>`);
+        } catch (e) {
+            forceCloseModal();
+            showToast('Falha ao gerar dossiê: ' + e.message, 'error');
+        }
+    };
+
+    // Imprime só o dossiê, numa janela isolada (não depende de CSS @media print da app).
+    window.printDossie = function() {
+        const el = document.getElementById('dossie-print');
+        if (!el) return;
+        const w = window.open('', '_blank');
+        if (!w) { showToast('Permita pop-ups para imprimir o dossiê', 'error'); return; }
+        w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Dossiê da Jornada</title>
+            <style>body{font-family:'Segoe UI',Arial,sans-serif;color:#111;max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.4}
+            h2{color:#00ade8}h3{margin:0 0 .25rem}dt{font-weight:600;margin-top:.5rem}dd{margin:0 0 .25rem}section{margin-bottom:1.25rem}
+            :root{--text:#111;--text-dim:#666;--accent:#00ade8;--border:#ddd}</style></head><body>${el.innerHTML}</body></html>`);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 250);
     };
 
     window.openJornadaQuestionnaire = function(jIdx, projectId) {

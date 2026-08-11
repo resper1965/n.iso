@@ -101,3 +101,44 @@ test('interpreta a fase e mostra o diagnóstico específico', async ({ page }) =
   await expect(page.locator('.modal')).toContainText('Formalizar o apetite de risco');
   await expect(page.locator('.modal')).toContainText('1/2 perguntas respondidas');
 });
+
+test('gera o dossiê da jornada com as respostas consolidadas', async ({ page }) => {
+  await page.addInitScript((u) => {
+    localStorage.setItem('niso_token', 'e2e-fake-token');
+    localStorage.setItem('niso_user', JSON.stringify(u));
+    localStorage.setItem('niso_activeProject', JSON.stringify({ id: 'proj-e2e', project_name: 'Projeto E2E' }));
+  }, USER);
+
+  await page.route('**/api/v1/**', async (route) => {
+    const url = new URL(route.request().url());
+    const json = (o) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
+    if (url.pathname === '/api/v1/auth/me') return json({ user: USER });
+    if (/\/journey-dossier$/.test(url.pathname)) {
+      return json({
+        generated_at: new Date().toISOString(), project_id: 'proj-e2e',
+        rotulo: 'Dossiê da jornada — não é parecer de certificação',
+        projeto: { client_name: 'ACME S.A.', scope: 'Sede e nuvem', standards: 'ISO 27001', org_role: 'controller', status: 'Active' },
+        resumo: { fases_iniciadas: 1, total_perguntas_das_fases_iniciadas: 4, respondidas: 1 },
+        secoes: [{
+          phase: 1, titulo: 'Entrevista Executiva', clausula: '5.2 & 6.2', status: 'Em andamento',
+          cobertura: { total: 4, respondidas: 1 },
+          respostas: [
+            { pergunta_key: 'p1_q1', pergunta: 'Apetite de risco declarado pela direção?', tipo: 'select', resposta: 'Moderado' },
+            { pergunta_key: 'p1_q2', pergunta: 'Objetivos de negócio?', tipo: 'text', resposta: null },
+          ],
+        }],
+      });
+    }
+    return json(route.request().method() === 'GET' ? [] : { ok: true });
+  });
+
+  await page.goto('/login.html');
+  await page.waitForFunction(() => typeof window.navigate === 'function' && !!window.S);
+
+  await page.evaluate(() => window.generateJourneyDossier('proj-e2e'));
+
+  await expect(page.locator('.modal')).toContainText('Dossiê da Jornada — ACME S.A.');
+  await expect(page.locator('.modal')).toContainText('Fase 1 — Entrevista Executiva');
+  await expect(page.locator('.modal')).toContainText('Moderado');
+  await expect(page.locator('.modal')).toContainText('— sem resposta —');
+});
