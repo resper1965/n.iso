@@ -330,7 +330,7 @@ const ISO_GUIDELINES = {
                                                 <div style="margin-bottom:1.25rem; padding:12px; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
                                                     <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
                                                     <div style="display:flex; gap:8px">
-                                                        ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length > 0 ? `<button class="btn-inline-action" onclick="interpretPhaseAnswers(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Interpretar</button>` : ''}
+                                                        ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length > 0 ? `<button class="btn-inline-action" onclick="interpretPhaseAnswers(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Interpretar</button><button class="btn-inline-action" onclick="suggestControlAdequacao(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Adequar controles</button>` : ''}
                                                         <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
                                                     </div>
                                                 </div>
@@ -1077,6 +1077,56 @@ const ISO_GUIDELINES = {
         w.document.close();
         w.focus();
         setTimeout(() => w.print(), 250);
+    };
+
+    // Adequação de controles (F3) — a IA sugere; o humano aprova cada item.
+    // Nada muda no controle até clicar "Aplicar" (guarda-rail: só status seguros).
+    window.suggestControlAdequacao = async function(phaseNumber, projectId) {
+        openModal(`<div class="modal-header"><span class="modal-title">Sugerindo adequações…</span></div>
+            <div style="padding:1.5rem 0; text-align:center; color:var(--text-dim)">Analisando as respostas e os controles do projeto…</div>`);
+        try {
+            const r = await api('GET', `/api/v1/projects/${projectId}/control-adequacao/${phaseNumber}/suggestions`);
+            const sugs = r.sugestoes || [];
+            S._adequacaoSugestoes = {}; // guarda para o Aplicar por índice
+            const cab = r.clausula ? `${escapeHTML(r.titulo)} — cláusula ${escapeHTML(r.clausula)}` : escapeHTML(r.titulo || ('Fase ' + phaseNumber));
+
+            let corpo;
+            if (!sugs.length) {
+                corpo = `<p style="font-size:0.83rem; color:var(--text-dim); line-height:1.5">Sem sugestões de adequação para esta fase no momento (sem IA configurada, sem respostas, ou nada que as respostas sustentem com base objetiva).</p>`;
+            } else {
+                corpo = sugs.map((s, i) => {
+                    S._adequacaoSugestoes[i] = { control_id: s.control_id, status: s.sugestao_status, maturity: s.sugestao_maturidade, justificativa: s.justificativa, pergunta_key: s.pergunta_key, phase_number: phaseNumber };
+                    const alvo = [s.sugestao_status ? `status: <strong>${escapeHTML(s.sugestao_status)}</strong>` : '', (s.sugestao_maturidade != null) ? `maturidade: <strong>${s.sugestao_maturidade}</strong>` : ''].filter(Boolean).join(' · ');
+                    return `<div id="adeq-item-${i}" style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px">
+                        <div style="font-size:0.8rem; font-weight:600">${escapeHTML(s.control_id)} — ${escapeHTML(s.control_title || '')}</div>
+                        <div style="font-size:0.72rem; color:var(--text-dim); margin:2px 0 6px">atual: status ${escapeHTML(String(s.status_atual ?? '—'))} · maturidade ${escapeHTML(String(s.maturidade_atual ?? 0))} → ${alvo}</div>
+                        <div style="font-size:0.8rem; line-height:1.4; margin-bottom:8px">${escapeHTML(s.justificativa)}</div>
+                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="applyControlAdequacao(${i}, '${projectId}')">Aplicar ao controle</button>
+                    </div>`;
+                }).join('');
+            }
+
+            openModal(`<div class="modal-header"><span class="modal-title">Adequação de controles — ${cab}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+                <div style="padding:1.25rem 0; text-align:left; max-height:65vh; overflow-y:auto">${corpo}
+                    <div style="font-size:0.68rem; color:var(--text-dim); margin-top:0.75rem">${escapeHTML(r.rotulo || '')}</div>
+                </div>`);
+        } catch (e) {
+            forceCloseModal();
+            showToast('Falha ao sugerir adequação: ' + e.message, 'error');
+        }
+    };
+
+    window.applyControlAdequacao = async function(idx, projectId) {
+        const s = S._adequacaoSugestoes && S._adequacaoSugestoes[idx];
+        if (!s) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/control-adequacao/apply`, s);
+            const card = document.getElementById(`adeq-item-${idx}`);
+            if (card) { card.style.opacity = '0.5'; const b = card.querySelector('button'); if (b) b.outerHTML = '<span style="font-size:0.72rem; color:var(--accent); font-weight:600">✓ Aplicado</span>'; }
+            showToast('Adequação aplicada ao controle ' + s.control_id);
+        } catch (e) {
+            showToast('Falha ao aplicar: ' + e.message, 'error');
+        }
     };
 
     window.openJornadaQuestionnaire = function(jIdx, projectId) {
