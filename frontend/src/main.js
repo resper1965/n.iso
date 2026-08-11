@@ -5,7 +5,6 @@ import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 import { navigate, render } from './router.js';
 import './data/wizards.js';
 import './data/assessment.js';
-import './data/journeys.js';
 
 import './views/commercial.js';
 import './views/project.js';

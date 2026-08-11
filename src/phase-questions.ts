@@ -6,7 +6,7 @@
 // alimentam a interpretação coesa (F2, AssessmentAgent) e a adequação de
 // controles (F3).
 //
-// Fonte única no backend; o frontend lê via GET /api/v1/phases/questions.
+// Fonte única no backend; o frontend lê via GET /api/v1/phase-questions.
 // `type`: 'text' (aberto) | 'select' (uma opção) | 'multi' (várias).
 
 export type PhaseQuestion = {
