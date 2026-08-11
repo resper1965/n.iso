@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, erro500, logAudit } from '../helpers';
-import { PHASE_QUESTIONS, PhaseQuestion } from '../phase-questions';
+import { PHASE_QUESTIONS, PHASE_META, PhaseQuestion } from '../phase-questions';
+import { PhaseInterpretationAgent, parseInterpretacao } from '../agents/phase-interpretation';
 
 // Questionário POR FASE da jornada — banco de perguntas + respostas por projeto.
 // F1: preencher e persistir. A interpretação coesa (AssessmentAgent) é a F2.
@@ -129,5 +130,80 @@ projectPhaseAnswersApp.put('/', async (c) => {
     return c.json({ ok: true, saved: gravar.length, cleared: apagar.length });
   } catch (e: any) {
     return erro500(c, 'Falha ao salvar respostas da jornada', e);
+  }
+});
+
+// GET /:phase/interpret — interpretação COESA das respostas de UMA fase (F2).
+// Camada determinística SEMPRE presente (cobertura + perguntas sem resposta) e,
+// se houver binding de IA, o diagnóstico específico do PhaseInterpretationAgent
+// por cima. A IA é assistiva: qualquer falha degrada para o determinístico puro.
+projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
+  try {
+    const projectId = c.req.param('projectId') ?? '';
+    if (foraDoEscopo(c, projectId)) return c.json({ error: 'Forbidden: fora do escopo do projeto' }, 403);
+
+    const phase = Number(c.req.param('phase'));
+    const perguntas = PHASE_QUESTIONS[phase];
+    if (!Number.isInteger(phase) || !perguntas) {
+      return c.json({ error: 'Fase inválida' }, 400);
+    }
+    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
+    if (!proj) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    // Respostas salvas desta fase (só desta fase).
+    const { results } = await c.env.DB.prepare(
+      'SELECT question_key, answer FROM project_phase_answers WHERE project_id = ? AND phase_number = ?'
+    ).bind(projectId, phase).all();
+    const respostas = new Map<string, string>();
+    for (const r of (results ?? []) as any[]) {
+      const v = (r.answer ?? '').toString().trim();
+      if (v) respostas.set(r.question_key, v);
+    }
+
+    // Determinístico: cobertura e perguntas materiais sem resposta.
+    const semResposta = perguntas.filter((q) => !respostas.has(q.key));
+    const cobertura = {
+      total: perguntas.length,
+      respondidas: perguntas.length - semResposta.length,
+      sem_resposta: semResposta.map((q) => ({ pergunta_key: q.key, pergunta: q.question })),
+    };
+
+    const meta = PHASE_META[phase] ?? { titulo: `Fase ${phase}`, clausula: '' };
+
+    // Retrato para a IA: cada pergunta com sua resposta (ou "(sem resposta)").
+    const estado = perguntas
+      .map((q) => `- [${q.key}] ${q.question}\n  Resposta: ${respostas.get(q.key) ?? '(sem resposta)'}`)
+      .join('\n');
+
+    let interpretacao: any = null;
+    let fonte: 'ia' | 'indisponivel' = 'indisponivel';
+    if (c.req.query('ai') !== '0' && c.env.AI && respostas.size > 0) {
+      try {
+        const agent = new PhaseInterpretationAgent(c.env.AI, c.env.DB, c.env);
+        const resp = await agent.run(estado, {
+          organizationId: projectId, titulo: meta.titulo, clausula: meta.clausula,
+        });
+        if (resp.success) {
+          const parsed = parseInterpretacao(resp.content, new Set(perguntas.map((q) => q.key)));
+          if (parsed) { interpretacao = { ...parsed, origem: 'ia' }; fonte = 'ia'; }
+        }
+      } catch {
+        interpretacao = null; // aterramento: IA nunca derruba a resposta.
+      }
+    }
+
+    return c.json({
+      generated_at: new Date().toISOString(),
+      project_id: projectId,
+      phase,
+      titulo: meta.titulo,
+      clausula: meta.clausula,
+      rotulo: 'Interpretação assistida da fase — revisar; não é parecer de certificação',
+      cobertura,
+      fonte,          // 'ia' quando o diagnóstico veio do agente; senão 'indisponivel'
+      interpretacao,  // null quando sem IA/sem respostas — o consumidor usa a cobertura
+    });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao interpretar respostas da fase', e);
   }
 });

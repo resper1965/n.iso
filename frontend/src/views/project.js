@@ -329,7 +329,10 @@ const ISO_GUIDELINES = {
                                             ${(S.phaseQuestions && S.phaseQuestions[ph.phase_number] && S.phaseQuestions[ph.phase_number].length) ? `
                                                 <div style="margin-bottom:1.25rem; padding:12px; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
                                                     <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
-                                                    <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
+                                                    <div style="display:flex; gap:8px">
+                                                        ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length > 0 ? `<button class="btn-inline-action" onclick="interpretPhaseAnswers(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Interpretar</button>` : ''}
+                                                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
+                                                    </div>
                                                 </div>
                                             ` : ''}
 
@@ -953,6 +956,60 @@ const ISO_GUIDELINES = {
             render();
         } catch (e) {
             showToast('Falha ao salvar: ' + e.message, 'error');
+        }
+    };
+
+    // Interpretação coesa das respostas da fase (F2) — chama o agente e mostra
+    // um diagnóstico ESPECÍFICO (prontidão, pontos citando a pergunta, próximos
+    // passos), com a cobertura determinística das perguntas sem resposta.
+    window.interpretPhaseAnswers = async function(phaseNumber, projectId) {
+        const questions = (S.phaseQuestions && S.phaseQuestions[phaseNumber]) || [];
+        const textoDaPergunta = k => (questions.find(q => q.key === k) || {}).question || k;
+        openModal(`<div class="modal-header"><span class="modal-title">Interpretando a fase…</span></div>
+            <div style="padding:1.5rem 0; text-align:center; color:var(--text-dim)">Analisando as respostas com o agente de conformidade…</div>`);
+        try {
+            const r = await api('GET', `/api/v1/projects/${projectId}/phase-answers/${phaseNumber}/interpret`);
+            const badge = { em_dia: ['#1f9d55', 'Em dia'], atencao: ['#c9770a', 'Atenção'], critico: ['#c0392b', 'Crítico'] };
+            const sevCor = { critico: '#c0392b', alto: '#c9770a', medio: 'var(--text-dim)' };
+            const it = r.interpretacao;
+            const cab = r.clausula ? `${escapeHTML(r.titulo)} — cláusula ${escapeHTML(r.clausula)}` : escapeHTML(r.titulo || ('Fase ' + phaseNumber));
+
+            let corpo = '';
+            if (it) {
+                const [cor, rotulo] = badge[it.prontidao] || badge.atencao;
+                corpo += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:1rem">
+                    <span style="background:${cor}; color:#fff; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">${rotulo}</span>
+                    <span style="font-size:0.75rem; color:var(--text-dim)">Prontidão da fase</span></div>`;
+                if (it.resumo) corpo += `<p style="font-size:0.85rem; line-height:1.5; margin-bottom:1rem">${escapeHTML(it.resumo)}</p>`;
+                if (it.pontos && it.pontos.length) {
+                    corpo += `<div style="font-weight:600; font-size:0.78rem; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Pontos de atenção</div>`;
+                    corpo += it.pontos.map(pt => `<div style="border-left:3px solid ${sevCor[pt.severidade] || 'var(--text-dim)'}; padding:6px 10px; margin-bottom:8px; background:rgba(255,255,255,0.02); border-radius:6px">
+                        <div style="font-size:0.68rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px">${escapeHTML(pt.severidade)} · ${escapeHTML(textoDaPergunta(pt.pergunta_key))}</div>
+                        <div style="font-size:0.82rem; line-height:1.45; margin-top:2px">${escapeHTML(pt.observacao)}</div></div>`).join('');
+                }
+                if (it.proximos_passos && it.proximos_passos.length) {
+                    corpo += `<div style="font-weight:600; font-size:0.78rem; margin:1rem 0 0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Próximos passos</div>`;
+                    corpo += `<ol style="font-size:0.82rem; line-height:1.5; padding-left:1.2rem; margin:0">${it.proximos_passos.map(s => `<li>${escapeHTML(s)}</li>`).join('')}</ol>`;
+                }
+            } else {
+                corpo += `<p style="font-size:0.83rem; color:var(--text-dim); line-height:1.5">Diagnóstico assistido indisponível no momento (sem IA configurada ou sem respostas suficientes). A cobertura das perguntas segue abaixo.</p>`;
+            }
+
+            const cov = r.cobertura || { total: 0, respondidas: 0, sem_resposta: [] };
+            corpo += `<div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border)">
+                <div style="font-size:0.78rem; color:var(--text-dim)"><strong>Cobertura</strong> — ${cov.respondidas}/${cov.total} perguntas respondidas</div>`;
+            if (cov.sem_resposta && cov.sem_resposta.length) {
+                corpo += `<ul style="font-size:0.78rem; color:var(--text-dim); line-height:1.45; margin:0.5rem 0 0; padding-left:1.2rem">${cov.sem_resposta.map(q => `<li>Sem resposta: ${escapeHTML(q.pergunta)}</li>`).join('')}</ul>`;
+            }
+            corpo += `</div>`;
+
+            openModal(`<div class="modal-header"><span class="modal-title">Interpretação — ${cab}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+                <div style="padding:1.25rem 0; text-align:left; max-height:65vh; overflow-y:auto">${corpo}
+                    <div style="font-size:0.68rem; color:var(--text-dim); margin-top:1rem; font-style:normal">${escapeHTML(r.rotulo || '')}</div>
+                </div>`);
+        } catch (e) {
+            forceCloseModal();
+            showToast('Falha ao interpretar: ' + e.message, 'error');
         }
     };
 
