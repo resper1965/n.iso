@@ -1,4 +1,5 @@
 import { BaseAgent, AgentContext, AgentResponse, gatewayConfig } from './types';
+import { reasoningModel, gatewayModel } from '../config/models';
 
 export class PolicyAgent extends BaseAgent {
   private buildSystemPrompt(controlId?: string, organizationalMemory?: string, standardReference?: string): string {
@@ -47,7 +48,7 @@ ${standardReference || 'Use o conhecimento base da ISO 27001:2022 Anexo A.'}
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'openai/gpt-4.1',
+          model: gatewayModel(this.env),
           input: { messages, max_tokens: 4096 },
         }),
       });
@@ -61,7 +62,7 @@ ${standardReference || 'Use o conhecimento base da ISO 27001:2022 Anexo A.'}
 
   // ponytail: Llama 3.3 70B via Workers AI (free fallback)
   private async callWorkersAI(messages: any[]): Promise<{ content: string; model: string }> {
-    const response = await this.ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    const response = await this.ai.run(reasoningModel(this.env), {
       messages,
       temperature: 0.3,
       max_tokens: 4096,

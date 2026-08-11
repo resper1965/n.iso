@@ -1,4 +1,5 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
+import { reasoningModel } from '../config/models';
 
 // PhaseInterpretationAgent — interpretação COESA das respostas de UMA fase da
 // jornada (F2 do questionário por fase).
@@ -43,7 +44,7 @@ FORMATO DA RESPOSTA: responda SOMENTE com um objeto JSON válido, sem texto ao r
       { role: 'user' as const, content: `Perguntas e respostas registradas nesta fase:\n\n${estado}` },
     ];
     try {
-      const response = await this.ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+      const response = await this.ai.run(reasoningModel(this.env), {
         messages,
         temperature: 0.2,
         max_tokens: 2048,

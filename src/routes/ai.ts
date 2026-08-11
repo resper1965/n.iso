@@ -4,6 +4,7 @@ import { logAudit } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
 import { validateBody, chatSchema } from '../schemas';
+import { chatModel } from '../config/models';
 
 export const aiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,7 +26,7 @@ Responda de forma clara, objetiva, profissional e baseada estritamente nas norma
 Seja solícito e forneça exemplos práticos quando solicitado.`;
 
   try {
-    const aiResponse = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const aiResponse = await c.env.AI.run(chatModel(c.env), {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: body.message }
@@ -103,7 +104,7 @@ Responda em PORTUGUÊS estritamente no formato JSON abaixo, sem blocos de códig
 }`;
 
   try {
-    const aiResponse = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const aiResponse = await c.env.AI.run(chatModel(c.env), {
       messages: [
         { role: 'system', content: 'You are an ISO 27001 Lead Auditor. Return only raw JSON as requested.' },
         { role: 'user', content: promptMessage }

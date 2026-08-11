@@ -1,4 +1,5 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
+import { reasoningModel } from '../config/models';
 
 // ControlAdequacaoAgent — sugere adequações de controle a partir das respostas de
 // uma fase (F3, adequação com aprovação).
@@ -44,7 +45,7 @@ FORMATO: responda SOMENTE com um array JSON válido, sem texto ao redor:
       { role: 'user' as const, content: estado },
     ];
     try {
-      const response = await this.ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+      const response = await this.ai.run(reasoningModel(this.env), {
         messages,
         temperature: 0.2,
         max_tokens: 2048,

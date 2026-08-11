@@ -1,5 +1,6 @@
 import { Bindings } from '../index';
 import { embed } from './embeddings';
+import { chatModel } from '../config/models';
 
 export type KnowledgeType = 'interview' | 'procedure' | 'policy' | 'evidence' | 'other';
 
@@ -30,7 +31,7 @@ Responda APENAS um JSON no formato:
   "controls": ["controles ISO relacionados"]
 }`;
 
-    const aiResponse = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const aiResponse = await this.env.AI.run(chatModel(this.env), {
       messages: [{ role: 'user', content: analysisPrompt }]
     }) as any;
     

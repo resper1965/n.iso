@@ -1,4 +1,5 @@
 import { BaseAgent, AgentContext, AgentResponse, gatewayConfig } from './types';
+import { reasoningModel, gatewayModel } from '../config/models';
 
 export class EvidenceAgent extends BaseAgent {
   private buildSystemPrompt(controlId?: string, standardReference?: string): string {
@@ -37,7 +38,7 @@ ESTRUTURA DA RESPOSTA:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'openai/gpt-4.1',
+          model: gatewayModel(this.env),
           input: { messages, max_tokens: 4096 },
         }),
       });
@@ -50,7 +51,7 @@ ESTRUTURA DA RESPOSTA:
 
   // ponytail: Llama 3.3 70B via Workers AI
   private async callWorkersAI(messages: any[]): Promise<{ content: string; model: string }> {
-    const response = await this.ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    const response = await this.ai.run(reasoningModel(this.env), {
       messages,
       temperature: 0.1,
       max_tokens: 4096,
