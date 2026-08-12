@@ -24,6 +24,8 @@ on:
 
 permissions:
   contents: read
+  # Para o passo de notificação abrir/atualizar uma issue quando o deploy falha.
+  issues: write
 
 concurrency:
   # Dois deploys simultâneos publicam versões imprevisíveis. O segundo espera.
@@ -76,3 +78,31 @@ jobs:
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # A falha mais cara aqui é a SILENCIOSA: o deploy parou (ex.: migration
+      # pendente) e ninguém viu por dias, então `main` acumulou correções que
+      # nunca saíram. Este passo torna a falha visível abrindo (ou comentando)
+      # uma issue com o rótulo `deploy-failure` e o link do run + a remediação.
+      - name: Avisar falha de deploy
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `O deploy de produção falhou no commit \`${context.sha.slice(0,7)}\`.`,
+              ``,
+              `Run: ${run}`,
+              ``,
+              `Causa mais comum: **migration pendente**. Aplique com`,
+              '`npx wrangler d1 migrations apply niso-db --remote`',
+              `e re-execute o workflow de Deploy. Enquanto isso, o que está em`,
+              `\`main\` NÃO está em produção.`,
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const abertas = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'deploy-failure' });
+            if (abertas.data.length) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: abertas.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'Deploy de produção falhou', body, labels: ['deploy-failure'] });
+            }
