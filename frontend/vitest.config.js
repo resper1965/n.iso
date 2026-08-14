@@ -30,15 +30,18 @@ export default defineConfig({
       all: true,
       reporter: ['text', 'text-summary', 'html', 'json-summary', 'lcov'],
       reportsDirectory: 'coverage',
-      // Piso de catraca: fixado logo abaixo do atual (2026-08, ~9% stmts após os
-      // testes de fluxo da jornada) para barrar REGRESSAO sem inventar meta. Subir
-      // conforme os testes crescem. As demais views grandes (dashboard/admin) ainda
-      // nao tem teste unitario — cobertura real delas viria de E2E (Playwright).
+      // Piso de catraca: fixado alguns pontos abaixo do atingido (2026-08,
+      // ~11.6% stmts / 7.4% br / 10% fn / 11.8% lines, após os contratos de dados
+      // (PHASE_PLAYBOOKS, ASSESSMENT_BLOCKS), as funcoes de UI de globals.js e o
+      // render do dashboard) para barrar REGRESSAO sem inventar meta. Subir
+      // conforme os testes crescem. As views grandes (grc/monitor/compliance/
+      // commercial) sao renderers monoliticos presos a `window` — cobertura real
+      // delas viria de E2E (Playwright), nao de teste unitario.
       thresholds: {
-        statements: 8,
+        statements: 10,
         branches: 6,
-        functions: 7,
-        lines: 8,
+        functions: 8,
+        lines: 10,
       },
     },
   },

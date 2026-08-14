@@ -46,13 +46,16 @@ export default defineConfig({
       all: true,
       reporter: ['text-summary', 'html', 'json-summary', 'lcov'],
       reportsDirectory: 'coverage',
-      // Piso de catraca fixado logo abaixo do atual (2026-08: ~49% stmts) para
-      // barrar REGRESSAO sem inventar meta. Subir junto conforme os testes crescem.
+      // Piso de catraca fixado alguns pontos abaixo do atingido (2026-08:
+      // ~55.8% stmts / 43% br / 62.6% fn / 57.7% lines, após os testes de
+      // agents/ (assessment, evidence) e services/ RAG (memory, knowledge,
+      // embeddings, policy-generator)) para barrar REGRESSAO sem inventar meta.
+      // Subir junto conforme os testes crescem.
       thresholds: {
-        statements: 48,
-        branches: 36,
-        functions: 52,
-        lines: 49,
+        statements: 53,
+        branches: 40,
+        functions: 59,
+        lines: 55,
       },
     },
   },
