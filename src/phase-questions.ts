@@ -151,7 +151,10 @@ export const PHASE_QUESTIONS: Record<number, PhaseQuestion[]> = build({
   // ── Jornada 4: Implementação SGPI (27701) ─────────────────────────────────
   21: [ // Programa de Privacidade (27701)
     S('p21_q1', 'Papel da organização no tratamento?', ['Controlador', 'Operador', 'Ambos']),
-    S('p21_q2', 'O programa de privacidade está formalizado?', ['Sim', 'Parcial', 'Não']),
+    S('p21_q2', 'O programa de privacidade (SGPI) está formalizado?', ['Sim', 'Parcial', 'Não']),
+    S('p21_q3', 'Existe RoPA (registro das operações de tratamento) mantido e atualizado?', ['Sim', 'Parcial', 'Não']),
+    S('p21_q4', 'Há processo de DPIA para tratamentos de alto risco?', ['Sim', 'Sob demanda', 'Não']),
+    S('p21_q5', 'O SGPI será conduzido como sistema autônomo (27701:2025) ou integrado ao SGSI 27001?', ['Autônomo', 'Integrado', 'A definir']),
   ],
   22: [ // Privacy by Design
     S('p22_q1', 'Privacy by Design é aplicado em novos projetos/produtos?', ['Sim', 'Às vezes', 'Não']),

@@ -151,6 +151,7 @@ export const PHASE_CHECKLISTS: Record<number, ChecklistItem[]> = {
     { id: 'p21_2', text: 'DPO/Encarregado nomeado', category: 'evidence' },
     { id: 'p21_3', text: 'Bases legais mapeadas por operação', category: 'document' },
     { id: 'p21_4', text: 'RoPA completo e atualizado', category: 'document' },
+    { id: 'p21_5', text: 'Processo de DPIA para tratamentos de alto risco', category: 'document' },
   ],
   22: [ // Privacy by Design
     { id: 'p22_1', text: 'Metodologia de Privacy by Design definida', category: 'document' },
