@@ -218,21 +218,28 @@ export const PHASE_QUESTIONS: Record<number, PhaseQuestion[]> = build({
     S('p36_q1', 'Os findings do Stage 1 foram tratados?', ['Todos', 'Alguns', 'Nenhum']),
     T('p36_q2', 'Plano e prazo para as pendências remanescentes?'),
   ],
-  37: [ // Gestão de Vulnerabilidades
-    S('p37_q1', 'Há processo recorrente de gestão de vulnerabilidades?', ['Sim', 'Parcial', 'Não']),
-    S('p37_q2', 'Pentest/scan periódico com correção acompanhada?', ['Sim', 'Eventual', 'Não']),
+  37: [ // Preparação Stage 2
+    S('p37_q1', 'A documentação obrigatória do SGSI está completa e aprovada?', ['Sim', 'Parcial', 'Não']),
+    S('p37_q2', 'As evidências dos controles estão organizadas e rastreáveis por controle?', ['Sim', 'Parcial', 'Não']),
+    S('p37_q3', 'As não conformidades do Stage 1 foram tratadas e verificadas?', ['Todas', 'Algumas', 'Nenhuma']),
+    S('p37_q4', 'Foi feita uma auditoria interna/simulado cobrindo o escopo do certificado?', ['Sim', 'Parcial', 'Não']),
   ],
-  38: [ // Continuidade de Negócios (A.5.30)
-    S('p38_q1', 'Existem planos de continuidade/recuperação (BCP/DRP)?', ['Sim, testados', 'Sim, não testados', 'Não']),
-    T('p38_q2', 'Quando foi o último teste de restore/continuidade?'),
+  38: [ // Atendimento ao Auditor
+    S('p38_q1', 'Os owners de controle e entrevistados estão preparados para a auditoria?', ['Sim', 'Parcial', 'Não']),
+    S('p38_q2', 'Há responsável definido para conduzir a evidência durante a auditoria (interface com o auditor)?', ['Sim', 'Não']),
+    T('p38_q3', 'Quais áreas/processos o organismo certificador indicou como foco do Estágio 2?'),
+    S('p38_q4', 'A reunião de abertura e a logística (acessos, salas, remoto) estão acordadas?', ['Sim', 'Parcial', 'Não']),
   ],
-  39: [ // Segurança Física
-    M('p39_q1', 'Controles físicos de segurança em operação?', ['Acesso controlado', 'Monitoramento', 'Energia/redundância', 'Prevenção a incêndio']),
-    T('p39_q2', 'Lacunas físicas conhecidas?'),
+  39: [ // Pós-Auditoria
+    S('p39_q1', 'Houve não conformidades no Estágio 2?', ['Nenhuma', 'Só menores', 'Maiores e menores']),
+    S('p39_q2', 'O plano de ação corretiva (causa raiz + correção) foi aceito pelo organismo?', ['Sim', 'Em análise', 'Não']),
+    T('p39_q3', 'Prazo acordado para tratar as NCs e evidenciar a eficácia?'),
   ],
-  40: [ // Encerramento do Ciclo
-    T('p40_q1', 'Principais lições aprendidas no ciclo?'),
-    S('p40_q2', 'Há plano de melhoria contínua para o próximo ciclo?', ['Sim', 'Em elaboração', 'Não']),
+  40: [ // Manutenção e Supervisão
+    S('p40_q1', 'Há calendário de auditorias de supervisão (surveillance) definido?', ['Sim', 'Parcial', 'Não']),
+    S('p40_q2', 'O programa de auditoria interna do próximo ciclo foi aprovado?', ['Sim', 'Em elaboração', 'Não']),
+    S('p40_q3', 'Os riscos residuais aceitos continuam aceitáveis na análise crítica?', ['Sim', 'Reavaliar', 'Não']),
+    S('p40_q4', 'A recertificação (fim do ciclo de 3 anos) está planejada?', ['Sim', 'A planejar', 'Não se aplica ainda']),
   ],
 });
 
@@ -277,8 +284,8 @@ export const PHASE_META: Record<number, { titulo: string; clausula: string }> = 
   34: { titulo: 'Readiness Review', clausula: '' },
   35: { titulo: 'Preparação Stage 1', clausula: '' },
   36: { titulo: 'Correções Pós-Stage 1', clausula: '' },
-  37: { titulo: 'Gestão de Vulnerabilidades', clausula: '' },
-  38: { titulo: 'Continuidade de Negócios', clausula: 'A.5.30' },
-  39: { titulo: 'Segurança Física', clausula: '' },
-  40: { titulo: 'Encerramento do Ciclo', clausula: '' },
+  37: { titulo: 'Preparação Stage 2', clausula: '' },
+  38: { titulo: 'Atendimento ao Auditor', clausula: '' },
+  39: { titulo: 'Pós-Auditoria', clausula: '10.2' },
+  40: { titulo: 'Manutenção e Supervisão', clausula: '10.1 & 9.3' },
 };

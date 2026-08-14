@@ -1297,10 +1297,10 @@ window.PHASE_PLAYBOOKS = {
     34: { obj: "Readiness Review", guideline: "Revisar todos os entregáveis do SGSI antes da contratação da certificadora. Verificar se todas as políticas e evidências mínimas estão disponíveis." },
     35: { obj: "Preparação Stage 1", guideline: "Organizar e compilar a documentação do SGSI (Escopo, Política, SoA e BCP) para envio ao auditor externo da certificadora." },
     36: { obj: "Correções Pós-Stage 1", guideline: "Tratar quaisquer apontamentos ou não conformidades levantadas pelo auditor na auditoria documental de Estágio 1." },
-    37: { obj: "Gestão de Vulnerabilidades", guideline: "Verificar se as varreduras de vulnerabilidades operacionais estão ativas e se os relatórios estão limpos para a auditoria de Estágio 2." },
-    38: { obj: "Continuidade de Negócios (Controle A.5.30)", guideline: "Revisar os planos de continuidade (BCP/DRP) e garantir que testes práticos de backup e restore foram executados e documentados com sucesso." },
-    39: { obj: "Segurança Física", guideline: "Fazer uma varredura nas dependências físicas do escritório para garantir a conformidade prática com a política de Mesa Limpa e Tela Limpa." },
-    40: { obj: "Encerramento do Ciclo", guideline: "Preparar a equipe e os principais owners de controles para as entrevistas presença/remota da auditoria externa de Estágio 2." }
+    37: { obj: "Preparação Stage 2", guideline: "Consolidar a documentação obrigatória do SGSI e organizar as evidências rastreáveis por controle. Confirmar que as NCs do Estágio 1 foram tratadas e que a auditoria interna/simulado cobriu o escopo do certificado." },
+    38: { obj: "Atendimento ao Auditor", guideline: "Preparar owners de controle e entrevistados, definir a interface que conduz a evidência durante a auditoria e acordar reunião de abertura e logística (acessos, salas, remoto). Alinhar-se ao foco indicado pelo organismo para o Estágio 2." },
+    39: { obj: "Pós-Auditoria", guideline: "Mapear as não conformidades do Estágio 2, submeter plano de ação corretiva (causa raiz + correção) ao organismo e acordar o prazo para evidenciar a eficácia. Sem parecer de certificação — isso é prerrogativa do organismo acreditado." },
+    40: { obj: "Manutenção e Supervisão", guideline: "Manter o SGSI vivo após o certificado: calendário de auditorias de supervisão (surveillance), programa de auditoria interna do próximo ciclo, reavaliação de riscos residuais na análise crítica e planejamento da recertificação ao fim do ciclo de 3 anos." }
 };
 
 window.initApp = window.initApp || function() {};
