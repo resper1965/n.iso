@@ -306,7 +306,11 @@ platformApp.get('/notifications', async (c) => {
 
 platformApp.put('/notifications/:id/read', async (c) => {
   const id = c.req.param('id');
-  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ?').bind(id).run();
+  const user = c.get('user');
+  // Escopo ao dono: sem o filtro, qualquer autenticado marcaria como lida a
+  // notificação de outro usuário (IDOR). Só o destinatário (ou broadcast) pode.
+  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND (user_id = ? OR user_id IS NULL)')
+    .bind(id, user?.id || null).run();
   return c.json({ ok: true });
 });
 

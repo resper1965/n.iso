@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
-import { logAudit, genNumericCode, erro500 } from '../helpers';
+import { logAudit, genNumericCode, erro500, sendEmail, escapeHtml, rateLimit } from '../helpers';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -40,6 +40,15 @@ publicApp.post('/policies/request-otp', async (c) => {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = (name || cleanEmail.split('@')[0]).trim();
+
+    // Esta rota é pública e montada ANTES do rateLimitMiddleware — sem trava
+    // própria, vira relay de mail-bombing e queima a cota/reputação do Resend.
+    // Limite por projeto+e-mail: 5 pedidos por hora.
+    const permitido = await rateLimit(c.env.SESSIONS, `otp:${project_id}:${cleanEmail}`, 5, 3600);
+    if (!permitido) {
+      return c.json({ error: 'Muitas solicitações de código. Tente novamente mais tarde.' }, 429);
+    }
+
     const otp = genNumericCode(6);
 
     const otpKey = `otp_${project_id}_${cleanEmail}`;
@@ -53,13 +62,29 @@ publicApp.post('/policies/request-otp', async (c) => {
 
     await c.env.SESSIONS.put(otpKey, JSON.stringify(otpData), { expirationTtl: 900 });
 
-    console.log(`[OTP SIMULATION] Código para ${cleanEmail} (Projeto ${project_id}): ${otp}`);
+    // O OTP é a ÚNICA credencial do portal público de políticas. Ele deve chegar
+    // só ao dono do e-mail — nunca no corpo da resposta (isso derrubaria o 2º
+    // fator: qualquer um que conheça o project_id leria as políticas do tenant).
+    // Entrega por e-mail; o eco em `demo_otp` fica restrito a dev/test.
+    // `cleanName` é controlado pelo chamador e vai no HTML enviado da identidade
+    // confiável noreply@ness.lat → escapar para não virar relay de injeção/phishing.
+    const enviado = await sendEmail(
+      c,
+      cleanEmail,
+      'Seu código de acesso às políticas',
+      `<p>Olá ${escapeHtml(cleanName)},</p><p>Seu código de verificação é <strong>${otp}</strong>. Ele expira em 15 minutos.</p>`
+    );
     await logAudit(c.env.DB, 'policy.otp_requested', cleanEmail, `OTP de acesso às políticas solicitado para projeto ${project_id}`);
 
+    const isDevOrTest = c.env.ENVIRONMENT === 'development' || c.env.ENVIRONMENT === 'test';
+    // Não anunciar sucesso se a entrega falhou. Em dev/test o eco supre o envio.
+    if (!enviado && !isDevOrTest) {
+      return c.json({ error: 'Não foi possível enviar o código no momento. Tente novamente.' }, 502);
+    }
     return c.json({
       ok: true,
-      message: `Código de verificação enviado para ${cleanEmail}. (Para ambiente de demonstração: ${otp})`,
-      demo_otp: otp
+      message: `Código de verificação enviado para ${cleanEmail}.`,
+      ...(isDevOrTest ? { demo_otp: otp } : {})
     });
   } catch (e: any) {
     return erro500(c, 'Falha ao gerar código OTP', e);

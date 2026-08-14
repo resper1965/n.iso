@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit } from '../helpers';
+import { logAudit, requireProjectAccess } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
 import { validateBody, chatSchema } from '../schemas';
@@ -274,8 +274,21 @@ aiApp.get('/mcp', async (c) => {
 
 aiApp.post('/mcp/execute', async (c) => {
   const { tool, arguments: args } = await c.req.json();
+
+  // Esta rota é montada em /api/v1 (fora de /projects/:projectId), então o
+  // projectAccessMiddleware NÃO roda aqui. O project_id vem do CORPO — sem a
+  // checagem abaixo, uma chave/sessão do projeto A leria dados do projeto B
+  // (IDOR cross-tenant). Trava o escopo antes de qualquer query.
+  const projectId = args?.project_id;
+  if (!projectId) return c.json({ error: 'project_id é obrigatório' }, 400);
+  try {
+    requireProjectAccess(c.get('user'), projectId);
+  } catch {
+    return c.json({ error: 'Sem acesso a este projeto' }, 403);
+  }
+
   const service = new KnowledgeService(c.env);
-  
+
   if (tool === 'get_project_knowledge') {
     const results = await service.search(args.project_id, args.query);
     return c.json({ results });

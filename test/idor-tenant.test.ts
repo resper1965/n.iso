@@ -361,4 +361,36 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       expect(mr.decisions).toBe('Manter o plano');
     });
   });
+
+  describe('MCP execute (rota fora de /projects/:id)', () => {
+    it('ator do A não lê controle do B via project_id no corpo (403); no próprio projeto passa; staff acessa qualquer um', async () => {
+      // ATAQUE: ator do A aponta o project_id do corpo para o B.
+      const ataque = await req('/api/v1/mcp/execute', {
+        method: 'POST', headers: jsonA,
+        body: JSON.stringify({ tool: 'check_control_compliance', arguments: { project_id: B, control_id: 'A.5.1' } }),
+      });
+      expect(ataque.status, await ataque.clone().text()).toBe(403);
+
+      // LEGÍTIMO: mesmo ator no próprio projeto.
+      const legitimo = await req('/api/v1/mcp/execute', {
+        method: 'POST', headers: jsonA,
+        body: JSON.stringify({ tool: 'check_control_compliance', arguments: { project_id: A, control_id: 'A.5.1' } }),
+      });
+      expect(legitimo.status, await legitimo.clone().text()).toBe(200);
+
+      // Sem project_id → 400 (não 500).
+      const semProjeto = await req('/api/v1/mcp/execute', {
+        method: 'POST', headers: jsonA,
+        body: JSON.stringify({ tool: 'check_control_compliance', arguments: { control_id: 'A.5.1' } }),
+      });
+      expect(semProjeto.status).toBe(400);
+
+      // Staff (platform_admin) acessa qualquer projeto.
+      const staffB = await req('/api/v1/mcp/execute', {
+        method: 'POST', headers: jsonStaff,
+        body: JSON.stringify({ tool: 'check_control_compliance', arguments: { project_id: B, control_id: 'A.5.1' } }),
+      });
+      expect(staffB.status, await staffB.clone().text()).toBe(200);
+    });
+  });
 });
