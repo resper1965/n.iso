@@ -212,6 +212,7 @@ export const PHASE_QUESTIONS: Record<number, PhaseQuestion[]> = build({
   34: [ // Readiness Review
     S('p34_q1', 'Uma revisão de prontidão (readiness) foi conduzida?', ['Sim', 'Parcial', 'Não']),
     T('p34_q2', 'Quais gaps residuais impedem a ida ao Stage 1?'),
+    S('p34_q3', 'Qual(is) norma(s) no escopo do certificado?', ['ISO 27001', 'ISO 27701 (autônomo)', '27001 + 27701 (integrado)']),
   ],
   35: [ // Preparação Stage 1
     S('p35_q1', 'A documentação obrigatória está completa e aprovada?', ['Sim', 'Parcial', 'Não']),
@@ -222,7 +223,7 @@ export const PHASE_QUESTIONS: Record<number, PhaseQuestion[]> = build({
     T('p36_q2', 'Plano e prazo para as pendências remanescentes?'),
   ],
   37: [ // Preparação Stage 2
-    S('p37_q1', 'A documentação obrigatória do SGSI está completa e aprovada?', ['Sim', 'Parcial', 'Não']),
+    S('p37_q1', 'A documentação obrigatória do SGSI/SGPI (conforme o escopo do certificado) está completa e aprovada?', ['Sim', 'Parcial', 'Não']),
     S('p37_q2', 'As evidências dos controles estão organizadas e rastreáveis por controle?', ['Sim', 'Parcial', 'Não']),
     S('p37_q3', 'As não conformidades do Stage 1 foram tratadas e verificadas?', ['Todas', 'Algumas', 'Nenhuma']),
     S('p37_q4', 'Foi feita uma auditoria interna/simulado cobrindo o escopo do certificado?', ['Sim', 'Parcial', 'Não']),

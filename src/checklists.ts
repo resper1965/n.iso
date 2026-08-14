@@ -1,5 +1,9 @@
 export type ChecklistItem = { id: string; text: string; category: 'task' | 'document' | 'evidence' };
 
+// ATENÇÃO: esta `PHASE_CHECKLISTS` é o mapa item→documento usado SÓ por policies.ts
+// (lookup de política gerada). NÃO é a checklist que o usuário vê — essa é a
+// `PHASE_CHECKLISTS` de src/constants.ts, servida em /api/v1/phases/config.
+// Itens que devem aparecer na UI vão em constants.ts, não aqui.
 export const PHASE_CHECKLISTS: Record<number, ChecklistItem[]> = {
   0: [ // Mobilização e Mandato
     { id: 'p0_1', text: 'Definir sponsor executivo', category: 'task' },

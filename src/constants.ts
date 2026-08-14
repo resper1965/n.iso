@@ -175,7 +175,10 @@ export const PHASE_TITLES: string[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// PHASE_CHECKLISTS — Checklists por fase
+// PHASE_CHECKLISTS — Checklist por fase SERVIDA À UI (endpoint /api/v1/phases/config,
+// platform.ts) e usada por projects.ts. É ESTA a checklist que o usuário vê e completa.
+// NÃO confundir com a `PHASE_CHECKLISTS` de src/checklists.ts, que é um mapa
+// item→documento usado só por policies.ts. Itens visíveis ao usuário entram AQUI.
 // ═══════════════════════════════════════════════════════════════
 export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; category: string; twyn_ref?: string }[]> = {
   0: [
@@ -358,6 +361,7 @@ export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; catego
     { id: 'p33_3', text: 'Emitir Ata da Análise Crítica', category: 'document' },
   ],
   34: [
+    { id: 'p34_0', text: 'Definir norma(s) e escopo do certificado (27001 / 27701 autônomo / integrado)', category: 'document' },
     { id: 'p34_1', text: 'Revisar Readiness Score Final', category: 'evidence' },
     { id: 'p34_2', text: 'Consolidar Pacote de Evidências', category: 'task' },
     { id: 'p34_3', text: 'Declaração de Prontidão do Consultor', category: 'document' },
