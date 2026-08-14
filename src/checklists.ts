@@ -1,10 +1,11 @@
 export type ChecklistItem = { id: string; text: string; category: 'task' | 'document' | 'evidence' };
 
-// ATENÇÃO: esta `PHASE_CHECKLISTS` é o mapa item→documento usado SÓ por policies.ts
-// (lookup de política gerada). NÃO é a checklist que o usuário vê — essa é a
-// `PHASE_CHECKLISTS` de src/constants.ts, servida em /api/v1/phases/config.
-// Itens que devem aparecer na UI vão em constants.ts, não aqui.
-export const PHASE_CHECKLISTS: Record<number, ChecklistItem[]> = {
+// PHASE_POLICY_DOCS — mapa item→documento usado SÓ por policies.ts (lookup da
+// política gerada). Antes se chamava `PHASE_CHECKLISTS`, colidindo com a de
+// src/constants.ts (a que o usuário VÊ, servida em /api/v1/phases/config) — foi
+// renomeado para eliminar o risco de editar o arquivo errado. Itens que devem
+// aparecer na UI vão em constants.ts; itens que mapeiam para documento, aqui.
+export const PHASE_POLICY_DOCS: Record<number, ChecklistItem[]> = {
   0: [ // Mobilização e Mandato
     { id: 'p0_1', text: 'Definir sponsor executivo', category: 'task' },
     { id: 'p0_2', text: 'Nomear equipe do projeto', category: 'task' },

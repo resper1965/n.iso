@@ -300,6 +300,7 @@ export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; catego
     { id: 'p21_1', text: 'Aprovar Política de Privacidade Externa', category: 'document' },
     { id: 'p21_2', text: 'Documentar Registro de Operações (RoPA)', category: 'document' },
     { id: 'p21_3', text: 'Definir Base Legal para cada Tratamento', category: 'document' },
+    { id: 'p21_4', text: 'Processo de DPIA para tratamentos de alto risco', category: 'document' },
   ],
   22: [
     { id: 'p22_1', text: 'Integrar PbD no Fluxo de Produto', category: 'task' },

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { PHASE_CHECKLISTS, ChecklistItem } from '../checklists';
+import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
 import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
@@ -98,9 +98,9 @@ policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
 
 // Helper para encontrar item de checklist
 function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: number } | null {
-  for (const phaseStr in PHASE_CHECKLISTS) {
+  for (const phaseStr in PHASE_POLICY_DOCS) {
     const phaseNumber = parseInt(phaseStr);
-    const item = PHASE_CHECKLISTS[phaseNumber].find(i => i.id === itemId);
+    const item = PHASE_POLICY_DOCS[phaseNumber].find(i => i.id === itemId);
     if (item) return { item, phaseNumber };
   }
   return null;
