@@ -393,4 +393,30 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       expect(staffB.status, await staffB.clone().text()).toBe(200);
     });
   });
+
+  describe('Aprovação de DPIA exige autoridade de assinatura', () => {
+    it('só o designado na matriz (DPO/Líder SGSI) aprova; não-designado e plataforma → 403', async () => {
+      await env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, processing_name, status) VALUES (?,?,?,?)`)
+        .bind('dpia-a', A, 'Tratamento A', 'Draft').run();
+
+      // ciso@a.com NÃO está na matriz de governança → não assina (fail-closed).
+      const naoDesignado = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonCiso });
+      expect(naoDesignado.status, await naoDesignado.clone().text()).toBe(403);
+
+      // Conta de plataforma (staff) não carimba conformidade.
+      const plataforma = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonStaff });
+      expect(plataforma.status).toBe(403);
+
+      // Estado intacto após as recusas.
+      let dpia = await env.DB.prepare('SELECT status, dpo_approved_by FROM dpia_assessments WHERE id = ?').bind('dpia-a').first<any>();
+      expect(dpia.status).toBe('Draft');
+
+      // adm@a.com É o CISO designado na matriz (gov-a) → assina de forma legítima.
+      const legitimo = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonA });
+      expect(legitimo.status, await legitimo.clone().text()).toBe(200);
+      dpia = await env.DB.prepare('SELECT status, dpo_approved_by FROM dpia_assessments WHERE id = ?').bind('dpia-a').first<any>();
+      expect(dpia.status).toBe('Approved');
+      expect(dpia.dpo_approved_by).toBe('Admin do A');
+    });
+  });
 });

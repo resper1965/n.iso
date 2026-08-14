@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 
@@ -71,8 +71,17 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     const assessmentId = c.req.param('assessmentId');
     const user = c.get('user');
 
+    // Aprovar DPIA é ato do DPO/Líder SGSI — a autoridade sai da matriz de
+    // governança DESTE projeto, não do papel de plataforma. Sem esta checagem,
+    // qualquer editor do projeto carimbava a aprovação (falha de segregação de
+    // funções). Mesmo padrão de evidência, controles e ROPA.
+    const autoridade = await autoridadeDeAssinatura(c.env.DB, projectId, user);
+    const recusa = recusaDeAssinatura(autoridade, 'ciso');
+    if (recusa) return c.json({ error: recusa }, 403);
+
     const dbUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first<any>();
-    let approvedBy = dbUser?.name || user.email;
+    // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
+    const approvedBy = autoridade.nome || dbUser?.name || user.email;
     const now = new Date().toISOString();
 
     await c.env.DB.prepare(
