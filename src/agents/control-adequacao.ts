@@ -1,5 +1,4 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
-import { reasoningModel } from '../config/models';
 
 // ControlAdequacaoAgent — sugere adequações de controle a partir das respostas de
 // uma fase (F3, adequação com aprovação).
@@ -44,16 +43,15 @@ FORMATO: responda SOMENTE com um array JSON válido, sem texto ao redor:
       { role: 'system' as const, content: this.buildSystemPrompt(context.titulo ?? 'Fase', context.clausula ?? '') },
       { role: 'user' as const, content: estado },
     ];
+    // Rota unificada (BaseAgent.runModel): GPT-4.1 compat → Workers AI via gateway
+    // → binding direto. A IA aqui só PROPÕE — o parseSugestoes e o /apply seguem
+    // sendo o guarda-rail; a rota do modelo não afeta a aprovação humana.
     try {
-      const response = await this.ai.run(reasoningModel(this.env), {
-        messages,
-        temperature: 0.2,
-        max_tokens: 2048,
-      });
-      const content = (response?.response ?? '').toString();
-      return { success: true, content, confidence: 0.8, metadata: { model: 'llama-3.3-70b-instruct-fp8-fast', source: 'workers-ai' } };
+      const r = await this.runModel(messages, { temperature: 0.2, maxTokens: 2048 });
+      const confidence = r.source === 'ai-gateway-compat' ? 0.85 : 0.8;
+      return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
-      return { success: false, content: '', confidence: 0, metadata: { error: error?.message } };
+      return { success: false, content: '', confidence: 0, metadata: { error: error?.message ?? String(error) } };
     }
   }
 }

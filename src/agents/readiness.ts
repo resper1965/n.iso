@@ -1,5 +1,4 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
-import { reasoningModel } from '../config/models';
 
 // ReadinessAgent — camada de IA (F2) do Diagnóstico de Prontidão.
 //
@@ -33,21 +32,14 @@ FORMATO DA RESPOSTA: responda SOMENTE com um array JSON válido, sem texto ao re
       { role: 'system' as const, content: this.buildSystemPrompt() },
       { role: 'user' as const, content: `Estado consolidado do SGSI:\n\n${estado}` },
     ];
+    // Rota unificada (BaseAgent.runModel): GPT-4.1 compat → Workers AI via gateway
+    // → binding direto. Antes era só o binding direto, sem gateway nem fallback.
     try {
-      const response = await this.ai.run(reasoningModel(this.env), {
-        messages,
-        temperature: 0.2,
-        max_tokens: 2048,
-      });
-      const content = (response?.response ?? '').toString();
-      return {
-        success: true,
-        content,
-        confidence: 0.85,
-        metadata: { model: 'llama-3.3-70b-instruct-fp8-fast', source: 'workers-ai' },
-      };
+      const r = await this.runModel(messages, { temperature: 0.2, maxTokens: 2048 });
+      const confidence = r.source === 'ai-gateway-compat' ? 0.9 : 0.85;
+      return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
-      return { success: false, content: '', confidence: 0, metadata: { error: error?.message } };
+      return { success: false, content: '', confidence: 0, metadata: { error: error?.message ?? String(error) } };
     }
   }
 }

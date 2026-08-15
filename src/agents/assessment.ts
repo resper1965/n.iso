@@ -1,5 +1,4 @@
-import { BaseAgent, AgentContext, AgentResponse, gatewayConfig } from './types';
-import { reasoningModel, gatewayModel } from '../config/models';
+import { BaseAgent, AgentContext, AgentResponse } from './types';
 
 export class AssessmentAgent extends BaseAgent {
   private buildSystemPrompt(projectInfo: string): string {
@@ -32,39 +31,6 @@ ESTRUTURA DA RESPOSTA (Markdown):
 `;
   }
 
-  private async callGateway(messages: any[]): Promise<{ content: string; model: string } | null> {
-    const token = this.env?.AI_GATEWAY_TOKEN;
-    if (!token) return null;
-    try {
-      const { accountId, gatewayId } = gatewayConfig(this.env);
-      const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'cf-aig-gateway-id': gatewayId,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: gatewayModel(this.env),
-          input: { messages, max_tokens: 4096 },
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json() as any;
-      const content = data?.result?.response || data?.choices?.[0]?.message?.content || '';
-      return content ? { content, model: 'openai/gpt-4.1' } : null;
-    } catch { return null; }
-  }
-
-  private async callWorkersAI(messages: any[]): Promise<{ content: string; model: string }> {
-    const response = await this.ai.run(reasoningModel(this.env), {
-      messages,
-      temperature: 0.1,
-      max_tokens: 4096,
-    });
-    return { content: response.response, model: 'llama-3.3-70b-instruct-fp8-fast' };
-  }
-
   async run(assessmentData: string, context: AgentContext): Promise<AgentResponse> {
     const projectInfo = `Setor/Contexto: ${context.standardReference || 'Geral'}\nID da Organização: ${context.organizationId}`;
     const systemPrompt = this.buildSystemPrompt(projectInfo);
@@ -73,31 +39,18 @@ ESTRUTURA DA RESPOSTA (Markdown):
       { role: 'user' as const, content: `Respostas e Dados Consolidados do Auto-Diagnóstico:\n\n${assessmentData}` }
     ];
 
+    // Rota unificada (BaseAgent.runModel): GPT-4.1 compat → Workers AI via gateway
+    // → binding direto. Antes o gateway batia no endpoint /ai/run (que só roda
+    // modelos Workers AI por binding, não roteava o GPT-4.1) e engolia o erro.
     try {
-      // 1. Try GPT-4.1 via AI Gateway
-      const gateway = await this.callGateway(messages);
-      if (gateway) {
-        return {
-          success: true,
-          content: gateway.content,
-          confidence: 0.96,
-          metadata: { model: gateway.model, source: 'ai-gateway' }
-        };
-      }
-
-      // 2. Fallback to Workers AI
-      const fallback = await this.callWorkersAI(messages);
-      return {
-        success: true,
-        content: fallback.content,
-        confidence: 0.90,
-        metadata: { model: fallback.model, source: 'workers-ai-fallback' }
-      };
+      const r = await this.runModel(messages, { temperature: 0.1, maxTokens: 4096 });
+      const confidence = r.source === 'ai-gateway-compat' ? 0.96 : 0.90;
+      return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
       return {
         success: false,
-        content: `Erro no processamento do diagnóstico: ${error.message}`,
-        confidence: 0
+        content: `Erro no processamento do diagnóstico: ${error?.message ?? error}`,
+        confidence: 0,
       };
     }
   }
