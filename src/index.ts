@@ -52,6 +52,8 @@ export type Bindings = {
   CF_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
   AI_GATEWAY_TOKEN?: string;
+  /** URL compat do AI Gateway (definida em wrangler.jsonc; roteia GPT-4.1 pelo n-iso). */
+  AI_GATEWAY_URL?: string;
   RESEND_API_KEY?: string;
   /** Analytics Engine. Opcional: sem o binding, a métrica é ignorada. */
   ANALYTICS?: AnalyticsEngineDataset;

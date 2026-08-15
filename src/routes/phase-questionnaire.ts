@@ -176,8 +176,15 @@ projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
       .join('\n');
 
     let interpretacao: any = null;
-    let fonte: 'ia' | 'indisponivel' = 'indisponivel';
-    if (c.req.query('ai') !== '0' && c.env.AI && respostas.size > 0) {
+    let fonte: 'ia' | 'sem_ia' | 'sem_respostas' | 'erro_ia' | 'formato_invalido' | 'desativada' = 'sem_ia';
+    let motivo = '';
+    if (c.req.query('ai') === '0') {
+      fonte = 'desativada'; motivo = 'Interpretação por IA desativada nesta chamada.';
+    } else if (!c.env.AI) {
+      fonte = 'sem_ia'; motivo = 'Binding de IA ausente neste ambiente.';
+    } else if (respostas.size === 0) {
+      fonte = 'sem_respostas'; motivo = 'Nenhuma resposta registrada nesta fase.';
+    } else {
       try {
         const agent = new PhaseInterpretationAgent(c.env.AI, c.env.DB, c.env);
         const resp = await agent.run(estado, {
@@ -185,11 +192,19 @@ projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
         });
         if (resp.success) {
           const parsed = parseInterpretacao(resp.content, new Set(perguntas.map((q) => q.key)));
-          if (parsed) { interpretacao = { ...parsed, origem: 'ia' }; fonte = 'ia'; }
+          if (parsed) {
+            interpretacao = { ...parsed, origem: 'ia' }; fonte = 'ia';
+          } else {
+            fonte = 'formato_invalido'; motivo = 'A IA respondeu, mas fora do formato esperado.';
+          }
+        } else {
+          fonte = 'erro_ia'; motivo = `Falha na chamada de IA: ${resp.metadata?.error ?? 'desconhecida'}`;
         }
-      } catch {
-        interpretacao = null; // aterramento: IA nunca derruba a resposta.
+      } catch (e: any) {
+        // Aterramento: a IA nunca derruba a resposta — mas o motivo não some mais.
+        fonte = 'erro_ia'; motivo = `Erro ao interpretar: ${e?.message ?? e}`;
       }
+      if (!interpretacao) console.error('[phase-interpret]', projectId, 'fase', phase, '→', motivo);
     }
 
     return c.json({
@@ -200,7 +215,8 @@ projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
       clausula: meta.clausula,
       rotulo: 'Interpretação assistida da fase — revisar; não é parecer de certificação',
       cobertura,
-      fonte,          // 'ia' quando o diagnóstico veio do agente; senão 'indisponivel'
+      fonte,          // 'ia' quando o diagnóstico veio do agente; senão o motivo da ausência
+      motivo,         // '' quando fonte==='ia'; senão a causa exata (para UI e log)
       interpretacao,  // null quando sem IA/sem respostas — o consumidor usa a cobertura
     });
   } catch (e: any) {

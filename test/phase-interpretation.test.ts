@@ -46,7 +46,8 @@ describe('Interpretação da fase (F2)', () => {
     const res = await interpret(1); // env sem AI
     expect(res.status).toBe(200);
     const b = (await res.json()) as any;
-    expect(b.fonte).toBe('indisponivel');
+    expect(b.fonte).toBe('sem_ia');          // contrato granular: binding de IA ausente
+    expect(b.motivo).toMatch(/IA/i);          // motivo exato acompanha a ausência
     expect(b.interpretacao).toBeNull();
     expect(b.cobertura.total).toBe(PHASE_QUESTIONS[1].length);
     expect(b.cobertura.respondidas).toBe(2);

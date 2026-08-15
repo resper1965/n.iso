@@ -1,5 +1,5 @@
-import { BaseAgent, AgentContext, AgentResponse } from './types';
-import { reasoningModel } from '../config/models';
+import { BaseAgent, AgentContext, AgentResponse, gatewayConfig } from './types';
+import { reasoningModel, gatewayModel } from '../config/models';
 
 // PhaseInterpretationAgent — interpretação COESA das respostas de UMA fase da
 // jornada (F2 do questionário por fase).
@@ -38,27 +38,77 @@ FORMATO DA RESPOSTA: responda SOMENTE com um objeto JSON válido, sem texto ao r
 {"prontidao":"em_dia|atencao|critico","resumo":"2-4 frases sobre o estado desta fase","pontos":[{"severidade":"critico|alto|medio","pergunta_key":"pX_qN","observacao":"o que a resposta revela e por quê importa nesta cláusula"}],"proximos_passos":["ação concreta ancorada na fase"]}`;
   }
 
+  // AI Gateway compat (OpenAI /chat/completions) na URL REAL que o projeto configura
+  // em AI_GATEWAY_URL — não um endpoint hardcoded. Roteia o modelo de gateway
+  // (GPT-4.1 por padrão) pelo gateway `n-iso`. Só roda quando há AI_GATEWAY_TOKEN;
+  // sem token, retorna null e o chamador usa o binding do Workers AI. Lança em erro
+  // HTTP para o motivo aparecer no log/UI em vez de sumir.
+  private async callCompatGateway(messages: any[]): Promise<{ content: string; model: string } | null> {
+    const base = this.env?.AI_GATEWAY_URL;
+    const token = this.env?.AI_GATEWAY_TOKEN;
+    if (!base || !token) return null;
+    const res = await fetch(`${String(base).replace(/\/$/, '')}/compat/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: gatewayModel(this.env), messages, max_tokens: 2048, temperature: 0.2 }),
+    });
+    if (!res.ok) throw new Error(`gateway compat HTTP ${res.status}`);
+    const data = await res.json() as any;
+    const content = data?.choices?.[0]?.message?.content || data?.result?.response || '';
+    return content ? { content: String(content), model: gatewayModel(this.env) } : null;
+  }
+
   async run(estado: string, context: AgentContext & { titulo?: string; clausula?: string }): Promise<AgentResponse> {
     const messages = [
       { role: 'system' as const, content: this.buildSystemPrompt(context.titulo ?? 'Fase', context.clausula ?? '') },
       { role: 'user' as const, content: `Perguntas e respostas registradas nesta fase:\n\n${estado}` },
     ];
+    const { gatewayId } = gatewayConfig(this.env);
+
+    // Registra o motivo de cada caminho que não deu certo — a falha não pode mais
+    // sumir sem rastro (era zerada em dois catch, deixando "IA indisponível" sem
+    // explicação para o operador nem para o log).
+    let motivo = '';
+
+    // 1. AI Gateway compat (GPT-4.1) — primário quando há AI_GATEWAY_TOKEN.
     try {
-      const response = await this.ai.run(reasoningModel(this.env), {
-        messages,
-        temperature: 0.2,
-        max_tokens: 2048,
-      });
-      const content = (response?.response ?? '').toString();
-      return {
-        success: true,
-        content,
-        confidence: 0.85,
-        metadata: { model: 'llama-3.3-70b-instruct-fp8-fast', source: 'workers-ai' },
-      };
+      const gw = await this.callCompatGateway(messages);
+      if (gw) {
+        return { success: true, content: gw.content, confidence: 0.9, metadata: { model: gw.model, source: 'ai-gateway-compat' } };
+      }
     } catch (error: any) {
-      return { success: false, content: '', confidence: 0, metadata: { error: error?.message } };
+      motivo = `gateway: ${error?.message ?? error}`;
     }
+
+    // 2. Workers AI (Llama 3.3 70B) roteado PELO gateway n-iso (analytics + cache),
+    //    sem secret novo — é o "usar o AI Gateway" que faltava.
+    try {
+      const response = await this.ai.run(
+        reasoningModel(this.env),
+        { messages, temperature: 0.2, max_tokens: 2048 },
+        { gateway: { id: gatewayId } },
+      );
+      const content = (response?.response ?? '').toString();
+      if (content.trim()) {
+        return { success: true, content, confidence: 0.82, metadata: { model: reasoningModel(this.env), source: 'workers-ai-gateway' } };
+      }
+      motivo = motivo || 'workers-ai: resposta vazia do modelo';
+    } catch (error: any) {
+      motivo = `${motivo ? motivo + ' | ' : ''}workers-ai(gateway): ${error?.message ?? error}`;
+      // 3. Último recurso: binding direto, sem roteamento — se a opção de gateway
+      //    não for suportada no runtime, ainda entregamos o diagnóstico.
+      try {
+        const response = await this.ai.run(reasoningModel(this.env), { messages, temperature: 0.2, max_tokens: 2048 });
+        const content = (response?.response ?? '').toString();
+        if (content.trim()) {
+          return { success: true, content, confidence: 0.8, metadata: { model: reasoningModel(this.env), source: 'workers-ai-direct' } };
+        }
+      } catch (e2: any) {
+        motivo = `${motivo} | direto: ${e2?.message ?? e2}`;
+      }
+    }
+
+    return { success: false, content: '', confidence: 0, metadata: { error: motivo || 'sem resposta da IA' } };
   }
 }
 

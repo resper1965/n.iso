@@ -974,31 +974,38 @@ const ISO_GUIDELINES = {
             const sevCor = { critico: '#c0392b', alto: '#c9770a', medio: 'var(--text-dim)' };
             const it = r.interpretacao;
             const cab = r.clausula ? `${escapeHTML(r.titulo)} — cláusula ${escapeHTML(r.clausula)}` : escapeHTML(r.titulo || ('Fase ' + phaseNumber));
+            const cov = r.cobertura || { total: 0, respondidas: 0, sem_resposta: [] };
+            const completo = cov.total > 0 && cov.respondidas === cov.total;
 
             let corpo = '';
             if (it) {
                 const [cor, rotulo] = badge[it.prontidao] || badge.atencao;
                 corpo += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:1rem">
-                    <span style="background:${cor}; color:#fff; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">${rotulo}</span>
+                    <span style="background:${cor}; color:#fff; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:500; text-transform:uppercase; letter-spacing:0.5px">${rotulo}</span>
                     <span style="font-size:0.75rem; color:var(--text-dim)">Prontidão da fase</span></div>`;
                 if (it.resumo) corpo += `<p style="font-size:0.85rem; line-height:1.5; margin-bottom:1rem">${escapeHTML(it.resumo)}</p>`;
                 if (it.pontos && it.pontos.length) {
-                    corpo += `<div style="font-weight:600; font-size:0.78rem; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Pontos de atenção</div>`;
+                    corpo += `<div style="font-weight:500; font-size:0.78rem; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Pontos de atenção</div>`;
                     corpo += it.pontos.map(pt => `<div style="border-left:3px solid ${sevCor[pt.severidade] || 'var(--text-dim)'}; padding:6px 10px; margin-bottom:8px; background:rgba(255,255,255,0.02); border-radius:6px">
                         <div style="font-size:0.68rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px">${escapeHTML(pt.severidade)} · ${escapeHTML(textoDaPergunta(pt.pergunta_key))}</div>
                         <div style="font-size:0.82rem; line-height:1.45; margin-top:2px">${escapeHTML(pt.observacao)}</div></div>`).join('');
                 }
                 if (it.proximos_passos && it.proximos_passos.length) {
-                    corpo += `<div style="font-weight:600; font-size:0.78rem; margin:1rem 0 0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Próximos passos</div>`;
+                    corpo += `<div style="font-weight:500; font-size:0.78rem; margin:1rem 0 0.5rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim)">Próximos passos</div>`;
                     corpo += `<ol style="font-size:0.82rem; line-height:1.5; padding-left:1.2rem; margin:0">${it.proximos_passos.map(s => `<li>${escapeHTML(s)}</li>`).join('')}</ol>`;
                 }
             } else {
-                corpo += `<p style="font-size:0.83rem; color:var(--text-dim); line-height:1.5">Diagnóstico assistido indisponível no momento (sem IA configurada ou sem respostas suficientes). A cobertura das perguntas segue abaixo.</p>`;
+                // Sem contradição: com a fase completa, dizemos isso em vez de
+                // "sem respostas suficientes"; o motivo real vem do backend.
+                const motivoSuffix = r.motivo ? ` (${escapeHTML(r.motivo)})` : '';
+                const abre = completo
+                    ? 'As respostas desta fase estão completas, mas a interpretação por IA não pôde ser gerada agora.'
+                    : 'A interpretação assistida por IA está indisponível no momento.';
+                corpo += `<p style="font-size:0.83rem; color:var(--text-dim); line-height:1.5">${abre}${motivoSuffix}</p>`;
             }
 
-            const cov = r.cobertura || { total: 0, respondidas: 0, sem_resposta: [] };
             corpo += `<div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border)">
-                <div style="font-size:0.78rem; color:var(--text-dim)"><strong>Cobertura</strong> — ${cov.respondidas}/${cov.total} perguntas respondidas</div>`;
+                <div style="font-size:0.78rem; color:var(--text-dim)"><strong style="font-weight:500">Cobertura</strong> — ${cov.respondidas}/${cov.total} perguntas respondidas</div>`;
             if (cov.sem_resposta && cov.sem_resposta.length) {
                 corpo += `<ul style="font-size:0.78rem; color:var(--text-dim); line-height:1.45; margin:0.5rem 0 0; padding-left:1.2rem">${cov.sem_resposta.map(q => `<li>Sem resposta: ${escapeHTML(q.pergunta)}</li>`).join('')}</ul>`;
             }
