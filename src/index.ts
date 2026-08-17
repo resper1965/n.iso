@@ -48,12 +48,11 @@ export type Bindings = {
   SETUP_KEY?: string;
   ENVIRONMENT?: string;
   ASSETS?: Fetcher;
-  /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts). */
+  /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts).
+   *  Os agentes roteiam pelo binding (env.AI.run + gateway n-iso) — sem secret;
+   *  GPT-4.1 usa Unified Billing. Só troque se a conta/gateway mudar. */
   CF_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
-  /** Cloudflare API token (permissão AI Gateway Run). Roteia GPT-4.1 pela REST
-   *  API do AI Gateway com Unified Billing; sem ele, os agentes usam Workers AI. */
-  AI_GATEWAY_TOKEN?: string;
   RESEND_API_KEY?: string;
   /** Analytics Engine. Opcional: sem o binding, a métrica é ignorada. */
   ANALYTICS?: AnalyticsEngineDataset;
