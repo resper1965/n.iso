@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, erro500, logAudit } from '../helpers';
+import { genId, erro500, logAudit, sha256Hex } from '../helpers';
 import { PHASE_QUESTIONS, PHASE_META, PhaseQuestion } from '../phase-questions';
 import { PhaseInterpretationAgent, parseInterpretacao } from '../agents/phase-interpretation';
 
@@ -175,16 +175,60 @@ projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
       .map((q) => `- [${q.key}] ${q.question}\n  Resposta: ${respostas.get(q.key) ?? '(sem resposta)'}`)
       .join('\n');
 
+    // Assinatura das respostas desta fase — muda quando qualquer resposta muda.
+    // É o que invalida o cache: interpretação salva com hash diferente = stale.
+    const canonico = [...respostas.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n');
+    const answersHash = await sha256Hex(`p${phase}\n${canonico}`);
+
+    // Interpretação já persistida desta fase (o cache).
+    const cacheRow = await c.env.DB.prepare(
+      'SELECT interpretacao, fonte, answers_hash, model, generated_at FROM project_phase_interpretations WHERE project_id = ? AND phase_number = ?'
+    ).bind(projectId, phase).first<any>();
+    const cachedObj = (() => {
+      if (!cacheRow?.interpretacao) return null;
+      try { return JSON.parse(cacheRow.interpretacao); } catch { return null; }
+    })();
+    const cacheFresh = !!cachedObj && cacheRow.answers_hash === answersHash;
+
+    const forceRefresh = c.req.query('refresh') === '1';
+    const aiOff = c.req.query('ai') === '0';
+
     let interpretacao: any = null;
-    let fonte: 'ia' | 'sem_ia' | 'sem_respostas' | 'erro_ia' | 'formato_invalido' | 'desativada' = 'sem_ia';
+    // 'ia' = fresca do agente; 'ia_cache' = servida do cache válido; 'ia_desatualizada'
+    // = cache servido porque as respostas mudaram ou a IA falhou agora.
+    let fonte: 'ia' | 'ia_cache' | 'ia_desatualizada' | 'sem_ia' | 'sem_respostas' | 'erro_ia' | 'formato_invalido' | 'desativada' = 'sem_ia';
     let motivo = '';
-    if (c.req.query('ai') === '0') {
-      fonte = 'desativada'; motivo = 'Interpretação por IA desativada nesta chamada.';
+    let fromCache = false;
+    let generatedAt = new Date().toISOString();
+    let modelUsed = '';
+
+    // Serve o cache existente (com o rótulo certo) — usado quando não vamos rodar
+    // a IA agora (desligada, sem binding, ou falha) mas há interpretação salva.
+    const servirCache = (motivoStale: string) => {
+      interpretacao = cachedObj;
+      fromCache = true;
+      generatedAt = cacheRow.generated_at ?? generatedAt;
+      modelUsed = cacheRow.model ?? '';
+      if (cacheFresh) { fonte = 'ia_cache'; }
+      else { fonte = 'ia_desatualizada'; motivo = motivoStale; }
+    };
+
+    if (aiOff) {
+      if (cachedObj) servirCache('Respostas mudaram desde esta interpretação; recarregue sem ai=0 para atualizar.');
+      else { fonte = 'desativada'; motivo = 'Interpretação por IA desativada nesta chamada.'; }
     } else if (!c.env.AI) {
-      fonte = 'sem_ia'; motivo = 'Binding de IA ausente neste ambiente.';
+      if (cachedObj) servirCache('Respostas mudaram desde esta interpretação; sem binding de IA para atualizar.');
+      else { fonte = 'sem_ia'; motivo = 'Binding de IA ausente neste ambiente.'; }
     } else if (respostas.size === 0) {
       fonte = 'sem_respostas'; motivo = 'Nenhuma resposta registrada nesta fase.';
+    } else if (cacheFresh && !forceRefresh) {
+      // Cache válido: NÃO chama a IA — é o ganho principal (custo/latência).
+      servirCache('');
     } else {
+      // Gera de novo (sem cache, respostas mudaram, ou refresh forçado) e persiste.
       try {
         const agent = new PhaseInterpretationAgent(c.env.AI, c.env.DB, c.env);
         const resp = await agent.run(estado, {
@@ -193,30 +237,46 @@ projectPhaseAnswersApp.get('/:phase/interpret', async (c) => {
         if (resp.success) {
           const parsed = parseInterpretacao(resp.content, new Set(perguntas.map((q) => q.key)));
           if (parsed) {
-            interpretacao = { ...parsed, origem: 'ia' }; fonte = 'ia';
+            interpretacao = { ...parsed, origem: 'ia' };
+            fonte = 'ia';
+            modelUsed = (resp.metadata?.model ?? '').toString();
+            await c.env.DB.prepare(
+              `INSERT INTO project_phase_interpretations (project_id, phase_number, interpretacao, fonte, answers_hash, model, generated_at)
+               VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(project_id, phase_number)
+               DO UPDATE SET interpretacao = excluded.interpretacao, fonte = excluded.fonte,
+                             answers_hash = excluded.answers_hash, model = excluded.model, generated_at = datetime('now')`
+            ).bind(projectId, phase, JSON.stringify(interpretacao), 'ia', answersHash, modelUsed).run();
+          } else if (cachedObj) {
+            servirCache('A IA respondeu fora do formato; mantendo a última interpretação salva.');
           } else {
             fonte = 'formato_invalido'; motivo = 'A IA respondeu, mas fora do formato esperado.';
           }
+        } else if (cachedObj) {
+          servirCache(`Falha na IA (${resp.metadata?.error ?? 'desconhecida'}); mantendo a última interpretação salva.`);
         } else {
           fonte = 'erro_ia'; motivo = `Falha na chamada de IA: ${resp.metadata?.error ?? 'desconhecida'}`;
         }
       } catch (e: any) {
-        // Aterramento: a IA nunca derruba a resposta — mas o motivo não some mais.
-        fonte = 'erro_ia'; motivo = `Erro ao interpretar: ${e?.message ?? e}`;
+        // Aterramento: a IA nunca derruba a resposta — cai no cache se houver.
+        if (cachedObj) servirCache(`Erro ao interpretar (${e?.message ?? e}); mantendo a última interpretação salva.`);
+        else { fonte = 'erro_ia'; motivo = `Erro ao interpretar: ${e?.message ?? e}`; }
       }
       if (!interpretacao) console.error('[phase-interpret]', projectId, 'fase', phase, '→', motivo);
     }
 
     return c.json({
-      generated_at: new Date().toISOString(),
+      generated_at: generatedAt,   // quando a interpretação servida foi gerada (cache = data original)
       project_id: projectId,
       phase,
       titulo: meta.titulo,
       clausula: meta.clausula,
       rotulo: 'Interpretação assistida da fase — revisar; não é parecer de certificação',
       cobertura,
-      fonte,          // 'ia' quando o diagnóstico veio do agente; senão o motivo da ausência
-      motivo,         // '' quando fonte==='ia'; senão a causa exata (para UI e log)
+      fonte,          // 'ia'/'ia_cache' quando há diagnóstico; senão o motivo da ausência
+      from_cache: fromCache,   // true quando veio da interpretação salva (não re-rodou a IA)
+      model: modelUsed,
+      motivo,         // '' quando fresco/cache válido; senão a causa (para UI e log)
       interpretacao,  // null quando sem IA/sem respostas — o consumidor usa a cobertura
     });
   } catch (e: any) {

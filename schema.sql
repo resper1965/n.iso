@@ -138,6 +138,22 @@ CREATE TABLE IF NOT EXISTS project_phase_answers (
     UNIQUE(project_id, phase_number, question_key)
 );
 
+-- Interpretação da IA por fase, PERSISTIDA (uma linha por projeto+fase). O
+-- diagnóstico deixa de ser recalculado a cada abertura: fica salvo e é servido do
+-- cache. `answers_hash` guarda o SHA-256 das respostas que geraram a interpretação
+-- — quando as respostas mudam, o hash diverge e a fase é reinterpretada; enquanto
+-- isso, a última interpretação salva ainda é servida (marcada como desatualizada).
+CREATE TABLE IF NOT EXISTS project_phase_interpretations (
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    phase_number INTEGER NOT NULL,
+    interpretacao TEXT NOT NULL,
+    fonte TEXT NOT NULL,
+    answers_hash TEXT NOT NULL,
+    model TEXT,
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, phase_number)
+);
+
 -- ═══════════════════════════════════════════════
 -- STREAM B: DELIVERY ENGINE
 -- ═══════════════════════════════════════════════

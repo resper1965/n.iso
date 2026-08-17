@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
@@ -76,6 +76,56 @@ describe('Interpretação da fase (F2)', () => {
     expect(b.interpretacao.pontos.length).toBe(1); // a forjada saiu
     expect(b.interpretacao.pontos[0].pergunta_key).toBe(k1);
     expect(b.interpretacao.origem).toBe('ia');
+  });
+
+  it('cache: 2ª chamada com mesmas respostas vem do cache e NÃO re-chama a IA', async () => {
+    const k1 = PHASE_QUESTIONS[1][0].key;
+    await put('/api/v1/projects/p1/phase-answers', { phase_number: 1, answers: { [k1]: 'Não definido' } });
+    const saida = JSON.stringify({
+      prontidao: 'atencao', resumo: 'estado da fase',
+      pontos: [{ severidade: 'alto', pergunta_key: k1, observacao: 'x' }], proximos_passos: ['a'],
+    });
+    const aiRun = vi.fn(async () => ({ response: saida }));
+
+    const b1 = (await (await interpret(1, { aiRun })).json()) as any;
+    expect(b1.fonte).toBe('ia');
+    expect(b1.from_cache).toBe(false);
+
+    const b2 = (await (await interpret(1, { aiRun })).json()) as any;
+    expect(b2.fonte).toBe('ia_cache');       // servido do cache persistido
+    expect(b2.from_cache).toBe(true);
+    expect(b2.interpretacao.pontos[0].pergunta_key).toBe(k1);
+    expect(aiRun).toHaveBeenCalledTimes(1);  // a 2ª leitura não pagou IA
+  });
+
+  it('cache: mudar a resposta invalida (hash diverge) e re-interpreta', async () => {
+    const k1 = PHASE_QUESTIONS[1][0].key;
+    const aiRun = vi.fn(async () => ({
+      response: JSON.stringify({ prontidao: 'atencao', resumo: 'ok', pontos: [], proximos_passos: [] }),
+    }));
+    await put('/api/v1/projects/p1/phase-answers', { phase_number: 1, answers: { [k1]: 'Não definido' } });
+    await interpret(1, { aiRun });                        // gera + cacheia
+    await put('/api/v1/projects/p1/phase-answers', { phase_number: 1, answers: { [k1]: 'Alto' } });
+    const b = (await (await interpret(1, { aiRun })).json()) as any;
+    expect(b.fonte).toBe('ia');
+    expect(b.from_cache).toBe(false);
+    expect(aiRun).toHaveBeenCalledTimes(2);              // respostas mudaram → re-rodou
+  });
+
+  it('cache: IA falha depois de haver cache — serve o salvo, marcado desatualizado', async () => {
+    const k1 = PHASE_QUESTIONS[1][0].key;
+    const ok = JSON.stringify({
+      prontidao: 'critico', resumo: 'r',
+      pontos: [{ severidade: 'alto', pergunta_key: k1, observacao: 'x' }], proximos_passos: [],
+    });
+    await put('/api/v1/projects/p1/phase-answers', { phase_number: 1, answers: { [k1]: 'Não definido' } });
+    await interpret(1, { aiRun: async () => ({ response: ok }) });   // cacheia 'critico'
+    await put('/api/v1/projects/p1/phase-answers', { phase_number: 1, answers: { [k1]: 'Moderado' } }); // invalida
+    const b = (await (await interpret(1, { aiRun: async () => { throw new Error('modelo fora do ar'); } })).json()) as any;
+    expect(b.fonte).toBe('ia_desatualizada');
+    expect(b.from_cache).toBe(true);
+    expect(b.interpretacao.prontidao).toBe('critico');  // a última salva sobrevive à falha
+    expect(b.motivo).toMatch(/fora do ar/);
   });
 
   it('com IA: saída não-JSON não quebra — cobertura intacta, interpretacao null', async () => {
