@@ -51,9 +51,9 @@ export type Bindings = {
   /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts). */
   CF_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
+  /** Cloudflare API token (permissão AI Gateway Run). Roteia GPT-4.1 pela REST
+   *  API do AI Gateway com Unified Billing; sem ele, os agentes usam Workers AI. */
   AI_GATEWAY_TOKEN?: string;
-  /** URL compat do AI Gateway (definida em wrangler.jsonc; roteia GPT-4.1 pelo n-iso). */
-  AI_GATEWAY_URL?: string;
   RESEND_API_KEY?: string;
   /** Analytics Engine. Opcional: sem o binding, a métrica é ignorada. */
   ANALYTICS?: AnalyticsEngineDataset;

@@ -36,7 +36,7 @@ ESTRUTURA DA RESPOSTA:
     // o GPT-4.1) e engolia o erro sem rastro.
     try {
       const r = await this.runModel(messages, { temperature: 0.1, maxTokens: 4096 });
-      const confidence = r.source === 'ai-gateway-compat' ? 0.98 : 0.92;
+      const confidence = r.source === 'ai-gateway' ? 0.98 : 0.92;
       return { success: true, content: r.content, confidence, metadata: { model: r.model, control: controlId, source: r.source } };
     } catch (error: any) {
       return {

@@ -44,7 +44,7 @@ ESTRUTURA DA RESPOSTA (Markdown):
     // modelos Workers AI por binding, não roteava o GPT-4.1) e engolia o erro.
     try {
       const r = await this.runModel(messages, { temperature: 0.1, maxTokens: 4096 });
-      const confidence = r.source === 'ai-gateway-compat' ? 0.96 : 0.90;
+      const confidence = r.source === 'ai-gateway' ? 0.96 : 0.90;
       return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
       return {

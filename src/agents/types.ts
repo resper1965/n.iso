@@ -16,7 +16,7 @@ export interface AgentContext {
 
 /** De qual caminho veio a resposta do modelo. Vai no metadata para o operador
  *  saber SE o GPT-4.1 respondeu ou se caímos no Llama, e por qual rota. */
-export type ModelSource = 'ai-gateway-compat' | 'workers-ai-gateway' | 'workers-ai-direct';
+export type ModelSource = 'ai-gateway' | 'workers-ai-gateway' | 'workers-ai-direct';
 
 export interface ModelRunResult {
   content: string;
@@ -55,26 +55,33 @@ export abstract class BaseAgent {
 
   abstract run(prompt: string, context: AgentContext): Promise<AgentResponse>;
 
-  // AI Gateway compat (OpenAI /chat/completions) na URL REAL que o projeto
-  // configura em AI_GATEWAY_URL — não um endpoint hardcoded. Roteia o modelo de
-  // gateway (GPT-4.1 por padrão) pelo gateway `n-iso`. Só roda quando há
-  // AI_GATEWAY_URL e AI_GATEWAY_TOKEN; sem eles, retorna null e o chamador usa o
-  // binding do Workers AI. Lança em erro HTTP para o motivo aparecer no log/UI
-  // em vez de sumir.
-  private async callCompatGateway(
+  // AI Gateway via REST API (api.cloudflare.com/.../ai/v1/chat/completions),
+  // endpoint OpenAI-compatível. Autentica com um Cloudflare API token
+  // (AI_GATEWAY_TOKEN, com permissão AI Gateway Run) e cobra os modelos de
+  // terceiros — GPT-4.1 (openai/gpt-4.1) — pela Unified Billing da Cloudflare,
+  // sem chave da OpenAI no ambiente. O header cf-aig-gateway-id roteia a chamada
+  // pelo gateway `n-iso` (logs, cache, rate limit). Só roda quando há
+  // AI_GATEWAY_TOKEN; sem ele, retorna null e o chamador usa o binding do
+  // Workers AI. Lança em erro HTTP para o motivo aparecer no log/UI em vez de
+  // sumir.
+  private async callRestGateway(
     messages: any[],
     temperature: number,
     maxTokens: number,
   ): Promise<{ content: string; model: string } | null> {
-    const base = this.env?.AI_GATEWAY_URL;
     const token = this.env?.AI_GATEWAY_TOKEN;
-    if (!base || !token) return null;
-    const res = await fetch(`${String(base).replace(/\/$/, '')}/compat/chat/completions`, {
+    if (!token) return null;
+    const { accountId, gatewayId } = gatewayConfig(this.env);
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'cf-aig-gateway-id': gatewayId,
+      },
       body: JSON.stringify({ model: gatewayModel(this.env), messages, max_tokens: maxTokens, temperature }),
     });
-    if (!res.ok) throw new Error(`gateway compat HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`gateway REST HTTP ${res.status}`);
     const data = await res.json() as any;
     const content = data?.choices?.[0]?.message?.content || data?.result?.response || '';
     return content ? { content: String(content), model: gatewayModel(this.env) } : null;
@@ -82,7 +89,8 @@ export abstract class BaseAgent {
 
   /**
    * Rota única de inferência dos agentes (padrão do PhaseInterpretationAgent):
-   *   1. AI Gateway compat (GPT-4.1) — primário quando há AI_GATEWAY_TOKEN+URL.
+   *   1. AI Gateway REST (GPT-4.1 via Unified Billing) — primário quando há
+   *      AI_GATEWAY_TOKEN (Cloudflare API token).
    *   2. Workers AI (Llama 70B) roteado PELO gateway n-iso — analytics + cache,
    *      sem secret novo.
    *   3. Binding direto do Workers AI — último recurso, se a opção de gateway não
@@ -98,10 +106,10 @@ export abstract class BaseAgent {
     const { gatewayId } = gatewayConfig(this.env);
     let motivo = '';
 
-    // 1. AI Gateway compat (GPT-4.1).
+    // 1. AI Gateway REST (GPT-4.1 via Unified Billing).
     try {
-      const gw = await this.callCompatGateway(messages, temperature, maxTokens);
-      if (gw) return { content: gw.content, model: gw.model, source: 'ai-gateway-compat' };
+      const gw = await this.callRestGateway(messages, temperature, maxTokens);
+      if (gw) return { content: gw.content, model: gw.model, source: 'ai-gateway' };
     } catch (error: any) {
       motivo = `gateway: ${error?.message ?? error}`;
     }

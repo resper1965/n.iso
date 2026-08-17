@@ -48,7 +48,7 @@ FORMATO DA RESPOSTA: responda SOMENTE com um objeto JSON válido, sem texto ao r
     // que de fato respondeu.
     try {
       const r = await this.runModel(messages, { temperature: 0.2, maxTokens: 2048 });
-      const confidence = r.source === 'ai-gateway-compat' ? 0.9 : r.source === 'workers-ai-gateway' ? 0.82 : 0.8;
+      const confidence = r.source === 'ai-gateway' ? 0.9 : r.source === 'workers-ai-gateway' ? 0.82 : 0.8;
       return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
       return { success: false, content: '', confidence: 0, metadata: { error: error?.message ?? String(error) } };

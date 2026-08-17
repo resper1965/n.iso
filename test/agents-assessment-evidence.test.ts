@@ -1,7 +1,8 @@
 // Unidade dos agentes de IA AssessmentAgent (diagnóstico de conformidade) e
 // EvidenceAgent (avaliação de evidência). Desde a unificação da rota de modelo
 // (BaseAgent.runModel), ambos seguem o MESMO caminho do PhaseInterpretationAgent:
-//   1. AI Gateway compat (GPT-4.1) — exige AI_GATEWAY_URL + AI_GATEWAY_TOKEN;
+//   1. AI Gateway REST (GPT-4.1 via Unified Billing) — exige AI_GATEWAY_TOKEN
+//      (Cloudflare API token); chama api.cloudflare.com/.../ai/v1/chat/completions;
 //   2. Workers AI (Llama) roteado PELO gateway n-iso;
 //   3. binding direto do Workers AI (último recurso).
 // Testamos os caminhos — gateway OK, fallback e erro — sem tocar rede real:
@@ -16,9 +17,9 @@ function fakeAi(response: string) {
   return { run: vi.fn(async () => ({ response })) };
 }
 
-// env com o gateway compat habilitado (URL + token). Sem AMBOS, o caminho 1 é
-// pulado e cai direto no Workers AI.
-const GW_ENV = { AI_GATEWAY_URL: 'https://gateway.example/n-iso', AI_GATEWAY_TOKEN: 'tok' };
+// env com o gateway REST habilitado (Cloudflare API token). Sem o token, o
+// caminho 1 é pulado e cai direto no Workers AI.
+const GW_ENV = { AI_GATEWAY_TOKEN: 'tok' };
 
 const ctx: AgentContext = {
   organizationId: 'org-42',
@@ -51,7 +52,7 @@ describe('AssessmentAgent', () => {
     expect(user).toContain('respostas do auto-diagnóstico');
   });
 
-  it('com gateway compat OK usa a resposta do GPT-4.1 (confiança 0.96)', async () => {
+  it('com gateway REST OK usa a resposta do GPT-4.1 (confiança 0.96)', async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ choices: [{ message: { content: 'Resposta do Gateway' } }] }),
@@ -62,17 +63,17 @@ describe('AssessmentAgent', () => {
     const res = await agent.run('dados', ctx);
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    // Rota compat: /compat/chat/completions na URL configurada.
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/compat/chat/completions');
+    // Rota REST: api.cloudflare.com/.../ai/v1/chat/completions.
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/ai/v1/chat/completions');
     expect(res.success).toBe(true);
     expect(res.content).toBe('Resposta do Gateway');
     expect(res.confidence).toBe(0.96);
-    expect(res.metadata?.source).toBe('ai-gateway-compat');
+    expect(res.metadata?.source).toBe('ai-gateway');
     // Gateway respondeu → Workers AI não foi tocado.
     expect(ai.run).not.toHaveBeenCalled();
   });
 
-  it('gateway compat com status não-ok cai para o Workers AI', async () => {
+  it('gateway REST com status não-ok cai para o Workers AI', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => ({}) })));
     const ai = fakeAi('fallback content');
     const agent = new AssessmentAgent(ai, {} as any, GW_ENV);
@@ -111,7 +112,7 @@ describe('EvidenceAgent', () => {
     expect(user).toContain('texto extraído da evidência');
   });
 
-  it('gateway compat OK usa a resposta do GPT-4.1 (confiança 0.98)', async () => {
+  it('gateway REST OK usa a resposta do GPT-4.1 (confiança 0.98)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({ choices: [{ message: { content: 'Veredito via Gateway' } }] }),
@@ -121,10 +122,10 @@ describe('EvidenceAgent', () => {
     const res = await agent.run('evidência', ctx);
     expect(res.content).toBe('Veredito via Gateway');
     expect(res.confidence).toBe(0.98);
-    expect(res.metadata?.source).toBe('ai-gateway-compat');
+    expect(res.metadata?.source).toBe('ai-gateway');
   });
 
-  it('gateway compat que responde vazio cai para o Workers AI', async () => {
+  it('gateway REST que responde vazio cai para o Workers AI', async () => {
     // choices/result ausentes → content vazio → compat devolve null (não lança).
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
     const ai = fakeAi('fallback');

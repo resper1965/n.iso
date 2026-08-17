@@ -36,7 +36,7 @@ FORMATO DA RESPOSTA: responda SOMENTE com um array JSON válido, sem texto ao re
     // → binding direto. Antes era só o binding direto, sem gateway nem fallback.
     try {
       const r = await this.runModel(messages, { temperature: 0.2, maxTokens: 2048 });
-      const confidence = r.source === 'ai-gateway-compat' ? 0.9 : 0.85;
+      const confidence = r.source === 'ai-gateway' ? 0.9 : 0.85;
       return { success: true, content: r.content, confidence, metadata: { model: r.model, source: r.source } };
     } catch (error: any) {
       return { success: false, content: '', confidence: 0, metadata: { error: error?.message ?? String(error) } };
