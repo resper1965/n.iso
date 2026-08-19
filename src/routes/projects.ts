@@ -5,6 +5,7 @@ import { genId, genToken, logAudit, validateUpload, erro500 } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
+import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
 import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
@@ -418,6 +419,60 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
     });
   } catch (e: any) {
     return erro500(c, 'Falha na migração 27701:2025', e);
+  }
+});
+
+// Semeia o control-set 27701:2025 (Anexo A) DO ZERO, por papel do projeto.
+//
+// O migrate-27701-2025 acima só TRANSFORMA um SoA 27701:2019 existente — inútil
+// para projetos sem base 2019 (a maioria: eles têm só os 93 do 27001:2022). Este
+// endpoint cria os controles de privacidade da edição 2025 (Tabela A.1 Controlador
+// e/ou A.2 Operador, conforme org_role) como 'Missing', para o SGPI existir de
+// fato. Idempotente: re-rodar não duplica. Também garante o rótulo da norma.
+projectsApp.post('/:id/seed-27701-2025', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const proj = await c.env.DB.prepare('SELECT id, org_role, standards FROM projects WHERE id = ?')
+      .bind(projectId).first<{ id: string; org_role: string; standards: string }>();
+    if (!proj) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const wanted = controlsForRole(proj.org_role);
+
+    // Idempotência: o código do controle vive como primeiro token do título
+    // (ex.: "A.1.2.2 — ..."). Pula o que já foi semeado.
+    const { results: existing } = await c.env.DB.prepare(
+      'SELECT title FROM compliance_controls WHERE project_id = ? AND standard = ?'
+    ).bind(projectId, ISO_27701_2025_STANDARD).all<{ title: string }>();
+    const existingCodes = new Set((existing || []).map((r) => (r.title || '').split(' ')[0]));
+
+    let created = 0;
+    for (const ctrl of wanted) {
+      if (existingCodes.has(ctrl.code)) continue;
+      await c.env.DB.prepare(
+        `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
+         VALUES (?, ?, ?, ?, '', 'Missing', 0, datetime('now'))`
+      ).bind(genId(), projectId, ISO_27701_2025_STANDARD, `${ctrl.code} — ${ctrl.title}`).run();
+      created++;
+    }
+
+    // Rótulo da norma: garante 27701:2025 (substitui 2019 se presente).
+    let standards = (proj.standards || '').toString();
+    if (!/27701:2025/.test(standards)) {
+      standards = /27701:2019/.test(standards)
+        ? standards.replace(/(ISO\/?\s*(?:IEC\s*)?)27701:2019/i, `$1${'27701:2025'}`)
+        : (standards ? `${standards}, ${ISO_27701_2025_STANDARD}` : ISO_27701_2025_STANDARD);
+      await c.env.DB.prepare('UPDATE projects SET standards = ? WHERE id = ?').bind(standards, projectId).run();
+    }
+
+    await logAudit(
+      c.env.DB, 'seed.27701.2025', c.get('user')?.email ?? 'system',
+      `Seed 27701:2025 (${proj.org_role || 'Controller'}): ${created} controles criados, ${wanted.length - created} já existiam, projeto ${projectId}`,
+      '', c.req.header('CF-Connecting-IP') ?? '', projectId,
+    );
+
+    return c.json({ ok: true, standard: ISO_27701_2025_STANDARD, role: proj.org_role, seeded: created, catalog_total: wanted.length, standards });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao semear controles 27701:2025', e);
   }
 });
 
