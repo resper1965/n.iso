@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "design:detect": "npx --yes impeccable detect src login.html"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
