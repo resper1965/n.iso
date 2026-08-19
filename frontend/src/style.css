@@ -24,7 +24,7 @@
         /* â€”â€”â€” LOGIN â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: grid; grid-template-columns: 1.2fr 1fr; transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
         #login-overlay.hidden { opacity: 0; pointer-events: none; transform: scale(1.05); }
-        .login-hero { position: relative; overflow: hidden; background: url('/niso_login_hero_1783427222343.png') center/cover no-repeat; }
+        .login-hero { position: relative; overflow: hidden; background: url('/hero.png') center/cover no-repeat; }
         .login-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, var(--bg) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 40%); }
         .login-hero-content { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 5rem; }
         .login-brand-logo { font-family: 'Montserrat', sans-serif; font-size: 4rem; font-weight: 500; letter-spacing: -0.05em; color: #fff; }
