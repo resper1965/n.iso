@@ -18,7 +18,7 @@ import { navigate } from '../router.js';
                 <div class="phase-num" style="width:3.5rem;color:var(--accent)">${ctrl.id}</div>
                 <div style="flex:1">
                     <div class="phase-title">${escapeHTML(ctrl.title)}</div>
-                    ${ctrl.maturity ? `<div style="font-size:0.6rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
+                    ${ctrl.maturity ? `<div style="font-size:0.72rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
                 </div>
                 <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${escapeHTML(ctrl.status)}</div>
             </div>`).join('')}</div>`;
@@ -47,7 +47,7 @@ import { navigate } from '../router.js';
             // Seção de IA (F2): só aparece quando pedida. Marcada como assistida — revisar.
             const obsIA = r.ai_observacoes || [];
             const secaoIA = comIA ? `
-                <h4 style="margin:1.2rem 0 0.4rem;font-size:0.9rem">Assistido por IA <span style="font-size:0.65rem;color:var(--muted);text-transform:uppercase">— revisar</span></h4>
+                <h4 style="margin:1.2rem 0 0.4rem;font-size:0.9rem">Assistido por IA <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase">— revisar</span></h4>
                 ${obsIA.length ? obsIA.map(a => `
                     <div style="border-left:3px dashed ${cor[a.severidade] || 'var(--muted)'};padding:6px 10px;margin:6px 0;background:rgba(255,255,255,0.03)">
                         <div style="font-size:0.68rem;text-transform:uppercase;color:${cor[a.severidade] || 'var(--muted)'}">${escapeHTML(a.severidade)} · ${escapeHTML(a.requisito)} · ${escapeHTML(String(a.referencia))}</div>
@@ -158,7 +158,7 @@ import { navigate } from '../router.js';
                 <div style="padding:0.6rem 1rem; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; justify-content:space-between; align-items:center">
                     <div>
                         <div style="font-size:0.8rem; font-weight:500">${escapeHTML(e.filename)}</div>
-                        <div style="font-size:0.6rem; color:var(--muted)">${e.evaluation_status || 'pendente'}</div>
+                        <div style="font-size:0.72rem; color:var(--muted)">${e.evaluation_status || 'pendente'}</div>
                     </div>
                     <button class="btn-ghost" onclick="viewEvidence('${e.id}')" style="padding:0.25rem">Ver</button>
                 </div>
@@ -684,8 +684,8 @@ import { navigate } from '../router.js';
                                         </span>
                                     </div>
                                     <div style="display:flex;gap:4px;margin-top:4px">
-                                        ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO</span>` : ''}
-                                        ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.55rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO</span>` : ''}
+                                        ${ctrl.ciso_approved_by ? `<span class="badge" style="font-size:0.72rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por DPO: ${escapeHTML(ctrl.ciso_approved_by)}">DPO</span>` : ''}
+                                        ${ctrl.ceo_approved_by ? `<span class="badge" style="font-size:0.72rem;padding:2px 4px;background:rgba(16,185,129,0.08);color:#10b981;border:1px solid rgba(16,185,129,0.15)" title="Assinado por CEO: ${escapeHTML(ctrl.ceo_approved_by)}">CEO</span>` : ''}
                                     </div>
                                 </td>
                                 <td>
@@ -1029,7 +1029,7 @@ import { navigate } from '../router.js';
                 return [
                     `<strong>${escapeHTML(fileName)}</strong>`,
                     sizeKB,
-                    `<code style="font-size:0.65rem;color:var(--text-dim)">${hashShort}</code>`,
+                    `<code style="font-size:0.75rem;color:var(--text-dim)">${hashShort}</code>`,
                     dpoBadge,
                     ceoBadge,
                     aiBadge,
@@ -1289,7 +1289,7 @@ import { navigate } from '../router.js';
                             <strong>Líder SGSI:</strong> 
                             <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleString()}</span>
                         </div>
-                        ${ctrl.ciso_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ciso_approved_ip)} | UA: ${escapeHTML(ctrl.ciso_approved_ua)}</div>` : ''}
+                        ${ctrl.ciso_approved_ip ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ciso_approved_ip)} | UA: ${escapeHTML(ctrl.ciso_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -1300,7 +1300,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1314,7 +1314,7 @@ import { navigate } from '../router.js';
                             <strong>Direção Executiva:</strong> 
                             <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleString()}</span>
                         </div>
-                        ${ctrl.ceo_approved_ip ? `<div style="font-size:0.6rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ceo_approved_ip)} | UA: ${escapeHTML(ctrl.ceo_approved_ua)}</div>` : ''}
+                        ${ctrl.ceo_approved_ip ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ceo_approved_ip)} | UA: ${escapeHTML(ctrl.ceo_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -1325,7 +1325,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1352,9 +1352,9 @@ import { navigate } from '../router.js';
                         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.5rem; margin-bottom: 0.6rem;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <div style="width: 8px; height: 8px; border-radius: 50%; background: #00ade8; box-shadow: 0 0 10px #00ade8;"></div>
-                                <span style="font-family: 'Montserrat', sans-serif; font-size: 0.65rem; font-weight: 700; color: #f5f5f7; text-transform: uppercase; letter-spacing: 0.1em;">Selo de Homologação Digital</span>
+                                <span style="font-family: 'Montserrat', sans-serif; font-size:0.75rem; font-weight: 700; color: #f5f5f7; text-transform: uppercase; letter-spacing: 0.1em;">Selo de Homologação Digital</span>
                             </div>
-                            <span style="font-family: 'Montserrat', sans-serif; font-size: 0.55rem; font-weight: 700; color: #00ade8; background: rgba(0, 173, 232, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 173, 232, 0.2);">ISO 27001 CONFORME</span>
+                            <span style="font-family: 'Montserrat', sans-serif; font-size:0.72rem; font-weight: 700; color: #00ade8; background: rgba(0, 173, 232, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 173, 232, 0.2);">ISO 27001 CONFORME</span>
                         </div>
                         <div style="font-size: 0.7rem; font-family: monospace; display: flex; flex-direction: column; gap: 4px; color: rgba(229, 235, 255, 0.75);">
                             <div><span style="color: var(--text-dim);">INTEGRIDADE (SHA-256):</span> <span style="color: #00ade8; word-break: break-all;">${evidenceHash || 'Calculando...'}</span></div>
@@ -1386,7 +1386,7 @@ import { navigate } from '../router.js';
                                             <td style="padding:6px 12px">${new Date(v.created_at).toLocaleDateString()}</td>
                                             <td style="padding:6px 12px">${escapeHTML(v.created_by)}</td>
                                             <td style="padding:6px 12px">
-                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.6rem; margin:0;" onclick="window.onPolicyVersionChange('${projectId}', '${controlId}', '${v.id}'); document.getElementById('policy-version-selector').value = '${v.id}'; document.getElementById('btn-restore-version').style.display = 'inline-block';">Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
+                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.72rem; margin:0;" onclick="window.onPolicyVersionChange('${projectId}', '${controlId}', '${v.id}'); document.getElementById('policy-version-selector').value = '${v.id}'; document.getElementById('btn-restore-version').style.display = 'inline-block';">Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -1404,7 +1404,7 @@ import { navigate } from '../router.js';
                     <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:16px;">
-                    <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif">Título da Política</div>
+                    <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif">Título da Política</div>
                     <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:1.15rem; color:var(--accent)">
                         ${escapeHTML(ctrl.title)}
                     </div>
@@ -1412,7 +1412,7 @@ import { navigate } from '../router.js';
                     ${versionsSelectHtml}
                     ${signatureSealHtml}
 
-                    <div style="font-size:0.55rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
+                    <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif; margin-top:8px">Conteúdo da Política</div>
                     <div id="policy-content-container">
                         <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.25rem; max-height:350px; overflow-y:auto; font-size:0.8rem; line-height:1.6; font-family:'Inter',sans-serif;" id="policy-content-text" class="markdown-body">${renderedHtml}</div>
                     </div>
@@ -1462,11 +1462,11 @@ import { navigate } from '../router.js';
                     container.innerHTML = `
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; height:400px; margin-top:10px">
                             <div style="display:flex; flex-direction:column; gap:8px; height:100%">
-                                <label class="form-label" style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Editor Markdown</label>
+                                <label class="form-label" style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Editor Markdown</label>
                                 <textarea id="policy-editor-textarea" style="flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:12px; color:#fff; font-family:monospace; font-size:0.75rem; resize:none; outline:none; line-height:1.4;" placeholder="Digite o conteúdo da política em Markdown...">${escapeHTML(originalMarkdown)}</textarea>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:8px; height:100%">
-                                <label class="form-label" style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Preview Renderizado (VSCode Mode)</label>
+                                <label class="form-label" style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em">Preview Renderizado (VSCode Mode)</label>
                                 <div id="policy-editor-preview" style="flex:1; overflow-y:auto; background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px; font-size:0.8rem; line-height:1.6;" class="markdown-body">${renderedHtml}</div>
                             </div>
                         </div>
@@ -1601,9 +1601,9 @@ import { navigate } from '../router.js';
                 } catch(e) {}
 
                 result.innerHTML = `
-                    <div style="font-size:0.5rem;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);font-weight:500;margin-bottom:0.5rem;font-family:'Montserrat',sans-serif">Política Gerada — ${escapeHTML(controlId)}</div>
+                    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);font-weight:500;margin-bottom:0.5rem;font-family:'Montserrat',sans-serif">Política Gerada — ${escapeHTML(controlId)}</div>
                     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;max-height:180px;overflow-y:auto;font-size:0.75rem;line-height:1.6;white-space:pre-wrap" id="policy-content-text">${escapeHTML(res.policy_markdown)}</div>
-                    <div style="margin-top:0.5rem;font-size:0.6rem;color:var(--muted)">Confiança: ${(res.confidence * 100).toFixed(0)}% | Modelo: ${res.metadata?.model || 'AI'}</div>
+                    <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--muted)">Confiança: ${(res.confidence * 100).toFixed(0)}% | Modelo: ${res.metadata?.model || 'AI'}</div>
                     
                     <div style="margin-top:1.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:1rem">
                         <h4 style="font-family:'Montserrat',sans-serif;font-size:0.7rem;color:var(--accent);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
@@ -1613,14 +1613,14 @@ import { navigate } from '../router.js';
                                     <strong>Líder SGSI:</strong> 
                                     <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como Líder SGSI</button>` : ''}
+                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como Líder SGSI</button>` : ''}
                             </div>
                             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
                                 <div>
                                     <strong>Direção Executiva:</strong> 
                                     <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.65rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como Direção Executiva</button>` : ''}
+                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como Direção Executiva</button>` : ''}
                             </div>
                         </div>
                     </div>

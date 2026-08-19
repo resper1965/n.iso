@@ -111,7 +111,7 @@ import { navigate } from '../router.js';
 
     async function openLeadDetail(id) {
         const l = await api('GET', '/api/v1/leads/' + id);
-        const cnpjBadge = l.cnpj_fetched_at ? '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.65rem;font-weight:600;background:rgba(0,173,232,0.12);color:var(--accent);margin-left:0.5rem">CNPJ Verificado</span>' : '';
+        const cnpjBadge = l.cnpj_fetched_at ? '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600;background:rgba(0,173,232,0.12);color:var(--accent);margin-left:0.5rem">CNPJ Verificado</span>' : '';
         const cnpjInfo = l.razao_social ? `
             <div style="margin:1rem 0;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:12px">
                 <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem">Dados Receita Federal</div>
@@ -247,7 +247,7 @@ import { navigate } from '../router.js';
                     <div class="wizard-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" onclick="goToBlock(${idx + 1})">
                         <div class="step-dot"></div>
                         <div class="step-label">Bloco ${b.block}: ${b.title}</div>
-                        ${isCompleted ? '<span style="margin-left:auto;color:var(--success);font-size:0.6rem">&#10003;</span>' : ''}
+                        ${isCompleted ? '<span style="margin-left:auto;color:var(--success);font-size:0.72rem">&#10003;</span>' : ''}
                     </div>
                 `;
             }).join('');
@@ -524,7 +524,7 @@ import { navigate } from '../router.js';
                     <div class="modal-header">
                         <span class="modal-title">Proposta ${escapeHTML(p.status)}</span>
                         <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.6rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
+                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
                             <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
                         </div>
                     </div>
@@ -579,7 +579,7 @@ import { navigate } from '../router.js';
                 <div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap">
                     <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
                         <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Score</div>
-                        <div style="font-size:1.1rem; font-weight:300; color:var(--text)">${p.score}<span style="font-size:0.65rem;color:var(--muted)">/${p.scoreMax}</span></div>
+                        <div style="font-size:1.1rem; font-weight:300; color:var(--text)">${p.score}<span style="font-size:0.75rem;color:var(--muted)">/${p.scoreMax}</span></div>
                     </div>
                     <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
                         <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Dura\u00e7\u00e3o</div>
@@ -597,18 +597,18 @@ import { navigate } from '../router.js';
 
                 <div style="text-align:center; margin-bottom:1.5rem">
                     <div style="font-size:2.5rem; font-weight:300; color:var(--accent); letter-spacing:-0.03em" id="pv-price">R$ ${p.precoFinal.toLocaleString('pt-BR')}</div>
-                    <div style="font-size:0.5rem; text-transform:uppercase; letter-spacing:0.2em; color:var(--muted); margin:0.5rem 0 1rem">ajuste o valor</div>
+                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.2em; color:var(--muted); margin:0.5rem 0 1rem">ajuste o valor</div>
                     <input type="range" class="pricing-slider" id="slide-price" min="${Math.round(p.precoFinal * 0.4)}" max="${Math.round(p.precoFinal * 2.5)}" step="500" value="${p.precoFinal}" oninput="pricingSlide()" style="width:80%">
                 </div>
 
-                <div style="display:flex; gap:2rem; justify-content:center; margin-bottom:1.5rem; font-size:0.65rem; color:var(--muted)">
+                <div style="display:flex; gap:2rem; justify-content:center; margin-bottom:1.5rem; font-size:0.75rem; color:var(--muted)">
                     <span>Receita: <strong style="color:var(--text)" id="pv-receita">R$ ${(eco.receitaLiquida/1000).toFixed(1)}k</strong></span>
                     <span>Custo: <strong style="color:var(--text)">R$ ${(eco.custoTotal/1000).toFixed(1)}k</strong></span>
                     <span>Lucro: <strong id="pv-lucro" style="color:${hc}">R$ ${(eco.margemOp/1000).toFixed(1)}k</strong></span>
-                    <span id="pv-status" class="status-badge" style="background:${hc}22;color:${hc};font-size:0.5rem;padding:0.1rem 0.4rem">${eco.margemPct >= 0.20 ? 'Saud\u00e1vel' : 'Ajustar'}</span>
+                    <span id="pv-status" class="status-badge" style="background:${hc}22;color:${hc};font-size:0.72rem;padding:0.1rem 0.4rem">${eco.margemPct >= 0.20 ? 'Saud\u00e1vel' : 'Ajustar'}</span>
                 </div>
 
-                <div style="display:flex; gap:1.5rem; justify-content:center; margin-bottom:1.5rem; font-size:0.55rem; color:var(--muted); opacity:0.7">
+                <div style="display:flex; gap:1.5rem; justify-content:center; margin-bottom:1.5rem; font-size:0.72rem; color:var(--muted); opacity:0.7">
                     <span>Base: ${tier.pdNess} PDs</span>
                     <span>Maturidade: x${(p.score / (p.scoreMax||1) * 0.4 + 0.8).toFixed(2)}</span>
                     <span>Escopo: x${scope.fator || '1.0'}</span>
@@ -762,7 +762,7 @@ import { navigate } from '../router.js';
                     <div class="modal-header">
                         <span class="modal-title">Proposta Draft</span>
                         <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.6rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
+                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
                             <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
                         </div>
                     </div>
@@ -838,7 +838,7 @@ import { navigate } from '../router.js';
             <div style="text-align:center;margin-bottom:2rem">
                 <div class="logo" style="font-size:1.5rem;margin-bottom:0.5rem">n<span style="color:var(--accent)">.</span>ISO</div>
                 <div style="font-size:0.75rem;color:var(--muted)">Assessment Self-Service para ${escapeHTML(window._ssData.client_name)}</div>
-                <div style="margin-top:0.5rem;font-size:0.6rem;color:var(--muted)">Bloco ${idx + 1} de ${total}</div>
+                <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--muted)">Bloco ${idx + 1} de ${total}</div>
                 <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:0.75rem">
                     <div style="width:${Math.round(((idx + 1) / total) * 100)}%;height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s"></div>
                 </div>

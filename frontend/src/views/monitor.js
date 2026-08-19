@@ -50,17 +50,17 @@ import { navigate } from '../router.js';
                     <div class="monitor-card">
                         <div class="monitor-card-title">Fases Concluídas</div>
                         <div class="monitor-card-value">${completedPhases} / ${totalPhases}</div>
-                        <div style="font-size:0.65rem; color:var(--text-dim)">Fases da jornada de adequação</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim)">Fases da jornada de adequação</div>
                     </div>
                     <div class="monitor-card">
                         <div class="monitor-card-title">Riscos Mapeados</div>
                         <div class="monitor-card-value">${p.risk_count || 0}</div>
-                        <div style="font-size:0.65rem; color:var(--text-dim)">Identificados e mitigados</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim)">Identificados e mitigados</div>
                     </div>
                     <div class="monitor-card">
                         <div class="monitor-card-title">Evidências Coletadas</div>
                         <div class="monitor-card-value">${p.evidence_count || 0}</div>
-                        <div style="font-size:0.65rem; color:var(--text-dim)">Documentos na nuvem R2</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim)">Documentos na nuvem R2</div>
                     </div>
                 </div>
             `;
@@ -239,31 +239,31 @@ import { navigate } from '../router.js';
             <div class="card" style="padding:2.5rem;margin-bottom:1.5rem">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem">
                     <div>
-                        <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:0.5rem">Estágio Atual</div>
+                        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:0.5rem">Estágio Atual</div>
                         <div style="font-size:1.8rem;font-weight:500;font-family:'Montserrat',sans-serif;color:var(--text)">${STAGE_MAP_PT[cert.stage] || cert.stage}</div>
                     </div>
                     <div style="text-align:right">
                         <div style="font-size:2.5rem;font-weight:300;color:var(--accent);letter-spacing:-0.05em">${pct}%</div>
-                        <div style="font-size:0.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Completude</div>
+                        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Completude</div>
                     </div>
                 </div>
                 <div style="height:4px;background:rgba(255,255,255,0.05);border-radius:2px;margin-bottom:2rem;position:relative;overflow:hidden">
                     <div style="width:${pct}%;height:100%;background:linear-gradient(90deg, var(--accent), #00d2ff);border-radius:2px;transition:width(0.8s);box-shadow:0 0 15px var(--accent-dim)"></div>
                 </div>
                 <div style="display:flex;gap:0.35rem;flex-wrap:wrap">
-                    ${stages.map((s, i) => `<span style="font-size:0.55rem;padding:0.35rem 0.75rem;border-radius:8px;font-weight:600;letter-spacing:0.05em;background:${i <= si ? 'var(--accent-dim)' : 'var(--surface)'};border:1px solid ${i <= si ? 'var(--accent)' : 'var(--border)'};color:${i <= si ? 'var(--accent)' : 'var(--muted)'}">${STAGE_MAP_PT[s] || s}</span>`).join('')}
+                    ${stages.map((s, i) => `<span style="font-size:0.72rem;padding:0.35rem 0.75rem;border-radius:8px;font-weight:600;letter-spacing:0.05em;background:${i <= si ? 'var(--accent-dim)' : 'var(--surface)'};border:1px solid ${i <= si ? 'var(--accent)' : 'var(--border)'};color:${i <= si ? 'var(--accent)' : 'var(--muted)'}">${STAGE_MAP_PT[s] || s}</span>`).join('')}
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">
                 <div class="card" style="padding:1.25rem">
                     <div class="card-label">Auditoria Estágio 1</div>
                     <div style="font-size:0.8rem;font-weight:500">${cert.stage1_date || 'A definir'}</div>
-                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage1_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage1_status==='Passed'?'Aprovado':'Pendente'}</div>
+                    <div style="font-size:0.72rem;margin-top:0.25rem;color:${cert.stage1_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage1_status==='Passed'?'Aprovado':'Pendente'}</div>
                 </div>
                 <div class="card" style="padding:1.25rem">
                     <div class="card-label">Auditoria Estágio 2</div>
                     <div style="font-size:0.8rem;font-weight:500">${cert.stage2_date || 'A definir'}</div>
-                    <div style="font-size:0.6rem;margin-top:0.25rem;color:${cert.stage2_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage2_status==='Passed'?'Aprovado':'Pendente'}</div>
+                    <div style="font-size:0.72rem;margin-top:0.25rem;color:${cert.stage2_status==='Passed'?'var(--success)':'var(--muted)'}">${cert.stage2_status==='Passed'?'Aprovado':'Pendente'}</div>
                 </div>
                 <div class="card" style="padding:1.25rem">
                     <div class="card-label">Organismo Certificador</div>
@@ -518,7 +518,7 @@ import { navigate } from '../router.js';
         for (const key in categories) {
             const cat = categories[key];
             let membersHtml = cat.list.map(m => {
-                const primaryBadge = m.is_primary ? `<span style="font-weight:700; font-size:0.55rem; color:#00ade8; background:rgba(0,173,232,0.12); border:1px solid rgba(0,173,232,0.2); padding:1px 4px; border-radius:4px; margin-left:6px; text-transform:uppercase; font-family:'Montserrat',sans-serif; letter-spacing:0.5px">DPO / Líder</span>` : '';
+                const primaryBadge = m.is_primary ? `<span style="font-weight:700; font-size:0.72rem; color:#00ade8; background:rgba(0,173,232,0.12); border:1px solid rgba(0,173,232,0.2); padding:1px 4px; border-radius:4px; margin-left:6px; text-transform:uppercase; font-family:'Montserrat',sans-serif; letter-spacing:0.5px">DPO / Líder</span>` : '';
                 const initials = getInitials(m.name);
                 return `
                     <div class="gov-member-item">
@@ -537,7 +537,7 @@ import { navigate } from '../router.js';
             
             colsHtml += `
                 <div class="gov-section-card">
-                    <div style="font-size:0.65rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px; margin-bottom:8px">${cat.label}</div>
+                    <div style="font-size:0.75rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px; margin-bottom:8px">${cat.label}</div>
                     <div style="display:flex; flex-direction:column; gap:8px">
                         ${membersHtml}
                     </div>
@@ -615,13 +615,13 @@ import { navigate } from '../router.js';
                 <div>
                     <strong style="color:var(--text)">${escapeHTML(m.name)}</strong>
                     <span style="font-size:0.7rem; color:var(--accent)">- ${escapeHTML(m.job_title)} (${escapeHTML(m.role_category)})</span>
-                    ${m.email ? `<div style="font-size:0.65rem; color:var(--text-dim)">${escapeHTML(m.email)}</div>` : ''}
+                    ${m.email ? `<div style="font-size:0.75rem; color:var(--text-dim)">${escapeHTML(m.email)}</div>` : ''}
                 </div>
                 <div style="display:flex; gap:8px">
-                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.65rem; color:var(--accent); border-color:rgba(0,173,232,0.2)" onclick="window.editGovernanceMember('${m.id}')">
+                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:var(--accent); border-color:rgba(0,173,232,0.2)" onclick="window.editGovernanceMember('${m.id}')">
                         Editar
                     </button>
-                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.65rem; color:#ef4444; border-color:rgba(239,68,68,0.2)" onclick="window.deleteGovernanceMember('${projectId}', '${m.id}')">
+                    <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444; border-color:rgba(239,68,68,0.2)" onclick="window.deleteGovernanceMember('${projectId}', '${m.id}')">
                         Excluir
                     </button>
                 </div>
@@ -1214,7 +1214,7 @@ import { navigate } from '../router.js';
                     return `
                         <span style="display: inline-flex; align-items: center; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: var(--text); line-height: 1;">
                             <span style="font-weight: 400; margin-right: 4px;">${escapeHTML(name)}</span>
-                            ${role ? `<span style="color: var(--accent); font-size: 0.65rem; font-weight: 500;">(${escapeHTML(role)})</span>` : ''}
+                            ${role ? `<span style="color: var(--accent); font-size:0.75rem; font-weight: 500;">(${escapeHTML(role)})</span>` : ''}
                         </span>
                     `;
                 }

@@ -173,19 +173,19 @@ const ISO_GUIDELINES = {
                 <div class="stat-card" style="margin-bottom:1.5rem; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:10px;">
                     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
                         <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                            <div style="font-size:0.65rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Progresso Geral</div>
+                            <div style="font-size:0.75rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Progresso Geral</div>
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <div style="font-size:1.5rem; font-weight:700; color:var(--text)">${overallPercent}%</div>
                                 <div class="progress-bar" style="flex:1; height:8px;">
                                     <div class="progress-fill" style="width: ${overallPercent}%"></div>
                                 </div>
                             </div>
-                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:6px">${completedPhasesCount} de ${totalPhasesCount} Fases Concluídas</div>
+                            <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px">${completedPhasesCount} de ${totalPhasesCount} Fases Concluídas</div>
                         </div>
                         <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)">
-                            <div style="font-size:0.65rem; color:${blockedPhasesCount > 0 ? 'var(--danger)' : 'var(--text-dim)'}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Impedimentos / Bloqueios</div>
+                            <div style="font-size:0.75rem; color:${blockedPhasesCount > 0 ? 'var(--danger)' : 'var(--text-dim)'}; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px">Impedimentos / Bloqueios</div>
                             <div style="font-size:1.5rem; font-weight:700; color:${blockedPhasesCount > 0 ? 'var(--danger)' : 'var(--text)'}">${blockedPhasesCount}</div>
-                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:6px">Fases necessitando de intervenção</div>
+                            <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px">Fases necessitando de intervenção</div>
                         </div>
                     </div>
                 </div>
@@ -199,7 +199,7 @@ const ISO_GUIDELINES = {
                     </div>
                     <div style="display:flex; gap:12px;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Status</label>
+                            <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Status</label>
                             <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaStatusFilter = this.value; render();">
                                 <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>Todos</option>
                                 <option value="pending" ${statusFilter === 'pending' ? 'selected' : ''}>Pending</option>
@@ -210,7 +210,7 @@ const ISO_GUIDELINES = {
                             </select>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <label style="font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Categoria</label>
+                            <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Categoria</label>
                             <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaCategoryFilter = this.value; render();">
                                 <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>Todas</option>
                                 <option value="task" ${categoryFilter === 'task' ? 'selected' : ''}>Task</option>
@@ -366,7 +366,7 @@ const ISO_GUIDELINES = {
                                                                 statusColor = '#ff4d4d';
                                                                 statusLabel = 'Falha [AI]';
                                                             }
-                                                            badgeHtml = `<span style="font-size:0.6rem; padding:2px 6px; border-radius:4px; border:1px solid ${statusColor}; color:${statusColor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${statusLabel}</span>`;
+                                                            badgeHtml = `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; border:1px solid ${statusColor}; color:${statusColor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${statusLabel}</span>`;
                                                         }
 
                                                         let borderLeftColor = 'rgba(255, 255, 255, 0.06)';
@@ -410,20 +410,20 @@ const ISO_GUIDELINES = {
                                                                 </div>
                                                                 ${(hasTip && isTipExpanded) ? `
                                                                     <div style="margin-top:0.6rem; background:rgba(0,173,232,0.03); border:1px solid rgba(0,173,232,0.1); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
-                                                                        <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
+                                                                        <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.72rem; letter-spacing:0.5px;">Auditoria (${tipInfo.control}) - ${tipInfo.tip}</div>
                                                                         <div style="color:var(--text); margin-bottom:6px;"><strong style="color:var(--text-dim);">Dica:</strong> ${escapeHTML(tipInfo.advice)}</div>
                                                                         <div style="color:var(--text-dim);"><strong style="color:var(--text-dim);">Evidência Recomendada:</strong> ${escapeHTML(tipInfo.evidence)}</div>
                                                                     </div>
                                                                 ` : ''}
                                                                 ${(isChecked && itemStatus && itemStatus !== 'conforme' && itemEvalNotes) ? `
                                                                     <div style="margin-top:0.6rem; background:rgba(255,77,77,0.03); border:1px solid rgba(255,77,77,0.15); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
-                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.6rem; letter-spacing:0.5px;">Gaps Identificados [AI]</div>
+                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.72rem; letter-spacing:0.5px;">Gaps Identificados [AI]</div>
                                                                         <div style="color:var(--text);">${escapeHTML(itemEvalNotes)}</div>
                                                                     </div>
                                                                 ` : ''}
                                                                 ${isDetailsExpanded ? `
                                                                     <div class="checklist-notes-group" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.04); padding-top: 0.5rem;">
-                                                                        <div style="font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
+                                                                        <div style="font-size:0.75rem; color: var(--text-dim); margin-bottom: 0.25rem;">Anotação / Conteúdo da Atividade</div>
                                                                         ${itemNotes.trim().startsWith('{') && itemNotes.trim().endsWith('}') ? formatActivityNotes(itemNotes) : ''}
                                                                         <textarea class="form-input" 
                                                                             placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
@@ -432,14 +432,14 @@ const ISO_GUIDELINES = {
                                                                         
                                                                         <div style="display: flex; gap: 12px; align-items: center;">
                                                                             <div style="flex: 1;">
-                                                                                <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
+                                                                                <div style="font-size:0.72rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
                                                                                 <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
                                                                                     onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
                                             ${window.renderGovernanceSelectOptions(S.currentGovernance, itemAssigned)}
                                             </select>
                                                                             </div>
                                                                             <div style="width: 150px;">
-                                                                                <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
+                                                                                <div style="font-size:0.72rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
                                                                                 <input type="date" class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; color: var(--text);"
                                                                                     value="${itemDueDate}"
                                                                                     onchange="saveChecklistItemDueDate('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
@@ -536,7 +536,7 @@ const ISO_GUIDELINES = {
             </div>
             <div style="padding:1.5rem 0;">
                 <div style="background:rgba(0,173,232,0.04); border:1px solid rgba(0,173,232,0.1); border-radius:10px; padding:12px; margin-bottom:1.25rem; font-size:0.75rem;">
-                    <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.65rem; letter-spacing:0.5px;">Dica do Auditor (${wiz.isoRef})</div>
+                    <div style="color:var(--accent); font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.5px;">Dica do Auditor (${wiz.isoRef})</div>
                     <div style="color:var(--text); line-height:1.4;">${escapeHTML(wiz.auditorTip)}</div>
                 </div>
                 <div id="wiz-form-fields">${fieldsHtml}</div>
@@ -691,7 +691,7 @@ const ISO_GUIDELINES = {
             </div>
             <div style="padding: 1.25rem 0; display: flex; gap: 20px; min-height: 480px;">
                 <div style="width: 200px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--border); padding-right: 12px;">
-                    <div style="font-size: 0.65rem; color: var(--accent); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">Trilhas de Auditoria</div>
+                    <div style="font-size:0.75rem; color: var(--accent); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">Trilhas de Auditoria</div>
                     ${sidebarHtml}
                 </div>
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding-left: 8px;">
@@ -754,12 +754,12 @@ const ISO_GUIDELINES = {
                             ${idx + 1}. ${escapeHTML(q.question)}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
-                            <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 500;">Resposta / Constatação do Auditor</label>
+                            <label style="font-size:0.75rem; color: var(--text-dim); font-weight: 500;">Resposta / Constatação do Auditor</label>
                             <textarea id="ans-${q.key}" class="form-input" style="width: 100%; min-height: 70px; font-size: 0.8rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); resize: vertical; font-family: inherit;" placeholder="Registre a resposta ou evidências coletadas...">${escapeHTML(ans)}</textarea>
                         </div>
                         <div style="display: flex; gap: 12px; align-items: center; margin-top: 4px;">
                             <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-                                <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 500;">Entrevistado (Nome / Cargo)</label>
+                                <label style="font-size:0.75rem; color: var(--text-dim); font-weight: 500;">Entrevistado (Nome / Cargo)</label>
                                 <input type="text" id="who-${q.key}" class="form-input" style="font-size: 0.8rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text);" value="${escapeHTML(who)}" placeholder="Ex: João CISO, Maria DevOps">
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; padding-top: 16px;">
@@ -1348,7 +1348,7 @@ const ISO_GUIDELINES = {
             const doc = (docs || []).find(d => d.id === docId);
             if (!doc) return;
             openModal(`<h3 style="margin-bottom:1rem">Extracao: ${escapeHTML(doc.filename)}</h3>
-                <div style="font-size:0.5rem;color:var(--muted);margin-bottom:0.5rem">Status: ${doc.status} | Tipo: ${doc.document_type}</div>
+                <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem">Status: ${doc.status} | Tipo: ${doc.document_type}</div>
                 <textarea class="form-input" id="doc-ext-edit" rows="12" style="font-size:0.7rem;font-family:monospace;line-height:1.6">${escapeHTML(doc.extracted_summary || '')}</textarea>
                 <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
                     <button class="btn" onclick="forceCloseModal()">Fechar</button>

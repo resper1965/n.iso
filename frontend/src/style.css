@@ -1,6 +1,6 @@
         :root {
             --bg: #070b14;
-            --surface: rgba(15, 20, 35, 0.6);
+            --surface: rgba(20, 27, 46, 0.75);
             --surface-hover: rgba(25, 35, 55, 0.8);
             --accent: #00ade8;
             --accent-glow: rgba(0, 173, 232, 0.3);
@@ -10,7 +10,7 @@
                4.66:1, no limite, e qualquer texto menor já reprovava. */
             --text-dim: rgba(229, 235, 255, 0.6);
             --muted: rgba(229, 235, 255, 0.6);
-            --border: rgba(255, 255, 255, 0.08);
+            --border: rgba(255, 255, 255, 0.11);
             --success: #22c55e;
             --warning: #f59e0b;
             --danger: #ef4444;
@@ -51,7 +51,7 @@
         .sidebar-nav .tooltip { display: none; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.7rem; white-space: nowrap; z-index: 200; pointer-events: none; }
         .sidebar.collapsed .sidebar-nav:hover .tooltip { display: block; }
 
-        .sidebar-label { padding: 1.1rem 1.25rem 0.35rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-family: 'Montserrat', sans-serif; cursor: pointer; display: flex; justify-content: space-between; align-items: center; opacity: 0.9; }
+        .sidebar-label { padding: 1.1rem 1.25rem 0.35rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-family: 'Montserrat', sans-serif; cursor: pointer; display: flex; justify-content: space-between; align-items: center; opacity: 0.9; }
         .sidebar-label::after { content: '\25BE'; font-size: 0.75rem; transition: 0.3s; color: rgba(245,245,247,0.5); }
         .sidebar-label.collapsed::after { transform: rotate(-90deg); }
 
@@ -110,7 +110,7 @@
             text-overflow: ellipsis;
         }
         .sidebar-user-role {
-            font-size: 0.6rem;
+            font-size: 0.72rem;
             color: var(--text-dim);
             white-space: nowrap;
             overflow: hidden;
@@ -160,7 +160,7 @@
         .notif-item { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; cursor: pointer; transition: 0.2s; }
         .notif-item:hover { background: var(--surface-hover); }
         .notif-item.unread { border-left: 3px solid var(--accent); }
-        .notif-time { font-size: 0.6rem; color: var(--text-dim); margin-top: 0.25rem; }
+        .notif-time { font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem; }
 
         /* â€”â€”â€” CONTENT â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .content { flex: 1; overflow-y: auto; padding: 2rem; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
@@ -174,14 +174,14 @@
         .toggle-context { position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; z-index: 10; }
         .toggle-context-open { position: fixed; right: 0; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); border-right: none; color: var(--text-dim); padding: 0.5rem 0.3rem; border-radius: 8px 0 0 8px; cursor: pointer; z-index: 50; font-size: 0.7rem; }
         .ctx-inner { font-size: 0.8rem; }
-        .ctx-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); margin: 0.15rem; }
+        .ctx-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); margin: 0.15rem; }
         .ctx-tag-green { background: rgba(34,197,94,0.1); color: var(--success); border-color: rgba(34,197,94,0.2); }
-        .ctx-label { font-size: 0.6rem; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; margin-top: 1rem; }
+        .ctx-label { font-size: 0.72rem; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; margin-top: 1rem; }
 
         /* â€”â€”â€” CARDS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; backdrop-filter: var(--glass-blur); transition: all 0.3s; margin-bottom: 1rem; }
         .card:hover { border-color: rgba(255,255,255,0.12); }
-        .card-label { font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.75rem; font-family: 'Montserrat', sans-serif; }
+        .card-label { font-size: 0.72rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.75rem; font-family: 'Montserrat', sans-serif; }
 
         /* â€”â€”â€” STATS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
@@ -213,7 +213,7 @@
 
         /* â€”â€”â€” DATA TABLES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-        .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
+        .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
         .data-table td { padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
         .data-table tr:hover td { background: rgba(255,255,255,0.02); }
 
@@ -227,8 +227,8 @@
         @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
         /* â€”â€”â€” BADGES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
-        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.65rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; }
+        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; }
         .badge-implemented { background: rgba(34, 197, 94, 0.12); color: #22c55e; border-color: rgba(34, 197, 94, 0.25); }
         .badge-pending { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.25); }
 
@@ -245,9 +245,9 @@
         /* â€”â€”â€” PHASES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .phase-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: 0.2s; cursor: pointer; }
         .phase-item:hover { border-color: rgba(255,255,255,0.12); }
-        .phase-num { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: var(--text-dim); font-family: 'Montserrat', sans-serif; flex-shrink: 0; }
+        .phase-num { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--text-dim); font-family: 'Montserrat', sans-serif; flex-shrink: 0; }
         .phase-title { font-size: 0.8rem; flex: 1; }
-        .phase-status { font-size: 0.6rem; font-weight: 500; padding: 0.2rem 0.5rem; border-radius: 6px; }
+        .phase-status { font-size: 0.72rem; font-weight: 500; padding: 0.2rem 0.5rem; border-radius: 6px; }
 
         /* â€”â€”â€” WIZARD â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .wizard-layout { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; min-height: 60vh; }
@@ -371,7 +371,7 @@
             display: inline-block; 
             padding: 0.15rem 0.4rem; 
             border-radius: 4px; 
-            font-size: 0.6rem; 
+            font-size: 0.72rem; 
             font-weight: 500; 
             text-transform: uppercase; 
             letter-spacing: 0.02em;
@@ -394,7 +394,7 @@
         }
         
         .checklist-actions { display: flex; gap: 0.5rem; }
-        .btn-inline-action { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.65rem; cursor: pointer; transition: 0.2s; }
+        .btn-inline-action { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: 0.2s; }
         .btn-inline-action:hover { border-color: var(--accent); color: var(--text); }
         .btn-inline-action.primary { background: rgba(0, 173, 232, 0.12); border-color: rgba(0, 173, 232, 0.25); color: var(--accent); }
         .btn-inline-action.primary:hover { background: var(--accent); color: #000; }
@@ -415,7 +415,7 @@
         
         .roadmap-j-header { display: flex; justify-content: space-between; align-items: flex-start; }
         .roadmap-j-name { font-family: 'Montserrat', sans-serif; font-size: 0.85rem; font-weight: 500; color: var(--text); }
-        .roadmap-j-desc { font-size: 0.65rem; color: var(--text-dim); margin-top: 0.15rem; }
+        .roadmap-j-desc { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.15rem; }
         .roadmap-j-pct { font-size: 0.85rem; font-weight: 600; color: var(--accent); }
         
         .roadmap-nodes-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
@@ -429,7 +429,7 @@
         .roadmap-node.blocked { background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: var(--danger); }
         .roadmap-node.skipped { background: rgba(255,255,255,0.01); border-color: rgba(255,255,255,0.05); color: var(--text-dim); text-decoration: line-through; }
         
-        .roadmap-node .tooltip { visibility: hidden; width: 180px; background-color: rgba(10,15,25,0.98); border: 1px solid var(--border); color: #fff; text-align: center; border-radius: 8px; padding: 0.6rem; position: absolute; z-index: 10; bottom: 125%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.65rem; pointer-events: none; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+        .roadmap-node .tooltip { visibility: hidden; width: 180px; background-color: rgba(10,15,25,0.98); border: 1px solid var(--border); color: #fff; text-align: center; border-radius: 8px; padding: 0.6rem; position: absolute; z-index: 10; bottom: 125%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.75rem; pointer-events: none; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
         .roadmap-node:hover .tooltip { visibility: visible; opacity: 1; }
         
         @keyframes pulse-node {
@@ -451,7 +451,7 @@
         /* â€”â€”â€” PRICING â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .pricing-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         .pricing-table th, .pricing-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
-        .pricing-table th { color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; }
+        .pricing-table th { color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; }
         .pricing-slider { width: 100%; accent-color: var(--accent); }
 
         /* â€”â€”â€” GROUP PROJECT ONLY â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
@@ -480,7 +480,7 @@
             writing-mode: vertical-lr;
             transform: rotate(180deg);
             text-align: center;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             font-weight: 500;
             color: var(--text-dim);
             letter-spacing: 0.1em;
@@ -531,7 +531,7 @@
             grid-column: 3;
             grid-row: 3;
             text-align: center;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             font-weight: 500;
             color: var(--text-dim);
             letter-spacing: 0.1em;
@@ -563,7 +563,7 @@
         .cell-counter {
             background: #ffffff;
             color: #070b14;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             font-weight: 700;
             width: 18px;
             height: 18px;
@@ -721,7 +721,7 @@
             color: var(--accent);
             text-transform: uppercase;
             font-family: 'Montserrat', sans-serif;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             font-weight: 500;
             letter-spacing: 0.05em;
             padding: 0.6rem 0.8rem;
@@ -1046,7 +1046,7 @@
             line-height: 1.2;
         }
         .gov-member-email {
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             color: rgba(229, 235, 255, 0.4);
             margin-top: 2px;
             white-space: nowrap;

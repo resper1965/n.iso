@@ -1059,7 +1059,7 @@ import { navigate } from '../router.js';
             </div>
             <div class="form-group">
                 <label class="form-label">Endpoint de Integração do Webhook</label>
-                <input class="form-input" style="font-family:monospace;font-size:0.65rem;background:rgba(255,255,255,0.02)" readonly value="${window.location.origin}/api/v1/projects/${projectId}/training/import-external">
+                <input class="form-input" style="font-family:monospace;font-size:0.75rem;background:rgba(255,255,255,0.02)" readonly value="${window.location.origin}/api/v1/projects/${projectId}/training/import-external">
             </div>
             <button class="btn btn-primary" id="btn-import-training" style="width:100%" onclick="doImportTraining('${projectId}')">Confirmar Importação</button>
         `);
