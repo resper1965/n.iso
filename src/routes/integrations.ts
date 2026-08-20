@@ -198,15 +198,16 @@ integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
   if (!valid.success) return valid.response;
   const body = valid.data;
 
-  // SSRF guard também na CRIAÇÃO (antes só o /test validava, então destinos
-  // internos podiam ser persistidos e disparados por outros caminhos).
+  // SSRF guard na CRIAÇÃO: só o bloqueio SÍNCRONO de IP literal (loopback, faixas
+  // privadas, link-local/metadata, IPv6 interno, codificações alternativas).
+  // A resolução DoH (anti-rebinding) NÃO roda aqui de propósito: é uma chamada de
+  // rede externa que tornaria a criação lenta e dependente do resolvedor — e, no
+  // CI, flaky (timeout). O rebinding se defende no MOMENTO que importa, a ENTREGA:
+  // resolveHostIsPublic é chamado imediatamente antes de cada fetch de saída, com
+  // a menor janela TOCTOU possível. Um destino que resolve para IP interno é então
+  // barrado ali, mesmo que tenha passado na criação.
   if (!isValidWebhookUrl(body.url)) {
     return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);
-  }
-  // S8: além do bloqueio de IP literal, resolve o hostname e recusa se ele apontar
-  // para um IP interno (DNS rebinding).
-  if (!(await resolveHostIsPublic(new URL(body.url).hostname))) {
-    return c.json({ error: 'Webhook host resolves to a non-public address (SSRF Guard)' }, 400);
   }
 
   const id = crypto.randomUUID();
