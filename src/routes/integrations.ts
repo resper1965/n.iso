@@ -60,8 +60,9 @@ function isPrivateIpv4(dotted: string): boolean {
  * SSRF guard para URLs de webhook: exige http(s) e bloqueia destinos internos
  * (loopback, faixas privadas, link-local/metadata, IPv6 interno), incluindo
  * codificações alternativas de IP.
- * ponytail: não resolve DNS — um hostname público que resolva para IP interno
- * (DNS rebinding) não é detectável aqui; o bloqueio é por destino literal.
+ * Só destinos LITERAIS. O caso de hostname que resolve para IP interno (DNS
+ * rebinding) é coberto por `resolveHostIsPublic` (resolução via DoH), chamada na
+ * criação e antes de cada entrega.
  */
 export function isValidWebhookUrl(urlStr: string): boolean {
   let url: URL;
@@ -109,6 +110,65 @@ export function isValidWebhookUrl(urlStr: string): boolean {
   return true;
 }
 
+/** true se o endereço IPv6 (texto) é loopback/link-local/ULA ou IPv4-mapeado interno. */
+function isPrivateIpv6(addr: string): boolean {
+  const v6 = addr.toLowerCase().replace(/%.*$/, '');
+  if (v6 === '::1' || v6 === '::') return true;
+  if (/^fe[89ab][0-9a-f]:/i.test(v6)) return true;   // link-local fe80::/10
+  if (/^f[cd][0-9a-f]{2}:/i.test(v6)) return true;   // ULA fc00::/7
+  const m = v6.match(/(\d+\.\d+\.\d+\.\d+)$/);        // ::ffff:1.2.3.4 (decimal)
+  if (m) { const c = canonicalizeIpv4(m[1]); if (c && isPrivateIpv4(c)) return true; }
+  // IPv4-mapeado em HEX: ::ffff:7f00:1 (loopback), ::ffff:a9fe:a9fe (metadata).
+  // Um AAAA controlado pelo atacante pode vir nesta forma; sem isto passava como
+  // público e o rebinding para IP interno seguia aberto (P1 da revisão do Codex).
+  const mh = v6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (mh) {
+    const hi = parseInt(mh[1], 16), lo = parseInt(mh[2], 16);
+    const dotted = [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255].join('.');
+    if (isPrivateIpv4(dotted)) return true;
+  }
+  return false;
+}
+
+/**
+ * S8 — fecha o gap de DNS rebinding do `isValidWebhookUrl` (que só vê destinos
+ * LITERAIS). Resolve o hostname via DNS-over-HTTPS (Cloudflare) e exige que TODOS
+ * os IPs resolvidos sejam públicos. Fail-closed: erro de resolução ou host sem
+ * A/AAAA público → false.
+ *
+ * Usado tanto na criação quanto IMEDIATAMENTE antes do fetch de entrega, para
+ * minimizar a janela TOCTOU — o fetch do Workers não permite pinar o IP resolvido
+ * (conectar pelo IP quebraria SNI/TLS), então resolver logo antes é o mais forte
+ * possível aqui. Literais de IP não precisam de DNS (já cobertos por isValidWebhookUrl).
+ */
+export async function resolveHostIsPublic(hostname: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (canonicalizeIpv4(host) || host.includes(':')) return true; // literal IP: já validado
+  try {
+    let temPublico = false;
+    for (const tipo of ['A', 'AAAA']) {
+      const r = await fetchImpl(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${tipo}`, {
+        headers: { accept: 'application/dns-json' },
+      });
+      if (!r.ok) return false;
+      const j = (await r.json()) as any;
+      for (const ans of j.Answer || []) {
+        if (ans.type === 1) { // A
+          const c = canonicalizeIpv4(ans.data);
+          if (!c || isPrivateIpv4(c)) return false;
+          temPublico = true;
+        } else if (ans.type === 28) { // AAAA
+          if (isPrivateIpv6(ans.data)) return false;
+          temPublico = true;
+        }
+      }
+    }
+    return temPublico; // sem nenhum A/AAAA público → fail closed
+  } catch {
+    return false;
+  }
+}
+
 /** Previne CSV Injection (Formula Injection) e escapa aspas */
 function safeCsvCell(val: any): string {
   let s = String(val ?? '');
@@ -142,6 +202,11 @@ integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
   // internos podiam ser persistidos e disparados por outros caminhos).
   if (!isValidWebhookUrl(body.url)) {
     return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);
+  }
+  // S8: além do bloqueio de IP literal, resolve o hostname e recusa se ele apontar
+  // para um IP interno (DNS rebinding).
+  if (!(await resolveHostIsPublic(new URL(body.url).hostname))) {
+    return c.json({ error: 'Webhook host resolves to a non-public address (SSRF Guard)' }, 400);
   }
 
   const id = crypto.randomUUID();
@@ -179,6 +244,11 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
 
   if (!isValidWebhookUrl(webhook.url)) {
     return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);
+  }
+  // S8: resolve o host IMEDIATAMENTE antes de disparar — se o DNS foi apontado
+  // para um IP interno depois da criação (rebinding), barra aqui.
+  if (!(await resolveHostIsPublic(webhook.url ? new URL(webhook.url).hostname : ''))) {
+    return c.json({ error: 'Webhook host resolves to a non-public address (SSRF Guard)' }, 400);
   }
 
   try {
