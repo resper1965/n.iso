@@ -184,3 +184,13 @@ temp_grc_skills/
 # Playwright (E2E)
 playwright-report/
 .playwright/
+
+# impeccable (design-audit): install espalha ~660 arquivos por vários harnesses.
+# Usamos só via `npx impeccable detect` (script design:detect); nada versionado.
+.agents/skills/impeccable/
+.claude/skills/impeccable/
+.codex/
+.cursor/
+.gemini/
+.windsurf/
+.github/agents/

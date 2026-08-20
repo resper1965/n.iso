@@ -9,16 +9,30 @@ import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025'
 import { checkCoherence } from '../services/coherence';
 import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
+import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // NUNCA devolver credenciais no corpo. `repository_token` é secret (uso só
 // server-side); redigido aqui — o cliente recebe apenas um booleano indicando se
-// há token configurado. (Cifragem em repouso é follow-up separado.)
+// há token configurado. Em repouso ele é cifrado (AES-GCM, ver secret-crypto.ts);
+// consumidores server-side leem via getRepositoryToken (decifra).
 function redactProject<T extends Record<string, any> | null | undefined>(p: T): T {
   if (!p) return p;
   const { repository_token, ...rest } = p as Record<string, any>;
   return { ...rest, repository_token_set: !!repository_token } as unknown as T;
+}
+
+/**
+ * Lê o `repository_token` de um projeto DECIFRADO, para uso server-side (git ops).
+ * Ponto único de leitura: nenhum consumidor deve tocar a coluna direto. Tokens
+ * legados em texto claro (sem prefixo `v1:`) são devolvidos como estão.
+ */
+export async function getRepositoryToken(env: Bindings, projectId: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT repository_token FROM projects WHERE id = ?').bind(projectId).first() as any;
+  const raw = row?.repository_token;
+  if (!raw) return null;
+  return decryptSecret(raw, env.TOKEN_ENC_KEY || '');
 }
 // controlsApp foi extraído para routes/controls.ts (mesmo path /api/v1/controls).
 
@@ -123,7 +137,15 @@ projectsApp.put('/:id', async (c) => {
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
     if (body.project_name !== undefined) { updates.push('project_name = ?'); values.push(body.project_name); }
     if (body.repository_url !== undefined) { updates.push('repository_url = ?'); values.push(body.repository_url); }
-    if (body.repository_token !== undefined) { updates.push('repository_token = ?'); values.push(body.repository_token); }
+    if (body.repository_token !== undefined) {
+      // Cifra em repouso quando há chave. Sem TOKEN_ENC_KEY (dev/legado), grava
+      // como veio — o campo continua redigido nas respostas por redactProject.
+      const tokenParaGravar = (body.repository_token && c.env.TOKEN_ENC_KEY)
+        ? await encryptSecret(body.repository_token, c.env.TOKEN_ENC_KEY)
+        : body.repository_token;
+      updates.push('repository_token = ?');
+      values.push(tokenParaGravar);
+    }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(id);
     await c.env.DB.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
@@ -131,6 +153,35 @@ projectsApp.put('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar projeto', e);
+  }
+});
+
+// Migração idempotente: cifra em repouso os repository_token gravados em texto
+// claro (pré-D1). Só platform_admin; exige TOKEN_ENC_KEY configurada. Rodar uma
+// vez após provisionar o secret. Reexecutar é seguro — o que já está cifrado
+// (prefixo v1:) é pulado.
+projectsApp.post('/admin/encrypt-tokens', async (c) => {
+  try {
+    if (c.get('user')?.role !== 'platform_admin') {
+      return c.json({ error: 'Forbidden: requer platform_admin' }, 403);
+    }
+    if (!c.env.TOKEN_ENC_KEY) {
+      return c.json({ error: 'TOKEN_ENC_KEY não configurada; nada a fazer' }, 400);
+    }
+    const { results } = await c.env.DB.prepare(
+      "SELECT id, repository_token FROM projects WHERE repository_token IS NOT NULL AND repository_token != ''"
+    ).all();
+    let cifrados = 0, jaCifrados = 0;
+    for (const row of (results || []) as any[]) {
+      if (isEncrypted(row.repository_token)) { jaCifrados++; continue; }
+      const enc = await encryptSecret(row.repository_token, c.env.TOKEN_ENC_KEY);
+      await c.env.DB.prepare('UPDATE projects SET repository_token = ? WHERE id = ?').bind(enc, row.id).run();
+      cifrados++;
+    }
+    await logAudit(c.env.DB, 'projects.tokens_encrypted', c.get('user')?.email ?? 'system', `Tokens cifrados: ${cifrados}; já cifrados: ${jaCifrados}`, '', '', '');
+    return c.json({ ok: true, cifrados, ja_cifrados: jaCifrados });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao cifrar tokens', e);
   }
 });
 

@@ -27,6 +27,7 @@
 	],
     "vars": {
 		"ENVIRONMENT": "test",
-		"SETUP_KEY": "test-123"
+		"SETUP_KEY": "test-123",
+		"TOKEN_ENC_KEY": "test-encryption-key-do-not-use-in-prod"
 	}
 }

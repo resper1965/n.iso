@@ -46,6 +46,10 @@ export type Bindings = {
   STORAGE: R2Bucket;
   AI: Ai;
   SETUP_KEY?: string;
+  /** Chave para cifrar segredos em repouso (repository_token). Secret:
+   *  `npx wrangler secret put TOKEN_ENC_KEY`. Sem ela, tokens são gravados em
+   *  texto claro (fallback legado) — configure em produção. */
+  TOKEN_ENC_KEY?: string;
   ENVIRONMENT?: string;
   ASSETS?: Fetcher;
   /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts).
