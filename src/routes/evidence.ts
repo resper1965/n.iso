@@ -122,6 +122,46 @@ evidenceApp.delete('/:id', async (c) => {
   }
 });
 
+// Re-associa (ou desassocia) uma evidência a um controle. Faltava caminho de API
+// para isso — o control_id só era definido no upload.
+evidenceApp.put('/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
+    const ev = await c.env.DB.prepare('SELECT id, project_id, control_id FROM evidence WHERE id = ?').bind(id).first<any>();
+    if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+
+    const body = await c.req.json<{ control_id?: string | null }>().catch(() => ({} as any));
+    if (!('control_id' in body)) {
+      return c.json({ error: 'Envie control_id (id do controle, ou null para desassociar).' }, 400);
+    }
+    const novoControle = body.control_id ?? null;
+
+    // Aterramento de tenant: só vincula a um controle DO MESMO projeto.
+    if (novoControle !== null) {
+      const ctrl = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(novoControle).first<any>();
+      if (!ctrl) return c.json({ error: 'Controle não encontrado' }, 404);
+      if (ctrl.project_id !== ev.project_id) {
+        return c.json({ error: 'Forbidden: controle pertence a outro projeto' }, 403);
+      }
+    }
+
+    // Mudar o controle-alvo invalida a avaliação anterior (foi feita contra outro
+    // controle): volta a 'pending'. Sem efeito se o vínculo não mudou.
+    const mudou = novoControle !== (ev.control_id ?? null);
+    if (mudou) {
+      await c.env.DB.prepare(
+        "UPDATE evidence SET control_id = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL, updated_at = datetime('now') WHERE id = ?"
+      ).bind(novoControle, id).run();
+      await logAudit(c.env.DB, 'evidence.relinked', c.get('user')?.email ?? 'system', `Evidência ${id} re-associada ao controle ${novoControle ?? '(nenhum)'} — avaliação resetada`, '', '', ev.project_id);
+    }
+    return c.json({ ok: true, control_id: novoControle, relinked: mudou });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Erro ao re-associar evidência', detail: e.message }, 500);
+  }
+});
+
 evidenceApp.post('/:id/evaluate', async (c) => {
   try {
     const evidenceId = c.req.param('id');

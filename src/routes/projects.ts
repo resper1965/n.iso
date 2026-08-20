@@ -11,6 +11,15 @@ import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, 
 import { registerAssetRoutes } from './project-assets';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// NUNCA devolver credenciais no corpo. `repository_token` é secret (uso só
+// server-side); redigido aqui — o cliente recebe apenas um booleano indicando se
+// há token configurado. (Cifragem em repouso é follow-up separado.)
+function redactProject<T extends Record<string, any> | null | undefined>(p: T): T {
+  if (!p) return p;
+  const { repository_token, ...rest } = p as Record<string, any>;
+  return { ...rest, repository_token_set: !!repository_token } as unknown as T;
+}
 // controlsApp foi extraído para routes/controls.ts (mesmo path /api/v1/controls).
 
 
@@ -64,11 +73,11 @@ projectsApp.get('/', async (c) => {
       const project = await c.env.DB.prepare(
         'SELECT * FROM projects WHERE id = ?'
       ).bind(user.client_project_id).first();
-      return c.json(project ? [project] : []);
+      return c.json(project ? [redactProject(project)] : []);
     }
 
     const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
-    return c.json(results);
+    return c.json((results ?? []).map(redactProject));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar projetos', e);
   }
@@ -84,7 +93,7 @@ projectsApp.get('/:id', async (c) => {
   }
   const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(project);
+  return c.json(redactProject(project));
 });
 
 projectsApp.put('/:id', async (c) => {
@@ -101,7 +110,14 @@ projectsApp.put('/:id', async (c) => {
       project_name?: string;
       repository_url?: string;
       repository_token?: string;
+      standards?: string;
     }>();
+    // `standards` não é editável por aqui — é derivado do control-set (definido
+    // pelos endpoints seed-27701-2025 / migrate). Erro EXPLÍCITO em vez do
+    // genérico "Nothing to update", que confundia (o campo estava presente).
+    if (body.standards !== undefined) {
+      return c.json({ error: 'O campo "standards" não é editável diretamente: ele é derivado do control-set. Use POST /:id/seed-27701-2025 ou os endpoints de migração.' }, 400);
+    }
     const updates: string[] = [];
     const values: any[] = [];
     if (body.status) { updates.push('status = ?'); values.push(body.status); }

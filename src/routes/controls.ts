@@ -30,6 +30,13 @@ controlsApp.put('/:id', async (c) => {
     // aqui: sem esta linha o UPDATE abaixo casa por id apenas e um org_admin
     // reescreve controle de outro tenant.
     await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
+    // `maturity` tem endpoint PRÓPRIO (PUT /:id/maturity, validação 0–5). O
+    // controlUpdateSchema o descartava em silêncio: retornava 200 sem gravar
+    // (no-op enganoso). Rejeita explícito apontando o caminho certo.
+    const raw = await c.req.json().catch(() => ({} as any));
+    if (raw && raw.maturity !== undefined) {
+      return c.json({ error: 'Use PUT /api/v1/controls/:id/maturity para alterar a maturidade (0–5); não é editável por este endpoint.' }, 400);
+    }
     const v = await validateBody(c, controlUpdateSchema);
     if (!v.success) return v.response;
     const { status, title, description } = v.data as any;
