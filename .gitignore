@@ -194,3 +194,5 @@ playwright-report/
 .gemini/
 .windsurf/
 .github/agents/
+.github/hooks/
+.github/skills/

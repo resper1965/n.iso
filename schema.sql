@@ -851,6 +851,13 @@ CREATE TABLE IF NOT EXISTS scope_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_scope_changes_project ON scope_changes(project_id);
 
+-- Contador de rate limit atômico (janela fixa) — ver migrations/0024 e rateLimitD1.
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    window_start INTEGER NOT NULL
+);
+
 -- -----------------------------------------------
 -- ÍNDICES em colunas quentes (filtros frequentes)
 -- -----------------------------------------------

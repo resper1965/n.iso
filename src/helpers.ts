@@ -293,6 +293,32 @@ export async function rateLimit(kv: KVNamespace, key: string, max: number, windo
   return true;
 }
 
+/**
+ * Rate limit ATÔMICO de JANELA FIXA em D1. Retorna true se a ação é permitida.
+ *
+ * Existe para controles de SEGURANÇA (ex.: brute force de login por conta), onde
+ * o `rateLimit` por KV é fraco em dois pontos que o Codex apontou no #113:
+ *  - get-then-put não é atômico → sob concorrência distribuída o teto vaza;
+ *  - o TTL é renovado a cada request → a janela desliza e nunca fecha (um
+ *    usuário legítimo espaçando logins pode tomar 429 sem nunca estourar N/janela).
+ *
+ * Aqui o incremento é um upsert de statement ÚNICO (atômico no D1) e a janela é
+ * FIXA: quando `window_start + windowSec` já passou, o contador zera e a janela
+ * reinicia. Use só onde o keyspace é limitado (ex.: por conta-alvo) — não há TTL,
+ * a linha é reaproveitada na próxima chamada da mesma chave.
+ */
+export async function rateLimitD1(db: D1Database, key: string, max: number, windowSec: number): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await db.prepare(
+    `INSERT INTO rate_limits (key, count, window_start) VALUES (?1, 1, ?2)
+     ON CONFLICT(key) DO UPDATE SET
+       count = CASE WHEN rate_limits.window_start + ?3 <= ?2 THEN 1 ELSE rate_limits.count + 1 END,
+       window_start = CASE WHEN rate_limits.window_start + ?3 <= ?2 THEN ?2 ELSE rate_limits.window_start END
+     RETURNING count`
+  ).bind(key, now, windowSec).first<{ count: number }>();
+  return (row?.count ?? 1) <= max;
+}
+
 /** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
 export async function sendEmail(c: any, to: string, subject: string, html: string): Promise<boolean> {
   const apiKey = c.env.RESEND_API_KEY;
