@@ -86,3 +86,25 @@ jobs:
             frontend/playwright-report/**
           if-no-files-found: ignore
           retention-days: 14
+
+  # Auditoria de dependências (S5 do backlog / OWASP A06). INFORMATIVO: só o job
+  # `test` é required pela proteção de branch, então isto reporta vulnerabilidades
+  # high+ sem bloquear o merge. Cada passo é continue-on-error para o job ficar
+  # verde e servir de sinal, não de portão — apertar para bloqueante quando a base
+  # estiver limpa. Não roda `npm ci`: `npm audit` só precisa do package-lock.json.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Audit (root)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+      - name: Audit (frontend)
+        continue-on-error: true
+        run: cd frontend && npm audit --audit-level=high
+      - name: Audit (mcp-server)
+        continue-on-error: true
+        run: cd mcp-server-niso && npm audit --audit-level=high
