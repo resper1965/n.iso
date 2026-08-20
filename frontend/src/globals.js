@@ -221,20 +221,29 @@ window.doLogout = function doLogout() {
 
 window.openPricingOverrideModal = function openPricingOverrideModal(id) {
         const a = S.assessments.find(x => x.id === id);
+        // XSS armazenado (S7): pricing_notas é texto livre gravado por qualquer
+        // escritor do assessment (PUT /assessments/:id/pricing, sem sanitização),
+        // e este HTML vira innerHTML via openModal. Sem escape, um valor como
+        // `</textarea><img src=x onerror=...>` quebra o textarea e executa quando
+        // OUTRO operador abre o modal — e o CSP com unsafe-inline permite. Os
+        // numéricos são escapados por robustez (o backend não valida o tipo).
+        const notas = escapeHTML(a.pricing_notas || '');
+        const preco = escapeHTML(a.pricing_override || 0);
+        const desconto = escapeHTML(a.pricing_desconto || 0);
         const html = `
             <div style="padding: 2rem">
                 <h2 style="margin-bottom: 1.5rem">Ajustar Precificação</h2>
                 <div class="form-group">
                     <label class="form-label">Preço Final Sugerido (R$)</label>
-                    <input type="number" id="p-price" class="form-input" value="${a.pricing_override || 0}">
+                    <input type="number" id="p-price" class="form-input" value="${preco}">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Desconto (%)</label>
-                    <input type="number" id="p-discount" class="form-input" value="${a.pricing_desconto || 0}">
+                    <input type="number" id="p-discount" class="form-input" value="${desconto}">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notas de Ajuste</label>
-                    <textarea id="p-notes" class="form-input" rows="3">${a.pricing_notas || ''}</textarea>
+                    <textarea id="p-notes" class="form-input" rows="3">${notas}</textarea>
                 </div>
                 <div style="display: flex; gap: 1rem; margin-top: 2rem">
                     <button class="btn btn-primary" onclick="savePricingOverride('${id}')">Salvar Ajustes</button>
