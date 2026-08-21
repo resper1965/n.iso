@@ -3,6 +3,7 @@ import { S } from './state.js';
 import { api, API_BASE } from './api.js';
 import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 import { navigate, render } from './router.js';
+import { initDelegation } from './delegation.js';
 import './data/wizards.js';
 import './data/assessment.js';
 
@@ -23,3 +24,7 @@ import './views/security.js';
 // For now, import remaining inline code below
 console.log('[nISO] Modules loaded:', { S, api, navigate });
 import './globals.js';
+
+// S2: delegação de eventos (substitui onclick inline, view a view). Um listener
+// no document cobre todo conteúdo renderizado.
+initDelegation();
