@@ -6,9 +6,9 @@ import { navigate, render } from '../router.js';
     async function renderKnowledge(c, h, a) {
         h.textContent = 'Cérebro do Projeto — Gestão de Conhecimento';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         
-        a.innerHTML = `<button class="btn btn-primary" onclick="openIngestModal('${proj.id}')">+ Ingerir Conhecimento</button>`;
+        a.innerHTML = `<button class="btn btn-primary" data-action="openIngestModal" data-args='["${proj.id}"]'>+ Ingerir Conhecimento</button>`;
         
         let query = S.knowledgeQuery || '';
         let items = [];
@@ -36,7 +36,7 @@ import { navigate, render } from '../router.js';
                                     ${(m.controls || []).map(ctrl => `<span class="ctx-tag">${ctrl}</span>`).join('')}
                                 </div>
                             </div>
-                            <button class="btn btn-ghost" onclick="viewKnowledge('${item.id}', '${proj.id}')">Ver</button>
+                            <button class="btn btn-ghost" data-action="viewKnowledge" data-args='["${item.id}","${proj.id}"]'>Ver</button>
                         </div>`;
                     }).join('') : '<div class="empty-state"><h3>Nenhum conhecimento mapeado</h3><p>Ingira atas de reuniões, entrevistas ou procedimentos para começar.</p></div>'}
                 </div>
@@ -52,7 +52,7 @@ import { navigate, render } from '../router.js';
 
     function openIngestModal(projectId) {
         openModal(`
-            <div class="modal-header"><span class="modal-title">Ingerir Novo Conhecimento</span><button class="btn-ghost" onclick="closeModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Ingerir Novo Conhecimento</span><button class="btn-ghost" data-action="closeModal">\u00d7</button></div>
             <div class="form-group">
                 <label class="form-label">Título do Documento / Nome da Entrevista</label>
                 <input class="form-input" id="ingest-title" placeholder="Ex: Entrevista CTO - 05/07/24">
@@ -62,7 +62,7 @@ import { navigate, render } from '../router.js';
                 <textarea class="form-input" id="ingest-content" rows="10" placeholder="Cole aqui o conteúdo do documento ou notas da reunião..."></textarea>
             </div>
             <div id="ingest-loading" style="display:none;margin-bottom:1rem;color:var(--accent);font-size:0.7rem">IA processando documento e mapeando controles...</div>
-            <button class="btn btn-primary" style="width:100%" id="ingest-btn" onclick="doIngest('${projectId}')">Processar e Ingerir</button>
+            <button class="btn btn-primary" style="width:100%" id="ingest-btn" data-action="doIngest" data-args='["${projectId}"]'>Processar e Ingerir</button>
         `);
     }
 
@@ -91,8 +91,8 @@ import { navigate, render } from '../router.js';
     async function renderAIChat(c, h, a) {
         h.textContent = 'AI Compliance Assistant';
         const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
-        a.innerHTML = `<button class="btn" onclick="clearChatHistory('${proj.id}')">Limpar Histórico</button>`;
+        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
+        a.innerHTML = `<button class="btn" data-action="clearChatHistory" data-args='["${proj.id}"]'>Limpar Histórico</button>`;
         let history = [];
         try { history = await api('GET', `/api/v1/projects/${proj.id}/chat/history`); } catch(e) {}
         if (!Array.isArray(history)) history = [];
@@ -104,7 +104,7 @@ import { navigate, render } from '../router.js';
             </div>
             <div style="display:flex;gap:0.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)">
                 <input class="form-input" id="chat-input" placeholder="Pergunte sobre compliance, controles ISO, audit..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage('${proj.id}')">
-                <button class="btn btn-primary" onclick="sendChatMessage('${proj.id}')">Enviar</button>
+                <button class="btn btn-primary" data-action="sendChatMessage" data-args='["${proj.id}"]'>Enviar</button>
             </div>
         </div>`;
         const msgs = document.getElementById('chat-messages');
