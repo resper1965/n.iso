@@ -133,9 +133,31 @@ app.get('/.well-known/security.txt', (c) => {
   );
 });
 
-// 1. CORS
+// 1. CORS (S3 / OWASP A05). Era `origin: '*'` — o frontend é servido pelo próprio
+// Worker (mesma origem), então CORS só afeta chamadas de NAVEGADOR cross-origin;
+// clientes não-browser (MCP server, curl) ignoram CORS. Restringir aos domínios
+// conhecidos reduz superfície sem quebrar integração. A função ECOA a origem
+// quando permitida (o Hono responde com essa origem exata, não com `*`), e devolve
+// '' (sem header) quando não.
+//
+// Loopback (localhost / 127.0.0.1, qualquer porta) é SEMPRE permitido: o dev do
+// repo roda o Worker com wrangler.jsonc, cujo ENVIRONMENT é sempre "production"
+// (então um gate por ambiente nunca liberaria o dev — ponto do Codex no #114), e o
+// frontend suporta tanto localhost quanto 127.0.0.1 (frontend/src/api.js). Liberar
+// loopback não é risco: uma página em loopback não tem o token da origem de prod
+// (fica no localStorage dela), então não há o que exfiltrar.
+const CORS_ORIGENS = new Set([
+  'https://niso.ness.com.br',
+  'https://n-iso.ness.com.br',
+  'https://niso.ness.workers.dev',
+]);
+const CORS_LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.use('*', cors({
-  origin: '*',
+  origin: (origin) => {
+    if (!origin) return origin; // requisições same-origin/sem Origin (curl, server-to-server)
+    if (CORS_ORIGENS.has(origin) || CORS_LOOPBACK.test(origin)) return origin;
+    return ''; // origem não permitida: sem Access-Control-Allow-Origin
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Session-ID'],
 }));
