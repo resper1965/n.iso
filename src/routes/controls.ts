@@ -195,3 +195,41 @@ const handleControlApprove = async (c: any) => {
 
 controlsApp.post('/:id/approve', handleControlApprove);
 controlsApp.put('/:id/approve', handleControlApprove);
+
+// Colunas de sign-off por papel. Revogar limpa as quatro do papel indicado.
+export const COLUNAS_REVOGACAO: Record<'ciso' | 'ceo', string> = {
+  ciso: 'ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL',
+  ceo: 'ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL',
+};
+
+// Revogar (desaprovar) a assinatura de um controle. Ao contrário de /approve, NÃO
+// exige a senha do aprovador original nem acesso de admin: é ação do papel de
+// escrita (consultor/platform_admin, via requireResourceAccess), para corrigir
+// aprovações inválidas ou sem lastro. `reason` é obrigatório e vai para a trilha.
+// Não mexe em `status`: segue a mesma convenção do PUT /:id (invalidação por
+// mudança de texto), que também limpa o sign-off sem tocar o status.
+controlsApp.post('/:id/revoke-approval', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
+    const body = await c.req.json().catch(() => ({} as any));
+    const role = body?.role;
+    const reason = String(body?.reason ?? '').trim();
+    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: "Campo 'role' deve ser 'ciso' ou 'ceo'" }, 400);
+    if (!reason) return c.json({ error: "Campo 'reason' é obrigatório para revogar uma aprovação" }, 400);
+
+    const atual = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
+    if (!atual) return c.json({ error: 'Controle não encontrado' }, 404);
+
+    await c.env.DB.prepare(
+      `UPDATE compliance_controls SET ${COLUNAS_REVOGACAO[role as 'ciso' | 'ceo']}, updated_at = datetime('now') WHERE id = ?`
+    ).bind(id).run();
+
+    const ator = c.get('user')?.email ?? 'system';
+    await logAudit(c.env.DB, 'control.approval_revoked', ator, `Aprovação ${String(role).toUpperCase()} do controle ${id} revogada. Motivo: ${reason}`, reason, '', atual.project_id);
+    return c.json({ ok: true, revoked: true, role });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return erro500(c, 'Falha ao revogar aprovação', e);
+  }
+});

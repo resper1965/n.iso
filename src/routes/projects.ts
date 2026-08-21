@@ -10,6 +10,7 @@ import { checkCoherence } from '../services/coherence';
 import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
+import { COLUNAS_REVOGACAO } from './controls';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -153,6 +154,36 @@ projectsApp.put('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar projeto', e);
+  }
+});
+
+// Revogação de aprovação EM LOTE (papel de escrita — o projectAccessMiddleware já
+// garante o tenant). Limpa o sign-off do papel indicado em vários controles do
+// projeto de uma vez. `reason` obrigatório; aterramento por project_id (só
+// controles DESTE projeto). Sem senha de aprovador nem admin. Ver revoke-approval
+// unitário em routes/controls.ts.
+projectsApp.post('/:id/revoke-approvals', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({} as any));
+    const role = body?.role;
+    const reason = String(body?.reason ?? '').trim();
+    const ids: string[] = Array.isArray(body?.control_ids) ? body.control_ids.filter((x: any) => typeof x === 'string' && x) : [];
+    if (role !== 'ciso' && role !== 'ceo') return c.json({ error: "Campo 'role' deve ser 'ciso' ou 'ceo'" }, 400);
+    if (!reason) return c.json({ error: "Campo 'reason' é obrigatório" }, 400);
+    if (!ids.length) return c.json({ error: "Campo 'control_ids' não pode ser vazio" }, 400);
+
+    const placeholders = ids.map(() => '?').join(',');
+    const res = await c.env.DB.prepare(
+      `UPDATE compliance_controls SET ${COLUNAS_REVOGACAO[role as 'ciso' | 'ceo']}, updated_at = datetime('now')
+       WHERE project_id = ? AND id IN (${placeholders})`
+    ).bind(projectId, ...ids).run();
+    const revogados = (res as any).meta?.changes ?? 0;
+
+    await logAudit(c.env.DB, 'control.approvals_revoked_batch', c.get('user')?.email ?? 'system', `Revogação em lote (${String(role).toUpperCase()}) de ${revogados} controle(s) no projeto ${projectId}. Motivo: ${reason}`, reason, '', projectId);
+    return c.json({ ok: true, role, revoked_count: revogados });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao revogar aprovações em lote', e);
   }
 });
 
