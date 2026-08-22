@@ -8,12 +8,12 @@ import { navigate, render } from '../router.js';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
             a.innerHTML = '';
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
             return; 
         }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewROPAModal('${proj.id}')">+ Nova Atividade</button>` : '';
+        a.innerHTML = canCrud ? `<button class="btn btn-primary" data-action="openNewROPAModal" data-args='["${proj.id}"]'>+ Nova Atividade</button>` : '';
         
         let records = [];
         try { records = await api('GET', `/api/v1/projects/${proj.id}/ropa`); } catch(e) {}
@@ -43,8 +43,8 @@ import { navigate, render } from '../router.js';
                     escapeHTML(r.retention_period || 'N/A'),
                     r.dpia_required ? window.renderStatusBadge('Sim', 'warning') : window.renderStatusBadge('Não', 'neutral'),
                     window.renderStatusBadge(r.status || 'Active', statusType),
-                    `<button class="btn btn-ghost btn-sm" onclick="window.openROPADetailsModal('${r.id}')">Detalhes</button>
-                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="event.stopPropagation(); window.openROPAReport('${proj.id}')">PDF</button>`
+                    `<button class="btn btn-ghost btn-sm" data-action="openROPADetailsModal" data-args='["${r.id}"]'>Detalhes</button>
+                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" data-action="openROPAReport" data-args='["${proj.id}"]' data-stop>PDF</button>`
                 ];
             }),
             { emptyState: 'Nenhum registro ROPA cadastrado neste projeto.' }
@@ -64,7 +64,7 @@ import { navigate, render } from '../router.js';
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Detalhes da Atividade ROPA</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
+                <button class="btn-ghost" data-action="forceCloseModal">&times;</button>
             </div>
             <div style="display:flex; flex-direction:column; gap:16px; font-family:'Inter',sans-serif;">
                 <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:1.3rem; color:var(--accent)">
@@ -121,23 +121,23 @@ import { navigate, render } from '../router.js';
                             <strong>Líder SGSI:</strong> 
                             ${r.ciso_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ciso')">Assinar</button>` : ''}
+                        ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ciso"]'>Assinar</button>` : ''}
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Direção Executiva:</strong> 
                             ${r.ceo_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="window.approveROPA('${projectId}', '${r.id}', 'ceo')">Assinar</button>` : ''}
+                        ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ceo"]'>Assinar</button>` : ''}
                     </div>
                 </div>
             </div>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px">
-                <button class="btn btn-secondary" onclick="window.openROPAReport('${projectId}')">Gerar Relatório ROPA</button>
+                <button class="btn btn-secondary" data-action="openROPAReport" data-args='["${projectId}"]'>Gerar Relatório ROPA</button>
                 <div>
-                    <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                    ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditROPAModal('${id}')">Editar Atividade</button>` : ''}
+                    <button class="btn" data-action="forceCloseModal">Fechar</button>
+                    ${canCrud ? `<button class="btn btn-primary" data-action="openEditROPAModal" data-args='["${id}"]'>Editar Atividade</button>` : ''}
                 </div>
             </div>
         `);
@@ -145,7 +145,7 @@ import { navigate, render } from '../router.js';
 
     window.openNewROPAModal = function(projectId) {
         openModal(`
-            <div class="modal-header"><span class="modal-title">Nova Atividade de Tratamento (ROPA)</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+            <div class="modal-header"><span class="modal-title">Nova Atividade de Tratamento (ROPA)</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Finalidade do Tratamento</label><input class="form-input" id="ropa-purpose" placeholder="Ex: Folha de pagamento"></div>
             <div class="form-group"><label class="form-label">Categorias de Dados</label><input class="form-input" id="ropa-categories" placeholder="Ex: Dados pessoais, financeiros, biometria"></div>
             <div class="form-group"><label class="form-label">Titulares</label><input class="form-input" id="ropa-subjects" placeholder="Ex: Colaboradores, Clientes"></div>
@@ -173,7 +173,7 @@ import { navigate, render } from '../router.js';
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-intl"> Transferencia Internacional</label>
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-dpia"> DPIA Requerido</label>
             </div>
-            <button class="btn btn-primary" style="width:100%" onclick="window.createROPA('${projectId}')">Registrar</button>
+            <button class="btn btn-primary" style="width:100%" data-action="createROPA" data-args='["${projectId}"]'>Registrar</button>
         `);
     };
 
@@ -200,7 +200,7 @@ import { navigate, render } from '../router.js';
         const r = S.ropa.find(x => x.id === id) || {};
         const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
-            <div class="modal-header"><span class="modal-title">Editar Atividade ROPA</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+            <div class="modal-header"><span class="modal-title">Editar Atividade ROPA</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Finalidade</label><input class="form-input" id="ropa-e-purpose" value="${escapeHTML(r.processing_purpose||'')}"></div>
             <div class="form-group"><label class="form-label">Categorias de Dados</label><input class="form-input" id="ropa-e-categories" value="${escapeHTML(r.data_categories||'')}"></div>
             <div class="form-group"><label class="form-label">Titulares</label><input class="form-input" id="ropa-e-subjects" value="${escapeHTML(r.data_subjects||'')}"></div>
@@ -224,8 +224,8 @@ import { navigate, render } from '../router.js';
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-e-dpia" ${r.dpia_required?'checked':''}> DPIA Requerido</label>
             </div>
             <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1rem">
-                <button class="btn" style="color:var(--danger)" onclick="window.deleteROPA('${id}')">Excluir</button>
-                <button class="btn btn-primary" onclick="window.updateROPA('${id}')">Salvar</button>
+                <button class="btn" style="color:var(--danger)" data-action="deleteROPA" data-args='["${id}"]'>Excluir</button>
+                <button class="btn btn-primary" data-action="updateROPA" data-args='["${id}"]'>Salvar</button>
             </div>
         `);
     };
@@ -257,12 +257,12 @@ import { navigate, render } from '../router.js';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
             a.innerHTML = '';
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
             return; 
         }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" onclick="window.openNewDPIAModal('${proj.id}')">+ Novo Relatório (DPIA)</button>` : '';
+        a.innerHTML = canCrud ? `<button class="btn btn-primary" data-action="openNewDPIAModal" data-args='["${proj.id}"]'>+ Novo Relatório (DPIA)</button>` : '';
         
         let assessments = [];
         try { assessments = await api('GET', `/api/v1/projects/${proj.id}/dpia`); } catch(e) {}
@@ -290,8 +290,8 @@ import { navigate, render } from '../router.js';
                     escapeHTML(dp.data_subjects_types || 'N/A'),
                     escapeHTML(dp.personal_data_categories || 'N/A'),
                     window.renderStatusBadge(dp.status || 'Draft', statusType),
-                    `<button class="btn btn-ghost btn-sm" onclick="window.openDPIADetailsModal('${dp.id}')">Detalhes</button>
-                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="event.stopPropagation(); window.openDPIAReport('${proj.id}', '${dp.id}')">PDF</button>`
+                    `<button class="btn btn-ghost btn-sm" data-action="openDPIADetailsModal" data-args='["${dp.id}"]'>Detalhes</button>
+                     <button class="btn btn-ghost btn-sm" style="color:var(--accent)" data-action="openDPIAReport" data-args='["${proj.id}","${dp.id}"]' data-stop>PDF</button>`
                 ];
             }),
             { emptyState: 'Nenhum relatório DPIA / RIPD cadastrado.' }
@@ -312,7 +312,7 @@ import { navigate, render } from '../router.js';
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Detalhes do DPIA / RIPD</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
+                <button class="btn-ghost" data-action="forceCloseModal">&times;</button>
             </div>
             <div style="display:flex; flex-direction:column; gap:16px; font-family:'Inter',sans-serif;">
                 <div style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:1.3rem; color:var(--accent)">
@@ -362,23 +362,23 @@ import { navigate, render } from '../router.js';
                             <strong>Líder SGSI:</strong> 
                             ${dp.dpo_signature ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(dp.dpo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!dp.dpo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ciso')">Assinar</button>` : ''}
+                        ${!dp.dpo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveDPIA" data-args='["${projectId}","${dp.id}","ciso"]'>Assinar</button>` : ''}
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Direção Executiva:</strong> 
                             ${dp.ceo_signature ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(dp.ceo_signature)}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!dp.ceo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="window.approveDPIA('${projectId}', '${dp.id}', 'ceo')">Assinar</button>` : ''}
+                        ${!dp.ceo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveDPIA" data-args='["${projectId}","${dp.id}","ceo"]'>Assinar</button>` : ''}
                     </div>
                 </div>
             </div>
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px">
-                <button class="btn btn-secondary" onclick="window.openDPIAReport('${projectId}', '${dp.id}')">Gerar Relatório DPIA</button>
+                <button class="btn btn-secondary" data-action="openDPIAReport" data-args='["${projectId}","${dp.id}"]'>Gerar Relatório DPIA</button>
                 <div>
-                    <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                    ${canCrud ? `<button class="btn btn-primary" onclick="window.openEditDPIAModal('${id}')">Editar Relatório</button>` : ''}
+                    <button class="btn" data-action="forceCloseModal">Fechar</button>
+                    ${canCrud ? `<button class="btn btn-primary" data-action="openEditDPIAModal" data-args='["${id}"]'>Editar Relatório</button>` : ''}
                 </div>
             </div>
         `);
@@ -386,7 +386,7 @@ import { navigate, render } from '../router.js';
 
     window.openNewDPIAModal = function(projectId) {
         openModal(`
-            <div class="modal-header"><span class="modal-title">Novo DPIA / RIPD</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+            <div class="modal-header"><span class="modal-title">Novo DPIA / RIPD</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Nome do Sistema / Processo de Dados</label><input class="form-input" id="dpia-system" placeholder="Ex: CRM Salesforce, Sistema de RH Interno"></div>
             <div class="form-group"><label class="form-label">Descrição do Fluxo de Dados</label><textarea class="form-input" id="dpia-flow" placeholder="Descreva como os dados entram, circulam e saem do sistema..."></textarea></div>
             <div style="display:flex; gap:0.5rem">
@@ -398,7 +398,7 @@ import { navigate, render } from '../router.js';
             <div class="form-group"><label class="form-label">Medidas de Mitigação e Salvaguardas</label><textarea class="form-input" id="dpia-mitigations" placeholder="Ex: Uso de criptografia TLS/AES-256, MFA ativo, auditorias..."></textarea></div>
             <div class="form-group"><label class="form-label">Parecer DPO (Opcional)</label><textarea class="form-input" id="dpia-opinion" placeholder="Parecer inicial do encarregado..."></textarea></div>
             
-            <button class="btn btn-primary" style="width:100%; margin-top:1rem" onclick="window.createDPIA('${projectId}')">Registrar DPIA</button>
+            <button class="btn btn-primary" style="width:100%; margin-top:1rem" data-action="createDPIA" data-args='["${projectId}"]'>Registrar DPIA</button>
         `);
     };
 
@@ -422,7 +422,7 @@ import { navigate, render } from '../router.js';
         const dp = S.dpia.find(x => x.id === id) || {};
         const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
-            <div class="modal-header"><span class="modal-title">Editar DPIA / RIPD</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+            <div class="modal-header"><span class="modal-title">Editar DPIA / RIPD</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Nome do Sistema</label><input class="form-input" id="dpia-e-system" value="${escapeHTML(dp.system_name||'')}"></div>
             <div class="form-group"><label class="form-label">Descrição do Fluxo</label><textarea class="form-input" id="dpia-e-flow">${escapeHTML(dp.data_flow_description||'')}</textarea></div>
             <div style="display:flex; gap:0.5rem">
@@ -441,8 +441,8 @@ import { navigate, render } from '../router.js';
                 </select></div>
 
             <div style="display:flex; gap:0.5rem; justify-content:space-between; margin-top:1.5rem">
-                <button class="btn" style="color:var(--danger)" onclick="window.deleteDPIA('${id}')">Excluir</button>
-                <button class="btn btn-primary" onclick="window.updateDPIA('${id}')">Salvar</button>
+                <button class="btn" style="color:var(--danger)" data-action="deleteDPIA" data-args='["${id}"]'>Excluir</button>
+                <button class="btn btn-primary" data-action="updateDPIA" data-args='["${id}"]'>Salvar</button>
             </div>
         `);
     };
