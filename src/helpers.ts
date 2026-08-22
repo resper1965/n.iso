@@ -51,6 +51,18 @@ export function registraErro(c: any, e: unknown): string {
   return rid;
 }
 
+/**
+ * Registra uma entrada no trilho de auditoria (append-only; ver schema.sql —
+ * triggers `audit_logs_no_update`/`_no_delete` garantem imutabilidade, controle
+ * de integridade de log da ISO 27001 A.8.15).
+ *
+ * S-log — minimização (LGPD/ISO 27701): `details` descreve a AÇÃO e o ALVO
+ * (ids, nomes de entidade de negócio, ação), nunca CONTEÚDO de titular de dados
+ * (texto de perguntas ao AI, corpo de mensagens, respostas de formulário). O
+ * `actor` (e-mail) é retido de propósito: identificar quem fez o quê é a própria
+ * finalidade do trilho. Como a tabela é imutável por design, a minimização é
+ * feita na ESCRITA — não há como "limpar" depois sem quebrar a imutabilidade.
+ */
 export async function logAudit(
   db: D1Database,
   action: string,

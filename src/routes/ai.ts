@@ -34,7 +34,10 @@ Seja solícito e forneça exemplos práticos quando solicitado.`;
     }) as any;
 
     const reply = aiResponse.response || 'Desculpe, não consegui processar sua solicitação no momento.';
-    await logAudit(c.env.DB, 'ai.chat', user?.email || 'system', `Pergunta ao AI Assistant no projeto ${projectId}: "${body.message.substring(0, 50)}..."`);
+    // S-log: NÃO registrar o conteúdo da pergunta no audit_log. O trilho de
+    // auditoria precisa saber QUE houve uma consulta, por QUEM (actor) e em QUAL
+    // projeto — não o texto perguntado (conteúdo do titular; minimização LGPD).
+    await logAudit(c.env.DB, 'ai.chat', user?.email || 'system', `Consulta ao AI Assistant no projeto ${projectId}`);
 
     return c.json({ ok: true, reply });
   } catch (err: any) {

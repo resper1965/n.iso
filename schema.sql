@@ -228,6 +228,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
+-- Retenção x imutabilidade (S-log): esta tabela é append-only por design
+-- (integridade de log, ISO 27001 A.8.15). Isso está em TENSÃO com um limite de
+-- retenção por expurgo (LGPD/ISO 27701 minimização): não se pode DELETE sem
+-- afrouxar os triggers abaixo, o que enfraquece a imutabilidade. A escolha aqui
+-- é: minimizar na ESCRITA (details nunca guarda conteúdo de titular — ver
+-- helpers.ts:logAudit) e manter a trilha imutável. Um expurgo por tempo é
+-- decisão de governança do controlador (exigiria um processo autorizado que
+-- relaxe os triggers) — não é feito silenciosamente no código.
 -- Trilha de auditoria imutável (append-only): bloqueia UPDATE/DELETE no nível do DB.
 CREATE TRIGGER IF NOT EXISTS audit_logs_no_update
 BEFORE UPDATE ON audit_logs
