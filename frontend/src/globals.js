@@ -7,7 +7,7 @@ import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 // nativo (design.md §2) e não havia CSS [data-theme], então o controle não fazia
 // nada além de trocar o próprio ícone (enganoso). Sem tema claro, sem toggle.
 
-// __noop: ação de despacho vazia. Substitui os antigos `onclick="event.stopPropagation()"`
+// __noop: ação de despacho vazia. Substitui os antigos `data-action="__noop"`
 // usados só para impedir que o clique num filho dispare o handler do container pai.
 // No modelo de delegação (despacho único do `closest([data-action])`), marcar o
 // próprio elemento com esta ação já impede o pai de ser acionado — sem stopPropagation.
@@ -89,8 +89,8 @@ window.viewEvidence = async function viewEvidence(id) {
                     ${sealHtml}
                     
                     <div style="margin-top: 1.5rem; display:flex; gap:0.5rem; justify-content: flex-end;">
-                        <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                        <button class="btn btn-primary" onclick="downloadEvidenceFile('${id}')">Baixar Arquivo</button>
+                        <button class="btn" data-action="forceCloseModal">Fechar</button>
+                        <button class="btn btn-primary" data-action="downloadEvidenceFile" data-args='["${id}"]'>Baixar Arquivo</button>
                     </div>
                 </div>
             `;
@@ -252,8 +252,8 @@ window.openPricingOverrideModal = function openPricingOverrideModal(id) {
                     <textarea id="p-notes" class="form-input" rows="3">${notas}</textarea>
                 </div>
                 <div style="display: flex; gap: 1rem; margin-top: 2rem">
-                    <button class="btn btn-primary" onclick="savePricingOverride('${id}')">Salvar Ajustes</button>
-                    <button class="btn" onclick="closeModal()">Cancelar</button>
+                    <button class="btn btn-primary" data-action="savePricingOverride" data-args='["${id}"]'>Salvar Ajustes</button>
+                    <button class="btn" data-action="closeModal">Cancelar</button>
                 </div>
             </div>
         `;
@@ -438,7 +438,7 @@ window.renderNotifDropdown = function renderNotifDropdown() {
             return;
         }
         dd.innerHTML = items.slice(0, 15).map(n => `
-            <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}')">
+            <div class="notif-item ${n.read ? '' : 'unread'}" data-action="handleNotificationClick" data-args='["${n.id}"]'>
                 <div style="font-weight:${n.read ? '400' : '600'}">${escapeHTML(n.title)}</div>
                 <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.2rem">${escapeHTML(n.message || '')}</div>
                 <div class="notif-time">${n.created_at ? n.created_at.split('T')[0] : ''}</div>
@@ -600,9 +600,9 @@ window.openProfileModal = function openProfileModal() {
             + '<div style="display:flex;justify-content:space-between;align-items:center;gap:1rem">'
             + '<div><div style="font-size:0.8rem">Autenticação em duas etapas</div>'
             + '<div style="font-size:0.7rem;color:var(--muted)">Exige um código do celular ao entrar</div></div>'
-            + '<button class="btn btn-primary" onclick="openSecurityModal()">Gerenciar</button>'
+            + '<button class="btn btn-primary" data-action="openSecurityModal">Gerenciar</button>'
             + '</div>'
-            + '<button class="btn" onclick="forceCloseModal()" style="margin-top:1.5rem">Fechar</button></div>');
+            + '<button class="btn" data-action="forceCloseModal" style="margin-top:1.5rem">Fechar</button></div>');
     }
 
 window.openActiveProjectModal = function openActiveProjectModal() {
@@ -618,7 +618,7 @@ window.updateContextPanel = function updateContextPanel() {
 window.openInviteClientModal = function openInviteClientModal(projectId) {
         const tempPassword = 'Niso@' + Math.floor(Math.random() * 9000 + 1000);
         openModal(`
-            <div class="modal-header"><span class="modal-title">Convidar Cliente</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Convidar Cliente</span><button class="btn-ghost" data-action="forceCloseModal">\u00d7</button></div>
             <div class="form-group">
                 <label class="form-label">Nome do Cliente</label>
                 <input class="form-input" id="invite-name" placeholder="Ex: João Silva">
@@ -632,7 +632,7 @@ window.openInviteClientModal = function openInviteClientModal(projectId) {
                 <input class="form-input" id="invite-password" type="text" value="${tempPassword}">
             </div>
             <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">O cliente terá acesso exclusivo ao portal do projeto vinculado.</p>
-            <button class="btn btn-primary" id="btn-do-invite" style="width:100%" onclick="doInviteClient('${projectId}')">Criar Acesso</button>
+            <button class="btn btn-primary" id="btn-do-invite" style="width:100%" data-action="doInviteClient" data-args='["${projectId}"]'>Criar Acesso</button>
             <div id="invite-result" style="margin-top:1rem;font-size:0.8rem"></div>
         `);
     }
@@ -895,8 +895,8 @@ window.refreshDoDDrawer = function() {
                         </div>
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
-                        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase</button>
-                        <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Fechar</button>
+                        <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" data-action="confirmDoDCompletion">Concluir Fase</button>
+                        <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" data-action="cancelDoDCompletion">Fechar</button>
                     </div>
                 </div>
             `;
@@ -928,10 +928,10 @@ window.refreshDoDDrawer = function() {
                                     </div>
                                     <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem; width: 100%;">
                                         ${(item.category === 'evidence' || item.category === 'document') ? `
-                                            <button class="btn" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="wsUploadEvidence('${item.id}')">Upload</button>
+                                            <button class="btn" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" data-action="wsUploadEvidence" data-args='["${item.id}"]'>Upload</button>
                                         ` : ''}
                                         ${item.category === 'document' ? `
-                                            <button class="btn btn-primary" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" onclick="openGeneratePolicyModal('${projectId}', '${controlId}')">Gerar Política</button>
+                                            <button class="btn btn-primary" style="flex: 1; padding: 0.4rem 0.8rem; font-size: 0.65rem;" data-action="openGeneratePolicyModal" data-args='["${projectId}","${controlId}"]'>Gerar Política</button>
                                         ` : ''}
                                     </div>
                                 </div>
@@ -941,8 +941,8 @@ window.refreshDoDDrawer = function() {
                 </div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1.5rem;">
-                    <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" onclick="window.confirmDoDCompletion()">Concluir Fase mesmo assim</button>
-                    <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" onclick="window.cancelDoDCompletion()">Cancelar</button>
+                    <button class="btn btn-primary" style="width: 100%; justify-content: center; font-weight: 500; font-size: 0.8rem; padding: 0.75rem;" data-action="confirmDoDCompletion">Concluir Fase mesmo assim</button>
+                    <button class="btn" style="width: 100%; justify-content: center; font-size: 0.8rem; padding: 0.75rem;" data-action="cancelDoDCompletion">Cancelar</button>
                 </div>
             </div>
         `;
@@ -1019,7 +1019,7 @@ window.openScopeChangeModal = async function(projectId, projData) {
         } catch(e) {}
 
         openModal(`
-            <div class="modal-header"><span class="modal-title">Alteração de Escopo (Cláusula 6.3)</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Alteração de Escopo (Cláusula 6.3)</span><button class="btn-ghost" data-action="forceCloseModal">\u00d7</button></div>
             <div class="form-group">
                 <label class="form-label">Escopo Atual do Projeto</label>
                 <textarea class="form-input" readonly rows="2" style="background:rgba(255,255,255,0.02);color:var(--text-dim);resize:none">${escapeHTML(projData.scope || 'Nenhum escopo definido')}</textarea>
@@ -1041,7 +1041,7 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <input class="form-input" id="scope-approved-by" placeholder="Ex: João (ness.) / CISO Cliente">
             </div>
             
-            <button class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="submitScopeChange('${projectId}', '${escapeHTML(projData.scope || '')}')">Registrar Alteração</button>
+            <button class="btn btn-primary" style="width:100%;margin-top:1rem" data-action="submitScopeChange" data-args='${escapeHTML(JSON.stringify([projectId, projData.scope || '']))}'>Registrar Alteração</button>
 
             <div style="margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
                 <h4 style="font-family:'Montserrat',sans-serif;font-size:0.7rem;color:var(--accent);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">Histórico de Alterações de Escopo</h4>
@@ -1164,8 +1164,8 @@ window.renderSelfServiceBlock = function renderSelfServiceBlock(c, blocks) {
                 }).join('')}
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:1rem">
-                ${idx > 0 ? '<button class="btn" onclick="ssPrev()">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
+                ${idx > 0 ? '<button class="btn" data-action="ssPrev">Anterior</button>' : '<div></div>'}
+                <button class="btn btn-primary" data-action="ssNext">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
             </div>
         </div>`;
     }
