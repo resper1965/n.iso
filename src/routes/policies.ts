@@ -217,7 +217,7 @@ policies.post('/api/v1/projects/:id/approve-document', async (c) => {
     const fileName = `${item.text}.md`;
     await c.env.DB.prepare(
       'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforme', 'Documento gerado e aprovado via wizard guiado.').run();
+    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforming', 'Documento gerado e aprovado via wizard guiado.').run();
 
     // Auto-check checklist item
     await c.env.DB.prepare(
@@ -291,7 +291,7 @@ policies.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
       'text/markdown',
       fileSize,
       userEmail,
-      'conforme',
+      'conforming',
       'Documento gerado internamente pelo assistente de IA.'
     ).run();
 

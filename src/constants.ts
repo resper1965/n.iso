@@ -1,4 +1,13 @@
 
+// Domínio canônico de evidence.evaluation_status (D2). Só o servidor escreve —
+// não há caminho de input livre. O caminho de IA (/evaluate) normaliza CONFORME/
+// PARCIAL/NÃO CONFORME para conforming/partial/non_conforming; upload e re-vínculo
+// entram como 'pending'. Antes, o wizard de políticas e o doc interno gravavam
+// 'conforme' (grafia divergente do enum) — normalizado para 'conforming'.
+// `rejected` é LIDO por readiness.ts mas nunca escrito (achado à parte).
+export const EVALUATION_STATUSES = ['pending', 'conforming', 'partial', 'non_conforming'] as const;
+export type EvaluationStatus = typeof EVALUATION_STATUSES[number];
+
 export type BlockQuestion = {
   key: string;
   question: string;

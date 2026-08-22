@@ -277,6 +277,12 @@ CREATE TABLE IF NOT EXISTS evidence (
     file_type TEXT,
     file_size INTEGER,
     uploaded_by TEXT NOT NULL,
+    -- Domínio canônico (D2, ver constants.ts EVALUATION_STATUSES): pending |
+    -- conforming | partial | non_conforming. Só o servidor escreve (sem input
+    -- livre). Sem CHECK aqui de propósito: evidence é referenciada por FK
+    -- (compliance_progress.evidence_id), então um rebuild p/ adicionar CHECK
+    -- arriscaria a integridade — a consistência é garantida na origem (constante +
+    -- normalização dos writes).
     evaluation_status TEXT DEFAULT 'pending',
     evaluation_score REAL,
     evaluation_notes TEXT,
