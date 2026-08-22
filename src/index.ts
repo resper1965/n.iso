@@ -95,12 +95,16 @@ app.use('*', secureHeaders({
 
   contentSecurityPolicy: {
     defaultSrc: ["'self'"],
-    // ponytail: 'unsafe-inline' em script-src e uma concessao real, nao um
-    // descuido. O frontend tem ~324 handlers `onclick=` inline; sem ela a
-    // aplicacao inteira para. Com ela, o CSP NAO protege contra XSS injetado —
-    // as diretivas abaixo e que entregam valor hoje. Caminho de upgrade:
-    // migrar os onclick para addEventListener e trocar por nonce.
-    scriptSrc: ["'self'", "'unsafe-inline'"],
+    // S2: 'unsafe-inline' REMOVIDO de script-src. Todo handler inline (onclick,
+    // onchange, onsubmit…) do frontend migrou para delegação de eventos
+    // (frontend/src/delegation.js) e os scripts inline das páginas públicas
+    // (landing/portal de políticas) foram externalizados como 'self'. Sem
+    // 'unsafe-inline', o CSP agora BLOQUEIA execução de script injetado —
+    // defesa real contra XSS refletido/armazenado. NÃO reintroduzir handlers
+    // inline nem <script> inline: quebram sob este CSP e reabrem o buraco.
+    // (style-src mantém 'unsafe-inline' — os atributos style="" são pervasivos
+    // e de baixo risco; nonce não cobre atributo de estilo.)
+    scriptSrc: ["'self'"],
     styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
     imgSrc: ["'self'", 'data:', 'blob:'],

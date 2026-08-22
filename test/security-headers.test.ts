@@ -6,9 +6,10 @@ import app from '../src/index';
  * Cabeçalho de segurança é invisível: some num refactor e ninguém percebe até o
  * pentest seguinte. Estes testes existem para que sumir custe um CI vermelho.
  *
- * O que NÃO é testado aqui, de propósito: que o CSP impeça XSS. Ele não impede —
- * `script-src` carrega `'unsafe-inline'` por causa dos ~324 `onclick=` do
- * frontend. O que se afirma abaixo é só o que a política realmente entrega.
+ * S2: `script-src` NÃO carrega mais `'unsafe-inline'` — todo handler inline do
+ * frontend migrou para delegação de eventos e os scripts das páginas públicas
+ * foram externalizados. Com isso o CSP passa a bloquear script injetado (XSS).
+ * O teste abaixo trava essa garantia: reintroduzir `'unsafe-inline'` fica vermelho.
  */
 describe('Cabeçalhos de segurança', () => {
   async function headers(path = '/health') {
@@ -32,13 +33,22 @@ describe('Cabeçalhos de segurança', () => {
     expect(h.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
   });
 
-  it('mantém as diretivas de CSP que valem mesmo com unsafe-inline', async () => {
+  it('mantém as diretivas estruturais do CSP', async () => {
     const csp = (await headers()).get('Content-Security-Policy') || '';
     // Injeção de <base>, de plugin e exfiltração via <form action>.
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
     expect(csp).toContain("default-src 'self'");
+  });
+
+  it("script-src NÃO permite 'unsafe-inline' (S2 — bloqueia XSS injetado)", async () => {
+    const csp = (await headers()).get('Content-Security-Policy') || '';
+    const scriptSrc = csp.split(';').find(d => d.trim().startsWith('script-src')) || '';
+    expect(scriptSrc).toContain('script-src');
+    expect(scriptSrc).not.toContain('unsafe-inline');
+    // script-src fica em 'self' apenas (nenhum inline, nenhuma CDN).
+    expect(scriptSrc.replace('script-src', '').trim()).toBe("'self'");
   });
 
   it('permite exatamente as origens externas que o frontend usa', async () => {
