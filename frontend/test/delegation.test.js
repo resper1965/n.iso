@@ -43,6 +43,26 @@ describe('delegação (S2)', () => {
     expect(window.__fn).toHaveBeenCalledWith('a', el);
   });
 
+  it('data-arg-event adiciona o próprio evento como arg', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<button data-action="__fn" data-arg-event>x</button>`;
+    const el = document.body.querySelector('[data-action]');
+    const ev = new MouseEvent('click', { bubbles: true });
+    el.dispatchEvent(ev);
+    expect(window.__fn).toHaveBeenCalledTimes(1);
+    expect(window.__fn.mock.calls[0][0]).toBe(ev);
+  });
+
+  it('data-prevent chama preventDefault (substitui `return false`)', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<a href="#" data-action="__fn" data-prevent>x</a>`;
+    const el = document.body.querySelector('[data-action]');
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    expect(window.__fn).toHaveBeenCalledTimes(1);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
   it('clique num filho ainda dispara (closest)', () => {
     window.__fn = vi.fn();
     document.body.innerHTML = '<button data-action="__fn"><span id="dentro">x</span></button>';

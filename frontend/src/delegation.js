@@ -10,12 +10,15 @@
 // views escrevem HTML via innerHTML). Convenção nos elementos:
 //   data-action="fnName"           → chama window.fnName()
 //   data-args='["a","b"]'          → window.fnName("a","b")  (JSON: array de args)
-//   data-arg-el                    → adiciona o próprio elemento como último arg
+//   data-arg-el                    → adiciona o próprio elemento como arg
+//   data-arg-event                 → adiciona o próprio evento como arg (ex.: closeModal(event))
 //   data-stop                      → event.stopPropagation() antes de chamar
+//   data-prevent                   → event.preventDefault() (substitui `; return false` em <a>)
+// A ordem dos args extras, quando presentes, é: [...data-args, event?, elemento?].
 // A função é resolvida em `window` (as views expõem as ações lá, como os onclick
 // faziam). Ação desconhecida ou data-args inválido: loga e ignora (não quebra).
 
-function resolverArgs(el) {
+function resolverArgs(el, e) {
   const raw = el.getAttribute('data-args');
   let args = [];
   if (raw) {
@@ -27,6 +30,7 @@ function resolverArgs(el) {
       return null;
     }
   }
+  if (el.hasAttribute('data-arg-event')) args.push(e);
   if (el.hasAttribute('data-arg-el')) args.push(el);
   return args;
 }
@@ -36,13 +40,14 @@ function makeDispatcher(attr) {
     const el = e.target.closest(`[${attr}]`);
     if (!el) return;
     if (el.hasAttribute('data-stop')) e.stopPropagation();
+    if (el.hasAttribute('data-prevent')) e.preventDefault();
     const fnName = el.getAttribute(attr);
     const fn = window[fnName];
     if (typeof fn !== 'function') {
       console.warn('[delegation] ação desconhecida:', fnName);
       return;
     }
-    const args = resolverArgs(el);
+    const args = resolverArgs(el, e);
     if (args === null) return;
     fn.apply(el, args);
   };
