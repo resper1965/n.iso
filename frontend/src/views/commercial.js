@@ -3,9 +3,15 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
 
+// S2: wrappers para handlers com `this` como PRIMEIRO argumento (a delegação só
+// ANEXA o elemento como último via data-arg-el). O dispatcher chama
+// fn.apply(el, args), então aqui `this` === o elemento clicado.
+window.__cmSelectNess = function (key, val) { window.selectNessOption(this, key, val); };
+window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
+
     async function renderLeads(c, h, a) {
         h.textContent = 'Pipeline de Leads & Oportunidades';
-        a.innerHTML = '<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>';
+        a.innerHTML = '<button class="btn btn-primary" data-action="openCreateLeadModal">+ Novo Lead</button>';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const leads = await api('GET', '/api/v1/leads').catch(() => []);
@@ -28,7 +34,7 @@ import { navigate } from '../router.js';
                     escapeHTML(l.contact_name || l.email || '---'),
                     escapeHTML(l.cnpj || l.porte || '---'),
                     window.renderStatusBadge(l.status || 'new', l.status === 'ganho' ? 'success' : 'info'),
-                    `<button class="btn btn-ghost btn-sm" onclick="openLeadDetail('${l.id}')">Ver Detalhes &rarr;</button>`
+                    `<button class="btn btn-ghost btn-sm" data-action="openLeadDetail" data-args='["${l.id}"]'>Ver Detalhes &rarr;</button>`
                 ]),
                 { emptyState: 'Nenhum lead comercial cadastrado no momento.' }
             );
@@ -59,13 +65,13 @@ import { navigate } from '../router.js';
             <div class="form-group"><label class="form-label">CNPJ</label>
                 <div style="display:flex;gap:0.5rem">
                     <input type="text" id="lead-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" oninput="maskCnpj(this)">
-                    <button class="btn" onclick="previewCnpj()" style="white-space:nowrap">Consultar</button>
+                    <button class="btn" data-action="previewCnpj" style="white-space:nowrap">Consultar</button>
                 </div>
                 <div id="cnpj-preview" style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem"></div>
             </div>
             <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem">
-                <button class="btn" onclick="closeModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="doCreateLead()">Criar Lead</button>
+                <button class="btn" data-action="closeModal">Cancelar</button>
+                <button class="btn btn-primary" data-action="doCreateLead">Criar Lead</button>
             </div>`);
     }
 
@@ -129,16 +135,16 @@ import { navigate } from '../router.js';
                 <label class="form-label">Enriquecer via CNPJ</label>
                 <div style="display:flex;gap:0.5rem">
                     <input type="text" id="lead-enrich-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" oninput="maskCnpj(this)">
-                    <button class="btn btn-primary" onclick="enrichLeadCnpj('${l.id}')">Consultar</button>
+                    <button class="btn btn-primary" data-action="enrichLeadCnpj" data-args='["${l.id}"]'>Consultar</button>
                 </div>
             </div>` : '';
-        openModal(`<div class="modal-header"><span class="modal-title">${escapeHTML(l.company_name)}${cnpjBadge}</span><button class="btn-ghost" onclick="forceCloseModal()">\u2715</button></div>
+        openModal(`<div class="modal-header"><span class="modal-title">${escapeHTML(l.company_name)}${cnpjBadge}</span><button class="btn-ghost" data-action="forceCloseModal">\u2715</button></div>
             <p><strong>Contato:</strong> ${escapeHTML(l.contact_name||'---')}</p>
             <p><strong>Status:</strong> <span class="status-badge status-${l.status}">${l.status}</span></p>
             ${cnpjInfo}${enrichBtn}
             <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end">
-                <button class="btn btn-primary" onclick="createAssessmentFromLead('${l.id}','${escapeHTML(l.razao_social||l.company_name)}')">Iniciar Levantamento</button>
-                <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn btn-primary" data-action="createAssessmentFromLead" data-args='["${l.id}","${escapeHTML(l.razao_social||l.company_name)}"]'>Iniciar Levantamento</button>
+                <button class="btn" data-action="forceCloseModal">Fechar</button>
             </div>`);
     }
 
@@ -181,7 +187,7 @@ import { navigate } from '../router.js';
                         `<strong>${escapeHTML(as.client_name || 'Sem nome')}</strong>`,
                         date,
                         window.renderStatusBadge(as.status || 'Em andamento', statusType),
-                        `<button class="btn btn-primary btn-sm" onclick="openAssessmentDetail('${as.id}')">Gerenciar Levantamento &rarr;</button>`
+                        `<button class="btn btn-primary btn-sm" data-action="openAssessmentDetail" data-args='["${as.id}"]'>Gerenciar Levantamento &rarr;</button>`
                     ];
                 }),
                 { emptyState: 'Nenhum levantamento de escopo cadastrado.' }
@@ -217,7 +223,7 @@ import { navigate } from '../router.js';
         const currentBlock = ASSESSMENT_BLOCKS[currentIdx];
 
         h.textContent = 'Levantamento';
-        a.innerHTML = '<button class="btn" onclick="navigate(\'assessments\')">&larr; Voltar</button>';
+        a.innerHTML = '<button class="btn" data-action="navigate" data-args=\'["assessments"]\'>&larr; Voltar</button>';
         c.innerHTML = '<div class="loading"></div>';
         
         try {
@@ -244,7 +250,7 @@ import { navigate } from '../router.js';
                 const isCompleted = answeredQ === totalQ;
 
                 return `
-                    <div class="wizard-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" onclick="goToBlock(${idx + 1})">
+                    <div class="wizard-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" data-action="goToBlock" data-args='[${idx + 1}]'>
                         <div class="step-dot"></div>
                         <div class="step-label">Bloco ${b.block}: ${b.title}</div>
                         ${isCompleted ? '<span style="margin-left:auto;color:var(--success);font-size:0.72rem">&#10003;</span>' : ''}
@@ -260,18 +266,18 @@ import { navigate } from '../router.js';
                 if (q.type === 'yesno') {
                     inputHtml = `
                         <div class="yesno-group">
-                            <button class="yesno-btn ${val === 'yes' ? 'yesno-active' : ''}" onclick="setWizardAnswer('${q.key}', 'yes', this)">Sim</button>
-                            <button class="yesno-btn ${val === 'no' ? 'yesno-active' : ''}" onclick="setWizardAnswer('${q.key}', 'no', this)">Não</button>
+                            <button class="yesno-btn ${val === 'yes' ? 'yesno-active' : ''}" data-action="setWizardAnswer" data-args='["${q.key}","yes"]' data-arg-el>Sim</button>
+                            <button class="yesno-btn ${val === 'no' ? 'yesno-active' : ''}" data-action="setWizardAnswer" data-args='["${q.key}","no"]' data-arg-el>Não</button>
                         </div>
                     `;
                 } else if (q.type === 'select' && q.options) {
                     inputHtml = `
                         <div class="ness-select" id="select-${q.key}">
-                            <div class="ness-select-trigger" onclick="toggleNessSelect(this)">${val || 'Selecione uma opção'}</div>
+                            <div class="ness-select-trigger" data-action="toggleNessSelect" data-arg-el>${val || 'Selecione uma opção'}</div>
                             <div class="ness-select-options">
-                                <div class="ness-select-option ${!val ? 'selected' : ''}" onclick="selectNessOption(this, '${q.key}', '')">Selecione uma opção</div>
+                                <div class="ness-select-option ${!val ? 'selected' : ''}" data-action="__cmSelectNess" data-args='["${q.key}",""]'>Selecione uma opção</div>
                                 ${q.options.map(o => `
-                                    <div class="ness-select-option ${val === o ? 'selected' : ''}" onclick="selectNessOption(this, '${q.key}', '${escapeHTML(o)}')">${escapeHTML(o)}</div>
+                                    <div class="ness-select-option ${val === o ? 'selected' : ''}" data-action="__cmSelectNess" data-args="${escapeHTML(JSON.stringify([q.key, o]))}">${escapeHTML(o)}</div>
                                 `).join('')}
                             </div>
                         </div>
@@ -281,7 +287,7 @@ import { navigate } from '../router.js';
                         <div class="multi-chips" data-key="${q.key}">
                             ${q.options.map(o => {
                                 const active = (val || '').split('||').includes(o);
-                                return `<div class="chip ${active ? 'chip-active' : ''}" onclick="toggleWizardChip(this, '${q.key}')">${escapeHTML(o)}</div>`;
+                                return `<div class="chip ${active ? 'chip-active' : ''}" data-action="__cmToggleChip" data-args='["${q.key}"]'>${escapeHTML(o)}</div>`;
                             }).join('')}
                         </div>
                     `;
@@ -302,7 +308,7 @@ import { navigate } from '../router.js';
                     <div class="wizard-sidebar">
                         ${sidebarHtml}
                         <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-dim)">
-                            ${as.status !== 'converted' ? `<button class="btn btn-primary" style="width:100%" onclick="promoteToProject('${as.id}')">ðŸš€ Converter para Projeto</button>` : '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>'}
+                            ${as.status !== 'converted' ? `<button class="btn btn-primary" style="width:100%" data-action="promoteToProject" data-args='["${as.id}"]'>ðŸš€ Converter para Projeto</button>` : '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>'}
                         </div>
                     </div>
                     <div class="wizard-content">
@@ -317,9 +323,9 @@ import { navigate } from '../router.js';
                                 </div>
                             </div>
                             <div class="wizard-footer" style="margin-top:0; padding-top:1.5rem">
-                                <button class="btn" onclick="goToBlock(${S.currentBlock - 1})" ${S.currentBlock === 1 ? 'style="display:none"' : ''}>Anterior</button>
+                                <button class="btn" data-action="goToBlock" data-args='[${S.currentBlock - 1}]' ${S.currentBlock === 1 ? 'style="display:none"' : ''}>Anterior</button>
                                 <div style="margin-left:auto; display:flex; gap:0.5rem">
-                                    <button class="btn btn-primary" onclick="goToBlock(${S.currentBlock + 1})" style="padding: 0.75rem 2.5rem; font-size: 0.75rem; box-shadow: 0 4px 15px rgba(0,173,232,0.3)">${S.currentBlock === ASSESSMENT_BLOCKS.length ? 'Gravar e Finalizar' : 'Gravar e Continuar'}</button>
+                                    <button class="btn btn-primary" data-action="goToBlock" data-args='[${S.currentBlock + 1}]' style="padding: 0.75rem 2.5rem; font-size: 0.75rem; box-shadow: 0 4px 15px rgba(0,173,232,0.3)">${S.currentBlock === ASSESSMENT_BLOCKS.length ? 'Gravar e Finalizar' : 'Gravar e Continuar'}</button>
                                 </div>
                             </div>
                         </div>
@@ -443,8 +449,8 @@ import { navigate } from '../router.js';
                                 <td style="font-weight:500">${escapeHTML(as.client_name || 'Sem nome')}</td>
                                 <td><span class="status-badge status-${as.status || 'in_progress'}">${as.status || 'Em andamento'}</span></td>
                                 <td style="text-align:right">
-                                    <button class="btn" onclick="viewPricing('${as.id}')">Precificar</button>
-                                    <button class="btn btn-primary" style="margin-left:0.25rem" onclick="generateProposalFromAssessment('${as.id}')">Gerar Proposta</button>
+                                    <button class="btn" data-action="viewPricing" data-args='["${as.id}"]'>Precificar</button>
+                                    <button class="btn btn-primary" style="margin-left:0.25rem" data-action="generateProposalFromAssessment" data-args='["${as.id}"]'>Gerar Proposta</button>
                                 </td>
                             </tr>`).join('')}
                         </tbody>
@@ -473,10 +479,10 @@ import { navigate } from '../router.js';
                                     <td><span class="status-badge status-${statusCls}">${p.status}</span></td>
                                     <td style="font-size:0.8rem">${data}</td>
                                     <td style="text-align:right">
-                                        <button class="btn" onclick="viewSavedProposal('${p.id}')">Ver</button>
-                                        ${p.status === 'Draft' ? `<button class="btn" style="margin-left:0.25rem" onclick="updateProposalStatus('${p.id}','Sent')">Enviar</button>` : ''}
-                                        ${p.status === 'Sent' ? `<button class="btn btn-primary" style="margin-left:0.25rem" onclick="updateProposalStatus('${p.id}','Signed')">Aprovar</button>` : ''}
-                                        <button class="btn" style="margin-left:0.25rem;color:#ff4d4f" onclick="deleteProposal('${p.id}')">Excluir</button>
+                                        <button class="btn" data-action="viewSavedProposal" data-args='["${p.id}"]'>Ver</button>
+                                        ${p.status === 'Draft' ? `<button class="btn" style="margin-left:0.25rem" data-action="updateProposalStatus" data-args='["${p.id}","Sent"]'>Enviar</button>` : ''}
+                                        ${p.status === 'Sent' ? `<button class="btn btn-primary" style="margin-left:0.25rem" data-action="updateProposalStatus" data-args='["${p.id}","Signed"]'>Aprovar</button>` : ''}
+                                        <button class="btn" style="margin-left:0.25rem;color:#ff4d4f" data-action="deleteProposal" data-args='["${p.id}"]'>Excluir</button>
                                     </td>
                                 </tr>`;
                             }).join('')}
@@ -502,7 +508,7 @@ import { navigate } from '../router.js';
                                     <td style="font-size:0.8rem;color:var(--muted)">${escapeHTML(cnpjFmt||'---')}</td>
                                     <td style="font-size:0.8rem">${escapeHTML(scope)}</td>
                                     <td><span class="status-badge status-${l.status}">${l.status}</span></td>
-                                    <td style="text-align:right"><button class="btn" onclick="openLeadDetail('${l.id}')">Ver</button></td>
+                                    <td style="text-align:right"><button class="btn" data-action="openLeadDetail" data-args='["${l.id}"]'>Ver</button></td>
                                 </tr>`;
                             }).join('')}
                         </tbody>
@@ -524,8 +530,8 @@ import { navigate } from '../router.js';
                     <div class="modal-header">
                         <span class="modal-title">Proposta ${escapeHTML(p.status)}</span>
                         <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
-                            <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
+                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" data-action="printProposal">Imprimir / PDF</button>
+                            <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
                         </div>
                     </div>
                     <iframe id="proposal-frame" srcdoc="" style="width:100%;height:75vh;border:1px solid var(--border);border-radius:12px;background:#fff"></iframe>
@@ -573,7 +579,7 @@ import { navigate } from '../router.js';
             openModal(`
                 <div class="modal-header">
                     <span class="modal-title">Precifica\u00e7\u00e3o \u2014 <span style="color:var(--accent)">${escapeHTML(tier.name)}</span></span>
-                    <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
+                    <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
                 </div>
 
                 <div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap">
@@ -625,8 +631,8 @@ import { navigate } from '../router.js';
                         <label class="form-label">N\u00ba da Proposta</label>
                         <input type="text" id="pv-proposal-num" class="form-input" placeholder="Ex: PROP-2026-001" style="padding:0.5rem 0.75rem">
                     </div>
-                    <button class="btn btn-primary" style="flex:0 0 auto" onclick="savePricingVal('${id}')">Salvar</button>
-                    <button class="btn" style="flex:0 0 auto; border:1px solid var(--accent); color:var(--accent)" onclick="generateProposalFromAssessment('${id}')">Gerar Proposta</button>
+                    <button class="btn btn-primary" style="flex:0 0 auto" data-action="savePricingVal" data-args='["${id}"]'>Salvar</button>
+                    <button class="btn" style="flex:0 0 auto; border:1px solid var(--accent); color:var(--accent)" data-action="generateProposalFromAssessment" data-args='["${id}"]'>Gerar Proposta</button>
                 </div>
             `, 'modal-large');
 
@@ -687,7 +693,7 @@ import { navigate } from '../router.js';
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Dados da Proposta</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
+                <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem">
                 <div class="form-group">
@@ -736,7 +742,7 @@ import { navigate } from '../router.js';
                 <label class="form-label">Observa\u00e7\u00f5es Adicionais</label>
                 <textarea id="pp-obs" class="form-input" rows="2" placeholder="Notas espec\u00edficas para esta proposta..."></textarea>
             </div>
-            <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" onclick="submitProposalPrompt('${id}')">Gerar Proposta</button>
+            <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" data-action="submitProposalPrompt" data-args='["${id}"]'>Gerar Proposta</button>
         `, 'modal-large');
     }
 
@@ -762,8 +768,8 @@ import { navigate } from '../router.js';
                     <div class="modal-header">
                         <span class="modal-title">Proposta Draft</span>
                         <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" onclick="printProposal()">Imprimir / PDF</button>
-                            <button class="btn-ghost" onclick="forceCloseModal()">\u2715</button>
+                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" data-action="printProposal">Imprimir / PDF</button>
+                            <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
                         </div>
                     </div>
                     <iframe id="proposal-frame" srcdoc="" style="width:100%;height:80vh;border:1px solid var(--border);border-radius:12px;background:#fff"></iframe>
@@ -867,8 +873,8 @@ import { navigate } from '../router.js';
                 }).join('')}
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:1rem">
-                ${idx > 0 ? '<button class="btn" onclick="ssPrev()">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" onclick="ssNext()">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
+                ${idx > 0 ? '<button class="btn" data-action="ssPrev">Anterior</button>' : '<div></div>'}
+                <button class="btn btn-primary" data-action="ssNext">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
             </div>
         </div>`;
     }

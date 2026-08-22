@@ -54,6 +54,16 @@ describe('delegação (S2)', () => {
     expect(() => clickar('<button data-action="naoExiste">x</button>')).not.toThrow();
   });
 
+  it('data-args com JSON escapado (aspas) via innerHTML é parseado', () => {
+    window.__fn = vi.fn();
+    // Padrão usado nas views: escapeHTML(JSON.stringify(args)) num atributo "".
+    const args = ['k', 'Opção "com aspas"'];
+    const attr = JSON.stringify(args).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    document.body.innerHTML = `<button data-action="__fn" data-args="${attr}">x</button>`;
+    document.body.querySelector('[data-action]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(window.__fn).toHaveBeenCalledWith('k', 'Opção "com aspas"');
+  });
+
   it('dispara mesmo dentro de container que faz stopPropagation (fase de captura)', () => {
     // Reproduz o #modal de login.html: o wrapper para a propagação no bubbling.
     window.__fn = vi.fn();
