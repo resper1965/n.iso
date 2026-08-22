@@ -49,7 +49,7 @@ const ISO_GUIDELINES = {
                     escapeHTML(p.sector || 'Geral'),
                     window.renderStatusBadge(p.status || 'active', p.status === 'completed' ? 'success' : 'info'),
                     escapeHTML(p.standard || 'ISO 27001:2022'),
-                    `<button class="btn btn-primary btn-sm" onclick="openProjectDetail('${p.id}')">Gerenciar Jornada &rarr;</button>`
+                    `<button class="btn btn-primary btn-sm" data-action="openProjectDetail" data-args='["${p.id}"]'>Gerenciar Jornada &rarr;</button>`
                 ]),
                 { emptyState: 'Nenhum projeto de implementação ativo no momento.' }
             );
@@ -103,7 +103,7 @@ const ISO_GUIDELINES = {
         h.textContent = 'Jornada';
         if (!S.expandedJourneys) S.expandedJourneys = {};
         if (!S.expandedPhases) S.expandedPhases = {};
-        a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" onclick="window.openAuditorNotesModal('${p.id}')">Notas do Auditor</button><button class="btn" onclick="navigate('projects')">&larr; Voltar</button>`;
+        a.innerHTML = `<button class="btn" style="border-color:var(--accent);color:var(--accent);margin-right:8px" data-action="openAuditorNotesModal" data-args='["${p.id}"]'>Notas do Auditor</button><button class="btn" data-action="navigate" data-args='["projects"]'>&larr; Voltar</button>`;
         c.innerHTML = '<div class="loading"></div>';
         
         try {
@@ -263,7 +263,7 @@ const ISO_GUIDELINES = {
                 
                 journeysHtml += `
                     <div class="journey-card fade-in">
-                        <div class="journey-header" onclick="toggleJourney(${journeyIdx})">
+                        <div class="journey-header" data-action="toggleJourney" data-args='["${journeyIdx}"]'>
                             <div class="journey-title-container">
                                 <div class="journey-title">${escapeHTML(journeyItem.name)}</div>
                                 <div class="journey-meta">${escapeHTML(journeyItem.desc)}</div>
@@ -294,12 +294,12 @@ const ISO_GUIDELINES = {
                                 
                                 return `
                                     <div class="phase-card">
-                                        <div class="phase-card-header" onclick="togglePhase(${ph.phase_number})">
+                                        <div class="phase-card-header" data-action="togglePhase" data-args='["${ph.phase_number}"]'>
                                             <div class="phase-card-title">
                                                 <div class="phase-num">${ph.phase_number}</div>
                                                 <div class="title-text">${escapeHTML(ph.title)}</div>
                                             </div>
-                                            <div class="phase-actions-wrapper" onclick="event.stopPropagation()">
+                                            <div class="phase-actions-wrapper" data-action="__noop">
                                                 <select class="phase-status-select" onchange="changePhaseStatus('${p.id}', ${ph.phase_number}, this)">
                                                     <option value="pending" ${ph.status === 'pending' ? 'selected' : ''}>Pending</option>
                                                     <option value="in_progress" ${ph.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
@@ -307,7 +307,7 @@ const ISO_GUIDELINES = {
                                                     <option value="blocked" ${ph.status === 'blocked' ? 'selected' : ''}>Blocked</option>
                                                     <option value="skipped" ${ph.status === 'skipped' ? 'selected' : ''}>Skipped</option>
                                                 </select>
-                                                <div class="phase-toggle-icon ${isPhExpanded ? 'expanded' : ''}" onclick="togglePhase(${ph.phase_number}); event.stopPropagation()">&darr;</div>
+                                                <div class="phase-toggle-icon ${isPhExpanded ? 'expanded' : ''}" data-action="togglePhase" data-args='["${ph.phase_number}"]'>&darr;</div>
                                             </div>
                                         </div>
                                         <div class="phase-details ${isPhExpanded ? 'expanded' : ''}" id="p-details-${ph.phase_number}">
@@ -328,8 +328,8 @@ const ISO_GUIDELINES = {
                                                 <div style="margin-bottom:1.25rem; padding:12px; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
                                                     <div style="font-size:0.72rem; color:var(--text-dim)"><strong>Questionário da fase</strong> — ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length}/${S.phaseQuestions[ph.phase_number].length} respondidas</div>
                                                     <div style="display:flex; gap:8px">
-                                                        ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length > 0 ? `<button class="btn-inline-action" onclick="interpretPhaseAnswers(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Interpretar</button><button class="btn-inline-action" onclick="suggestControlAdequacao(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Adequar controles</button>` : ''}
-                                                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="openPhaseQuestionnaire(${ph.phase_number}, '${p.id}'); event.stopPropagation();">Responder</button>
+                                                        ${Object.values((S.phaseAnswers && S.phaseAnswers[ph.phase_number]) || {}).filter(v => v != null && String(v).trim() !== '').length > 0 ? `<button class="btn-inline-action" data-action="interpretPhaseAnswers" data-args='["${ph.phase_number}","${p.id}"]'>Interpretar</button><button class="btn-inline-action" data-action="suggestControlAdequacao" data-args='["${ph.phase_number}","${p.id}"]'>Adequar controles</button>` : ''}
+                                                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" data-action="openPhaseQuestionnaire" data-args='["${ph.phase_number}","${p.id}"]'>Responder</button>
                                                     </div>
                                                 </div>
                                             ` : ''}
@@ -383,29 +383,29 @@ const ISO_GUIDELINES = {
                                                                     <div class="checklist-left" style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
                                                                         <input type="checkbox" class="checklist-item-checkbox" 
                                                                             ${isChecked ? 'checked' : ''} 
-                                                                            onclick="toggleChecklistItem('${p.id}', '${item.id}', this)"
+                                                                            data-action="toggleChecklistItem" data-args='["${p.id}","${item.id}"]' data-arg-el
                                                                             ${(!isChecked && item.id === 'p2_2') ? 'disabled' : ''}>
                                                                         <span class="badge-cat ${item.category}">${item.category}</span>
                                                                         <span class="checklist-text ${isChecked ? 'checked' : ''}">${escapeHTML(item.text)}</span>
                                                                         ${badgeHtml}
                                                                         ${hasTip ? `
-                                                                            <button class="btn-ghost" onclick="toggleAuditorTip('${item.id}'); event.stopPropagation()" style="font-size:0.85rem; padding:2px 6px; color:var(--accent); line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">Dica</button>
+                                                                            <button class="btn-ghost" data-action="toggleAuditorTip" data-args='["${item.id}"]' style="font-size:0.85rem; padding:2px 6px; color:var(--accent); line-height:1; display:inline-flex; align-items:center; justify-content:center;" title="Ver dica do auditor">Dica</button>
                                                                         ` : ''}
                                                                     </div>
                                                                     <div class="checklist-actions" style="display: flex; align-items: center; gap: 0.5rem;">
                                                                         ${itemEvidenceId ? `
-                                                                            <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent);" onclick="openInternalDocumentEditor('${itemEvidenceId}'); event.stopPropagation()">Editar Doc</button>
+                                                                            <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent);" data-action="openInternalDocumentEditor" data-args='["${itemEvidenceId}"]'>Editar Doc</button>
                                                                         ` : ''}
                                                                         ${(item.category === 'evidence' || item.category === 'document') ? `
-                                                                            <button class="btn-inline-action" onclick="wsUploadEvidence('${item.id}')">Upload</button>
+                                                                            <button class="btn-inline-action" data-action="wsUploadEvidence" data-args='["${item.id}"]'>Upload</button>
                                                                         ` : ''}
                                                                         ${(!isChecked && (item.category === 'document' || DOC_WIZARDS[item.id])) ? `
-                                                                            <button class="btn-inline-action primary" onclick="openDocWizard('${p.id}', '${item.id}'); event.stopPropagation()">${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
+                                                                            <button class="btn-inline-action primary" data-action="openDocWizard" data-args='["${p.id}","${item.id}"]'>${DOC_WIZARDS[item.id] ? (DOC_WIZARDS[item.id].evidenceOnly ? 'Registrar Evidência' : 'Preencher e Gerar') : 'Gerar IA'}</button>
                                                                         ` : ''}
                                                                         ${(item.id === 'p2_2') ? `
-                                                                            <button class="btn-inline-action primary" onclick="openInterviewWizard('${p.id}'); event.stopPropagation()">${isChecked ? 'Ver Entrevistas' : 'Conduzir Entrevistas'}</button>
+                                                                            <button class="btn-inline-action primary" data-action="openInterviewWizard" data-args='["${p.id}"]'>${isChecked ? 'Ver Entrevistas' : 'Conduzir Entrevistas'}</button>
                                                                         ` : ''}
-                                                                        <button class="btn-ghost" onclick="toggleChecklistDetails('${item.id}'); event.stopPropagation()" style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">Editar</button>
+                                                                        <button class="btn-ghost" data-action="toggleChecklistDetails" data-args='["${item.id}"]' style="font-size:0.75rem; color:${isDetailsExpanded ? 'var(--accent)' : 'var(--text-dim)'}; padding:4px 6px; display:inline-flex; align-items:center;" title="Editar detalhes, responsável e prazo">Editar</button>
                                                                     </div>
                                                                 </div>
                                                                 ${(hasTip && isTipExpanded) ? `
@@ -465,7 +465,7 @@ const ISO_GUIDELINES = {
                 <div style="margin-top: 0.5rem;">
                     ${metricsHtml}
                     <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem">
-                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="generateJourneyDossier('${p.id}')">📖 Gerar Dossiê da Jornada</button>
+                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" data-action="generateJourneyDossier" data-args='["${p.id}"]'>📖 Gerar Dossiê da Jornada</button>
                     </div>
                     ${filtersHtml}
                     ${journeysHtml || '<div class="empty-state"><h3>Nenhuma fase correspondente aos filtros</h3></div>'}
@@ -532,7 +532,7 @@ const ISO_GUIDELINES = {
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">${escapeHTML(wiz.title)}</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
             </div>
             <div style="padding:1.5rem 0;">
                 <div style="background:rgba(0,173,232,0.04); border:1px solid rgba(0,173,232,0.1); border-radius:10px; padding:12px; margin-bottom:1.25rem; font-size:0.75rem;">
@@ -542,9 +542,9 @@ const ISO_GUIDELINES = {
                 <div id="wiz-form-fields">${fieldsHtml}</div>
                 <div id="wiz-preview-area" style="display:none;"></div>
                 <div id="wiz-actions" style="display:flex; justify-content:flex-end; gap:10px; margin-top:1.25rem;">
-                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
-                    <button class="btn" onclick="wizSaveProgress('${projectId}', '${itemId}')" style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
-                    <button class="btn btn-primary" id="wiz-generate-btn" onclick="wizGenerate('${projectId}', '${itemId}', this)">Gerar Documento</button>
+                    <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn" data-action="wizSaveProgress" data-args='["${projectId}","${itemId}"]' style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
+                    <button class="btn btn-primary" id="wiz-generate-btn" data-action="wizGenerate" data-args='["${projectId}","${itemId}"]' data-arg-el>Gerar Documento</button>
                 </div>
             </div>
         `, 'modal-large');
@@ -605,8 +605,8 @@ const ISO_GUIDELINES = {
                 <textarea id="wiz-doc-content" class="form-input" style="width:100%; height:350px; font-family:monospace; font-size:0.8rem; line-height:1.5; background:rgba(0,0,0,0.3); resize:vertical; padding:12px; color:var(--text); border:1px solid var(--border); border-radius:8px;">${escapeHTML(content)}</textarea>
             `;
             document.getElementById('wiz-actions').innerHTML = `
-                <button class="btn" onclick="wizBackToForm('${projectId}', '${itemId}')" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar</button>
-                <button class="btn btn-primary" onclick="wizApprove('${projectId}', '${itemId}', this)">Confirmar e Registrar Evidência</button>
+                <button class="btn" data-action="wizBackToForm" data-args='["${projectId}","${itemId}"]' style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar</button>
+                <button class="btn btn-primary" data-action="wizApprove" data-args='["${projectId}","${itemId}"]' data-arg-el>Confirmar e Registrar Evidência</button>
             `;
             btnEl.disabled = false;
             btnEl.textContent = prevText;
@@ -625,8 +625,8 @@ const ISO_GUIDELINES = {
                 <textarea id="wiz-doc-content" class="form-input" style="width:100%; height:350px; font-family:monospace; font-size:0.8rem; line-height:1.5; background:rgba(0,0,0,0.3); resize:vertical; padding:12px; color:var(--text); border:1px solid var(--border); border-radius:8px;">${escapeHTML(res.content || '')}</textarea>
             `;
             document.getElementById('wiz-actions').innerHTML = `
-                <button class="btn" onclick="wizBackToForm('${projectId}', '${itemId}')" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar Dados</button>
-                <button class="btn btn-primary" onclick="wizApprove('${projectId}', '${itemId}', this)">Aprovar e Salvar como Evidencia</button>
+                <button class="btn" data-action="wizBackToForm" data-args='["${projectId}","${itemId}"]' style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Voltar e Editar Dados</button>
+                <button class="btn btn-primary" data-action="wizApprove" data-args='["${projectId}","${itemId}"]' data-arg-el>Aprovar e Salvar como Evidencia</button>
             `;
         } catch(e) {
             showToast('Erro ao gerar documento: ' + e.message, 'error');
@@ -640,9 +640,9 @@ const ISO_GUIDELINES = {
         document.getElementById('wiz-form-fields').style.display = 'block';
         document.getElementById('wiz-preview-area').style.display = 'none';
         document.getElementById('wiz-actions').innerHTML = `
-            <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
-            <button class="btn" onclick="wizSaveProgress('${projectId}', '${itemId}')" style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
-            <button class="btn btn-primary" id="wiz-generate-btn" onclick="wizGenerate('${projectId}', '${itemId}', this)">Gerar Documento</button>
+            <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+            <button class="btn" data-action="wizSaveProgress" data-args='["${projectId}","${itemId}"]' style="border-color:var(--accent); color:var(--accent);">Salvar Rascunho</button>
+            <button class="btn btn-primary" id="wiz-generate-btn" data-action="wizGenerate" data-args='["${projectId}","${itemId}"]' data-arg-el>Gerar Documento</button>
         `;
     };
 
@@ -679,7 +679,7 @@ const ISO_GUIDELINES = {
         const sidebarHtml = tracks.map(t => {
             const isDone = S.interviewProgress[projectId + '_' + t.id];
             const check = isDone ? '<span style="color:var(--success); font-weight:bold; margin-right:4px;"></span>' : '';
-            return `<div class="wizard-sidebar-item" id="track-tab-${t.id}" onclick="changeInterviewTrack('${projectId}', '${t.id}')" style="padding: 10px 12px; font-size: 0.8rem; border-radius: 8px; cursor: pointer; color: var(--text-dim); transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between;">
+            return `<div class="wizard-sidebar-item" id="track-tab-${t.id}" data-action="changeInterviewTrack" data-args='["${projectId}","${t.id}"]' style="padding: 10px 12px; font-size: 0.8rem; border-radius: 8px; cursor: pointer; color: var(--text-dim); transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between;">
                 <span>${check}${t.name}</span>
             </div>`;
         }).join('');
@@ -687,7 +687,7 @@ const ISO_GUIDELINES = {
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Conduzir Entrevistas por Trilha (Mapeamento Inicial)</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
             </div>
             <div style="padding: 1.25rem 0; display: flex; gap: 20px; min-height: 480px;">
                 <div style="width: 200px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--border); padding-right: 12px;">
@@ -702,7 +702,7 @@ const ISO_GUIDELINES = {
                         </div>
                     </div>
                     <div id="interview-actions-container" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
-                        <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Fechar</button>
+                        <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Fechar</button>
                         <div id="interview-buttons-right" style="display: flex; gap: 10px;"></div>
                     </div>
                 </div>
@@ -777,9 +777,9 @@ const ISO_GUIDELINES = {
             const tracksList = ['executiva', 'tecnologia', 'juridico', 'rh', 'operacoes'];
             const allSaved = tracksList.every(tId => S.interviewProgress[projectId + '_' + tId]);
 
-            let rightButtons = `<button class="btn btn-primary" onclick="saveInterviewTrack('${projectId}', '${track}', this)">Salvar Trilha</button>`;
+            let rightButtons = `<button class="btn btn-primary" data-action="saveInterviewTrack" data-args='["${projectId}","${track}"]' data-arg-el>Salvar Trilha</button>`;
             if (allSaved) {
-                rightButtons += `<button class="btn btn-primary" onclick="completeInterviewsTask('${projectId}', this)" style="background: var(--success); border-color: var(--success)">Concluir e Registrar</button>`;
+                rightButtons += `<button class="btn btn-primary" data-action="completeInterviewsTask" data-args='["${projectId}"]' data-arg-el style="background: var(--success); border-color: var(--success)">Concluir e Registrar</button>`;
             }
 
             document.getElementById('interview-buttons-right').innerHTML = rightButtons;
@@ -924,16 +924,19 @@ const ISO_GUIDELINES = {
         }).join('');
 
         openModal(`
-            <div class="modal-header"><span class="modal-title">Questionário — ${escapeHTML(titulo)}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            <div class="modal-header"><span class="modal-title">Questionário — ${escapeHTML(titulo)}</span><button class="btn-ghost" data-action="forceCloseModal">Fechar</button></div>
             <div style="padding:1.25rem 0; text-align:left; max-height:60vh; overflow-y:auto">${campos}
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:0.5rem">
-                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
-                    <button class="btn btn-primary" onclick="savePhaseQuestionnaire(${phaseNumber}, '${projectId}')">Salvar</button>
+                    <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" data-action="savePhaseQuestionnaire" data-args='["${phaseNumber}","${projectId}"]'>Salvar</button>
                 </div>
             </div>`);
     };
 
     window.savePhaseQuestionnaire = async function(phaseNumber, projectId) {
+        // A delegação entrega os args como string (data-args JSON); o backend e o
+        // contrato da API esperam phase_number numérico. Normaliza na fronteira.
+        phaseNumber = Number(phaseNumber);
         const questions = (S.phaseQuestions && S.phaseQuestions[phaseNumber]) || [];
         const answers = {};
         questions.forEach(q => {
@@ -1011,7 +1014,7 @@ const ISO_GUIDELINES = {
             }
             corpo += `</div>`;
 
-            openModal(`<div class="modal-header"><span class="modal-title">Interpretação — ${cab}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            openModal(`<div class="modal-header"><span class="modal-title">Interpretação — ${cab}</span><button class="btn-ghost" data-action="forceCloseModal">Fechar</button></div>
                 <div style="padding:1.25rem 0; text-align:left; max-height:65vh; overflow-y:auto">${corpo}
                     <div style="font-size:0.68rem; color:var(--text-dim); margin-top:1rem; font-style:normal">${escapeHTML(r.rotulo || '')}</div>
                 </div>`);
@@ -1058,8 +1061,8 @@ const ISO_GUIDELINES = {
 
             openModal(`<div class="modal-header"><span class="modal-title">Dossiê da Jornada</span>
                     <div style="display:flex; gap:8px">
-                        <button class="btn btn-primary" onclick="printDossie()">Imprimir / PDF</button>
-                        <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                        <button class="btn btn-primary" data-action="printDossie">Imprimir / PDF</button>
+                        <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
                     </div>
                 </div>
                 <div style="padding:1.25rem 0; max-height:68vh; overflow-y:auto">${doc}</div>`);
@@ -1106,12 +1109,12 @@ const ISO_GUIDELINES = {
                         <div style="font-size:0.8rem; font-weight:600">${escapeHTML(s.control_id)} — ${escapeHTML(s.control_title || '')}</div>
                         <div style="font-size:0.72rem; color:var(--text-dim); margin:2px 0 6px">atual: status ${escapeHTML(String(s.status_atual ?? '—'))} · maturidade ${escapeHTML(String(s.maturidade_atual ?? 0))} → ${alvo}</div>
                         <div style="font-size:0.8rem; line-height:1.4; margin-bottom:8px">${escapeHTML(s.justificativa)}</div>
-                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" onclick="applyControlAdequacao(${i}, '${projectId}')">Aplicar ao controle</button>
+                        <button class="btn-inline-action" style="border-color:var(--accent); color:var(--accent); font-weight:600" data-action="applyControlAdequacao" data-args='["${i}","${projectId}"]'>Aplicar ao controle</button>
                     </div>`;
                 }).join('');
             }
 
-            openModal(`<div class="modal-header"><span class="modal-title">Adequação de controles — ${cab}</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            openModal(`<div class="modal-header"><span class="modal-title">Adequação de controles — ${cab}</span><button class="btn-ghost" data-action="forceCloseModal">Fechar</button></div>
                 <div style="padding:1.25rem 0; text-align:left; max-height:65vh; overflow-y:auto">${corpo}
                     <div style="font-size:0.68rem; color:var(--text-dim); margin-top:0.75rem">${escapeHTML(r.rotulo || '')}</div>
                 </div>`);
@@ -1154,7 +1157,7 @@ const ISO_GUIDELINES = {
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">Editor de Documento Interno</span>
-                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
             </div>
             <div id="doc-editor-body" style="padding:1.5rem 0;">
                 <div class="loading"></div>
@@ -1174,8 +1177,8 @@ const ISO_GUIDELINES = {
                     <textarea id="internal-doc-text" class="form-input" style="width:100%; height:450px; font-family:monospace; font-size:0.8rem; line-height:1.4; background:rgba(0,0,0,0.35); resize:vertical; padding:12px;">${escapeHTML(data.content || '')}</textarea>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
-                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
-                    <button class="btn btn-primary" onclick="saveInternalDocument('${evidenceId}', this)">Salvar Alterações</button>
+                    <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" data-action="saveInternalDocument" data-args='["${evidenceId}"]' data-arg-el>Salvar Alterações</button>
                 </div>
             `;
         } catch(e) {
@@ -1312,8 +1315,8 @@ const ISO_GUIDELINES = {
             <div class="form-group"><label class="form-label">Arquivo</label><input type="file" id="doc-file" class="form-input" accept=".pdf,.docx,.xlsx,.txt,.csv,.md,.png,.jpg,.jpeg"></div>
             <div id="doc-msg" style="font-size:0.7rem;color:var(--muted);margin:0.5rem 0"></div>
             <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-                <button class="btn" onclick="closeModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="doDocUpload('${docType}')">Upload e Extrair</button>
+                <button class="btn" data-action="closeModal">Cancelar</button>
+                <button class="btn btn-primary" data-action="doDocUpload" data-args='["${docType}"]'>Upload e Extrair</button>
             </div>`);
     }
 
@@ -1351,8 +1354,8 @@ const ISO_GUIDELINES = {
                 <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem">Status: ${doc.status} | Tipo: ${doc.document_type}</div>
                 <textarea class="form-input" id="doc-ext-edit" rows="12" style="font-size:0.7rem;font-family:monospace;line-height:1.6">${escapeHTML(doc.extracted_summary || '')}</textarea>
                 <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">
-                    <button class="btn" onclick="forceCloseModal()">Fechar</button>
-                    <button class="btn btn-primary" onclick="wsConfirmExtraction('${docId}')">Confirmar e Indexar</button>
+                    <button class="btn" data-action="forceCloseModal">Fechar</button>
+                    <button class="btn btn-primary" data-action="wsConfirmExtraction" data-args='["${docId}"]'>Confirmar e Indexar</button>
                 </div>`);
         } catch(e) { alert('Erro: ' + e.message); }
     }

@@ -7,6 +7,12 @@ import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 // nativo (design.md §2) e não havia CSS [data-theme], então o controle não fazia
 // nada além de trocar o próprio ícone (enganoso). Sem tema claro, sem toggle.
 
+// __noop: ação de despacho vazia. Substitui os antigos `onclick="event.stopPropagation()"`
+// usados só para impedir que o clique num filho dispare o handler do container pai.
+// No modelo de delegação (despacho único do `closest([data-action])`), marcar o
+// próprio elemento com esta ação já impede o pai de ser acionado — sem stopPropagation.
+window.__noop = function () {};
+
 window.viewEvidence = async function viewEvidence(id) {
         try {
             openModal(`
