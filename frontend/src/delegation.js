@@ -49,9 +49,17 @@ function makeDispatcher(attr) {
 }
 
 let ligado = false;
-/** Liga a delegação no document. Idempotente: chamadas repetidas não acumulam listeners. */
+/**
+ * Liga a delegação no document. Idempotente: chamadas repetidas não acumulam listeners.
+ *
+ * Fase de CAPTURA (3º arg = true), não bubbling: vários containers de modal/drawer
+ * têm `onclick="event.stopPropagation()"` (ex. #modal em login.html) para não fechar
+ * ao clicar dentro. No bubbling, isso IMPEDE o clique de chegar ao document e a
+ * delegação não veria nenhum botão dentro de modal. A captura roda de cima para
+ * baixo ANTES do bubbling, então o stopPropagation do bubble não a afeta.
+ */
 export function initDelegation() {
   if (ligado) return;
   ligado = true;
-  document.addEventListener('click', makeDispatcher('data-action'));
+  document.addEventListener('click', makeDispatcher('data-action'), true);
 }

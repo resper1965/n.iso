@@ -53,4 +53,16 @@ describe('delegação (S2)', () => {
   it('ação desconhecida não lança', () => {
     expect(() => clickar('<button data-action="naoExiste">x</button>')).not.toThrow();
   });
+
+  it('dispara mesmo dentro de container que faz stopPropagation (fase de captura)', () => {
+    // Reproduz o #modal de login.html: o wrapper para a propagação no bubbling.
+    window.__fn = vi.fn();
+    document.body.innerHTML = `
+      <div id="modal" onclick="event.stopPropagation()">
+        <button data-action="__fn">Criar</button>
+      </div>`;
+    document.getElementById('modal').addEventListener('click', (e) => e.stopPropagation());
+    document.body.querySelector('[data-action]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(window.__fn).toHaveBeenCalledTimes(1);
+  });
 });

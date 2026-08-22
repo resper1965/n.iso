@@ -3,6 +3,13 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
 import { navigate, render } from '../router.js';
 
+// S2: wrappers para os handlers COMPOSTOS (a delegação chama uma função só).
+window.__adminFecharConcluir = () => { window.forceCloseModal(); window.render(); };
+window.__adminCopiarApiKey = () => {
+    navigator.clipboard.writeText(document.getElementById('apikey-plain').value);
+    window.showToast('Copiada');
+};
+
     async function renderSettings(c, h, a) {
         h.textContent = 'Configurações';
         a.innerHTML = '';
@@ -79,7 +86,7 @@ import { navigate, render } from '../router.js';
                 </div>
             </div>
 
-            <button class="btn btn-primary" style="padding:0.6rem 2rem" onclick="savePricingConfig()">Salvar Configurações</button>
+            <button class="btn btn-primary" style="padding:0.6rem 2rem" data-action="savePricingConfig">Salvar Configurações</button>
             `;
         } catch(e) {
             c.innerHTML = '<div class="error">Erro ao carregar configuracoes: ' + escapeHTML(e.message) + '</div>';
@@ -112,7 +119,7 @@ import { navigate, render } from '../router.js';
 
     async function renderUsers(c, h, a) {
         h.textContent = 'Gestão de Usuários & RBAC';
-        a.innerHTML = '<button class="btn btn-primary" onclick="openUserModal()">+ Novo Usuário</button>';
+        a.innerHTML = '<button class="btn btn-primary" data-action="openUserModal">+ Novo Usuário</button>';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const users = await api('GET', '/api/v1/users').catch(() => []);
@@ -148,8 +155,8 @@ import { navigate, render } from '../router.js';
                         escapeHTML(u.email),
                         window.renderStatusBadge(roleLabel, u.role === 'platform_admin' ? 'info' : 'success'),
                         escapeHTML(projectName),
-                        `<button class="btn btn-ghost btn-sm" onclick="openUserModal('${u.id}')">Editar</button>
-                         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteUser('${u.id}')">Excluir</button>`
+                        `<button class="btn btn-ghost btn-sm" data-action="openUserModal" data-args='["${u.id}"]'>Editar</button>
+                         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" data-action="deleteUser" data-args='["${u.id}"]'>Excluir</button>`
                     ];
                 }),
                 { emptyState: 'Nenhum usuário cadastrado.' }
@@ -306,7 +313,7 @@ import { navigate, render } from '../router.js';
         const html = `
             <div class="modal-header">
                 <span class="modal-title">${user ? 'Editar Usuário' : 'Novo Usuário'}</span>
-                <button class="btn-ghost" onclick="closeModal()">&times;</button>
+                <button class="btn-ghost" data-action="closeModal">&times;</button>
             </div>
             <div style="display:flex; flex-direction:column; gap:1.25rem">
                 ${govImportHtml}
@@ -338,8 +345,8 @@ import { navigate, render } from '../router.js';
                 </div>
 
                 <div style="display:flex; gap:1rem; margin-top:1.5rem">
-                    <button class="btn btn-primary" style="flex:1" onclick="saveUser('${user ? user.id : ''}')">Salvar</button>
-                    <button class="btn" style="flex:1" onclick="closeModal()">Cancelar</button>
+                    <button class="btn btn-primary" style="flex:1" data-action="saveUser" data-args='["${user ? user.id : ""}"]'>Salvar</button>
+                    <button class="btn" style="flex:1" data-action="closeModal">Cancelar</button>
                 </div>
             </div>
         `;
@@ -430,7 +437,7 @@ import { navigate, render } from '../router.js';
                         <td>${window.renderStatusBadge(k.status, active ? 'success' : 'info')}</td>
                         <td style="font-size:0.75rem;color:var(--muted)">${k.last_used_at ? escapeHTML(String(k.last_used_at)) : '—'}</td>
                         <td style="font-size:0.75rem;color:var(--muted)">${escapeHTML(String(k.created_at || '').slice(0, 10))}</td>
-                        <td>${active ? `<button class="btn-inline-action" style="border-color:var(--danger);color:var(--danger)" onclick="revokeApiKey('${k.id}')">Revogar</button>` : ''}</td>
+                        <td>${active ? `<button class="btn-inline-action" style="border-color:var(--danger);color:var(--danger)" data-action="revokeApiKey" data-args='["${k.id}"]'>Revogar</button>` : ''}</td>
                     </tr>`;
                 }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Nenhuma chave para este projeto.</td></tr>`;
             }
@@ -443,7 +450,7 @@ import { navigate, render } from '../router.js';
                         <label class="form-label">Projeto</label>
                         <select class="form-input" onchange="S.apiKeysProjectId=this.value; render();">${projOptions}</select>
                     </div>
-                    <button class="btn btn-primary" onclick="openApiKeyModal()" ${pid ? '' : 'disabled'}>+ Nova Chave</button>
+                    <button class="btn btn-primary" data-action="openApiKeyModal" ${pid ? '' : 'disabled'}>+ Nova Chave</button>
                 </div>
             </div>
             <div class="card fade-in" style="overflow-x:auto">
@@ -462,7 +469,7 @@ import { navigate, render } from '../router.js';
     window.openApiKeyModal = function () {
         if (!S.apiKeysProjectId) { showToast('Selecione um projeto', 'error'); return; }
         openModal(`
-            <div class="modal-header"><span class="modal-title">Nova API Key</span><button class="btn-ghost" onclick="forceCloseModal()">Fechar</button></div>
+            <div class="modal-header"><span class="modal-title">Nova API Key</span><button class="btn-ghost" data-action="forceCloseModal">Fechar</button></div>
             <div style="padding:1.25rem 0;text-align:left">
                 <div class="form-group"><label class="form-label">Nome</label><input id="apikey-name" class="form-input" placeholder="ex: consultor-clienteX"></div>
                 <div class="form-group"><label class="form-label">Papel</label>
@@ -484,8 +491,8 @@ import { navigate, render } from '../router.js';
                     </select>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:1rem">
-                    <button class="btn" onclick="forceCloseModal()" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1)">Cancelar</button>
-                    <button class="btn btn-primary" onclick="createApiKey()">Criar</button>
+                    <button class="btn" data-action="forceCloseModal" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1)">Cancelar</button>
+                    <button class="btn btn-primary" data-action="createApiKey">Criar</button>
                 </div>
             </div>`);
     };
@@ -502,15 +509,15 @@ import { navigate, render } from '../router.js';
             const res = await api('POST', `/api/v1/projects/${pid}/api-keys`, body);
             const key = (res && res.key) || '';
             openModal(`
-                <div class="modal-header"><span class="modal-title">Chave criada</span><button class="btn-ghost" onclick="forceCloseModal(); render();">Fechar</button></div>
+                <div class="modal-header"><span class="modal-title">Chave criada</span><button class="btn-ghost" data-action="__adminFecharConcluir">Fechar</button></div>
                 <div style="padding:1.25rem 0;text-align:left">
                     <p style="font-size:0.8rem;color:var(--danger);margin-bottom:0.75rem"><strong>Copie agora.</strong> Esta chave não será exibida novamente — só o hash é armazenado.</p>
                     <div style="display:flex;gap:8px;align-items:center">
                         <input id="apikey-plain" class="form-input" readonly value="${escapeHTML(key)}" style="font-family:monospace;font-size:0.8rem">
-                        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('apikey-plain').value); showToast('Copiada');">Copiar</button>
+                        <button class="btn" data-action="__adminCopiarApiKey">Copiar</button>
                     </div>
                     <div style="display:flex;justify-content:flex-end;margin-top:1rem">
-                        <button class="btn btn-primary" onclick="forceCloseModal(); render();">Concluir</button>
+                        <button class="btn btn-primary" data-action="__adminFecharConcluir">Concluir</button>
                     </div>
                 </div>`);
         } catch (e) { showToast('Erro ao criar chave: ' + e.message, 'error'); }
