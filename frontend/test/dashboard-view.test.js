@@ -50,7 +50,11 @@ describe('renderDashboard — onboarding do cliente', () => {
     S.clientAssessmentId = 'as-1';
     await window.renderDashboard(c, h, a);
     expect(c.innerHTML).toContain('Responder Questionário');
-    expect(c.innerHTML).toContain("assessmentId: 'as-1'");
+    // S2: o CTA agora usa delegação (data-action) em vez de onclick inline.
+    // Ler o atributo decodificado (innerHTML re-serializa as aspas como &quot;).
+    const btn = c.querySelector('[data-action="navigate"]');
+    expect(btn).not.toBeNull();
+    expect(JSON.parse(btn.getAttribute('data-args'))).toEqual(['self-service', { assessmentId: 'as-1' }]);
   });
 
   it('marca a fase de assessment como Concluído quando já existe proposta', async () => {

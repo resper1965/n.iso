@@ -5,8 +5,8 @@ import { navigate, render } from '../router.js';
 
     async function renderDashboard(c, h, a) {
         h.textContent = 'Dashboard Executivo';
-        a.innerHTML = `<button class="btn btn-primary" onclick="openCreateLeadModal()">+ Novo Lead</button>
-                       <button class="btn btn-ghost" onclick="navigate('monitor')">Monitor</button>`;
+        a.innerHTML = `<button class="btn btn-primary" data-action="openCreateLeadModal">+ Novo Lead</button>
+                       <button class="btn btn-ghost" data-action="navigate" data-args='["monitor"]'>Monitor</button>`;
         if (S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client') && !S.user.client_project_id) {
             let assessmentStatus = 'Pending';
             let proposalStatus = 'Pending';
@@ -20,7 +20,7 @@ import { navigate, render } from '../router.js';
             if (assessmentStatus === 'Completed') {
                 assessmentActionHtml = '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Concluído</span>';
             } else if (S.clientAssessmentId) {
-                assessmentActionHtml = `<button class="btn btn-primary" onclick="navigate('self-service', { assessmentId: '${S.clientAssessmentId}' })">Responder Questionário</button>`;
+                assessmentActionHtml = `<button class="btn btn-primary" data-action="navigate" data-args='["self-service",{"assessmentId":"${S.clientAssessmentId}"}]'>Responder Questionário</button>`;
             } else {
                 assessmentActionHtml = '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Liberação</span>';
             }
@@ -100,8 +100,8 @@ import { navigate, render } from '../router.js';
                     { label: 'Status', key: 'status', render: (row) => window.renderStatusBadge(row.status === 'completed' ? 'success' : row.status === 'in_progress' ? 'warning' : 'info', row.status || 'Pendente') },
                     {
                         label: 'Ações', align: 'right', render: (row) => `
-                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="openAssessmentDetail('${row.id}')">Ver</button>
-                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="generateProposalFromAssessment('${row.id}')">Proposta</button>
+                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openAssessmentDetail" data-args='["${row.id}"]'>Ver</button>
+                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>
                         `
                     }
                 ],
@@ -123,7 +123,7 @@ import { navigate, render } from '../router.js';
                             `;
                         }
                     },
-                    { label: 'Ação', align: 'right', render: (row) => `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" onclick="openProjectDetail('${row.id}')">Gerenciar</button>` }
+                    { label: 'Ação', align: 'right', render: (row) => `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openProjectDetail" data-args='["${row.id}"]'>Gerenciar</button>` }
                 ],
                 activeProjectsList.slice(0, 5),
                 { emptyMessage: 'Nenhum projeto ativo.' }
