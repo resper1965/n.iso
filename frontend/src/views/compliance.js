@@ -7,14 +7,14 @@ import { navigate } from '../router.js';
         h.textContent = 'Controles';
         // Botão do Diagnóstico de Prontidão ("gap em voo") — só com projeto ativo.
         a.innerHTML = S.currentProject
-            ? `<button class="btn btn-secondary" onclick="window.runReadinessCheck('${S.currentProject.id}')">Diagnóstico de prontidão</button>`
+            ? `<button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${S.currentProject.id}"]'>Diagnóstico de prontidão</button>`
             : '';
         if (!S.controls.length) {
             c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
             return;
         }
         c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${S.controls.map(ctrl => `
-            <div class="phase-item" onclick="openControlDetail('${ctrl.id}')" style="cursor:pointer">
+            <div class="phase-item" data-action="openControlDetail" data-args='["${ctrl.id}"]' style="cursor:pointer">
                 <div class="phase-num" style="width:3.5rem;color:var(--accent)">${ctrl.id}</div>
                 <div style="flex:1">
                     <div class="phase-title">${escapeHTML(ctrl.title)}</div>
@@ -28,7 +28,7 @@ import { navigate } from '../router.js';
     // painel agrupado por categoria, com severidade. É auto-diagnóstico, não
     // auditoria — o rótulo vem do próprio backend e é exibido aqui.
     window.runReadinessCheck = async function (projectId, comIA = false) {
-        openModal(`<div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div><div style="padding:1.5rem 0;text-align:center"><div class="loading"></div>${comIA ? '<p style="font-size:0.75rem;color:var(--muted);margin-top:8px">Analisando com IA…</p>' : ''}</div>`);
+        openModal(`<div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" data-action="closeModal">&times;</button></div><div style="padding:1.5rem 0;text-align:center"><div class="loading"></div>${comIA ? '<p style="font-size:0.75rem;color:var(--muted);margin-top:8px">Analisando com IA…</p>' : ''}</div>`);
         try {
             const r = await api('GET', `/api/v1/projects/${projectId}/readiness-check${comIA ? '?ai=1' : ''}`);
             const cor = { critico: 'var(--danger)', alto: '#e0a800', medio: 'var(--muted)' };
@@ -53,9 +53,9 @@ import { navigate } from '../router.js';
                         <div style="font-size:0.68rem;text-transform:uppercase;color:${cor[a.severidade] || 'var(--muted)'}">${escapeHTML(a.severidade)} · ${escapeHTML(a.requisito)} · ${escapeHTML(String(a.referencia))}</div>
                         <div style="font-size:0.85rem;margin-top:2px">${escapeHTML(a.descricao)}</div>
                     </div>`).join('') : '<p style="color:var(--muted);font-size:0.85rem">Nenhuma inconsistência de conteúdo apontada pela IA.</p>'}` : '';
-            const botaoIA = comIA ? '' : `<button class="btn btn-secondary" style="margin-top:0.8rem" onclick="window.runReadinessCheck('${projectId}', true)">Analisar com IA</button>`;
+            const botaoIA = comIA ? '' : `<button class="btn btn-secondary" style="margin-top:0.8rem" data-action="runReadinessCheck" data-args='["${projectId}",true]'>Analisar com IA</button>`;
             openModal(`
-                <div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" onclick="closeModal()">&times;</button></div>
+                <div class="modal-header"><span class="modal-title">Diagnóstico de prontidão</span><button class="btn-ghost" data-action="closeModal">&times;</button></div>
                 <div style="padding:0.5rem 0;text-align:left">
                     <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.6rem">${escapeHTML(r.rotulo || '')}</p>
                     <div style="display:flex;gap:16px;margin-bottom:0.4rem;font-size:0.85rem">
@@ -80,7 +80,7 @@ import { navigate } from '../router.js';
         openModal(`
             <div class="modal-header">
                 <span class="modal-title">${ctrl.id}: ${escapeHTML(ctrl.title)}</span>
-                <button class="btn-ghost" onclick="closeModal()">&times;</button>
+                <button class="btn-ghost" data-action="closeModal">&times;</button>
             </div>
             <div style="margin-bottom: 1.5rem;">
                 <div class="ctx-label">Descrição</div>
@@ -113,8 +113,8 @@ import { navigate } from '../router.js';
                 </div>
                 
                 <div style="display:flex; gap:0.75rem">
-                    <button class="btn btn-primary" style="flex:1" onclick="generatePolicyForControl('${ctrl.id}')">Gerar Política AI</button>
-                    <button class="btn" style="flex:1" onclick="openEvidenceUploadModal('${S.currentProject?.id}', '${ctrl.id}')">Upload Evidência</button>
+                    <button class="btn btn-primary" style="flex:1" data-action="generatePolicyForControl" data-args='["${ctrl.id}"]'>Gerar Política AI</button>
+                    <button class="btn" style="flex:1" data-action="openEvidenceUploadModal" data-args='["${S.currentProject?.id}","${ctrl.id}"]'>Upload Evidência</button>
                 </div>
             </div>
         `);
@@ -160,7 +160,7 @@ import { navigate } from '../router.js';
                         <div style="font-size:0.8rem; font-weight:500">${escapeHTML(e.filename)}</div>
                         <div style="font-size:0.72rem; color:var(--muted)">${e.evaluation_status || 'pendente'}</div>
                     </div>
-                    <button class="btn-ghost" onclick="viewEvidence('${e.id}')" style="padding:0.25rem">Ver</button>
+                    <button class="btn-ghost" data-action="viewEvidence" data-args='["${e.id}"]' style="padding:0.25rem">Ver</button>
                 </div>
             `).join('');
         } catch(e) { listEl.innerHTML = `<div style="padding:1rem; color:var(--danger)">Erro ao carregar.</div>`; }
@@ -516,7 +516,7 @@ import { navigate } from '../router.js';
             return;
         }
         
-        a.innerHTML = `<button class="btn btn-secondary" onclick="window.runReadinessCheck('${proj.id}')" style="margin-right:8px">Diagnóstico de prontidão</button><button class="btn btn-secondary" onclick="window.generateSoA('${proj.id}')" style="margin-right:8px">Gerar SoA (AI)</button><button class="btn btn-primary" onclick="window.migrate27701('${proj.id}')">Migrar 27701</button>`;
+        a.innerHTML = `<button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${proj.id}"]' style="margin-right:8px">Diagnóstico de prontidão</button><button class="btn btn-secondary" data-action="generateSoA" data-args='["${proj.id}"]' style="margin-right:8px">Gerar SoA (AI)</button><button class="btn btn-primary" data-action="migrate27701" data-args='["${proj.id}"]'>Migrar 27701</button>`;
         c.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Carregando controles do SoA...</div>';
         
         try {
@@ -577,11 +577,11 @@ import { navigate } from '../router.js';
                         <svg viewBox="0 0 24 24" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--text-dim);fill:none;stroke-width:1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:8px">
-                        <button class="btn btn-filter active" data-filter="all" onclick="window.setSoAFilter('all')" style="font-size:0.75rem;padding:6px 12px;background:rgba(0,173,232,0.15);border-color:var(--accent);color:var(--accent)">Todos</button>
-                        <button class="btn btn-filter" data-filter="applicable" onclick="window.setSoAFilter('applicable')" style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Aplicáveis</button>
-                        <button class="btn btn-filter" data-filter="not_applicable" onclick="window.setSoAFilter('not_applicable')" style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Não Aplicáveis</button>
-                        <button class="btn btn-filter" data-filter="gaps" onclick="window.setSoAFilter('gaps')" style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Gaps</button>
-                        <button class="btn btn-filter" data-filter="approved" onclick="window.setSoAFilter('approved')" style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Aprovados</button>
+                        <button class="btn btn-filter active" data-filter="all" data-action="setSoAFilter" data-args='["all"]' style="font-size:0.75rem;padding:6px 12px;background:rgba(0,173,232,0.15);border-color:var(--accent);color:var(--accent)">Todos</button>
+                        <button class="btn btn-filter" data-filter="applicable" data-action="setSoAFilter" data-args='["applicable"]' style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Aplicáveis</button>
+                        <button class="btn btn-filter" data-filter="not_applicable" data-action="setSoAFilter" data-args='["not_applicable"]' style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Não Aplicáveis</button>
+                        <button class="btn btn-filter" data-filter="gaps" data-action="setSoAFilter" data-args='["gaps"]' style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Gaps</button>
+                        <button class="btn btn-filter" data-filter="approved" data-action="setSoAFilter" data-args='["approved"]' style="font-size:0.75rem;padding:6px 12px;background:var(--surface);border-color:var(--border);color:var(--text)">Aprovados</button>
                     </div>
                 </div>
             `;
@@ -613,7 +613,7 @@ import { navigate } from '../router.js';
 
                     html += `
                         <div class="soa-section soa-accordion ${isOpen ? 'active' : ''} fade-in" id="soa-acc-${sectionId}">
-                            <div class="soa-accordion-header" onclick="window.toggleSoAAccordion('${sectionId}')">
+                            <div class="soa-accordion-header" data-action="toggleSoAAccordion" data-args='["${sectionId}"]'>
                                 <div class="soa-accordion-title">
                                     <span class="code">${escapeHTML(subData.meta.label)}</span>
                                     <span>${escapeHTML(subData.meta.name)}</span>
@@ -667,8 +667,8 @@ import { navigate } from '../router.js';
                                 <td style="font-weight:400;font-size:0.8rem;line-height:1.45;word-break:break-word">${escapeHTML(parsed.title)}</td>
                                 <td>
                                     <div class="segmented-control ${isNA ? 'not-applicable' : 'applicable'}" id="seg-toggle-${ctrl.id}">
-                                        <button type="button" class="seg-btn ${!isNA ? 'active' : ''}" onclick="${!isNA ? '' : `window.toggleSoAApplicability('${ctrl.id}', 'Applicable')`}">Sim</button>
-                                        <button type="button" class="seg-btn ${isNA ? 'active' : ''}" onclick="${isNA ? '' : `window.toggleSoAApplicability('${ctrl.id}', 'Not Applicable')`}">Não</button>
+                                        <button type="button" class="seg-btn ${!isNA ? 'active' : ''}" ${!isNA ? '' : `data-action="toggleSoAApplicability" data-args='["${ctrl.id}","Applicable"]'`}>Sim</button>
+                                        <button type="button" class="seg-btn ${isNA ? 'active' : ''}" ${isNA ? '' : `data-action="toggleSoAApplicability" data-args='["${ctrl.id}","Not Applicable"]'`}>Não</button>
                                     </div>
                                 </td>
                                 <td>
@@ -676,10 +676,10 @@ import { navigate } from '../router.js';
                                 </td>
                                 <td>
                                     <div style="display:flex;gap:6px">
-                                        <span onclick="window.showControlRisks('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.12)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
+                                        <span data-action="showControlRisks" data-args='["${ctrl.id}","${escapeHTML(parsed.code)}"]' class="badge-trace" style="cursor:pointer;background:${risksCount > 0 ? 'rgba(0,173,232,0.12)' : 'rgba(255,255,255,0.02)'};color:${risksCount > 0 ? '#00ade8' : 'var(--text-dim)'};border:1px solid ${risksCount > 0 ? 'rgba(0,173,232,0.2)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${risksCount} risco(s) vinculado(s)">
                                             R: ${risksCount}
                                         </span>
-                                        <span onclick="window.showControlEvidence('${ctrl.id}', '${escapeHTML(parsed.code)}')" class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.15)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
+                                        <span data-action="showControlEvidence" data-args='["${ctrl.id}","${escapeHTML(parsed.code)}"]' class="badge-trace" style="cursor:pointer;background:${evidenceCount > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)'};color:${evidenceCount > 0 ? '#10b981' : 'var(--text-dim)'};border:1px solid ${evidenceCount > 0 ? 'rgba(16,185,129,0.15)' : 'var(--border)'};padding:3px 7px;border-radius:6px;font-size:0.7rem;font-weight:600;display:flex;align-items:center;gap:4px" title="${evidenceCount} evidência(s) vinculada(s)">
                                             E: ${evidenceCount}
                                         </span>
                                     </div>
@@ -798,7 +798,7 @@ import { navigate } from '../router.js';
                 <span class="modal-title" style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--accent)">
                     Riscos Vinculados — ${escapeHTML(standard)}
                 </span>
-                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
             </div>
             <div style="margin-top:1rem">
         `;
@@ -846,7 +846,7 @@ import { navigate } from '../router.js';
         
         html += `
             <div style="margin-top:2rem;display:flex;justify-content:flex-end">
-                <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn" data-action="forceCloseModal">Fechar</button>
             </div>
             </div>
         `;
@@ -863,7 +863,7 @@ import { navigate } from '../router.js';
                 <span class="modal-title" style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--accent)">
                     Evidências Vinculadas — ${escapeHTML(standard)}
                 </span>
-                <button class="btn-ghost" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn-ghost" data-action="forceCloseModal">Fechar</button>
             </div>
             <div style="margin-top:1rem">
         `;
@@ -890,8 +890,8 @@ import { navigate } from '../router.js';
                         <td style="font-weight:500">${escapeHTML(e.file_name)}</td>
                         <td style="color:var(--text-dim)">${dateStr}</td>
                         <td style="text-align:right">
-                            <button class="btn btn-ghost" onclick="window.viewEvidenceDetails('${e.id}')" style="padding:4px 8px;font-size:0.75rem;margin-right:6px">Ver</button>
-                            <button class="btn btn-primary" onclick="window.downloadEvidenceFile('${e.id}')" style="padding:4px 8px;font-size:0.75rem">Download</button>
+                            <button class="btn btn-ghost" data-action="viewEvidenceDetails" data-args='["${e.id}"]' style="padding:4px 8px;font-size:0.75rem;margin-right:6px">Ver</button>
+                            <button class="btn btn-primary" data-action="downloadEvidenceFile" data-args='["${e.id}"]' style="padding:4px 8px;font-size:0.75rem">Download</button>
                         </td>
                     </tr>
                 `;
@@ -905,7 +905,7 @@ import { navigate } from '../router.js';
         
         html += `
             <div style="margin-top:2rem;display:flex;justify-content:flex-end">
-                <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                <button class="btn" data-action="forceCloseModal">Fechar</button>
             </div>
             </div>
         `;
@@ -975,7 +975,7 @@ import { navigate } from '../router.js';
             return;
         }
         
-        a.innerHTML = `<button class="btn btn-primary" onclick="openEvidenceUploadModal('${proj.id}')">+ Upload Evidência</button>`;
+        a.innerHTML = `<button class="btn btn-primary" data-action="openEvidenceUploadModal" data-args='["${proj.id}"]'>+ Upload Evidência</button>`;
 
         let evidence = [];
         try { evidence = await api('GET', `/api/v1/projects/${proj.id}/evidence`); } catch(e) {}
@@ -1017,13 +1017,13 @@ import { navigate } from '../router.js';
                     : window.renderStatusBadge('Não avaliado', 'neutral');
 
                 const dpoBtn = (!e.ciso_approved_by && !isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" onclick="signEvidence('${e.id}', 'ciso')">Assinar DPO</button>`
+                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso"]'>Assinar DPO</button>`
                     : '';
                 const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" onclick="signEvidence('${e.id}', 'ceo')">Assinar CEO</button>`
+                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ceo"]'>Assinar CEO</button>`
                     : '';
                 const evalBtn = (!isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="evaluateEvidenceAI('${e.id}')">IA</button>`
+                    ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" data-action="evaluateEvidenceAI" data-args='["${e.id}"]'>IA</button>`
                     : '';
 
                 return [
@@ -1033,7 +1033,7 @@ import { navigate } from '../router.js';
                     dpoBadge,
                     ceoBadge,
                     aiBadge,
-                    `<button onclick="window.downloadEvidenceFile('${e.id}')" class="btn btn-ghost btn-sm">Download</button> ${dpoBtn} ${ceoBtn} ${evalBtn}`
+                    `<button data-action="downloadEvidenceFile" data-args='["${e.id}"]' class="btn btn-ghost btn-sm">Download</button> ${dpoBtn} ${ceoBtn} ${evalBtn}`
                 ];
             }),
             { emptyState: 'Nenhuma evidência enviada para este projeto.' }
@@ -1047,7 +1047,7 @@ import { navigate } from '../router.js';
 
     function openEvidenceUploadModal(projectId) {
         openModal(`
-            <div class="modal-header"><span class="modal-title">Upload de Evidencia</span><button class="btn-ghost" onclick="forceCloseModal()">\u00d7</button></div>
+            <div class="modal-header"><span class="modal-title">Upload de Evidencia</span><button class="btn-ghost" data-action="forceCloseModal">\u00d7</button></div>
             <div class="form-group">
                 <label class="form-label">Controle ISO (opcional)</label>
                 <input class="form-input" id="ev-control-id" placeholder="Ex: A.5.1, A.8.25">
@@ -1057,7 +1057,7 @@ import { navigate } from '../router.js';
                 <input type="file" id="ev-file" class="form-input" style="padding:0.5rem">
             </div>
             <div id="ev-msg" style="font-size:0.7rem;margin-bottom:0.75rem;color:var(--muted)">Formatos aceitos: PDF, DOCX, XLSX, imagens, logs</div>
-            <button class="btn btn-primary" id="btn-ev-upload" style="width:100%" onclick="doEvidenceUpload('${projectId}')">Enviar Evidencia</button>
+            <button class="btn btn-primary" id="btn-ev-upload" style="width:100%" data-action="doEvidenceUpload" data-args='["${projectId}"]'>Enviar Evidencia</button>
         `);
     }
 
@@ -1101,7 +1101,7 @@ import { navigate } from '../router.js';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
             a.innerHTML = '';
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
             return; 
         }
         
@@ -1173,7 +1173,7 @@ import { navigate } from '../router.js';
                         ceoSign,
                         window.renderStatusBadge(stageText, stageType),
                         window.renderStatusBadge(ctrl.status || 'IMPLEMENTED', statusType),
-                        `<button onclick="window.openGeneratePolicyModal('${proj.id}', '${escapeHTML(displayId)}')" class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
+                        `<button data-action="openGeneratePolicyModal" data-args='["${proj.id}","${escapeHTML(displayId)}"]' class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
                     ];
                 }),
                 { emptyState: 'Nenhuma política cadastrada.' }
@@ -1192,7 +1192,7 @@ import { navigate } from '../router.js';
         const controlId = controlIdArg || 'A.5.1';
         
         openModal(`
-            <div class="modal-header"><span class="modal-title">Gestão de Política</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+            <div class="modal-header"><span class="modal-title">Gestão de Política</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div style="padding: 2rem; text-align: center; color: var(--text-dim);">Carregando detalhes do controle...</div>
         `);
 
@@ -1243,7 +1243,7 @@ import { navigate } from '../router.js';
 
         const showGenerationFormHtml = () => {
             const formHtml = `
-                <div class="modal-header"><span class="modal-title">Gerar Política ISO — ${escapeHTML(controlId)}</span><button class="btn-ghost" onclick="forceCloseModal()">&times;</button></div>
+                <div class="modal-header"><span class="modal-title">Gerar Política ISO — ${escapeHTML(controlId)}</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
                 <div class="form-group" style="display:none">
                     <label class="form-label">Controle ISO</label>
                     <input class="form-input" id="policy-control-id" value="${escapeHTML(controlId)}">
@@ -1265,7 +1265,7 @@ import { navigate } from '../router.js';
                 </div>
 
                 <p style="font-size:0.75rem;color:var(--muted);margin-bottom:1rem" id="policy-gen-hint">O PolicyAgent irá gerar uma política completa usando IA, adaptada ao contexto organizacional deste projeto.</p>
-                <button class="btn btn-primary" id="btn-gen-policy" style="width:100%" onclick="doGeneratePolicy('${projectId}')">Gerar com IA</button>
+                <button class="btn btn-primary" id="btn-gen-policy" style="width:100%" data-action="doGeneratePolicy" data-args='["${projectId}"]'>Gerar com IA</button>
                 <div id="policy-result" style="margin-top:1rem"></div>
             `;
             const modalContent = document.getElementById('modal-content');
@@ -1300,7 +1300,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ciso"]'>Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1325,7 +1325,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ceo"]'>Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1339,7 +1339,7 @@ import { navigate } from '../router.js';
                         <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" onchange="window.onPolicyVersionChange('${projectId}', '${controlId}', this.value)">
                             ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? 'v' + v.version + ' (Atual)' : 'v' + v.version} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
                         </select>
-                        <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" onclick="window.doRestorePolicyVersion('${projectId}', '${controlId}')">Restaurar vX</button>
+                        <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" data-action="doRestorePolicyVersion" data-args='["${projectId}","${controlId}"]'>Restaurar vX</button>
                     </div>
                 `;
             }
@@ -1386,7 +1386,7 @@ import { navigate } from '../router.js';
                                             <td style="padding:6px 12px">${new Date(v.created_at).toLocaleDateString()}</td>
                                             <td style="padding:6px 12px">${escapeHTML(v.created_by)}</td>
                                             <td style="padding:6px 12px">
-                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.72rem; margin:0;" onclick="window.onPolicyVersionChange('${projectId}', '${controlId}', '${v.id}'); document.getElementById('policy-version-selector').value = '${v.id}'; document.getElementById('btn-restore-version').style.display = 'inline-block';">Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
+                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.72rem; margin:0;" data-action="__cmpViewPolicyVersion" data-args='["${projectId}","${controlId}","${v.id}"]'>Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -1401,7 +1401,7 @@ import { navigate } from '../router.js';
             const html = `
                 <div class="modal-header">
                     <span class="modal-title">Política Ativa — ${escapeHTML(controlId)}</span>
-                    <button class="btn-ghost" onclick="forceCloseModal()">&times;</button>
+                    <button class="btn-ghost" data-action="forceCloseModal">&times;</button>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:16px;">
                     <div style="font-size:0.72rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.2em; font-family:'Montserrat',sans-serif">Título da Política</div>
@@ -1433,9 +1433,9 @@ import { navigate } from '../router.js';
                     
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1rem">
                         <div style="display:flex; gap:8px">
-                            <button class="btn" onclick="forceCloseModal()">Fechar</button>
+                            <button class="btn" data-action="forceCloseModal">Fechar</button>
                             <button class="btn btn-secondary" id="btn-edit-policy">Editar Documento</button>
-                            <button class="btn btn-secondary" onclick="window.openPolicyReport('${projectId}', '${controlId}')">Imprimir PDF</button>
+                            <button class="btn btn-secondary" data-action="openPolicyReport" data-args='["${projectId}","${controlId}"]'>Imprimir PDF</button>
                         </div>
                         <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
                     </div>
@@ -1530,7 +1530,16 @@ import { navigate } from '../router.js';
                     showToast('Erro ao carregar texto da versão', 'error');
                 }
             };
-            
+
+            // Wrapper S2: substitui o onclick composto (chamada + selector + botão).
+            window.__cmpViewPolicyVersion = function(pId, cId, verId) {
+                window.onPolicyVersionChange(pId, cId, verId);
+                const sel = document.getElementById('policy-version-selector');
+                if (sel) sel.value = verId;
+                const restoreBtn = document.getElementById('btn-restore-version');
+                if (restoreBtn) restoreBtn.style.display = 'inline-block';
+            };
+
             window.doRestorePolicyVersion = async function(pId, cId) {
                 const selector = document.getElementById('policy-version-selector');
                 const verId = selector.value;
@@ -1613,14 +1622,14 @@ import { navigate } from '../router.js';
                                     <strong>Líder SGSI:</strong> 
                                     <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ciso')">Assinar como Líder SGSI</button>` : ''}
+                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ciso"]'>Assinar como Líder SGSI</button>` : ''}
                             </div>
                             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
                                 <div>
                                     <strong>Direção Executiva:</strong> 
                                     <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
                                 </div>
-                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="signPolicy('${ctrl.id || ''}', 'ceo')">Assinar como Direção Executiva</button>` : ''}
+                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ceo"]'>Assinar como Direção Executiva</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1668,7 +1677,7 @@ import { navigate } from '../router.js';
         h.textContent = 'Ciencia de Políticas';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { 
-            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" onclick="openActiveProjectModal()" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
+            c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; 
             return; 
         }
         
@@ -1721,7 +1730,7 @@ import { navigate } from '../router.js';
                     <label class="form-label">Seu E-mail</label>
                     <input class="form-input" id="ack-self-email" value="${escapeHTML(currentUserEmail)}" readonly style="background:rgba(255,255,255,0.02)">
                 </div>
-                <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" onclick="window.submitSelfAcknowledgment('${proj.id}')">Assinar Ciencia Eletronica</button>
+                <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" data-action="submitSelfAcknowledgment" data-args='["${proj.id}"]'>Assinar Ciencia Eletronica</button>
             </div>
         `;
 
@@ -1745,7 +1754,7 @@ import { navigate } from '../router.js';
                     <label class="form-label">E-mail do Colaborador</label>
                     <input class="form-input" id="ack-manual-email" placeholder="Ex: carlos@empresa.com">
                 </div>
-                <button class="btn" style="width:100%; border-color:var(--accent); color:var(--accent); margin-top:0.5rem" onclick="window.submitManualAcknowledgment('${proj.id}')">Registrar Aceite</button>
+                <button class="btn" style="width:100%; border-color:var(--accent); color:var(--accent); margin-top:0.5rem" data-action="submitManualAcknowledgment" data-args='["${proj.id}"]'>Registrar Aceite</button>
             </div>
         ` : '';
 
@@ -1777,7 +1786,7 @@ import { navigate } from '../router.js';
                         </div>
                     </div>
                     <div>
-                        <button class="btn btn-primary" onclick="window.copyPublicPolicyPortalLink('${proj.id}')">
+                        <button class="btn btn-primary" data-action="copyPublicPolicyPortalLink" data-args='["${proj.id}"]'>
                             Copiar Link do Portal Explicito (OTP)
                         </button>
                     </div>
