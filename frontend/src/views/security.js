@@ -63,7 +63,7 @@ function telaInativo() {
     <div class="form-group">
       <label class="form-label">Confirme sua senha</label>
       <input type="password" id="mfa-setup-pass" class="form-input" autocomplete="current-password"
-             placeholder="••••••••" onkeydown="if(event.key==='Enter')doMfaSetup()">
+             placeholder="••••••••" data-action-keydown="doMfaSetup" data-key="Enter">
     </div>
     <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">
       Pedimos a senha porque vincular um autenticador é tão sensível quanto desligá-lo:
@@ -116,7 +116,7 @@ function telaQr(secret, otpauthUrl) {
       <input type="text" id="mfa-codigo" class="form-input" inputmode="numeric" maxlength="6"
              autocomplete="one-time-code" placeholder="000000"
              style="text-align:center;letter-spacing:6px;font-weight:600"
-             onkeydown="if(event.key==='Enter')doMfaActivate()">
+             data-action-keydown="doMfaActivate" data-key="Enter">
     </div>
     <div id="mfa-erro" style="${ERRO}"></div>
     <div style="display:flex;gap:0.75rem;margin-top:1rem">
@@ -225,7 +225,7 @@ function telaAtivo(restantes) {
     <div class="form-group">
       <label class="form-label">Para desativar, confirme sua senha</label>
       <input type="password" id="mfa-off-pass" class="form-input" autocomplete="current-password"
-             placeholder="••••••••" onkeydown="if(event.key==='Enter')doMfaDisable()">
+             placeholder="••••••••" data-action-keydown="doMfaDisable" data-key="Enter">
     </div>
     <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">
       Desativar encerra <strong>todas as suas sessões abertas</strong>, inclusive esta:

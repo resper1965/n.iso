@@ -196,3 +196,4 @@ playwright-report/
 .github/agents/
 .github/hooks/
 .github/skills/
+.claude/settings.local.json

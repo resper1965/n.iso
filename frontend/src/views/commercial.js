@@ -64,7 +64,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             <div class="form-group"><label class="form-label">Contato</label><input type="text" id="lead-contact" class="form-input"></div>
             <div class="form-group"><label class="form-label">CNPJ</label>
                 <div style="display:flex;gap:0.5rem">
-                    <input type="text" id="lead-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" oninput="maskCnpj(this)">
+                    <input type="text" id="lead-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" data-action-input="maskCnpj" data-arg-el>
                     <button class="btn" data-action="previewCnpj" style="white-space:nowrap">Consultar</button>
                 </div>
                 <div id="cnpj-preview" style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem"></div>
@@ -134,7 +134,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             <div class="form-group" style="margin-top:1rem">
                 <label class="form-label">Enriquecer via CNPJ</label>
                 <div style="display:flex;gap:0.5rem">
-                    <input type="text" id="lead-enrich-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" oninput="maskCnpj(this)">
+                    <input type="text" id="lead-enrich-cnpj" class="form-input" placeholder="00.000.000/0001-00" style="flex:1" data-action-input="maskCnpj" data-arg-el>
                     <button class="btn btn-primary" data-action="enrichLeadCnpj" data-args='["${l.id}"]'>Consultar</button>
                 </div>
             </div>` : '';
@@ -143,7 +143,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             <p><strong>Status:</strong> <span class="status-badge status-${l.status}">${l.status}</span></p>
             ${cnpjInfo}${enrichBtn}
             <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end">
-                <button class="btn btn-primary" data-action="createAssessmentFromLead" data-args='["${l.id}","${escapeHTML(l.razao_social||l.company_name)}"]'>Iniciar Levantamento</button>
+                <button class="btn btn-primary" data-action="createAssessmentFromLead" data-args='${escapeHTML(JSON.stringify([l.id, l.razao_social || l.company_name]))}'>Iniciar Levantamento</button>
                 <button class="btn" data-action="forceCloseModal">Fechar</button>
             </div>`);
     }
@@ -292,7 +292,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                         </div>
                     `;
                 } else {
-                    inputHtml = `<input type="text" class="form-input wizard-input" data-key="${q.key}" value="${escapeHTML(val)}" oninput="setWizardAnswer('${q.key}', this.value)" placeholder="Sua resposta...">`;
+                    inputHtml = `<input type="text" class="form-input wizard-input" data-key="${q.key}" value="${escapeHTML(val)}" data-action-input="setWizardAnswer" data-args='["${q.key}"]' data-arg-val placeholder="Sua resposta...">`;
                 }
 
                 return `
@@ -604,7 +604,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                 <div style="text-align:center; margin-bottom:1.5rem">
                     <div style="font-size:2.5rem; font-weight:300; color:var(--accent); letter-spacing:-0.03em" id="pv-price">R$ ${p.precoFinal.toLocaleString('pt-BR')}</div>
                     <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.2em; color:var(--muted); margin:0.5rem 0 1rem">ajuste o valor</div>
-                    <input type="range" class="pricing-slider" id="slide-price" min="${Math.round(p.precoFinal * 0.4)}" max="${Math.round(p.precoFinal * 2.5)}" step="500" value="${p.precoFinal}" oninput="pricingSlide()" style="width:80%">
+                    <input type="range" class="pricing-slider" id="slide-price" min="${Math.round(p.precoFinal * 0.4)}" max="${Math.round(p.precoFinal * 2.5)}" step="500" value="${p.precoFinal}" data-action-input="pricingSlide" style="width:80%">
                 </div>
 
                 <div style="display:flex; gap:2rem; justify-content:center; margin-bottom:1.5rem; font-size:0.75rem; color:var(--muted)">

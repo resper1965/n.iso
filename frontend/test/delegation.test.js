@@ -84,6 +84,55 @@ describe('delegação (S2)', () => {
     expect(window.__fn).toHaveBeenCalledWith('k', 'Opção "com aspas"');
   });
 
+  it('data-action-change dispara no evento change', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<select data-action-change="__fn" data-arg-val><option value="v1">a</option></select>`;
+    const el = document.body.querySelector('[data-action-change]');
+    el.value = 'v1';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(window.__fn).toHaveBeenCalledWith('v1');
+  });
+
+  it('data-arg-val passa el.value; data-args vem antes', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<input data-action-input="__fn" data-args='["k"]' data-arg-val value="txt">`;
+    const el = document.body.querySelector('[data-action-input]');
+    el.value = 'txt';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(window.__fn).toHaveBeenCalledWith('k', 'txt');
+  });
+
+  it('data-arg-event injeta o evento como PRIMEIRO arg (submit)', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<form data-action-submit="__fn" data-arg-event data-args='["cid"]' data-prevent><button>ok</button></form>`;
+    const el = document.body.querySelector('[data-action-submit]');
+    const ev = new Event('submit', { bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    expect(window.__fn).toHaveBeenCalledTimes(1);
+    expect(window.__fn.mock.calls[0][0]).toBe(ev);
+    expect(window.__fn.mock.calls[0][1]).toBe('cid');
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it('data-key filtra a tecla (keydown Enter)', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<input data-action-keydown="__fn" data-key="Enter">`;
+    const el = document.body.querySelector('[data-action-keydown]');
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(window.__fn).not.toHaveBeenCalled();
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(window.__fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('data-action-blur dispara no blur (captura, não borbulha)', () => {
+    window.__fn = vi.fn();
+    document.body.innerHTML = `<input data-action-blur="__fn" data-arg-val value="z">`;
+    const el = document.body.querySelector('[data-action-blur]');
+    el.value = 'z';
+    el.dispatchEvent(new FocusEvent('blur'));
+    expect(window.__fn).toHaveBeenCalledWith('z');
+  });
+
   it('dispara mesmo dentro de container que faz stopPropagation (fase de captura)', () => {
     // Reproduz o #modal de login.html: o wrapper para a propagação no bubbling.
     window.__fn = vi.fn();

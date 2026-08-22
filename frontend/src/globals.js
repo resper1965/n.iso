@@ -13,6 +13,22 @@ import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
 // próprio elemento com esta ação já impede o pai de ser acionado — sem stopPropagation.
 window.__noop = function () {};
 
+// Wrappers S2 para handlers de eventos que não eram simples chamadas de função.
+// __setFilter: substitui os `onchange/oninput="S.<campo> = this.value; render();"`.
+window.__setFilter = function (field, value) { S[field] = value; render(); };
+// __syncSiblingText: substitui `oninput="this.nextElementSibling.textContent = this.value"`
+// (slider que mostra o próprio valor no elemento seguinte). Usa `this` (o dispatcher
+// chama com fn.apply(elemento,...)) e ignora args — o mesmo elemento também tem um
+// data-action-change cujos data-args não devem interferir aqui.
+window.__syncSiblingText = function () { if (this.nextElementSibling) this.nextElementSibling.textContent = this.value; };
+// __saveSoAJustification: substitui o onblur composto (salva a justificativa e
+// marca/desmarca visualmente o campo obrigatório vazio quando o controle é aplicável).
+window.__saveSoAJustification = function (id, isNA, el) {
+    window.saveSoAJustification(id, el.value);
+    if (el.value.trim() !== '') el.classList.remove('required-missing');
+    else if (isNA) el.classList.add('required-missing');
+};
+
 window.viewEvidence = async function viewEvidence(id) {
         try {
             openModal(`

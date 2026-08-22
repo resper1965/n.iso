@@ -27,7 +27,7 @@
         <div class="login-form-side">
             <!-- Standard Login Box -->
             <div class="login-box" id="standard-login-box">
-                <form onsubmit="doLogin(); return false;">
+                <form data-action-submit="doLogin" data-prevent>
                     <div style="margin-bottom:1.5rem">
                         <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
                         <input type="email" id="login-email" class="form-input" placeholder="seu@email.com" autocomplete="username" required>
@@ -46,7 +46,7 @@
 
             <!-- First Login Password Change Box -->
             <div class="login-box" id="first-login-reset-box" style="display:none">
-                <form onsubmit="doFirstLoginReset(); return false;">
+                <form data-action-submit="doFirstLoginReset" data-prevent>
                     <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha Obrigatória</h2>
                     <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este é seu primeiro acesso, você deve cadastrar uma nova senha segura para prosseguir.</p>
                     <div style="margin-bottom:1.5rem">
@@ -64,7 +64,7 @@
 
             <!-- Segundo Fator (TOTP) -->
             <div class="login-box" id="mfa-login-box" style="display:none">
-                <form onsubmit="doMfaLogin(); return false;">
+                <form data-action-submit="doMfaLogin" data-prevent>
                     <h2 style="font-family:'Montserrat';margin-bottom:1rem">Verificação em duas etapas</h2>
                     <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Digite o código de 6 dígitos do seu autenticador. Se perdeu o acesso ao aparelho, use um dos seus códigos de recuperação.</p>
                     <div style="margin-bottom:2rem">
@@ -81,7 +81,7 @@
 
             <!-- Forgot Password Box -->
             <div class="login-box" id="forgot-password-box" style="display:none">
-                <form onsubmit="return false;">
+                <form data-action-submit="__noop" data-prevent>
                     <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
                     <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um código numérico de 6 dígitos.</p>
                     <div style="margin-bottom:1.5rem" id="forgot-email-step">
@@ -114,7 +114,7 @@
         <div class="sidebar-logo">n<span style="color:var(--accent)">.</span>iso</div>
         <div style="padding: 0 1rem 1.2rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0.8rem;" id="sidebar-project-selector-container">
             <label style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 1px; display: block; margin-bottom: 0.4rem; font-family:'Montserrat',sans-serif; font-weight:500;">Projeto Ativo</label>
-            <select class="form-input" id="sidebar-project-select" onchange="window.changeActiveProject(this.value)" style="background: rgba(7, 11, 20, 0.6); border: 1px solid rgba(0, 173, 232, 0.2); color: var(--text); padding: 0.4rem 0.6rem; font-size: 0.8rem; height: auto; cursor: pointer; width: 100%; border-radius: 8px; backdrop-filter: blur(8px);">
+            <select class="form-input" id="sidebar-project-select" data-action-change="changeActiveProject" data-arg-val style="background: rgba(7, 11, 20, 0.6); border: 1px solid rgba(0, 173, 232, 0.2); color: var(--text); padding: 0.4rem 0.6rem; font-size: 0.8rem; height: auto; cursor: pointer; width: 100%; border-radius: 8px; backdrop-filter: blur(8px);">
                 <option value="">Selecione um projeto...</option>
             </select>
             <a href="#" data-action="navigate" data-args='["projects"]' data-prevent style="font-size:0.7rem; color:var(--accent); text-decoration:none; display:inline-block; margin-top:6px; font-weight:500;">Gerenciar Projetos</a>

@@ -194,13 +194,13 @@ const ISO_GUIDELINES = {
             const filtersHtml = `
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:1.5rem; background:rgba(255,255,255,0.01); padding:10px 16px; border:1px solid var(--border); border-radius:12px; backdrop-filter: var(--glass-blur);">
                     <div style="position:relative; flex:1;">
-                        <input type="text" class="form-input" style="width:100%; padding-left:2.25rem; font-size:0.8rem; height:38px; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" placeholder="Buscar fase ou atividade..." value="${escapeHTML(S.jornadaSearchQuery || '')}" oninput="S.jornadaSearchQuery = this.value; render();">
+                        <input type="text" class="form-input" style="width:100%; padding-left:2.25rem; font-size:0.8rem; height:38px; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" placeholder="Buscar fase ou atividade..." value="${escapeHTML(S.jornadaSearchQuery || '')}" data-action-input="__setFilter" data-args='["jornadaSearchQuery"]' data-arg-val>
                         <svg viewBox="0 0 24 24" style="position:absolute; left:10px; top:10px; width:18px; height:18px; stroke:var(--text-dim); stroke-width:2; fill:none; pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
                     <div style="display:flex; gap:12px;">
                         <div style="display:flex; align-items:center; gap:8px;">
                             <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Status</label>
-                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaStatusFilter = this.value; render();">
+                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" data-action-change="__setFilter" data-args='["jornadaStatusFilter"]' data-arg-val>
                                 <option value="all" ${statusFilter === 'all' ? 'selected' : ''}>Todos</option>
                                 <option value="pending" ${statusFilter === 'pending' ? 'selected' : ''}>Pending</option>
                                 <option value="in_progress" ${statusFilter === 'in_progress' ? 'selected' : ''}>In Progress</option>
@@ -211,7 +211,7 @@ const ISO_GUIDELINES = {
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <label style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing: 0.5px;">Categoria</label>
-                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" onchange="S.jornadaCategoryFilter = this.value; render();">
+                            <select class="form-input" style="height:38px; padding:0 12px; font-size:0.8rem; border-radius:10px; background: rgba(255,255,255,0.02); border-color: var(--border);" data-action-change="__setFilter" data-args='["jornadaCategoryFilter"]' data-arg-val>
                                 <option value="all" ${categoryFilter === 'all' ? 'selected' : ''}>Todas</option>
                                 <option value="task" ${categoryFilter === 'task' ? 'selected' : ''}>Task</option>
                                 <option value="document" ${categoryFilter === 'document' ? 'selected' : ''}>Document</option>
@@ -300,7 +300,7 @@ const ISO_GUIDELINES = {
                                                 <div class="title-text">${escapeHTML(ph.title)}</div>
                                             </div>
                                             <div class="phase-actions-wrapper" data-action="__noop">
-                                                <select class="phase-status-select" onchange="changePhaseStatus('${p.id}', ${ph.phase_number}, this)">
+                                                <select class="phase-status-select" data-action-change="changePhaseStatus" data-args='["${p.id}","${ph.phase_number}"]' data-arg-el>
                                                     <option value="pending" ${ph.status === 'pending' ? 'selected' : ''}>Pending</option>
                                                     <option value="in_progress" ${ph.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
                                                     <option value="completed" ${ph.status === 'completed' ? 'selected' : ''}>Completed</option>
@@ -428,13 +428,13 @@ const ISO_GUIDELINES = {
                                                                         <textarea class="form-input" 
                                                                             placeholder="Digite aqui para registrar informações (Ex: nome do sponsor executivo, link do documento, etc.)"
                                                                             style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.7rem; font-family: inherit; resize: vertical; margin-bottom: 0.5rem;"
-                                                                            onblur="saveChecklistItemNotes('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">${itemNotes.trim().startsWith('{') && itemNotes.trim().endsWith('}') ? '' : escapeHTML(itemNotes)}</textarea>
+                                                                            data-action-blur="saveChecklistItemNotes" data-args='["${p.id}","${ph.phase_number}","${item.id}"]' data-arg-val>${itemNotes.trim().startsWith('{') && itemNotes.trim().endsWith('}') ? '' : escapeHTML(itemNotes)}</textarea>
                                                                         
                                                                         <div style="display: flex; gap: 12px; align-items: center;">
                                                                             <div style="flex: 1;">
                                                                                 <div style="font-size:0.72rem; color: var(--text-dim); margin-bottom: 0.25rem;">Responsável</div>
                                                                                 <select class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; color: var(--text);"
-                                                                                    onchange="saveChecklistItemAssigned('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                                    data-action-change="saveChecklistItemAssigned" data-args='["${p.id}","${ph.phase_number}","${item.id}"]' data-arg-val>
                                             ${window.renderGovernanceSelectOptions(S.currentGovernance, itemAssigned)}
                                             </select>
                                                                             </div>
@@ -442,7 +442,7 @@ const ISO_GUIDELINES = {
                                                                                 <div style="font-size:0.72rem; color: var(--text-dim); margin-bottom: 0.25rem;">Prazo</div>
                                                                                 <input type="date" class="form-input" style="width: 100%; font-size: 0.7rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; color: var(--text);"
                                                                                     value="${itemDueDate}"
-                                                                                    onchange="saveChecklistItemDueDate('${p.id}', ${ph.phase_number}, '${item.id}', this.value)">
+                                                                                    data-action-change="saveChecklistItemDueDate" data-args='["${p.id}","${ph.phase_number}","${item.id}"]' data-arg-val>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1369,6 +1369,9 @@ const ISO_GUIDELINES = {
     }
 
     window.saveChecklistItemMetadata = function(projectId, phaseNum, itemId) {
+        // A delegação entrega phaseNum como string (data-args JSON); o payload
+        // phase_number precisa ser numérico. Normaliza na fronteira.
+        phaseNum = Number(phaseNum);
         const key = projectId + '_' + itemId;
         const isChecked = S.phaseChecks[key] === true;
         

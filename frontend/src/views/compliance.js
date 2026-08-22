@@ -89,7 +89,7 @@ import { navigate } from '../router.js';
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
                     <div>
                         <div class="ctx-label">Status do Controle</div>
-                        <select class="form-input" onchange="updateControlStatus('${ctrl.id}', this.value)" style="width:100%">
+                        <select class="form-input" data-action-change="updateControlStatus" data-args='["${ctrl.id}"]' data-arg-val style="width:100%">
                             <option value="Missing" ${ctrl.status === 'Missing' ? 'selected' : ''}>Ausente</option>
                             <option value="Partial" ${ctrl.status === 'Partial' ? 'selected' : ''}>Parcial</option>
                             <option value="Compliant" ${ctrl.status === 'Compliant' ? 'selected' : ''}>Conforme</option>
@@ -99,8 +99,8 @@ import { navigate } from '../router.js';
                         <div class="ctx-label">Maturidade (CMM 0-5)</div>
                         <div style="display:flex; align-items:center; gap: 1rem; background:rgba(255,255,255,0.03); padding:0.5rem; border-radius:8px">
                             <input type="range" min="0" max="5" step="1" value="${ctrl.maturity || 0}" 
-                                oninput="this.nextElementSibling.textContent = this.value"
-                                onchange="updateControlMaturity('${ctrl.id}', this.value)"
+                                data-action-input="__syncSiblingText"
+                                data-action-change="updateControlMaturity" data-args='["${ctrl.id}"]' data-arg-val
                                 style="flex:1">
                             <span style="font-weight:700; color:var(--accent); min-width:1rem">${ctrl.maturity || 0}</span>
                         </div>
@@ -573,7 +573,7 @@ import { navigate } from '../router.js';
 
                 <div class="soa-filters fade-in" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:2rem;align-items:center;background:rgba(15,20,35,0.4);border:1px solid var(--border);border-radius:12px;padding:16px;backdrop-filter:var(--glass-blur)">
                     <div style="flex:1;min-width:280px;position:relative">
-                        <input type="text" id="soa-search" placeholder="Buscar por ID ou termo..." oninput="window.filterSoATable()" style="width:100%;background:rgba(7,11,20,0.5);border:1px solid var(--border);border-radius:10px;padding:8px 12px 8px 36px;color:var(--text);font-size:0.85rem;outline:none" />
+                        <input type="text" id="soa-search" placeholder="Buscar por ID ou termo..." data-action-input="filterSoATable" style="width:100%;background:rgba(7,11,20,0.5);border:1px solid var(--border);border-radius:10px;padding:8px 12px 8px 36px;color:var(--text);font-size:0.85rem;outline:none" />
                         <svg viewBox="0 0 24 24" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--text-dim);fill:none;stroke-width:1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:8px">
@@ -693,10 +693,10 @@ import { navigate } from '../router.js';
                                         placeholder="${isNA ? 'Justificativa obrigatória para exclusão' : 'Notas do consultor...'}" 
                                         class="soa-justification-input ${isJustificationMissing ? 'required-missing' : ''}" 
                                         style="width:100%; box-sizing:border-box; background:rgba(7,11,20,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 10px; color:var(--text); font-size:0.8rem;"
-                                        onblur="window.saveSoAJustification('${ctrl.id}', this.value); if (this.value.trim() !== '') { this.classList.remove('required-missing'); } else if (${isNA}) { this.classList.add('required-missing'); }" />
+                                        data-action-blur="__saveSoAJustification" data-args='["${ctrl.id}",${isNA ? 'true' : 'false'}]' data-arg-el />
                                 </td>
                                 <td>
-                                    <select onchange="window.updateControlMaturity('${ctrl.id}', this.value)" class="custom-select" style="padding:6px 10px;width:100%;background:rgba(7,11,20,0.8);color:var(--text);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-weight:600;font-size:0.8rem;cursor:pointer">
+                                    <select data-action-change="updateControlMaturity" data-args='["${ctrl.id}"]' data-arg-val class="custom-select" style="padding:6px 10px;width:100%;background:rgba(7,11,20,0.8);color:var(--text);border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-weight:600;font-size:0.8rem;cursor:pointer">
                                         ${[0, 1, 2, 3, 4, 5].map(val => `<option value="${val}" ${ctrl.maturity === val ? 'selected' : ''}>CMM ${val}</option>`).join('')}
                                     </select>
                                 </td>
@@ -1251,7 +1251,7 @@ import { navigate } from '../router.js';
                 
                 <div class="form-group">
                     <label class="form-label">Método de Geração</label>
-                    <select class="form-input" id="policy-gen-method" onchange="togglePolicyGenFields()">
+                    <select class="form-input" id="policy-gen-method" data-action-change="togglePolicyGenFields">
                         <option value="ai">Inteligência Artificial (PolicyAgent)</option>
                         ${options.length ? `<option value="template">Template de Política Standard</option>` : ''}
                     </select>
@@ -1336,7 +1336,7 @@ import { navigate } from '../router.js';
                 versionsSelectHtml = `
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
                         <label style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; min-width:120px">Histórico de Versões:</label>
-                        <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" onchange="window.onPolicyVersionChange('${projectId}', '${controlId}', this.value)">
+                        <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" data-action-change="onPolicyVersionChange" data-args='["${projectId}","${controlId}"]' data-arg-val>
                             ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? 'v' + v.version + ' (Atual)' : 'v' + v.version} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
                         </select>
                         <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" data-action="doRestorePolicyVersion" data-args='["${projectId}","${controlId}"]'>Restaurar vX</button>

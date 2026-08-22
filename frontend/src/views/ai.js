@@ -21,7 +21,7 @@ import { navigate, render } from '../router.js';
             <div class="fade-in">
                 <div class="card" style="padding:1.5rem;margin-bottom:1.5rem">
                     <div class="form-group" style="margin-bottom:0">
-                        <input class="form-input" id="k-search" placeholder="Buscar no conhecimento do projeto..." value="${query}" onkeydown="if(event.key==='Enter')searchKnowledge()">
+                        <input class="form-input" id="k-search" placeholder="Buscar no conhecimento do projeto..." value="${query}" data-action-keydown="searchKnowledge" data-key="Enter">
                     </div>
                 </div>
                 <div id="k-results">
@@ -103,7 +103,7 @@ import { navigate, render } from '../router.js';
                 `).join('') : '<div style="text-align:center;color:var(--muted);padding:3rem 0;font-size:0.8rem">Faca uma pergunta sobre ISO 27001, controles, audit preparation ou compliance.</div>'}
             </div>
             <div style="display:flex;gap:0.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)">
-                <input class="form-input" id="chat-input" placeholder="Pergunte sobre compliance, controles ISO, audit..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage('${proj.id}')">
+                <input class="form-input" id="chat-input" placeholder="Pergunte sobre compliance, controles ISO, audit..." style="flex:1" data-action-keydown="sendChatMessage" data-args='["${proj.id}"]' data-key="Enter">
                 <button class="btn btn-primary" data-action="sendChatMessage" data-args='["${proj.id}"]'>Enviar</button>
             </div>
         </div>`;

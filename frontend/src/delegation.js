@@ -6,17 +6,21 @@
 // CSP, os handlers antigos e a delegação coexistem sem quebra; o CSP só aperta no
 // último lote, quando não sobrar nenhum handler inline.
 //
-// Um ÚNICO listener no `document` cobre também o conteúdo renderizado depois (as
-// views escrevem HTML via innerHTML). Convenção nos elementos:
-//   data-action="fnName"           → chama window.fnName()
+// Um ÚNICO listener por tipo de evento no `document` (fase de CAPTURA) cobre também
+// o conteúdo renderizado depois (as views escrevem HTML via innerHTML). Convenção:
+//   data-action="fnName"           → clique: chama window.fnName()
+//   data-action-change="fnName"    → change   (idem para input/submit/keydown/blur)
+//   data-action-input / -submit / -keydown / -blur
 //   data-args='["a","b"]'          → window.fnName("a","b")  (JSON: array de args)
 //   data-arg-el                    → adiciona o próprio elemento como arg
-//   data-arg-event                 → adiciona o próprio evento como arg (ex.: closeModal(event))
+//   data-arg-val                   → adiciona `el.value` como arg (substitui `this.value`)
+//   data-arg-event                 → adiciona o próprio evento como PRIMEIRO arg
+//   data-key="Enter"               → só dispara se `event.key` bater (p/ keydown)
 //   data-stop                      → event.stopPropagation() antes de chamar
-//   data-prevent                   → event.preventDefault() (substitui `; return false` em <a>)
-// A ordem dos args extras, quando presentes, é: [...data-args, event?, elemento?].
-// A função é resolvida em `window` (as views expõem as ações lá, como os onclick
-// faziam). Ação desconhecida ou data-args inválido: loga e ignora (não quebra).
+//   data-prevent                   → event.preventDefault() (substitui `return false`)
+// Ordem final dos args: [event?, ...data-args, el.value?, elemento?].
+// A função é resolvida em `window` (as views expõem as ações lá, como os on* faziam).
+// Ação desconhecida ou data-args inválido: loga e ignora (não quebra).
 
 function resolverArgs(el, e) {
   const raw = el.getAttribute('data-args');
@@ -30,7 +34,10 @@ function resolverArgs(el, e) {
       return null;
     }
   }
-  if (el.hasAttribute('data-arg-event')) args.push(e);
+  // `event` vem antes (os handlers de submit usam `fn(event, ...)`); `el.value` e o
+  // próprio elemento vêm depois (os handlers usam `fn(..., this.value)`/`fn(..., this)`).
+  if (el.hasAttribute('data-arg-event')) args = [e, ...args];
+  if (el.hasAttribute('data-arg-val')) args.push(el.value);
   if (el.hasAttribute('data-arg-el')) args.push(el);
   return args;
 }
@@ -39,6 +46,9 @@ function makeDispatcher(attr) {
   return function dispatch(e) {
     const el = e.target.closest(`[${attr}]`);
     if (!el) return;
+    // Filtro de tecla (keydown): só age na tecla declarada.
+    const key = el.getAttribute('data-key');
+    if (key && e.key !== key) return;
     if (el.hasAttribute('data-stop')) e.stopPropagation();
     if (el.hasAttribute('data-prevent')) e.preventDefault();
     const fnName = el.getAttribute(attr);
@@ -53,18 +63,31 @@ function makeDispatcher(attr) {
   };
 }
 
+// (evento DOM, atributo). Tudo em CAPTURA — inclusive `blur`, que não borbulha mas
+// propaga na descida da captura, então um único listener no document o alcança.
+const MAPA_EVENTOS = [
+  ['click', 'data-action'],
+  ['change', 'data-action-change'],
+  ['input', 'data-action-input'],
+  ['submit', 'data-action-submit'],
+  ['keydown', 'data-action-keydown'],
+  ['blur', 'data-action-blur'],
+];
+
 let ligado = false;
 /**
  * Liga a delegação no document. Idempotente: chamadas repetidas não acumulam listeners.
  *
  * Fase de CAPTURA (3º arg = true), não bubbling: vários containers de modal/drawer
- * têm `onclick="event.stopPropagation()"` (ex. #modal em login.html) para não fechar
- * ao clicar dentro. No bubbling, isso IMPEDE o clique de chegar ao document e a
- * delegação não veria nenhum botão dentro de modal. A captura roda de cima para
- * baixo ANTES do bubbling, então o stopPropagation do bubble não a afeta.
+ * têm `data-action="__noop"`/stopPropagation para não fechar ao clicar dentro. No
+ * bubbling, um stopPropagation intermediário IMPEDE o evento de chegar ao document e
+ * a delegação não veria o alvo. A captura roda de cima para baixo ANTES do bubbling,
+ * então o stopPropagation do bubble não a afeta.
  */
 export function initDelegation() {
   if (ligado) return;
   ligado = true;
-  document.addEventListener('click', makeDispatcher('data-action'), true);
+  for (const [evento, attr] of MAPA_EVENTOS) {
+    document.addEventListener(evento, makeDispatcher(attr), true);
+  }
 }

@@ -276,7 +276,7 @@ window.__adminCopiarApiKey = () => {
             govImportHtml = `
                 <div class="form-group" style="margin-bottom: 1.25rem; border-bottom: 1px dashed var(--border); padding-bottom: 1.25rem;">
                     <label class="form-label" style="color:var(--accent)">Importar da Governança do Projeto</label>
-                    <select id="user-m-gov-import" class="form-input" onchange="window.importFromGovernance(this.value)">
+                    <select id="user-m-gov-import" class="form-input" data-action-change="importFromGovernance" data-arg-val>
                         <option value="">Selecione um membro para importar...</option>
                         ${govMembers.map((m, idx) => `<option value="${idx}">${escapeHTML(m.name)} (${escapeHTML(m.job_title)})</option>`).join('')}
                     </select>
@@ -331,7 +331,7 @@ window.__adminCopiarApiKey = () => {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Papel (Role)</label>
-                    <select id="user-m-role" class="form-input" onchange="toggleUserProjectSelect(this.value)">
+                    <select id="user-m-role" class="form-input" data-action-change="toggleUserProjectSelect" data-arg-val>
                         ${roleOptions}
                     </select>
                 </div>
@@ -448,7 +448,7 @@ window.__adminCopiarApiKey = () => {
                 <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
                     <div class="form-group" style="flex:1;min-width:220px;margin:0">
                         <label class="form-label">Projeto</label>
-                        <select class="form-input" onchange="S.apiKeysProjectId=this.value; render();">${projOptions}</select>
+                        <select class="form-input" data-action-change="__setFilter" data-args='["apiKeysProjectId"]' data-arg-val>${projOptions}</select>
                     </div>
                     <button class="btn btn-primary" data-action="openApiKeyModal" ${pid ? '' : 'disabled'}>+ Nova Chave</button>
                 </div>

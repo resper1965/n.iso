@@ -631,7 +631,7 @@ import { navigate } from '../router.js';
         const formHtml = `
             <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:16px">
                 <h4 style="font-family:'Montserrat',sans-serif; font-size:0.85rem; color:var(--accent); margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px" id="gov-form-title">Adicionar Novo Membro</h4>
-                <form id="add-gov-member-form" onsubmit="window.saveGovernanceMember(event, '${projectId}')" style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+                <form id="add-gov-member-form" data-action-submit="saveGovernanceMember" data-arg-event data-args='["${projectId}"]' style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
                     <div class="form-group" style="grid-column: span 2">
                         <label class="form-label">Nome Completo</label>
                         <input class="form-input" id="gov-name" required placeholder="Ex: Ricardo Esper">
@@ -1110,7 +1110,7 @@ import { navigate } from '../router.js';
                 </span>
                 <button class="btn-ghost" data-action="closeModal">&times;</button>
             </div>
-            <form id="stakeholder-form" onsubmit="window.saveStakeholder(event, ${isEdit ? '\'' + s.id + '\'' : 'null'})" style="margin-top:1rem">
+            <form id="stakeholder-form" data-action-submit="saveStakeholder" data-arg-event data-args='${escapeHTML(JSON.stringify([isEdit ? s.id : null]))}' style="margin-top:1rem">
                 <div class="form-group" style="margin-bottom:16px">
                     <label class="form-label">Nome / Identificação</label>
                     <input type="text" name="name" class="form-input" value="${s ? escapeHTML(s.name) : ''}" required style="width:100%" />
@@ -1278,7 +1278,7 @@ import { navigate } from '../router.js';
             <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
                 Nova Reunião de Análise Crítica (Cláusula 9.3)
             </div>
-            <form id="new-mgmt-form" onsubmit="window.saveNewMgmtReview(event)">
+            <form id="new-mgmt-form" data-action-submit="saveNewMgmtReview" data-arg-event>
                 <div class="form-group" style="margin-bottom:12px">
                     <label style="display:block;margin-bottom:4px;font-size:0.85rem">Data da Análise</label>
                     <input type="date" name="review_date" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)" />
@@ -1402,7 +1402,7 @@ import { navigate } from '../router.js';
             <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
                 Editar Ata da Análise Crítica (${review.review_date})
             </div>
-            <form id="edit-mgmt-form" onsubmit="window.saveMgmtReviewDetails(event, '${review.id}')">
+            <form id="edit-mgmt-form" data-action-submit="saveMgmtReviewDetails" data-arg-event data-args='["${review.id}"]'>
                 <div class="form-group" style="margin-bottom:16px">
                     <label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600">Participantes</label>
                     <textarea name="attendees" required style="width:100%;height:60px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:0.85rem">${escapeHTML(review.attendees || '')}</textarea>

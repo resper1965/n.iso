@@ -279,7 +279,7 @@ window.__grcCloseExecAudit = function (id) {
             <div class="modal-header"><span class="modal-title">Novo Risco</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group">
                 <label class="form-label">Ativo do Inventario (Opcional)</label>
-                <select class="form-input" id="risk-asset-select" onchange="window.onRiskAssetSelectChange(this)">
+                <select class="form-input" id="risk-asset-select" data-action-change="onRiskAssetSelectChange" data-arg-el>
                     <option value="">-- Escolha um ativo --</option>
                     ${assets.map(a => `<option value="${a.id}" data-name="${escapeHTML(a.name)}">${escapeHTML(a.name)} (${a.category})</option>`).join('')}
                     <option value="__manual__">-- Digitar manualmente --</option>
@@ -297,7 +297,7 @@ window.__grcCloseExecAudit = function (id) {
             </div>
             <div class="form-group">
                 <label class="form-label">Tratamento</label>
-                <select class="form-input" id="risk-treatment" onchange="window.onRiskTreatmentChange(this)">
+                <select class="form-input" id="risk-treatment" data-action-change="onRiskTreatmentChange" data-arg-el>
                     <option value="Mitigate">Mitigar</option>
                     <option value="Accept">Aceitar</option>
                     <option value="Transfer">Transferir</option>
@@ -630,9 +630,9 @@ window.__grcCloseExecAudit = function (id) {
             
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Certificacoes Conhecidas</div>
             <div style="display:flex; gap:1rem; margin-bottom:1rem">
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27001" onchange="window.previewVendorScore()"> ISO 27001</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27701" onchange="window.previewVendorScore()"> ISO 27701</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-soc2" onchange="window.previewVendorScore()"> SOC 2</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27001" data-action-change="previewVendorScore"> ISO 27001</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27701" data-action-change="previewVendorScore"> ISO 27701</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-soc2" data-action-change="previewVendorScore"> SOC 2</label>
             </div>
             
             <div class="form-group">
@@ -642,29 +642,29 @@ window.__grcCloseExecAudit = function (id) {
 
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Postura de Seguranca (Se houver questionario/dados)</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:1rem">
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-mfa" onchange="window.previewVendorScore()"> MFA Habilitado</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-enc" onchange="window.previewVendorScore()"> Criptografia Ativa</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-bkp" onchange="window.previewVendorScore()"> Backups Regulares</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-inc" onchange="window.previewVendorScore()"> Plano de Incidentes</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem; grid-column:span 2"><input type="checkbox" id="vnd-pen" onchange="window.previewVendorScore()"> Testes de Invasao (Pentest)</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-mfa" data-action-change="previewVendorScore"> MFA Habilitado</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-enc" data-action-change="previewVendorScore"> Criptografia Ativa</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-bkp" data-action-change="previewVendorScore"> Backups Regulares</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-inc" data-action-change="previewVendorScore"> Plano de Incidentes</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem; grid-column:span 2"><input type="checkbox" id="vnd-pen" data-action-change="previewVendorScore"> Testes de Invasao (Pentest)</label>
             </div>
 
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Canais Publicos (Trust Center / DPA Padrao)</div>
             <div class="form-group">
                 <label class="form-label">Trust Center / Security Portal (URL)</label>
-                <input class="form-input" id="vnd-tc-url" placeholder="Ex: https://aws.amazon.com/compliance/" oninput="window.previewVendorScore()">
+                <input class="form-input" id="vnd-tc-url" placeholder="Ex: https://aws.amazon.com/compliance/" data-action-input="previewVendorScore">
             </div>
             <div style="display:flex; gap:0.5rem">
                 <div class="form-group" style="flex:1">
                     <label class="form-label">DPA Assinado?</label>
-                    <select class="form-input" id="vnd-dpa" onchange="window.previewVendorScore()">
+                    <select class="form-input" id="vnd-dpa" data-action-change="previewVendorScore">
                         <option value="0">Nao</option>
                         <option value="1">Sim</option>
                     </select>
                 </div>
                 <div class="form-group" style="flex:2">
                     <label class="form-label">DPA URL (Padrao do Site)</label>
-                    <input class="form-input" id="vnd-dpa-url" placeholder="Ex: https://aws.amazon.com/dpa/" oninput="window.previewVendorScore()">
+                    <input class="form-input" id="vnd-dpa-url" placeholder="Ex: https://aws.amazon.com/dpa/" data-action-input="previewVendorScore">
                 </div>
             </div>
 
@@ -710,9 +710,9 @@ window.__grcCloseExecAudit = function (id) {
             
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Certificacoes Conhecidas</div>
             <div style="display:flex; gap:1rem; margin-bottom:1rem">
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27001" ${v.has_iso27001?'checked':''} onchange="window.previewVendorScore()"> ISO 27001</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27701" ${v.has_iso27701?'checked':''} onchange="window.previewVendorScore()"> ISO 27701</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-soc2" ${v.has_soc2?'checked':''} onchange="window.previewVendorScore()"> SOC 2</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27001" ${v.has_iso27001?'checked':''} data-action-change="previewVendorScore"> ISO 27001</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-iso27701" ${v.has_iso27701?'checked':''} data-action-change="previewVendorScore"> ISO 27701</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-soc2" ${v.has_soc2?'checked':''} data-action-change="previewVendorScore"> SOC 2</label>
             </div>
             
             <div class="form-group">
@@ -722,29 +722,29 @@ window.__grcCloseExecAudit = function (id) {
 
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Postura de Seguranca</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:1rem">
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-mfa" ${v.has_mfa?'checked':''} onchange="window.previewVendorScore()"> MFA Habilitado</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-enc" ${v.has_encryption?'checked':''} onchange="window.previewVendorScore()"> Criptografia Ativa</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-bkp" ${v.has_backup?'checked':''} onchange="window.previewVendorScore()"> Backups Regulares</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-inc" ${v.has_incident_plan?'checked':''} onchange="window.previewVendorScore()"> Plano de Incidentes</label>
-                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem; grid-column:span 2"><input type="checkbox" id="vnd-pen" ${v.has_pentest?'checked':''} onchange="window.previewVendorScore()"> Testes de Invasao (Pentest)</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-mfa" ${v.has_mfa?'checked':''} data-action-change="previewVendorScore"> MFA Habilitado</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-enc" ${v.has_encryption?'checked':''} data-action-change="previewVendorScore"> Criptografia Ativa</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-bkp" ${v.has_backup?'checked':''} data-action-change="previewVendorScore"> Backups Regulares</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem"><input type="checkbox" id="vnd-inc" ${v.has_incident_plan?'checked':''} data-action-change="previewVendorScore"> Plano de Incidentes</label>
+                <label style="font-size:0.7rem; color:var(--muted); display:flex; align-items:center; gap:0.25rem; grid-column:span 2"><input type="checkbox" id="vnd-pen" ${v.has_pentest?'checked':''} data-action-change="previewVendorScore"> Testes de Invasao (Pentest)</label>
             </div>
 
             <div class="card-label" style="margin-top:1rem; margin-bottom:0.5rem">Canais Publicos</div>
             <div class="form-group">
                 <label class="form-label">Trust Center / Security Portal (URL)</label>
-                <input class="form-input" id="vnd-tc-url" value="${escapeHTML(v.trust_center_url||'')}" placeholder="Ex: https://aws.amazon.com/compliance/" oninput="window.previewVendorScore()">
+                <input class="form-input" id="vnd-tc-url" value="${escapeHTML(v.trust_center_url||'')}" placeholder="Ex: https://aws.amazon.com/compliance/" data-action-input="previewVendorScore">
             </div>
             <div style="display:flex; gap:0.5rem">
                 <div class="form-group" style="flex:1">
                     <label class="form-label">DPA Assinado?</label>
-                    <select class="form-input" id="vnd-dpa" onchange="window.previewVendorScore()">
+                    <select class="form-input" id="vnd-dpa" data-action-change="previewVendorScore">
                         <option value="0" ${!v.dpa_signed?'selected':''}>Nao</option>
                         <option value="1" ${v.dpa_signed?'selected':''}>Sim</option>
                     </select>
                 </div>
                 <div class="form-group" style="flex:2">
                     <label class="form-label">DPA URL</label>
-                    <input class="form-input" id="vnd-dpa-url" value="${escapeHTML(v.dpa_url||'')}" placeholder="Ex: https://aws.amazon.com/dpa/" oninput="window.previewVendorScore()">
+                    <input class="form-input" id="vnd-dpa-url" value="${escapeHTML(v.dpa_url||'')}" placeholder="Ex: https://aws.amazon.com/dpa/" data-action-input="previewVendorScore">
                 </div>
             </div>
 
@@ -977,7 +977,7 @@ window.__grcCloseExecAudit = function (id) {
                     <input class="form-input" id="tr-evidence" style="flex:1" placeholder="Ex: Link do certificado ou upload de arquivo">
                     <label class="btn" style="padding:0.6rem 1rem; margin:0; cursor:pointer; font-size:0.8rem; display:flex; align-items:center; justify-content:center; white-space:nowrap">
                         Upload
-                        <input type="file" style="display:none" onchange="window.uploadTrainingEvidence(this, '${projectId}')">
+                        <input type="file" style="display:none" data-action-change="uploadTrainingEvidence" data-args='["${projectId}"]' data-arg-el>
                     </label>
                 </div>
                 <div id="tr-upload-status" style="font-size:0.7rem; color:var(--text-dim); margin-top:4px; display:none"></div>
@@ -1019,7 +1019,7 @@ window.__grcCloseExecAudit = function (id) {
                     <input class="form-input" id="tr-e-evidence" style="flex:1" placeholder="Ex: Link do certificado ou upload de arquivo" value="${escapeHTML(r.evidence_file||'')}">
                     <label class="btn" style="padding:0.6rem 1rem; margin:0; cursor:pointer; font-size:0.8rem; display:flex; align-items:center; justify-content:center; white-space:nowrap">
                         Upload
-                        <input type="file" style="display:none" onchange="window.uploadTrainingEvidence(this, '${projectId}')">
+                        <input type="file" style="display:none" data-action-change="uploadTrainingEvidence" data-args='["${projectId}"]' data-arg-el>
                     </label>
                 </div>
                 <div id="tr-upload-status" style="font-size:0.7rem; color:var(--text-dim); margin-top:4px; display:none"></div>
@@ -1710,7 +1710,7 @@ window.__grcCloseExecAudit = function (id) {
             <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:1.5rem;color:var(--accent)">
                 Registrar Achado — Controle ${controlStandard}
             </div>
-            <form id="finding-form" onsubmit="window.submitFinding(event, '${controlId}')">
+            <form id="finding-form" data-action-submit="submitFinding" data-arg-event data-args='["${controlId}"]'>
                 <div class="form-group" style="margin-bottom:12px">
                     <label style="display:block;margin-bottom:4px;font-size:0.85rem">Tipo de Achado</label>
                     <select name="finding_type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text)">
