@@ -487,19 +487,16 @@ import { navigate } from '../router.js';
     }
 
     window.renderProjectGovernance = function(members, projectId) {
+        // Organograma (D6): o DPO/Líder do SGSI é a ÂNCORA no topo; abaixo, um
+        // tronco desce para as ramificações por área. A âncora não se repete nas
+        // colunas. Ordem das áreas de cima p/ baixo na hierarquia de segurança.
         const categories = {
-            consultor: { label: 'Consultoria / Apoio', list: [] },
             executivo: { label: 'Liderança Executiva', list: [] },
             tech: { label: 'Tecnologia & Produto', list: [] },
-            operacoes: { label: 'Operações & Segurança', list: [] }
+            operacoes: { label: 'Operações & Segurança', list: [] },
+            consultor: { label: 'Consultoria / Apoio', list: [] }
         };
-        
-        members.forEach(m => {
-            if (categories[m.role_category]) {
-                categories[m.role_category].list.push(m);
-            }
-        });
-        
+
         const getInitials = name => {
             if (!name) return '??';
             const parts = name.trim().split(/\s+/);
@@ -507,7 +504,13 @@ import { navigate } from '../router.js';
             return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
         };
 
-        let colsHtml = '';
+        // A âncora é o primeiro membro marcado como is_primary (DPO/Líder).
+        const anchor = members.find(m => m.is_primary) || null;
+        members.forEach(m => {
+            if (anchor && m.id === anchor.id) return; // âncora não duplica nas colunas
+            if (categories[m.role_category]) categories[m.role_category].list.push(m);
+        });
+
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const manageBtn = canCrud ? `
             <button class="btn" style="padding:0.25rem 0.75rem; font-size:0.7rem; font-weight:600; height:28px" data-action="openGovernanceModal" data-args='["${projectId}"]'>
@@ -515,48 +518,58 @@ import { navigate } from '../router.js';
             </button>
         ` : '';
 
+        const badge = `<span class="org-badge">DPO / Líder</span>`;
+        const memberCard = (m) => `
+            <div class="gov-member-item">
+                <div class="gov-avatar">${escapeHTML(getInitials(m.name))}</div>
+                <div class="gov-member-info">
+                    <div class="gov-member-name">
+                        <span>${escapeHTML(m.name)}</span>
+                        ${m.is_primary ? badge : ''}
+                    </div>
+                    <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
+                    ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
+                </div>
+            </div>`;
+
+        const anchorHtml = anchor ? `
+            <div class="org-anchor">
+                <div class="gov-avatar org-anchor-avatar">${escapeHTML(getInitials(anchor.name))}</div>
+                <div class="org-anchor-info">
+                    <div class="org-anchor-name"><span>${escapeHTML(anchor.name)}</span>${badge}</div>
+                    <div class="org-anchor-title">${escapeHTML(anchor.job_title)}</div>
+                    ${anchor.email ? `<div class="gov-member-email org-anchor-email" title="${escapeHTML(anchor.email)}">${escapeHTML(anchor.email)}</div>` : ''}
+                </div>
+            </div>` : `
+            <div class="org-anchor org-anchor-empty">
+                <div class="org-anchor-name">DPO / Líder do SGSI não designado</div>
+                <div class="org-anchor-title">Defina o responsável máximo em “Gerenciar Governança”.</div>
+            </div>`;
+
+        let branchesHtml = '';
         for (const key in categories) {
             const cat = categories[key];
-            let membersHtml = cat.list.map(m => {
-                const primaryBadge = m.is_primary ? `<span style="font-weight:700; font-size:0.72rem; color:#00ade8; background:rgba(0,173,232,0.12); border:1px solid rgba(0,173,232,0.2); padding:1px 4px; border-radius:4px; margin-left:6px; text-transform:uppercase; font-family:'Montserrat',sans-serif; letter-spacing:0.5px">DPO / Líder</span>` : '';
-                const initials = getInitials(m.name);
-                return `
-                    <div class="gov-member-item">
-                        <div class="gov-avatar">${escapeHTML(initials)}</div>
-                        <div class="gov-member-info">
-                            <div class="gov-member-name">
-                                <span>${escapeHTML(m.name)}</span>
-                                ${primaryBadge}
-                            </div>
-                            <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
-                            ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
-                        </div>
+            const membersHtml = cat.list.map(memberCard).join('') || `<div class="gov-empty-list">Nenhum cadastrado</div>`;
+            branchesHtml += `
+                <div class="org-branch">
+                    <div class="gov-section-card">
+                        <div class="gov-section-title">${cat.label}</div>
+                        <div style="display:flex; flex-direction:column; gap:8px">${membersHtml}</div>
                     </div>
-                `;
-            }).join('') || `<div class="gov-empty-list">Nenhum cadastrado</div>`;
-            
-            colsHtml += `
-                <div class="gov-section-card">
-                    <div style="font-size:0.75rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px; margin-bottom:8px">${cat.label}</div>
-                    <div style="display:flex; flex-direction:column; gap:8px">
-                        ${membersHtml}
-                    </div>
-                </div>
-            `;
+                </div>`;
         }
-        
+
         return `
-            <!-- Painel de Governança/Organograma do Projeto -->
-            <div style="margin-bottom:1.5rem; padding:20px; background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:16px; backdrop-filter:blur(24px)">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-                    <div style="font-family:'Montserrat',sans-serif; font-weight:500; font-size:0.85rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px">Governança & Organograma do SGSI</div>
+            <!-- Organograma de Governança do SGSI (D6) -->
+            <div class="org-chart">
+                <div class="org-header">
+                    <div class="org-header-title">Governança & Organograma do SGSI</div>
                     ${manageBtn}
                 </div>
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;">
-                    ${colsHtml}
-                </div>
-            </div>
-        `;
+                ${anchorHtml}
+                <div class="org-trunk" aria-hidden="true"></div>
+                <div class="org-branches">${branchesHtml}</div>
+            </div>`;
     };
 
     window.renderGovernanceSelectOptions = function(members, selectedValue) {

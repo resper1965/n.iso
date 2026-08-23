@@ -1063,6 +1063,146 @@
             border-radius: 8px;
             background: rgba(0, 0, 0, 0.1);
         }
+
+        /* ————— ORGANOGRAMA DE GOVERNANÇA (D6) —————
+           Âncora (DPO/Líder) no topo → tronco → ramificações por área. Os
+           conectores são desenhados com pseudo-elementos e só aparecem no layout
+           em linha (desktop); no empilhamento mobile eles somem para não cruzar. */
+        .org-chart {
+            margin-bottom: 1.5rem;
+            padding: 24px 20px 20px;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            backdrop-filter: blur(24px);
+        }
+        .org-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .org-header-title {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .org-badge {
+            font-weight: 700;
+            font-size: 0.68rem;
+            color: #00ade8;
+            background: rgba(0, 173, 232, 0.12);
+            border: 1px solid rgba(0, 173, 232, 0.2);
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+            text-transform: uppercase;
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        /* Nó âncora: centralizado, destacado. */
+        .org-anchor {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            max-width: 420px;
+            margin: 0 auto;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(0, 173, 232, 0.08), rgba(0, 173, 232, 0.02));
+            border: 1px solid rgba(0, 173, 232, 0.28);
+            border-radius: 14px;
+            box-shadow: 0 6px 24px rgba(0, 173, 232, 0.08);
+        }
+        .org-anchor-empty {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            border-style: dashed;
+            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.12);
+        }
+        .org-anchor-avatar {
+            width: 48px;
+            height: 48px;
+            font-size: 0.95rem;
+            background: rgba(0, 173, 232, 0.14);
+            border-color: rgba(0, 173, 232, 0.3);
+        }
+        .org-anchor-info { min-width: 0; }
+        .org-anchor-name {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .org-anchor-title {
+            font-size: 0.78rem;
+            color: rgba(229, 235, 255, 0.7);
+            margin-top: 2px;
+        }
+        .org-anchor-email { margin-top: 3px; }
+        /* Tronco vertical descendo da âncora. */
+        .org-trunk {
+            width: 2px;
+            height: 28px;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, rgba(0, 173, 232, 0.4), rgba(0, 173, 232, 0.15));
+        }
+        /* Ramificações: uma linha de cards, com barramento horizontal e “gotas”. */
+        .org-branches {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            position: relative;
+            padding-top: 24px;
+        }
+        /* Barramento horizontal ligando o tronco às gotas de cada ramo. */
+        .org-branches::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: rgba(0, 173, 232, 0.22);
+        }
+        .org-branch { position: relative; }
+        /* Gota vertical do barramento até o topo de cada card. */
+        .org-branch::before {
+            content: '';
+            position: absolute;
+            top: -24px;
+            left: 50%;
+            width: 2px;
+            height: 24px;
+            background: rgba(0, 173, 232, 0.22);
+        }
+        .gov-section-title {
+            font-size: 0.75rem;
+            color: var(--accent);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+        /* Mobile: uma coluna só — os conectores horizontais/gotas cruzariam feio,
+           então somem; o empilhamento vertical já comunica a hierarquia. */
+        @media (max-width: 640px) {
+            .org-branches { padding-top: 0; }
+            .org-branches::before,
+            .org-branch::before,
+            .org-trunk { display: none; }
+        }
 /* ─── ACESSIBILIDADE ─────────────────────────────────────────────────────
    O app é operável por teclado (o observador em globals.js dá tabindex/role/
    Enter-Espaço aos [onclick] que não são controles nativos), mas não havia
