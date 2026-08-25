@@ -39,7 +39,7 @@ controlsApp.put('/:id', async (c) => {
     }
     const v = await validateBody(c, controlUpdateSchema);
     if (!v.success) return v.response;
-    const { status, title, description } = v.data as any;
+    const { status, title, description, owner } = v.data as any;
 
     const atual = await c.env.DB.prepare(
       'SELECT project_id, description FROM compliance_controls WHERE id = ?'
@@ -53,6 +53,8 @@ controlsApp.put('/:id', async (c) => {
     if (status) { updates.push('status = ?'); values.push(status); }
     if (title) { updates.push('title = ?'); values.push(title); }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    // `owner` é metadado organizacional: grava sem tocar aprovações/maturity/status.
+    if (owner !== undefined) { updates.push('owner = ?'); values.push(owner); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
 
     // `description` é onde mora o texto da política do controle. Um documento

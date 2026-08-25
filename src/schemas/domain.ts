@@ -307,6 +307,10 @@ export const controlUpdateSchema = z.object({
   status: curtoOpcional,
   title: curtoOpcional,
   description: longoOpcional,
+  // `owner` é metadado organizacional (responsável pelo controle). Gravável por
+  // este endpoint sob o mesmo modelo de permissão; não toca status, aprovações
+  // (ciso_/ceo_) nem maturity. Aceita string vazia p/ limpar o responsável.
+  owner: curtoOpcional,
 }).passthrough();
 
 export const maturitySchema = z.object({

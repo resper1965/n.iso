@@ -187,6 +187,35 @@ projectsApp.post('/:id/revoke-approvals', async (c) => {
   }
 });
 
+// Reatribuição em lote do responsável (owner) dos controles de UM projeto:
+// troca `owner_from` por `owner_to` sem N chamadas ao PUT /controls/:id. `owner`
+// é metadado organizacional — não toca status, aprovações nem maturidade. O
+// isolamento por tenant vem do projectAccessMiddleware (mesmo padrão do lote de
+// revogação); o WHERE ainda amarra por project_id como defesa em profundidade.
+projectsApp.patch('/:id/controls', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({} as any));
+    // owner_from: valor atual a casar (obrigatório, não-vazio). owner_to: novo
+    // valor (obrigatório; string vazia limpa o responsável).
+    const ownerFrom = typeof body?.owner_from === 'string' ? body.owner_from.trim() : '';
+    const ownerTo = typeof body?.owner_to === 'string' ? body.owner_to : undefined;
+    if (!ownerFrom) return c.json({ error: "Campo 'owner_from' é obrigatório (responsável atual a reatribuir)" }, 400);
+    if (ownerTo === undefined) return c.json({ error: "Campo 'owner_to' é obrigatório (novo responsável; string vazia limpa)" }, 400);
+
+    const res = await c.env.DB.prepare(
+      `UPDATE compliance_controls SET owner = ?, updated_at = datetime('now')
+       WHERE project_id = ? AND owner = ?`
+    ).bind(ownerTo, projectId, ownerFrom).run();
+    const reatribuidos = (res as any).meta?.changes ?? 0;
+
+    await logAudit(c.env.DB, 'control.owner_reassigned_batch', c.get('user')?.email ?? 'system', `Reatribuição em lote de responsável: ${reatribuidos} controle(s) de "${ownerFrom}" para "${ownerTo || '(sem responsável)'}" no projeto ${projectId}`, '', '', projectId);
+    return c.json({ ok: true, owner_from: ownerFrom, owner_to: ownerTo, reassigned_count: reatribuidos });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao reatribuir responsável em lote', e);
+  }
+});
+
 // Migração idempotente: cifra em repouso os repository_token gravados em texto
 // claro (pré-D1). Só platform_admin; exige TOKEN_ENC_KEY configurada. Rodar uma
 // vez após provisionar o secret. Reexecutar é seguro — o que já está cifrado
