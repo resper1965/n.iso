@@ -1,0 +1,51 @@
+name: CodeQL
+
+# Análise estática de segurança (SAST) do GitHub. Agora que o repo é público, o
+# code scanning é gratuito. Cobre o código JS/TS do Worker e do frontend; os
+# achados aparecem na aba Security → Code scanning. Não substitui o CI de testes
+# — é a camada que pega classes de bug (injeção, path traversal, uso inseguro de
+# cripto) que teste unitário raramente cobre.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Semanal: pega CVEs novas em padrões já mergeados, sem depender de push.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          # security-and-quality traz, além de segurança, regras de qualidade.
+          queries: security-and-quality
+
+      # JS/TS é interpretado: o autobuild é no-op, mas mantém o passo padrão.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
