@@ -1,0 +1,87 @@
+name: Apply DB migrations (manual)
+
+# O workflow de Deploy RECUSA publicar com migration pendente, e de propósito NÃO
+# aplica sozinho: migration em produção pode reconstruir tabela com PII e exige
+# backup verificado antes. Este workflow é o caminho AUTORIZADO e manual para
+# aplicar as migrations pendentes SEM depender de um terminal local com wrangler.
+#
+# Fluxo: backup do D1 (salvo como artifact) -> lista pendentes -> aplica ->
+# confirma que zerou. Depois disto, rode o workflow "Deploy".
+#
+# Pré-requisitos (mesmos do Deploy): secret `CLOUDFLARE_API_TOKEN` (D1 Edit) e o
+# environment `production` (onde vive o gate de reviewer, se configurado).
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Digite APLICAR para confirmar (aplica migrations em PRODUÇÃO).'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # Nunca dois applies simultâneos no mesmo banco.
+  group: db-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Exigir confirmação explícita
+        if: ${{ inputs.confirmar != 'APLICAR' }}
+        run: |
+          echo "::error::Confirmação ausente. Re-execute e digite APLICAR no campo 'confirmar'."
+          exit 1
+
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Backup ANTES de qualquer mutação. Vira artifact recuperável (30 dias).
+      - name: Backup do D1 (remoto)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          mkdir -p backups
+          npx wrangler d1 export niso-db --remote --output backups/niso-backup.sql
+          ls -lh backups/niso-backup.sql
+
+      - name: Guardar backup como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ github.run_id }}
+          path: backups/niso-backup.sql
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Migrations pendentes (antes)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations list niso-db --remote
+
+      # CI=true (setado pelo runner) faz o wrangler aplicar sem prompt interativo.
+      - name: Aplicar migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply niso-db --remote
+
+      - name: Confirmar que zerou
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -o pipefail
+          saida=$(npx wrangler d1 migrations list niso-db --remote 2>&1 | tee /dev/stderr)
+          if echo "$saida" | grep -q "No migrations to apply"; then
+            echo "✅ Migrations aplicadas. Agora rode o workflow 'Deploy'."
+            exit 0
+          fi
+          echo "::error::Ainda há migration pendente após o apply — verifique o log acima."
+          exit 1
