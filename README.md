@@ -1,6 +1,13 @@
 # nISO — Agentic GRC System
 
+[![CI](https://github.com/resper1965/nISO/actions/workflows/ci.yml/badge.svg)](https://github.com/resper1965/nISO/actions/workflows/ci.yml)
+[![Deploy](https://github.com/resper1965/nISO/actions/workflows/deploy.yml/badge.svg)](https://github.com/resper1965/nISO/actions/workflows/deploy.yml)
+![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)
+![Stack](https://img.shields.io/badge/stack-Cloudflare%20Workers%20%2B%20D1%20%2B%20R2%20%2B%20Vectorize-f38020.svg)
+
 O **nISO** é a evolução do sistema de adequação ISO 27001 da **ness.**, migrado para uma arquitetura agêntica e serverless sobre a stack da Cloudflare.
+
+> **Produção:** `https://niso.ness.com.br` (também `n-iso.ness.com.br` e `niso.ness.workers.dev`).
 
 ## Quick Start
 
@@ -11,7 +18,27 @@ O **nISO** é a evolução do sistema de adequação ISO 27001 da **ness.**, mig
     npx wrangler d1 execute niso-db --local --file=./schema.sql
     npx wrangler d1 migrations apply niso-db --local
     ```
-4.  **Deploy**: `npm run deploy` — faça backup antes (`npm run db:backup`, runbook em `backups/README.md`).
+## Deploy & operação
+
+O deploy é **automatizado** pelo workflow `Deploy` (a cada push na `main`), mas com
+um gate deliberado: **recusa publicar se houver migration D1 pendente** — publicar
+código que consulta tabela inexistente já custou caro aqui.
+
+**Fluxo pela aba Actions (sem terminal):**
+1. **Apply DB migrations (manual)** → *Run workflow* → digite `APLICAR`. Faz backup
+   do D1 (artifact) e aplica as migrations pendentes.
+2. **Deploy** → *Run workflow* (`main`). Com as migrations aplicadas, publica.
+
+**Deploy local (não usa GitHub Actions — útil se o billing de Actions estiver bloqueado):**
+```bash
+npx wrangler login
+npm run db:backup                                   # backup verificado antes de mutar
+npx wrangler d1 migrations apply niso-db --remote   # aplica pendentes
+npm run deploy                                       # build do frontend + wrangler deploy
+```
+
+> Segredos (`SETUP_KEY`, `TOKEN_ENC_KEY`) ficam em *wrangler secrets*, nunca no git:
+> `npx wrangler secret put <NOME>`.
 
 ## Features
 
@@ -55,7 +82,10 @@ As variáveis de ambiente e bindings estão configuradas no `wrangler.jsonc`.
 
 ## License
 
-© 2026 ness. Cybersecurity. Todos os direitos reservados.
+Proprietária — © 2026 ness. Cybersecurity. Todos os direitos reservados. Ver
+[`LICENSE`](LICENSE). Visualizar o repositório não concede direito de uso, cópia
+ou distribuição. Componentes de terceiros (ex.: skills adaptadas sob MIT) mantêm
+sua própria licença e atribuição.
 
 ---
 **ness.** · Cybersecurity Enterprise Grade

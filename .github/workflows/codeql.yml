@@ -27,6 +27,11 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    # Só roda em repo PÚBLICO: em repo privado, o upload do code scanning exige
+    # GitHub Advanced Security (pago) e falharia com "Code scanning is not
+    # enabled", queimando minutos a cada push/PR/semana. O job é pulado (não
+    # falha) quando o repo é privado.
+    if: ${{ github.event.repository.private == false }}
     strategy:
       fail-fast: false
       matrix:

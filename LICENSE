@@ -1,0 +1,33 @@
+nISO — Proprietary License
+Copyright (c) 2026 ness. Cybersecurity. All Rights Reserved.
+
+This software and its associated source code, documentation, and other files in
+this repository (collectively, the "Software") are the proprietary and
+confidential property of ness. Cybersecurity ("ness.").
+
+No license, right, or permission is granted to any person or entity to use,
+copy, reproduce, modify, adapt, merge, publish, distribute, sublicense, sell,
+or create derivative works of the Software, in whole or in part, by any means,
+without the prior express written permission of ness.
+
+Viewing this repository (for example, because it is hosted publicly) does not
+grant any of the rights above. All rights not expressly granted are reserved.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL ness. BE LIABLE
+FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Contact: legal@ness.lat
+
+---
+
+Third-party components
+
+Portions of the knowledge skills (e.g. the ISO 27001 skill) are adapted from
+third-party material released under the MIT License and retain their original
+license and attribution as noted in the respective files and in AGENTS.md. Those
+third-party portions remain governed by their own licenses; this proprietary
+license applies to ness.'s own code and content.
