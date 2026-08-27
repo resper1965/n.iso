@@ -126,6 +126,7 @@ projectsApp.put('/:id', async (c) => {
       repository_url?: string;
       repository_token?: string;
       standards?: string;
+      scope?: string;
     }>();
     // `standards` não é editável por aqui — é derivado do control-set (definido
     // pelos endpoints seed-27701-2025 / migrate). Erro EXPLÍCITO em vez do
@@ -137,6 +138,9 @@ projectsApp.put('/:id', async (c) => {
     const values: any[] = [];
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
     if (body.project_name !== undefined) { updates.push('project_name = ?'); values.push(body.project_name); }
+    // `scope` (escopo do SGSI / descrição, ex.: residência de dado) é gravável
+    // pelo mesmo modelo de permissão dos demais campos deste handler.
+    if (body.scope !== undefined) { updates.push('scope = ?'); values.push(body.scope); }
     if (body.repository_url !== undefined) { updates.push('repository_url = ?'); values.push(body.repository_url); }
     if (body.repository_token !== undefined) {
       // Cifra em repouso quando há chave. Sem TOKEN_ENC_KEY (dev/legado), grava
@@ -278,7 +282,14 @@ projectsApp.put('/:id/phases/:num', async (c) => {
     if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(projectId, num);
-    await c.env.DB.prepare(`UPDATE project_phases SET ${updates.join(', ')} WHERE project_id = ? AND phase_number = ?`).bind(...values).run();
+    const res = await c.env.DB.prepare(`UPDATE project_phases SET ${updates.join(', ')} WHERE project_id = ? AND phase_number = ?`).bind(...values).run();
+    // Fim do no-op silencioso: a rota casa por `phase_number` (0..N), não por
+    // phase_id. Um `num` inexistente (ex.: id passado no lugar do número) casava
+    // 0 linhas e ainda devolvia {ok:true} — indistinguível de gravação real.
+    // Agora 0 linhas afetadas = 404 explícito.
+    if (((res as any).meta?.changes ?? 0) === 0) {
+      return c.json({ error: `Fase ${num} não encontrada no projeto ${projectId}. Use o phase_number (0..N), não o phase_id.` }, 404);
+    }
     await logAudit(c.env.DB, 'phase.updated', c.get('user')?.email ?? 'system', `Fase ${num} do projeto ${projectId} atualizada`, '', '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
