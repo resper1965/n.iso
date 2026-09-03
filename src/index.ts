@@ -38,6 +38,7 @@ import { controlAdequacaoApp } from './routes/control-adequacao';
 import risks from './routes/risks';
 import policies from './routes/policies';
 import integrations from './routes/integrations';
+import { manutencaoDiaria } from './manutencao';
 
 export type Bindings = {
   DB: D1Database;
@@ -329,4 +330,21 @@ app.onError((err, c) => {
   return c.json({ error: 'Erro interno do servidor', ...(detail ? { detail } : {}) }, 500);
 });
 
-export default app;
+/**
+ * O worker precisa expor `fetch` E `scheduled`. O default continua sendo o app
+ * do Hono — só ganha o `scheduled` por cima.
+ *
+ * Escrito assim, e não como um objeto novo `{ fetch, scheduled }`, porque o app
+ * é importado como default por ~20 arquivos de teste e parte deles usa o helper
+ * `.request()` do Hono, que um objeto novo não teria. Trocar o formato do export
+ * custaria editar testes que esta mudança não tem motivo para tocar.
+ *
+ * `scheduled` é o cron de manutenção (ver `src/manutencao.ts` e o bloco
+ * `triggers` do `wrangler.jsonc`). O `waitUntil` mantém a invocação viva até a
+ * rotina terminar — sem ele o runtime pode encerrá-la no meio do DELETE.
+ */
+export default Object.assign(app, {
+  scheduled: (_evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
+    ctx.waitUntil(manutencaoDiaria(env));
+  },
+});

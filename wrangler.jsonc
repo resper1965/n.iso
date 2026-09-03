@@ -18,6 +18,14 @@
 	"observability": {
 		"enabled": true
 	},
+
+	// Cron de manutenção (ver src/manutencao.ts). Diário às 04:10 UTC — fora do
+	// horário comercial no Brasil e deslocado da hora cheia, onde a fila de cron
+	// da Cloudflare é mais disputada. É a PRIMEIRA execução periódica do
+	// sistema; até aqui nada rodava sozinho.
+	"triggers": {
+		"crons": ["10 4 * * *"]
+	},
 	"upload_source_maps": true,
 
 	/**

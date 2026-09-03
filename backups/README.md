@@ -3,7 +3,17 @@
 > ⚠️ **Faça um backup ANTES de aplicar qualquer migration de hardening de dados.**
 > Os dumps (`*.sql`) NÃO são versionados (gitignored) — podem conter PII.
 
-## Backup de produção (execute você mesmo, com as credenciais da conta)
+## Backup automático (desde 2026-09)
+
+O backup de produção passou a rodar sozinho: `.github/workflows/db-backup.yml`,
+diariamente às 03:40 UTC, com verificação do dump (tamanho mínimo, tabelas
+essenciais presentes, contagem compatível com o `schema.sql`) e issue automática
+se falhar. O arquivo fica como artifact da execução, por 30 dias.
+
+Enquanto houver issue aberta com a label `backup`, considere que **não há
+backup recente** — é esse o sinal.
+
+## Backup de produção sob demanda (execute você mesmo, com as credenciais da conta)
 
 ```bash
 # Requer login na conta Cloudflare (wrangler login) com acesso ao D1 `niso-db`.
