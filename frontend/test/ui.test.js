@@ -9,6 +9,7 @@ import {
     renderStatCards,
     renderStatusBadge,
     renderDataTable,
+    traduzStatus,
 } from '../src/ui.js';
 
 describe('escapeHTML()', () => {
@@ -221,5 +222,42 @@ describe('renderDataTable()', () => {
             { name: 'b', status: 'y' },
         ]);
         expect((html.match(/<tr /g) || []).length).toBe(3); // 1 cabecalho + 2 dados
+    });
+});
+
+
+describe('traduzStatus()', () => {
+    // O dicionário saiu de dentro do `renderStatusBadge` porque nem toda tela
+    // usa badge: a lista de riscos e a de controles pintam o valor com estilo
+    // próprio e mostravam "High", "Medium", "Completed" e "In Progress" crus.
+    it('traduz o vocabulário que o banco grava em inglês', () => {
+        expect(traduzStatus('High')).toBe('Alto');
+        expect(traduzStatus('Medium')).toBe('Médio');
+        expect(traduzStatus('Completed')).toBe('Concluído');
+        expect(traduzStatus('In Progress')).toBe('Em Andamento');
+        expect(traduzStatus('Treated')).toBe('Tratado');
+        expect(traduzStatus('Mitigate')).toBe('Mitigar');
+    });
+
+    it('não depende de caixa nem de espaço em volta', () => {
+        expect(traduzStatus('  hIgH  ')).toBe('Alto');
+    });
+
+    it('valor desconhecido volta como veio — apagar a informação é pior', () => {
+        expect(traduzStatus('Frobnicated')).toBe('Frobnicated');
+    });
+
+    it('vazio, null e undefined viram string vazia (nunca "undefined" na tela)', () => {
+        // Era exatamente isto que aparecia em Riscos: "Tratamento: undefined".
+        expect(traduzStatus(undefined)).toBe('');
+        expect(traduzStatus(null)).toBe('');
+        expect(traduzStatus('')).toBe('');
+    });
+
+    it('NÃO escapa — quem chama é que escapa, e o badge já faz isso', () => {
+        // Deixar o escape aqui esconderia a responsabilidade de quem interpola
+        // o valor direto no HTML, que é onde o bug estava.
+        expect(traduzStatus('<b>x</b>')).toBe('<b>x</b>');
+        expect(renderStatusBadge('<b>x</b>', 'info')).toContain('&lt;b&gt;');
     });
 });

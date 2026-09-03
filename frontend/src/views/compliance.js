@@ -1,6 +1,6 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
-import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
+import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
 
     function renderControls(c, h, a) {
@@ -20,7 +20,7 @@ import { navigate } from '../router.js';
                     <div class="phase-title">${escapeHTML(ctrl.title)}</div>
                     ${ctrl.maturity ? `<div style="font-size:0.72rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
                 </div>
-                <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${escapeHTML(ctrl.status)}</div>
+                <div class="phase-status ${ctrl.status==='Compliant'?'status-done':ctrl.status==='Partial'?'status-progress':'status-pending'}">${escapeHTML(traduzStatus(ctrl.status))}</div>
             </div>`).join('')}</div>`;
     }
 
@@ -1382,7 +1382,7 @@ import { navigate } from '../router.js';
                                 <tbody>
                                     ${versions.map((v, i) => `
                                         <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-                                            <td style="padding:6px 12px; font-weight:600; color:var(--accent)">v${v.version}</td>
+                                            <td style="padding:6px 12px; font-weight:600; color:var(--accent)">v${escapeHTML(v.version)}</td>
                                             <td style="padding:6px 12px">${new Date(v.created_at).toLocaleDateString()}</td>
                                             <td style="padding:6px 12px">${escapeHTML(v.created_by)}</td>
                                             <td style="padding:6px 12px">
