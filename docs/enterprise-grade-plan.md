@@ -178,8 +178,20 @@ sem o binding `ASSETS`.
 | 2.1 | Ambiente `staging` no `wrangler.jsonc` (D1, KV, R2 e Vectorize próprios) | `wrangler deploy --env staging` publica; produção intocada |
 | 2.2 | Deploy em dois passos: `main` → staging → aprovação → produção | workflow com `environment: staging` antes de `production` |
 | 2.3 | Migration ensaiada em staging antes de produção | passo do `db-migrate.yml` que aplica em staging primeiro |
-| 2.4 | Handler `scheduled` + cron triggers | backup diário verificado, purga de `rate_limits`, expiração de token de auditor |
-| 2.5 | Runbook de incidente em `docs/` | quem aciona, como reverter deploy, como restaurar D1, como comunicar |
+| 2.4a | ~~Handler `scheduled` + cron trigger~~ **feito** | `src/manutencao.ts` + `triggers.crons` no `wrangler.jsonc`: purga de `rate_limits` e de token de auditor vencido. É a PRIMEIRA execução periódica do sistema |
+| 2.4b | ~~Backup diário verificado~~ **feito** | `.github/workflows/db-backup.yml`, agendado, com verificação do dump e issue automática se falhar |
+| 2.5 | ~~Runbook de incidente~~ **feito** | `docs/runbook-incidente.md`: sonda, reverter deploy, restaurar D1, migration ruim, MFA perdido, acesso indevido, comunicar |
+
+Os itens 2.4 e 2.5 não exigem infraestrutura nova e estão feitos. Os itens
+2.1–2.3 exigem: um ambiente de staging duplica D1, KV, R2 e Vectorize, e é a
+única parte do plano que precisa de decisão de orçamento antes de código.
+
+> **Correção ao próprio plano.** O item 2.4 juntava "backup diário verificado" e
+> "purga" num handler `scheduled` só. Não cabem no mesmo lugar: o binding D1 não
+> expõe API de export, então um Worker não consegue fazer backup — quem exporta é
+> o `wrangler d1 export`, que é CLI. O backup virou workflow agendado (2.4b) e a
+> purga ficou no cron do Worker (2.4a). Escrever o item errado custou barato aqui
+> porque apareceu na implementação; teria custado caro como promessa a cliente.
 
 ### Onda 3 — Contrato e operação
 
