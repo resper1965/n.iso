@@ -17,7 +17,7 @@
   "dependencies": {
     "@cloudflare/vitest-pool-workers": "^0.20.3",
     "@types/node": "^26.1.1",
-    "hono": "^4.12.27",
+    "hono": "^4.13.5",
     "typescript": "^5.5.2",
     "vitest": "^4.1.10",
     "wrangler": "^4.107.0",

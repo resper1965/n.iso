@@ -419,4 +419,172 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       expect(dpia.dpo_approved_by).toBe('Admin do A');
     });
   });
+
+  /**
+   * Recursos que existiam no código e não no inventário deste teste.
+   *
+   * O bloco acima cobria 13 recursos; o levantamento de 2026-09 encontrou mais
+   * 9 rotas mutantes de topo — mesma forma, mesma exposição, nenhuma asserção.
+   * Que todas passem na primeira execução não torna o bloco inútil: a guarda
+   * existir hoje e continuar existindo amanhã são fatos diferentes, e é o
+   * segundo que um teste sustenta.
+   *
+   * `notifications` entra por outro motivo e por isso não está na tabela: o
+   * escopo dela não é o projeto, é o DONO, e o handler responde 200 mesmo
+   * quando não altera nada. Ali o status não prova coisa alguma — só a linha.
+   */
+  describe('Recursos de topo que faltavam ao inventário', () => {
+    beforeAll(async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO corrective_actions (id, project_id, title, status) VALUES (?,?,?,?)`)
+          .bind('capa-a', A, 'CAPA do A', 'Open'),
+        env.DB.prepare(`INSERT INTO corrective_actions (id, project_id, title, status) VALUES (?,?,?,?)`)
+          .bind('capa-b', B, 'CAPA secreta do B', 'Open'),
+
+        env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES (?,?,?)`)
+          .bind('ropa-a', A, 'Tratamento do A'),
+        env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES (?,?,?)`)
+          .bind('ropa-b', B, 'Tratamento secreto do B'),
+
+        env.DB.prepare(`INSERT INTO certification_tracking (id, project_id, standard, stage) VALUES (?,?,?,?)`)
+          .bind('cert-a', A, 'ISO 27001:2022', 'Gap Assessment'),
+        env.DB.prepare(`INSERT INTO certification_tracking (id, project_id, standard, stage) VALUES (?,?,?,?)`)
+          .bind('cert-b', B, 'ISO 27001:2022', 'Gap Assessment'),
+
+        env.DB.prepare(`INSERT INTO assets (id, project_id, name) VALUES (?,?,?)`).bind('ast-a', A, 'Ativo do A'),
+        env.DB.prepare(`INSERT INTO assets (id, project_id, name) VALUES (?,?,?)`).bind('ast-b', B, 'Ativo secreto do B'),
+
+        env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, processing_name, status) VALUES (?,?,?,?)`)
+          .bind('dpia-inv-a', A, 'DPIA do A', 'Draft'),
+        env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, processing_name, status) VALUES (?,?,?,?)`)
+          .bind('dpia-inv-b', B, 'DPIA secreta do B', 'Draft'),
+
+        env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events) VALUES (?,?,?,?)`)
+          .bind('wh-a', A, 'https://exemplo.test/a', 'evidence.uploaded'),
+        env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events) VALUES (?,?,?,?)`)
+          .bind('wh-b', B, 'https://exemplo.test/b', 'evidence.uploaded'),
+
+        env.DB.prepare(`INSERT INTO api_keys (id, project_id, key_hash, name) VALUES (?,?,?,?)`)
+          .bind('key-b', B, 'hash-b', 'Chave do B'),
+
+        // Auditoria descartável do A, para o DELETE legítimo não derrubar a
+        // `aud-a`, de que os casos de achado dependem.
+        env.DB.prepare(`INSERT INTO audit_schedule (id, project_id, audit_type, title, scheduled_date) VALUES (?,?,?,?,?)`)
+          .bind('aud-a-descartavel', A, 'Interna', 'Auditoria descartavel do A', '2026-01-01'),
+
+        // Notificação de OUTRO usuário — nem do A, nem do B.
+        env.DB.prepare(`INSERT INTO notifications (id, user_id, type, title, read) VALUES (?,?,?,?,?)`)
+          .bind('notif-alheia', 'u-staff', 'assessment_done', 'Aviso do staff', 0),
+      ]);
+    });
+
+    const ataques: Array<[string, string, string, string, any]> = [
+      ['PUT',    '/api/v1/capa/capa-b',            'corrective_actions',     'capa-b',  { title: 'Alterado por A', status: 'Closed' }],
+      ['DELETE', '/api/v1/capa/capa-b',            'corrective_actions',     'capa-b',  null],
+      ['PUT',    '/api/v1/ropa/ropa-b',            'ropa_records',           'ropa-b',  { processing_purpose: 'Alterado por A' }],
+      ['DELETE', '/api/v1/ropa/ropa-b',            'ropa_records',           'ropa-b',  null],
+      ['PUT',    '/api/v1/certification/cert-b',   'certification_tracking', 'cert-b',  { stage: 'Certified' }],
+      ['DELETE', '/api/v1/certification/cert-b',   'certification_tracking', 'cert-b',  null],
+      ['PUT',    '/api/v1/assets/ast-b',           'assets',                 'ast-b',   { name: 'Alterado por A' }],
+      ['DELETE', '/api/v1/assets/ast-b',           'assets',                 'ast-b',   null],
+      ['PUT',    '/api/v1/dpia/dpia-inv-b',        'dpia_assessments',       'dpia-inv-b', { processing_name: 'Alterado por A' }],
+      ['DELETE', '/api/v1/webhooks/wh-b',          'webhooks',               'wh-b',    null],
+      ['POST',   '/api/v1/webhooks/test/wh-b',     'webhooks',               'wh-b',    {}],
+      ['PUT',    '/api/v1/audits/aud-b',           'audit_schedule',         'aud-b',   { audit_type: 'Interna', title: 'Alterado por A', scheduled_date: '2026-02-01', auditor_name: 'A', scope: 'x', status: 'Planned' }],
+      ['DELETE', '/api/v1/audits/aud-b',           'audit_schedule',         'aud-b',   null],
+    ];
+
+    it('recusa com 403 e deixa a linha do outro tenant intacta', async () => {
+      for (const [metodo, rota, tabela, id, corpo] of ataques) {
+        const res = await req(rota, {
+          method: metodo,
+          headers: corpo ? jsonA : orgAdminA,
+          body: corpo ? JSON.stringify(corpo) : undefined,
+        });
+        expect(res.status, `${metodo} ${rota}`).toBe(403);
+
+        const linha = await env.DB.prepare(`SELECT id FROM ${tabela} WHERE id = ?`).bind(id).first();
+        expect(linha, `${metodo} ${rota} apagou a linha do outro tenant`).not.toBeNull();
+      }
+
+      // Nenhum PUT recusado pode ter escrito o valor do atacante. O status 403
+      // sozinho não prova isto: um handler pode responder 403 depois de gravar.
+      const capa = await env.DB.prepare('SELECT title FROM corrective_actions WHERE id = ?').bind('capa-b').first<any>();
+      expect(capa.title).toBe('CAPA secreta do B');
+      const ropa = await env.DB.prepare('SELECT processing_purpose FROM ropa_records WHERE id = ?').bind('ropa-b').first<any>();
+      expect(ropa.processing_purpose).toBe('Tratamento secreto do B');
+      const cert = await env.DB.prepare('SELECT stage FROM certification_tracking WHERE id = ?').bind('cert-b').first<any>();
+      expect(cert.stage).toBe('Gap Assessment');
+      const ast = await env.DB.prepare('SELECT name FROM assets WHERE id = ?').bind('ast-b').first<any>();
+      expect(ast.name).toBe('Ativo secreto do B');
+      const dpia = await env.DB.prepare('SELECT processing_name FROM dpia_assessments WHERE id = ?').bind('dpia-inv-b').first<any>();
+      expect(dpia.processing_name).toBe('DPIA secreta do B');
+      const aud = await env.DB.prepare('SELECT title FROM audit_schedule WHERE id = ?').bind('aud-b').first<any>();
+      expect(aud.title).toBe('Auditoria B');
+    });
+
+    it('chave de API é do platform_admin: org_admin não revoga nem a do próprio tenant', async () => {
+      // Aqui a guarda que responde primeiro é o papel, não o tenant — e é a
+      // ordem certa: gestão de credencial não é operação de cliente.
+      const res = await req('/api/v1/api-keys/key-b', { method: 'DELETE', headers: orgAdminA });
+      expect(res.status).toBe(403);
+      const k = await env.DB.prepare('SELECT status FROM api_keys WHERE id = ?').bind('key-b').first<any>();
+      expect(k.status).toBe('Active');
+    });
+
+    it('notificação de outro usuário não é marcada como lida (o status é 200, a linha é que conta)', async () => {
+      await req('/api/v1/notifications/notif-alheia/read', { method: 'PUT', headers: jsonA });
+      const n = await env.DB.prepare('SELECT read FROM notifications WHERE id = ?').bind('notif-alheia').first<any>();
+      expect(n.read, 'marcou como lida a notificação de outro usuário').toBe(0);
+    });
+
+    it('POSITIVO: as mesmas rotas funcionam dentro do próprio projeto', async () => {
+      // Corpo COMPLETO de propósito: o handler liga cada coluna direto, então
+      // campo ausente vira `bind(undefined)` e estoura no D1. É a forma que o
+      // formulário do produto envia — este teste é de isolamento, não o lugar
+      // de cobrar tolerância a corpo parcial (item 3.3 do plano).
+      const putCapa = await req('/api/v1/capa/capa-a', {
+        method: 'PUT', headers: jsonA,
+        body: JSON.stringify({
+          title: 'CAPA do A revisada', description: 'Descricao', severity: 'Medium',
+          assigned_to: 'Fulano', due_date: '2026-03-01', status: 'Open',
+        }),
+      });
+      expect(putCapa.status, await putCapa.clone().text()).toBe(200);
+      const capa = await env.DB.prepare('SELECT title FROM corrective_actions WHERE id = ?').bind('capa-a').first<any>();
+      expect(capa.title).toBe('CAPA do A revisada');
+
+      const putRopa = await req('/api/v1/ropa/ropa-a', {
+        method: 'PUT', headers: jsonA, body: JSON.stringify({ processing_purpose: 'Tratamento do A revisado' }),
+      });
+      expect(putRopa.status, await putRopa.clone().text()).toBe(200);
+      const ropa = await env.DB.prepare('SELECT processing_purpose FROM ropa_records WHERE id = ?').bind('ropa-a').first<any>();
+      expect(ropa.processing_purpose).toBe('Tratamento do A revisado');
+
+      const putCert = await req('/api/v1/certification/cert-a', {
+        method: 'PUT', headers: jsonA, body: JSON.stringify({ stage: 'Stage 1' }),
+      });
+      expect(putCert.status, await putCert.clone().text()).toBe(200);
+      const cert = await env.DB.prepare('SELECT stage FROM certification_tracking WHERE id = ?').bind('cert-a').first<any>();
+      expect(cert.stage).toBe('Stage 1');
+
+      const putAst = await req('/api/v1/assets/ast-a', {
+        method: 'PUT', headers: jsonA,
+        body: JSON.stringify({ name: 'Ativo do A revisado', type: 'Servidor', category: 'Hardware', owner: 'TI', criticality: 'High', description: 'x' }),
+      });
+      expect(putAst.status, await putAst.clone().text()).toBe(200);
+      const ast = await env.DB.prepare('SELECT name FROM assets WHERE id = ?').bind('ast-a').first<any>();
+      expect(ast.name).toBe('Ativo do A revisado');
+
+      const delWh = await req('/api/v1/webhooks/wh-a', { method: 'DELETE', headers: orgAdminA });
+      expect(delWh.status, await delWh.clone().text()).toBe(200);
+      const wh = await env.DB.prepare('SELECT id FROM webhooks WHERE id = ?').bind('wh-a').first();
+      expect(wh).toBeNull();
+
+      const delAud = await req('/api/v1/audits/aud-a-descartavel', { method: 'DELETE', headers: orgAdminA });
+      expect(delAud.status, await delAud.clone().text()).toBe(200);
+      const aud = await env.DB.prepare('SELECT id FROM audit_schedule WHERE id = ?').bind('aud-a-descartavel').first();
+      expect(aud).toBeNull();
+    });
+  });
 });

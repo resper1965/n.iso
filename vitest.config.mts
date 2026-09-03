@@ -46,16 +46,20 @@ export default defineConfig({
       all: true,
       reporter: ['text-summary', 'html', 'json-summary', 'lcov'],
       reportsDirectory: 'coverage',
-      // Piso de catraca fixado alguns pontos abaixo do atingido (2026-08:
-      // ~55.8% stmts / 43% br / 62.6% fn / 57.7% lines, após os testes de
-      // agents/ (assessment, evidence) e services/ RAG (memory, knowledge,
-      // embeddings, policy-generator)) para barrar REGRESSAO sem inventar meta.
-      // Subir junto conforme os testes crescem.
+      // Piso de catraca fixado alguns pontos abaixo do atingido para barrar
+      // REGRESSAO sem inventar meta. Subir junto conforme os testes crescem.
+      //
+      // 2026-08: ~55.8% stmts / 43% br / 62.6% fn / 57.7% lines, após os testes
+      //   de agents/ (assessment, evidence) e services/ RAG.
+      // 2026-09: 65.5% stmts / 54.1% br / 72.4% fn / 68.0% lines, ao fim da
+      //   onda 1 do plano — contrato de isolamento das rotas de topo,
+      //   inventário de IDOR, portfólio/portal do cliente e o CRUD dos seis
+      //   módulos de projeto.
       thresholds: {
-        statements: 53,
-        branches: 40,
-        functions: 59,
-        lines: 55,
+        statements: 62,
+        branches: 50,
+        functions: 69,
+        lines: 64,
       },
     },
   },

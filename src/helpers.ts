@@ -222,6 +222,26 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
 const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
 
 /**
+ * O usuário é da equipe ness. (e não de um cliente)?
+ *
+ * Existe para que a decisão "vê a plataforma inteira" seja tomada por
+ * ALLOWLIST DE STAFF, nunca por allowlist de papel-cliente. A diferença é de
+ * direção de falha, e ela já custou caro: `users.role` é TEXT livre e
+ * `createUserSchema.role` é `z.string()`, então a lista de papéis-cliente
+ * (`org_admin`/`org_user`/`client`) nunca é exaustiva — um papel fora dela,
+ * como `ciso`, caía no ramo de plataforma e enxergava a carteira de TODOS os
+ * tenants. Invertida, a lista desconhecida cai no ramo escopado, que é o lado
+ * seguro de errar.
+ *
+ * É o mesmo conjunto que `requireResourceAccess` e `requireProjectAccess` já
+ * usam acima — deliberadamente a mesma fonte, para não haver duas definições
+ * de "staff" que possam divergir.
+ */
+export function ehEquipeNess(user: { role?: string } | undefined | null): boolean {
+  return !!user && PAPEIS_NESS.has(user.role ?? '');
+}
+
+/**
  * Guarda de papel para o pipeline comercial da ness. (lead → assessment →
  * proposta). Estes registros não pertencem a projeto nenhum: não existe
  * `project_id` para comparar, então `requireResourceAccess` não alcança essas

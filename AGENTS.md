@@ -131,8 +131,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
 - **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
   tocar e melhoria barata; nao precisa de permissao.
-- **2 de 22 arquivos de teste ainda mockam o D1**: `test/integration.test.ts` e
-  `test/mcp-integration.test.ts`. Os outros 14 que tocam banco usam o D1 real do
+- **1 de 58 arquivos de teste ainda mocka o D1**: `test/mcp-integration.test.ts`. Todos os demais que tocam banco usam o D1 real do
   `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
@@ -142,15 +141,20 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 - **~46 leituras de corpo sem schema semantico** (`projects`, `policies`,
   `assessments`, `platform`, `public`). O `bodyGuard` global cobre teto de
   tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
-- **324 handlers `onclick=` inline** no frontend. E por isso que o CSP tem
-  `'unsafe-inline'` em `script-src` — com ele, o CSP nao protege contra XSS
-  injetado. Migrar para `addEventListener` destrava trocar por nonce.
+- ~~**324 handlers `onclick=` inline**~~ **RESOLVIDO.** A migracao para delegacao
+  de eventos terminou (PRs #121–#134) e `'unsafe-inline'` saiu de `script-src`
+  em `src/index.ts`. Sobra 1 ocorrencia de `onclick=` no frontend. NAO
+  reintroduzir handler inline nem `<script>` inline: quebram sob o CSP atual e
+  reabrem o buraco.
 - **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
   em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
-- **9 vulnerabilidades no `npm audit`** (2 criticas), todas na cadeia de teste e
-  build — nenhuma chega no bundle do Worker. A correcao e o PR #22
-  (`vitest` 4 + TypeScript 7), que exige migrar o isolamento de storage dos
-  testes: a opcao `isolatedStorage` nao existe mais no pool 0.19.
+- ~~**9 vulnerabilidades no `npm audit`**~~ **RESOLVIDO** (2026-09): `npm audit`
+  esta em zero. A migracao para vitest 4 aconteceu e o ultimo advisory era do
+  proprio `hono` (<=4.12.33, ReDoS no middleware de CORS) — nao da cadeia de
+  build, ao contrario do que esta linha afirmava. Hoje em 4.13.5.
+  **Licao:** "todas na cadeia de teste e build" era verdade quando foi escrito e
+  deixou de ser sem que ninguem reavaliasse. Rode `npm audit` antes de repetir
+  a afirmacao.
 
 ## Segundo fator (MFA) — e como destravar alguem
 

@@ -295,6 +295,20 @@ app.get('/*', async (c) => {
 // 8. Handler de erro global: garante corpo JSON consistente em erros não capturados
 // e evita vazar detalhes internos ao cliente (o detalhe só é incluído se ENVIRONMENT for EXPLICITAMENTE 'development' ou 'test').
 app.onError((err, c) => {
+  // Negação de acesso NUNCA é 500. `requireResourceAccess` e
+  // `requireProjectAccess` sinalizam por exceção com o prefixo `Forbidden:`, e
+  // cada handler traduz isso para 403 no próprio catch — quando tem um. Onde a
+  // chamada ficou fora do try (ou não há try algum), a recusa escapava para cá
+  // e o cliente recebia 500: contrato errado e, pior, recusa de rotina contando
+  // como erro de servidor na taxa de 5xx que a operação monitora. Traduzir aqui
+  // fecha a classe inteira, inclusive para o handler que ainda não existe. O
+  // prefixo `Forbidden:` (COM os dois-pontos) é string nossa, produzida só
+  // pelas duas guardas em helpers.ts — nunca vem do usuário. Casar `Forbidden`
+  // sem o separador devolveria ao cliente a mensagem de qualquer Error que
+  // começasse com essa palavra.
+  if (err instanceof Error && err.message.startsWith('Forbidden:')) {
+    return c.json({ error: err.message }, 403);
+  }
   // Tudo aqui é defensivo de propósito: um handler de erro que estoura
   // substitui um 500 informativo por um erro sem corpo. O contexto pode estar
   // incompleto justamente porque a falha aconteceu cedo.

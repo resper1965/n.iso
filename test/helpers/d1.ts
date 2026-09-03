@@ -92,3 +92,25 @@ export async function seedTwoProjects(): Promise<void> {
     ).bind('proj-b', 'Cliente B', 'ISO 27001', 'controller', 'Active'),
   ]);
 }
+
+/**
+ * `env` do worker com o binding de IA trocado por stub.
+ *
+ * Oito arquivos de teste declaravam esta mesma função local. Ela vive aqui para
+ * que o stub de IA tenha UMA definição — teste que exercita rota com IA sem o
+ * stub estoura no `env.AI.run`, e descobrir isso arquivo a arquivo é
+ * desperdício. Os arquivos anteriores a 2026-09 ainda têm a cópia local;
+ * migram quando forem tocados.
+ */
+export function workerEnv(): any {
+  return { ...env, AI: { run: async () => ({ response: 'stub' }) } };
+}
+
+/** Requisição ao worker montado, com o `workerEnv()` acima. */
+export async function pedir(
+  worker: { fetch: (r: Request, e: any) => Promise<Response> },
+  caminho: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  return worker.fetch(new Request(`http://localhost${caminho}`, init), workerEnv());
+}
