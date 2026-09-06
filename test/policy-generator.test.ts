@@ -4,7 +4,7 @@
 // para v2022 em 404, a interpolação dos placeholders e o ID dinâmico do
 // documento. O `assetsFetcher` é dublado — nada toca o binding ASSETS real.
 import { describe, it, expect, vi } from 'vitest';
-import { PolicyGeneratorService } from '../src/services/policy-generator';
+import { PolicyGeneratorService, TemplateNaoEncontrado } from '../src/services/policy-generator';
 import type { PolicyContext } from '../src/services/policy-generator';
 
 const baseCtx: PolicyContext = {
@@ -56,7 +56,9 @@ describe('generate — validações de trust boundary', () => {
   const svc = new PolicyGeneratorService('/base', fetcher({}));
 
   it('rejeita nome de template fora do charset seguro', async () => {
-    await expect(svc.generate('../etc/passwd', baseCtx)).rejects.toThrow(/inválido/);
+    // Recusa por TIPO: nome fora do charset é tratado como template
+    // inexistente (404 na rota), e não como erro de servidor.
+    await expect(svc.generate('../etc/passwd', baseCtx)).rejects.toBeInstanceOf(TemplateNaoEncontrado);
   });
 
   it('rejeita versão de norma desconhecida', async () => {
@@ -109,18 +111,34 @@ describe('generate — renderização', () => {
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('propaga erro quando o template não existe em nenhuma versão', async () => {
+  it('template ausente lança TemplateNaoEncontrado — o tipo é o que vira 404 na rota', async () => {
+    // O tipo importa mais que a mensagem: é ele que `routes/policies.ts` usa
+    // para responder 404 em vez de 500. Asserção sobre o texto passaria mesmo
+    // se o erro voltasse a ser um `Error` genérico.
     const svc = new PolicyGeneratorService('/base', fetcher({}));
-    await expect(svc.generate('isms-policy', baseCtx)).rejects.toThrow(/not found/);
+    await expect(svc.generate('isms-policy', baseCtx)).rejects.toBeInstanceOf(TemplateNaoEncontrado);
+  });
+
+  it('falha 5xx do ASSETS NÃO vira 404 — é falha nossa, não pedido inválido', async () => {
+    const svc = new PolicyGeneratorService('/base', fetcher({
+      '/templates/policies/v2022/isms-policy.md': { status: 503, body: '' },
+    }));
+    const erro = await svc.generate('isms-policy', baseCtx).catch((e) => e);
+    expect(erro).toBeInstanceOf(Error);
+    expect(erro).not.toBeInstanceOf(TemplateNaoEncontrado);
   });
 });
 
 describe('listAvailableTemplates', () => {
-  it('lista os templates conhecidos incluindo isms-policy e soa-template', async () => {
+  it('lista os templates conhecidos', async () => {
+    // Este teste afirmava que a lista contém `soa-template` — e o arquivo nunca
+    // existiu, então ele pinava a falha em vez de pegá-la. Quem confere se cada
+    // nome tem arquivo é `test/policies-templates.test.ts`, com o ASSETS real;
+    // aqui fica só a forma da lista.
     const svc = new PolicyGeneratorService('/base');
     const list = await svc.listAvailableTemplates();
     expect(list).toContain('isms-policy');
-    expect(list).toContain('soa-template');
+    expect(new Set(list).size, 'nome repetido no catálogo').toBe(list.length);
     expect(list.length).toBeGreaterThan(10);
   });
 });

@@ -13,9 +13,20 @@ name: Backup do D1 (diário)
 
 on:
   schedule:
-    # 03:40 UTC = 00:40 em Brasília. Antes do cron de manutenção do Worker
-    # (04:10 UTC) de propósito: se a purga apagar algo indevidamente, o backup
-    # daquele dia é anterior a ela.
+    # 03:40 UTC = 00:40 em Brasília.
+    #
+    # A INTENÇÃO era rodar antes do cron de manutenção do Worker (04:10 UTC),
+    # para que o backup do dia fosse anterior a uma purga que apagasse algo
+    # indevidamente. Na prática isso NÃO se sustenta e o comentário anterior
+    # mentia: schedule do GitHub Actions é best-effort e atrasa por fila — as
+    # três primeiras execuções saíram 08:12, 07:50 e 08:06 UTC, todas DEPOIS do
+    # cron do Worker. O horário aqui é preferência, não garantia.
+    #
+    # A ordem não é o que protege: o que protege é a purga não alcançar linha
+    # viva (`src/manutencao.ts` só apaga rate limit parado há 7+ dias e token de
+    # auditor vencido há 90+), e o backup ser diário. Ordenar de verdade exigiria
+    # o backup ser disparado PELO Worker — o que ele não pode fazer, porque o
+    # binding D1 não exporta.
     - cron: '40 3 * * *'
   workflow_dispatch: {}
 

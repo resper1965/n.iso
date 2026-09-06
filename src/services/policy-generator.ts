@@ -19,6 +19,24 @@ const TEMPLATE_DEPENDENCIES: Record<string, string[]> = {
   'pims-privacy-policy': ['A.5.34'],
 };
 
+/**
+ * O template pedido não existe — nome fora do charset aceito, ou arquivo
+ * ausente no binding ASSETS.
+ *
+ * Existe como tipo próprio porque as rotas precisam distinguir "você pediu um
+ * template que não existe" (404, culpa do pedido) de "não consegui servir o
+ * template" (500, culpa nossa). Antes tudo saía como `Error` e o handler
+ * traduzia o conjunto inteiro para 500: nome inexistente devolvia erro de
+ * servidor, o que polui a taxa de 5xx e ainda ensina o cliente a reportar como
+ * incidente o que é só um 404.
+ */
+export class TemplateNaoEncontrado extends Error {
+  constructor(readonly templateName: string, motivo: string) {
+    super(`Template ${templateName} não encontrado: ${motivo}`);
+    this.name = 'TemplateNaoEncontrado';
+  }
+}
+
 export class PolicyGeneratorService {
   private assetsFetcher?: any;
 
@@ -45,7 +63,7 @@ export class PolicyGeneratorService {
     // a um charset seguro (impede path traversal e acesso a chaves herdadas). A versão
     // da norma também é validada contra a lista fixa.
     if (!/^[a-z0-9-]+$/.test(templateName)) {
-      throw new Error(`Nome de template inválido: ${templateName}`);
+      throw new TemplateNaoEncontrado(templateName, 'nome fora do charset aceito');
     }
     const VALID_VERSIONS: StandardVersion[] = ['v2022', 'v2013', 'v2026'];
     if (!VALID_VERSIONS.includes(context.standardVersion)) {
@@ -71,7 +89,12 @@ export class PolicyGeneratorService {
       resolvedVersion = 'v2022';
       res = await fetchTemplate(resolvedVersion);
     }
+    if (res.status === 404) {
+      throw new TemplateNaoEncontrado(templateName, `ausente em ${resolvedVersion}`);
+    }
     if (!res.ok) {
+      // 5xx do ASSETS é falha nossa, não pedido inválido — segue como erro
+      // genérico para o handler traduzir em 500.
       throw new Error(`Template ${templateName} not found via ASSETS fetch: ${res.status}`);
     }
     let content = await res.text();
@@ -104,13 +127,28 @@ export class PolicyGeneratorService {
     return content;
   }
 
-  async listAvailableTemplates(version: StandardVersion = 'v2022'): Promise<string[]> {
-    // Por enquanto, todos os nossos templates são v2022
+  /**
+   * Catálogo de templates. É lista escrita à mão porque o binding ASSETS não
+   * lista diretório — só busca arquivo por caminho.
+   *
+   * Por isso ela envelhece em silêncio, e envelheceu: anunciava `soa-template`,
+   * que nunca existiu em `src/templates/policies/v2022/` (o consultor clicava e
+   * recebia erro), e omitia `risk-policy` e `vendor-risk-assessment`, que
+   * existem e ficavam invisíveis. Quem impede a repetição é
+   * `test/policies-templates.test.ts`, que busca CADA nome daqui pelo ASSETS de
+   * verdade e falha se algum não voltar 200.
+   *
+   * A Declaração de Aplicabilidade (SoA) segue sem template — é lacuna de
+   * conteúdo do produto, registrada no `enterprise-grade-plan.md`, e não se
+   * conserta anunciando um arquivo que não está lá.
+   */
+  async listAvailableTemplates(_version: StandardVersion = 'v2022'): Promise<string[]> {
+    // Por enquanto, todos os nossos templates são v2022.
     return [
       'isms-policy', 'pims-privacy-policy', 'access-control-policy',
       'secure-development-policy', 'asset-policy', 'supplier-policy',
-      'bcp-policy', 'isms-scope', 'risk-treatment-plan',
-      'disaster-recovery-plan', 'training-plan', 'soa-template',
+      'bcp-policy', 'isms-scope', 'risk-policy', 'risk-treatment-plan',
+      'disaster-recovery-plan', 'training-plan', 'vendor-risk-assessment',
       'dpia-template', 'asset-inventory', 'data-inventory-ropa',
       'risk-register', 'incident-log', 'management-review-minutes',
       'internal-audit-procedure', 'sdlc-standard', 'performance-dashboard',

@@ -1,0 +1,106 @@
+name: Sonda externa de produção
+
+# A LACUNA que este workflow fecha, declarada na seção 1 do
+# `docs/runbook-incidente.md`: "erro em produção fora do deploy → ninguém vê".
+# O Analytics Engine grava e ninguém lê; o `deploy.yml` só enxerga falha de
+# deploy. Um 500 generalizado, um binding removido, um certificado — tudo isso
+# ficava invisível até um cliente ligar.
+#
+# É sonda EXTERNA de propósito: roda fora da Cloudflare, então enxerga a queda
+# que um health check de dentro do próprio worker não enxergaria.
+#
+# O que ela NÃO é: alerta em tempo real. Schedule do GitHub Actions é
+# best-effort e atrasa por fila — as execuções do `db-backup.yml` saem
+# rotineiramente 4h depois do horário pedido. Na prática a detecção fica na casa
+# de dezenas de minutos, não de segundos. Isso é melhor que "ninguém vê" e pior
+# que monitoramento de verdade; quando o produto precisar de minutos, o caminho
+# é um serviço de uptime externo pago, não apertar este cron.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    steps:
+      # Duas verificações, e a segunda é a que importa. `/health` prova que
+      # ALGUM código responde; o login com corpo vazio prova que é o código
+      # esperado, porque a resposta carrega o envelope de validação do Zod.
+      # Worker publicado pela metade responde 200 no /health e erra aqui.
+      #
+      # Três tentativas espaçadas: uma falha isolada de rede do runner não vale
+      # uma issue. Falha nas três é sinal, não ruído.
+      - name: Sondar
+        id: sonda
+        run: |
+          base=https://niso.ness.workers.dev
+          for tentativa in 1 2 3; do
+            motivo=""
+            código=$(curl -s -m 15 -o /dev/null -w "%{http_code}" "$base/health" || echo "000")
+            if [ "$código" != "200" ]; then
+              motivo="/health devolveu $código"
+            else
+              corpo=$(curl -s -m 15 -X POST -H "Content-Type: application/json" -d '{}' "$base/api/v1/auth/login" || echo "")
+              echo "$corpo" | grep -q 'Payload inválido' || motivo="login com corpo vazio não devolveu o envelope de validação"
+            fi
+            [ -z "$motivo" ] && { echo "ok na tentativa $tentativa"; exit 0; }
+            echo "tentativa $tentativa falhou: $motivo"
+            [ "$tentativa" -lt 3 ] && sleep 20
+          done
+          echo "motivo=$motivo" >> "$GITHUB_OUTPUT"
+          echo "::error::produção não respondeu como esperado em 3 tentativas: $motivo"
+          exit 1
+
+      # Uma issue, um estado — mesmo padrão do `deploy.yml`. Atualiza o corpo da
+      # issue existente em vez de empilhar comentário a cada 15 minutos, que é o
+      # que transformaria o alerta em ruído que ninguém lê.
+      - name: Abrir ou atualizar issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body = [
+              `A sonda externa não obteve resposta esperada de produção.`,
+              ``,
+              `Motivo: \`${{ steps.sonda.outputs.motivo || 'ver log' }}\``,
+              `Detectado em: ${new Date().toISOString()}`,
+              `Run: ${run}`,
+              ``,
+              `Primeiro passo: **seção 0 do \`docs/runbook-incidente.md\`**.`,
+              `Se a causa for um deploy recente, a seção 2 tem o caminho de reversão.`,
+              ``,
+              `Esta issue fecha sozinha quando a próxima sonda passar.`,
+            ].join('\n');
+            const abertas = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'uptime' });
+            if (abertas.data.length) {
+              await github.rest.issues.update({ owner, repo, issue_number: abertas.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'Produção não está respondendo como esperado', body, labels: ['uptime'] });
+            }
+
+      # Fecha o alerta quando volta. Alerta que não fecha sozinho ensina a
+      # ignorar alerta.
+      - name: Fechar issue (produção respondendo)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const abertas = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'uptime' });
+            for (const it of abertas.data) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: it.number, body: `Produção respondendo de novo (${run}). Fechando.\n\nSe houve indisponibilidade real, a seção 8 do runbook diz o que fazer depois.` });
+              await github.rest.issues.update({ owner, repo, issue_number: it.number, state: 'closed', state_reason: 'completed' });
+            }

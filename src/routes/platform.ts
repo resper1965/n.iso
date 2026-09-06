@@ -295,15 +295,43 @@ platformApp.get('/client/dashboard', async (c) => {
   }
 });
 
+/*
+ * PORTAL DO CLIENTE — o vínculo com o funil comercial.
+ *
+ * As duas rotas abaixo estavam MORTAS. As duas começavam com
+ * `if (!user.client_lead_id) return 404`, e `users.client_lead_id` nunca
+ * existiu: não está em `schema.sql` nem em nenhuma das 25 migrations, e o login
+ * não seleciona a coluna. Respondiam 404 para todo mundo, sempre — inclusive
+ * quando o assessment e a proposta existiam no banco.
+ *
+ * A correção NÃO é criar a coluna. Um `client_lead_id` em `users` seria um
+ * terceiro lugar guardando um vínculo que o banco já tem, e que passaria a
+ * poder divergir dos outros dois. O caminho já está gravado pelo próprio fluxo
+ * de conversão:
+ *
+ *   users.client_project_id → projects.assessment_id → assessments.id
+ *                                                    ↳ proposals.assessment_id
+ *
+ * `POST /api/v1/assessments/:id/convert` grava `projects.assessment_id`, e as
+ * duas rotas que criam proposta gravam `proposals.assessment_id`. Derivar dali
+ * é correto por construção e não tem o que sincronizar.
+ *
+ * O isolamento também sai de graça: o filtro é `projects.id = <projeto do
+ * usuário>`, então não há id vindo do cliente para forjar. Conta de staff
+ * (`client_project_id` nulo) não casa com projeto nenhum e recebe 404 — o
+ * portal do cliente é do cliente.
+ */
+
 platformApp.get('/client/assessment', async (c) => {
   try {
     const user = c.get('user');
-    if (!user.client_lead_id) {
-      return c.json({ error: 'Nenhum lead comercial associado a esta conta' }, 404);
-    }
-    const assessment = await c.env.DB.prepare('SELECT id FROM assessments WHERE lead_id = ?').bind(user.client_lead_id).first() as any;
+    const assessment = await c.env.DB.prepare(
+      `SELECT a.id FROM assessments a
+       JOIN projects p ON p.assessment_id = a.id
+       WHERE p.id = ?`
+    ).bind(user?.client_project_id ?? '').first() as any;
     if (!assessment) {
-      return c.json({ error: 'Assessment não encontrado para este lead' }, 404);
+      return c.json({ error: 'Nenhum assessment associado a esta conta' }, 404);
     }
     return c.json({ assessment_id: assessment.id });
   } catch (e: any) {
@@ -314,12 +342,17 @@ platformApp.get('/client/assessment', async (c) => {
 platformApp.get('/client/proposal', async (c) => {
   try {
     const user = c.get('user');
-    if (!user.client_lead_id) {
-      return c.json({ error: 'Nenhum lead comercial associado a esta conta' }, 404);
-    }
-    const proposal = await c.env.DB.prepare('SELECT id, status FROM proposals WHERE lead_id = ?').bind(user.client_lead_id).first() as any;
+    // `ORDER BY created_at DESC LIMIT 1`: o mesmo assessment pode gerar mais de
+    // uma proposta (a geração automática e a manual usam a mesma tabela). A que
+    // interessa ao cliente é a última.
+    const proposal = await c.env.DB.prepare(
+      `SELECT pr.id, pr.status FROM proposals pr
+       JOIN projects p ON p.assessment_id = pr.assessment_id
+       WHERE p.id = ?
+       ORDER BY pr.created_at DESC LIMIT 1`
+    ).bind(user?.client_project_id ?? '').first() as any;
     if (!proposal) {
-      return c.json({ error: 'Proposta não encontrada para este lead' }, 404);
+      return c.json({ error: 'Nenhuma proposta associada a esta conta' }, 404);
     }
     return c.json({ proposal_id: proposal.id, status: proposal.status });
   } catch (e: any) {

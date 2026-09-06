@@ -9,6 +9,11 @@ name: Deploy
 #   1. Secret `CLOUDFLARE_API_TOKEN` com permissão de editar Workers.
 #   2. Environment `production`. Marque "Required reviewers" nele se quiser que
 #      todo deploy passe por aprovação humana — é onde esse controle vive.
+#   3. Para o passo de staging (item 2.2 do plano): environment `staging` e a
+#      VARIÁVEL de repositório `STAGING_ATIVO` = `true`. Enquanto a variável não
+#      existir, o job de staging é PULADO e produção segue como antes — o
+#      ambiente ainda depende de recursos não provisionados (ver docs/staging.md),
+#      e um gate que não pode passar pararia toda a entrega.
 #
 # O que este workflow NÃO faz, de propósito: aplicar migration. Migration em
 # produção exige backup verificado antes (`npm run db:backup`, runbook em
@@ -33,8 +38,63 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Staging vem ANTES de produção: é o ensaio, e o valor dele é justamente ser o
+  # primeiro a quebrar. Pulado enquanto `vars.STAGING_ATIVO` não for `true` —
+  # e o pulo aparece no log, não em silêncio.
+  staging:
+    runs-on: ubuntu-latest
+    if: vars.STAGING_ATIVO == 'true'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build Frontend
+        run: cd frontend && npm ci && npm run build
+
+      # Em staging a migration é APLICADA, não recusada — é para isso que ele
+      # existe. Falhar aqui é o resultado útil: a mesma migration teria falhado
+      # em produção, onde não há rollback.
+      - name: Aplicar migrations em staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply niso-db-staging --remote --env staging
+
+      # `npx wrangler` direto, e não a `cloudflare/wrangler-action`: o passo de
+      # migration logo acima já usa o CLI, então é o mesmo binário e a mesma
+      # versão do `package-lock.json`. De quebra, mantém o token fora de mais
+      # uma action de terceiro presa a tag móvel — o CodeQL sinaliza justamente
+      # isso, e aqui não havia razão para adicionar a dependência.
+      - name: Deploy staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --env staging
+
+      # A mesma sonda da seção 0 do runbook. `/health` só prova que ALGUM código
+      # subiu; o login com corpo vazio prova que é o código esperado, porque a
+      # resposta carrega o envelope de validação.
+      - name: Sonda de fumaça em staging
+        run: |
+          set -o pipefail
+          base=https://niso-staging.ness.workers.dev
+          código=$(curl -s -o /dev/null -w "%{http_code}" "$base/health")
+          [ "$código" = "200" ] || { echo "::error::/health devolveu $código"; exit 1; }
+          corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{}' "$base/api/v1/auth/login")
+          echo "$corpo"
+          echo "$corpo" | grep -q 'Payload inválido' || {
+            echo "::error::login com corpo vazio não devolveu o envelope de validação — código antigo ou quebrado no ar"
+            exit 1
+          }
+
   deploy:
     runs-on: ubuntu-latest
+    # `always()` porque `needs` sozinho bloquearia produção quando staging é
+    # PULADO (que é o estado atual). O que não pode passar é staging FALHO.
+    needs: [staging]
+    if: always() && needs.staging.result != 'failure' && needs.staging.result != 'cancelled'
     environment: production
     steps:
       - uses: actions/checkout@v7

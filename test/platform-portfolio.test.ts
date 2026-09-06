@@ -28,9 +28,9 @@ const req = (caminho: string, init: RequestInit = {}) => pedir(worker, caminho, 
 
 describe('Portfólio e portal do cliente', () => {
   let admA: Record<string, string>;
+  let admB: Record<string, string>;
   let staff: Record<string, string>;
   let orfao: Record<string, string>;
-  let comLead: Record<string, string>;
   let cisoA: Record<string, string>;
 
   beforeAll(async () => {
@@ -38,13 +38,17 @@ describe('Portfólio e portal do cliente', () => {
     const senha = await hashPassword('password123');
 
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      // `assessment_id` é o que a conversão de assessment grava, e é dele que o
+      // portal do cliente deriva o vínculo com o funil comercial.
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, assessment_id) VALUES (?,?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'as-1'),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
         .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
 
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('u-adm-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', A),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-adm-b', 'adm@b.com', senha, 'Admin do B', 'org_admin', B),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('u-staff', 'staff@ness.io', senha, 'Staff', 'platform_admin', null),
       // Papel de cliente SEM projeto — criável hoje pela rota de usuários.
@@ -66,8 +70,6 @@ describe('Portfólio e portal do cliente', () => {
         .bind('as-1', 'lead-1', 'Empresa Lead', 'In Progress'),
       env.DB.prepare(`INSERT INTO proposals (id, lead_id, assessment_id, status, total_price) VALUES (?,?,?,?,?)`)
         .bind('prop-1', 'lead-1', 'as-1', 'Sent', 100000),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-lead', 'lead@x.com', senha, 'Contato do lead', 'client', null),
 
       env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
         .bind('at-1', A, 'tok-auditor-valido', '2099-01-01T00:00:00Z'),
@@ -76,9 +78,9 @@ describe('Portfólio e portal do cliente', () => {
     ]);
 
     admA = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A });
+    admB = await sessionFor({ id: 'u-adm-b', email: 'adm@b.com', role: 'org_admin', client_project_id: B });
     staff = await sessionFor({ id: 'u-staff', email: 'staff@ness.io', role: 'platform_admin' });
     orfao = await sessionFor({ id: 'u-orfao', email: 'orfao@x.com', role: 'org_admin', client_project_id: null });
-    comLead = await sessionFor({ id: 'u-lead', email: 'lead@x.com', role: 'client' });
     cisoA = await sessionFor({ id: 'u-ciso-a', email: 'ciso@a.com', role: 'ciso', client_project_id: A });
   });
 
@@ -167,41 +169,73 @@ describe('Portfólio e portal do cliente', () => {
   });
 
   /**
-   * ACHADO, não conveniência: estas duas rotas estão MORTAS.
+   * Portal do cliente — as duas rotas que estavam MORTAS.
    *
-   * As duas começam com `if (!user.client_lead_id) return 404`, e
-   * `users.client_lead_id` NÃO EXISTE — nem em `schema.sql`, nem em nenhuma das
-   * 25 migrations. O login (`routes/auth.ts`) também não seleciona a coluna,
-   * então o campo nunca chega à sessão por caminho real. Resultado: as duas
-   * respondem 404 para qualquer usuário, sempre.
+   * Começavam com `if (!user.client_lead_id) return 404`, e
+   * `users.client_lead_id` nunca existiu: nem em `schema.sql`, nem em nenhuma
+   * das 25 migrations, e o login não seleciona a coluna. Respondiam 404 para
+   * qualquer usuário, sempre — inclusive com assessment e proposta no banco.
    *
-   * Isso importa além do endpoint: o comentário que justifica o `somenteNess`
-   * em `routes/proposals.ts` afirma que "o caminho legítimo do cliente para a
-   * própria proposta é /api/v1/client/proposal ... e continua aberto". Não
-   * continua. Hoje o cliente não alcança a própria proposta por caminho nenhum.
+   * A versão anterior deste arquivo FIXAVA aquele 404 e afirmava que ligar a
+   * coluna faria o teste falhar. A coluna não foi criada: o vínculo já existe
+   * no banco (`projects.assessment_id`, gravado pela conversão do assessment) e
+   * é dali que as rotas passaram a derivá-lo. Um `users.client_lead_id` seria
+   * um terceiro lugar guardando o mesmo vínculo, livre para divergir.
    *
-   * Este teste fixa o comportamento ATUAL de propósito. Quando alguém ligar a
-   * coluna de verdade (migration + SELECT no login + quem grava o vínculo),
-   * ele vai FALHAR — e é esse o sinal desejado: obriga a revisitar o
-   * comentário do `proposals.ts` no mesmo commit.
+   * O que estes testes verificam agora é o oposto do que verificavam: que o
+   * cliente ALCANÇA o próprio assessment e a própria proposta — e só os dele.
    */
-  describe('GET /client/assessment e /client/proposal (rotas mortas)', () => {
-    it('respondem 404 mesmo havendo lead, assessment e proposta no banco', async () => {
-      const as = await req('/api/v1/client/assessment', { headers: comLead });
-      expect(as.status, 'a coluna client_lead_id passou a existir? atualizar proposals.ts também').toBe(404);
-
-      const prop = await req('/api/v1/client/proposal', { headers: comLead });
-      expect(prop.status).toBe(404);
-
-      // O dado existe — o que falta é o vínculo, não o registro.
-      const p = await env.DB.prepare('SELECT id FROM proposals WHERE lead_id = ?').bind('lead-1').first();
-      expect(p).not.toBeNull();
+  describe('GET /client/assessment e /client/proposal', () => {
+    it('cliente alcança o próprio assessment pelo projeto', async () => {
+      const res = await req('/api/v1/client/assessment', { headers: admA });
+      expect(res.status, await res.clone().text()).toBe(200);
+      expect((await res.json() as any).assessment_id).toBe('as-1');
     });
 
-    it('a coluna que elas leem não existe no schema canônico', async () => {
+    it('cliente alcança a própria proposta', async () => {
+      const res = await req('/api/v1/client/proposal', { headers: admA });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const body = await res.json() as any;
+      expect(body.proposal_id).toBe('prop-1');
+      expect(body.status).toBe('Sent');
+    });
+
+    it('cliente de OUTRO projeto não vê nada — o filtro é o projeto, não um id do corpo', async () => {
+      // O `proj-b` não tem assessment vinculado. Se o filtro voltasse a sair de
+      // um campo controlável pelo chamador, este é o caso que entregaria a
+      // proposta do Cliente A ao Cliente B.
+      const as = await req('/api/v1/client/assessment', { headers: admB });
+      expect(as.status).toBe(404);
+      const prop = await req('/api/v1/client/proposal', { headers: admB });
+      expect(prop.status).toBe(404);
+      expect(await prop.text()).not.toContain('prop-1');
+    });
+
+    it('conta de staff não tem portal de cliente', async () => {
+      // `client_project_id` nulo não pode casar com projeto nenhum: escopo
+      // ausente significa "nada", nunca "tudo".
+      expect((await req('/api/v1/client/assessment', { headers: staff })).status).toBe(404);
+      expect((await req('/api/v1/client/proposal', { headers: staff })).status).toBe(404);
+      expect((await req('/api/v1/client/assessment', { headers: orfao })).status).toBe(404);
+    });
+
+    it('a proposta devolvida é a MAIS RECENTE do assessment', async () => {
+      // O mesmo assessment gera proposta pela rota automática e pela manual.
+      await env.DB.prepare(
+        `INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, created_at)
+         VALUES (?,?,?,?,?, datetime('now','+1 day'))`
+      ).bind('prop-2', 'lead-1', 'as-1', 'Draft', 120000).run();
+
+      const res = await req('/api/v1/client/proposal', { headers: admA });
+      expect((await res.json() as any).proposal_id).toBe('prop-2');
+
+      await env.DB.prepare('DELETE FROM proposals WHERE id = ?').bind('prop-2').run();
+    });
+
+    it('a coluna client_lead_id continua não existindo — o vínculo sai do projeto', async () => {
       const cols = await env.DB.prepare('PRAGMA table_info(users)').all();
       const nomes = (cols.results as any[]).map(c => c.name);
-      expect(nomes, 'client_lead_id foi adicionada — as rotas acima podem voltar a viver').not.toContain('client_lead_id');
+      expect(nomes, 'client_lead_id foi criada — duplica um vínculo que projects.assessment_id já guarda').not.toContain('client_lead_id');
     });
   });
 

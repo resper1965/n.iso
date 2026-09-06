@@ -74,6 +74,75 @@
 		}
 	],
 
+	/**
+	 * Ambiente de STAGING (item 2.1 do enterprise-grade-plan.md).
+	 *
+	 * Existe por um motivo específico: migration em produção é o caminho sem
+	 * volta deste sistema — D1 não tem rollback, e a recuperação é restaurar
+	 * backup. Staging é onde a migration é ENSAIADA antes de tocar dado de
+	 * cliente.
+	 *
+	 * O que ele NÃO tem, e por quê:
+	 *
+	 *   - `vectorize`: a base de conhecimento (RAG) é o único binding que não faz
+	 *     sentido duplicar para ensaio de migration, e apontar staging para o
+	 *     índice de produção faria ingestão de teste gravar vetor no índice do
+	 *     cliente. Sem o binding, as rotas de IA que usam RAG falham em staging —
+	 *     é limitação declarada, não descuido.
+	 *   - `triggers`: o cron de manutenção não roda aqui. Dois workers apagando
+	 *     linha em bancos diferentes é ruído; a rotina tem teste próprio.
+	 *   - `assets`: herda o de cima (mesmo build do frontend).
+	 *
+	 * `ENVIRONMENT` = "staging" muda o comportamento de código que já lê essa
+	 * var — é o mesmo mecanismo do ambiente de teste.
+	 */
+	"env": {
+		"staging": {
+			"vars": {
+				"ENVIRONMENT": "staging"
+			},
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "niso-db-staging",
+					"database_id": "59298065-af65-40b5-8e17-c67859974ed4",
+					"migrations_dir": "migrations"
+				}
+			],
+			"kv_namespaces": [
+				{
+					"binding": "SESSIONS",
+					// PENDENTE DE PROVISIONAMENTO — ver docs/staging.md.
+					// `npx wrangler kv namespace create niso-sessions-staging`
+					"id": "PREENCHER_APOS_CRIAR_O_NAMESPACE"
+				}
+			],
+			"r2_buckets": [
+				{
+					"binding": "STORAGE",
+					// PENDENTE — `npx wrangler r2 bucket create niso-evidence-staging`
+					"bucket_name": "niso-evidence-staging"
+				}
+			],
+			"ai": {
+				"binding": "AI",
+				"gateway": {
+					"id": "n-iso"
+				}
+			},
+			"analytics_engine_datasets": [
+				{
+					"binding": "ANALYTICS",
+					"dataset": "niso_metrics_staging"
+				}
+			],
+			"observability": {
+				"enabled": true
+			},
+			"upload_source_maps": true
+		}
+	},
+
 	// SETUP_KEY é um segredo: configure com `npx wrangler secret put SETUP_KEY`.
 	// Sem ele, o endpoint POST /api/v1/auth/setup fica desabilitado (falha fechada).
 	// TOKEN_ENC_KEY (segredo) cifra repository_token em repouso (AES-GCM):

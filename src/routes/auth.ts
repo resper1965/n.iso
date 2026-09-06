@@ -6,10 +6,37 @@ import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, 
 function clientIp(c: any): string {
   return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
 }
-import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema } from '../schemas';
+import { authMiddleware } from '../middleware/auth';
+import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema, primeiroAcessoSchema, mudarSenhaSchema } from '../schemas';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+
+/*
+ * ACHADO: três rotas deste arquivo estavam MORTAS por ordem de montagem.
+ *
+ * O `index.ts` monta `app.route('/api/v1/auth', authApp)` ANTES de
+ * `app.use('/api/v1/*', authMiddleware)`. Em Hono o sub-router é HANDLER, não
+ * middleware: quando ele responde, a cadeia para — e o `authMiddleware`
+ * registrado depois nunca roda para nada sob `/api/v1/auth`. Isso é correto
+ * para `/login`, `/setup`, `/forgot-password` e `/reset-password`, que precisam
+ * ser públicos. Para as três abaixo era defeito, e dava para ver em produção:
+ *
+ *   GET  /api/v1/auth/me                  → 200 {} sem credencial nenhuma
+ *   POST /api/v1/auth/reset-password-first→ 403 SEMPRE (`c.get('user')` vazio)
+ *   POST /api/v1/auth/change-password     → 500 SEMPRE (`user.email` de undefined)
+ *
+ * A troca de senha do primeiro acesso é o caminho que o `globals.js` usa depois
+ * do login com `requires_password_change` — ou seja, o fluxo obrigatório de
+ * primeiro acesso não funcionava.
+ *
+ * As três passam a exigir sessão explicitamente. `/logout` NÃO entra: ele lê o
+ * token do cabeçalho e apaga a chave, e exigir sessão válida para deslogar
+ * inverteria o objetivo — sessão já expirada deve poder ser limpa.
+ */
+authApp.use('/me', authMiddleware);
+authApp.use('/change-password', authMiddleware);
+authApp.use('/reset-password-first', authMiddleware);
 
 authApp.post('/setup', async (c) => {
   try {
@@ -110,8 +137,9 @@ authApp.post('/reset-password-first', async (c) => {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Não autorizado' }, 403);
 
-    const { newPassword } = await c.req.json<{ newPassword: string }>();
-    if (!newPassword) return c.json({ error: 'Nova senha é obrigatória' }, 400);
+    const v = await validateBody(c, primeiroAcessoSchema);
+    if (!v.success) return v.response;
+    const { newPassword } = v.data;
 
     const newHash = await hashPassword(newPassword);
     
@@ -134,8 +162,9 @@ authApp.post('/forgot-password', async (c) => {
       return c.json({ error: 'Muitas solicitações. Tente novamente mais tarde.' }, 429);
     }
 
-    const { email } = await c.req.json<{ email: string }>();
-    if (!email) return c.json({ error: 'Email é obrigatório' }, 400);
+    const v = await validateBody(c, resetRequestSchema);
+    if (!v.success) return v.response;
+    const { email } = v.data;
 
     const user = await c.env.DB.prepare(
       'SELECT id, email, name FROM users WHERE email = ?'
@@ -187,8 +216,9 @@ authApp.post('/reset-password', async (c) => {
       return c.json({ error: 'Muitas tentativas. Tente novamente mais tarde.' }, 429);
     }
 
-    const { token, newPassword } = await c.req.json<{ token: string; newPassword: string }>();
-    if (!token || !newPassword) return c.json({ error: 'Token e nova senha são obrigatórios' }, 400);
+    const v = await validateBody(c, resetConfirmSchema);
+    if (!v.success) return v.response;
+    const { token, newPassword } = v.data;
 
     const storedData = await c.env.SESSIONS.get(`reset_token:${token}`);
     if (!storedData) {
@@ -232,9 +262,10 @@ authApp.get('/me', (c) => {
 
 authApp.post('/change-password', async (c) => {
   try {
-    const { oldPassword, newPassword } = await c.req.json();
+    const v = await validateBody(c, mudarSenhaSchema);
+    if (!v.success) return v.response;
+    const { oldPassword, newPassword } = v.data;
     const user = c.get('user');
-    if (!oldPassword || !newPassword) return c.json({ error: 'Senhas obrigatórias' }, 400);
     
     const dbUser = await c.env.DB.prepare('SELECT password_hash FROM users WHERE email = ?')
       .bind(user.email).first() as any;

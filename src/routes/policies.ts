@@ -4,7 +4,7 @@ import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
 import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
-import { PolicyGeneratorService } from '../services/policy-generator';
+import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -553,6 +553,8 @@ policies.get('/api/v1/policies/templates/:templateName', async (c) => {
     });
     return c.json({ ok: true, markdown });
   } catch (e: any) {
+    // Nome de template que não existe é pedido inválido, não falha do servidor.
+    if (e instanceof TemplateNaoEncontrado) return c.json({ error: 'Template não encontrado' }, 404);
     return erro500(c, 'Falha ao obter conteúdo do template', e);
   }
 });
@@ -609,6 +611,9 @@ policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) 
       control: control_id
     });
   } catch (e: any) {
+    // Mesma distinção da rota de leitura: `template_name` vem do cliente, então
+    // template inexistente é 404 do pedido, não 500 nosso.
+    if (e instanceof TemplateNaoEncontrado) return c.json({ error: 'Template não encontrado' }, 404);
     return erro500(c, 'Falha ao gerar política a partir de template', e);
   }
 });

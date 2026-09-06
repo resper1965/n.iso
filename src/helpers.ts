@@ -97,6 +97,26 @@ export async function createNotification(
   ).bind(genId(), userId || null, type, title, message, link || null, actionType || null, targetId || null).run();
 }
 
+/**
+ * O que a autorização precisa saber sobre quem está pedindo.
+ *
+ * As três funções abaixo recebiam `user: any`, e `any` numa função de
+ * autorização é pior que em qualquer outro lugar: um chamador que passe o
+ * objeto errado — a linha do banco em vez da sessão, por exemplo — compila, e o
+ * `user.client_project_id` vira `undefined`, o que a comparação trata como "não
+ * bate" ou "bate com outro undefined" conforme o caso. Só o tipo pega isso, e
+ * pega antes de rodar.
+ *
+ * Deliberadamente estrutural (não `Variables['user']`): o que essas funções
+ * exigem é papel e escopo, e nada mais. Assim `test/` e chamadores que só têm
+ * esses dois campos seguem servindo, sem `as any` de conveniência — que
+ * devolveria o buraco pela porta dos fundos.
+ */
+export interface AtorAutorizado {
+  role?: string;
+  client_project_id?: string | null;
+}
+
 const ALLOWED_TABLES = [
   'risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions',
   'compliance_controls', 'evidence', 'assets', 'stakeholders', 'dpia_assessments',
@@ -104,13 +124,13 @@ const ALLOWED_TABLES = [
   'performance_metrics', 'webhooks', 'api_keys', 'auditor_notes'
 ];
 
-export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: any) {
+export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: AtorAutorizado) {
   if (!ALLOWED_TABLES.includes(table)) {
     throw new Error('Invalid table');
   }
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
 
-  const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first() as any;
+  const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
   if (!row || row.project_id !== user.client_project_id) {
     throw new Error('Forbidden: No access to this resource');
   }
@@ -122,7 +142,7 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
  * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
  * seu client_project_id. Lança em caso de negação (fail-closed).
  */
-export function requireProjectAccess(user: any, projectId: string): true {
+export function requireProjectAccess(user: AtorAutorizado, projectId: string): true {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
   throw new Error('Forbidden: No access to this project');
@@ -254,9 +274,12 @@ export function ehEquipeNess(user: { role?: string } | undefined | null): boolea
  * por sonda: `GET /api/v1/proposals/:id` devolvia 200 com o `content_html` de
  * outro cliente e `DELETE` removia a linha.
  */
-export async function somenteNess(c: any, next: () => Promise<void>) {
+export async function somenteNess(
+  c: { get: (k: 'user') => AtorAutorizado | undefined; json: (b: unknown, s: 403) => Response },
+  next: () => Promise<void>
+) {
   const user = c.get('user');
-  if (!user || !PAPEIS_NESS.has(user.role)) {
+  if (!user || !PAPEIS_NESS.has(user.role ?? '')) {
     return c.json({ error: 'Forbidden: Área comercial restrita à equipe ness.' }, 403);
   }
   await next();

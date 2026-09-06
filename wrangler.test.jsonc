@@ -6,6 +6,16 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	// `src` e nao `frontend/dist` de proposito: o que os testes precisam do
+	// binding ASSETS sao os templates de politica, que o Worker busca em
+	// `/templates/policies/<versao>/<nome>.md` e que moram em `src/templates/`.
+	// Apontar para `frontend/dist` amarraria a suite a um build previo do
+	// frontend — rodar `vitest` num clone limpo passaria a falhar por
+	// diretorio inexistente, e a falha nao se pareceria com a causa.
+	"assets": {
+		"directory": "src",
+		"binding": "ASSETS"
+	},
 	"d1_databases": [
 		{
 			"binding": "DB",

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, erro500 } from '../helpers';
-import { validateBody, createUserSchema } from '../schemas';
+import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -93,7 +93,9 @@ usersApp.put('/:id', async (c) => {
 
   const id = c.req.param('id');
   try {
-    const { name, email, role, client_project_id, password } = await c.req.json();
+    const v = await validateBody(c, updateUserSchema);
+    if (!v.success) return v.response;
+    const { name, email, role, client_project_id, password } = v.data;
     
     const user = await c.env.DB.prepare('SELECT id, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
     if (!user) {

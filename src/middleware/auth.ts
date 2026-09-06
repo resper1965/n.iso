@@ -1,3 +1,4 @@
+import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
 import { sha256Hex, sessionRevoked } from '../helpers';
@@ -8,11 +9,25 @@ import { apiKeyRoleViolation } from '../auth-policy';
  * usuário (escopado ao projeto da chave, papel read-only `client`) ou uma Response
  * de erro. A chave só é aceita se existir, estiver Active e não expirada.
  */
-async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variables['user']; writeCapable: boolean } | Response> {
+/** A linha de `api_keys` que a resolução precisa. Tipada porque `.first()` sem
+ * parâmetro devolve `unknown` por coluna, e o antigo `c: any` escondia isso. */
+interface LinhaChaveApi {
+  id: string;
+  project_id: string | null;
+  name: string | null;
+  permissions: string | null;
+  status: string | null;
+  expires_at: string | null;
+}
+
+async function resolveApiKeyUser(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  apiKey: string
+): Promise<{ user: Variables['user']; writeCapable: boolean } | Response> {
   const keyHash = await sha256Hex(apiKey);
   const row = await c.env.DB.prepare(
     'SELECT id, project_id, name, permissions, status, expires_at FROM api_keys WHERE key_hash = ?'
-  ).bind(keyHash).first();
+  ).bind(keyHash).first<LinhaChaveApi>();
 
   if (!row || row.status !== 'Active' || (row.expires_at && new Date(row.expires_at) < new Date())) {
     return c.json({ error: 'Unauthorized: Invalid or expired API key' }, 401);
@@ -46,7 +61,11 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
 
   // Separação de papéis: consultor não registra achado; auditor não escreve
   // implementação. Não afeta 'write'/'admin' (retrocompatível).
-  const roleViolation = apiKeyRoleViolation(row.permissions, method, new URL(c.req.url).pathname);
+  // `?? ''`: a coluna é nullable e `apiKeyRoleViolation` só reconhece
+  // 'consultant'/'auditor' — string vazia cai no mesmo ramo permissivo em que
+  // um NULL já caía, e a escrita segue barrada pelo `writeCapable` acima.
+  // Comportamento idêntico ao anterior; o que muda é o tipo dizer isso.
+  const roleViolation = apiKeyRoleViolation(row.permissions ?? '', method, new URL(c.req.url).pathname);
   if (roleViolation) {
     return c.json({ error: roleViolation }, 403);
   }
@@ -71,7 +90,7 @@ async function resolveApiKeyUser(c: any, apiKey: string): Promise<{ user: Variab
   return {
     user: {
       id: `apikey:${row.id}`,
-      email: atorDaChave(row.id as string, row.name as string | null),
+      email: atorDaChave(row.id, row.name),
       role: 'client',
       client_project_id: row.project_id,
     },
@@ -106,6 +125,13 @@ const MFA_PENDENTE_PERMITIDO = new Set([
 // esta entrada no allow-list, um `org_user` com MFA ativo recebe 403 em
 // /verify e fica trancado para fora em definitivo, mesmo com o código correto.
 const MFA_AUTO_SERVICO = /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable)$/;
+
+// A própria senha, pelo mesmo argumento. `/reset-password-first` é o caminho
+// OBRIGATÓRIO do primeiro acesso (`users.requires_password_change`): sem esta
+// entrada, um `org_user` recém-criado recebe 403 ao definir a primeira senha e
+// não consegue usar a conta. Nenhuma das duas toca dado de tenant — as duas
+// escrevem só o hash do próprio usuário.
+const SENHA_AUTO_SERVICO = /^\/api\/v1\/auth\/(change-password|reset-password-first)$/;
 
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
   const path = new URL(c.req.url).pathname;
@@ -150,7 +176,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     // de papel, exclusão do usuário). Sem esta checagem, uma sessão roubada
     // sobrevive à troca de senha por até 24h — a sessão vive no KV sob um token
     // aleatório e não há como enumerá-la para apagar.
-    if (await sessionRevoked(c.env.SESSIONS, (user as any).id, (user as any).iat)) {
+    if (await sessionRevoked(c.env.SESSIONS, user.id, user.iat)) {
       return c.json({ error: 'Unauthorized: Session revoked, please sign in again' }, 401);
     }
 
@@ -160,7 +186,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     // obtém a sessão pendente e a usa em /disable, apresentando a MESMA senha
     // para desligar o segundo fator. O fator caía com exatamente aquilo que ele
     // existe para complementar.
-    if ((user as any).mfa_pending && !MFA_PENDENTE_PERMITIDO.has(path.replace(/\/+$/, ''))) {
+    if (user.mfa_pending && !MFA_PENDENTE_PERMITIDO.has(path.replace(/\/+$/, ''))) {
       return c.json({ error: 'Unauthorized: Second factor required', mfa_required: true }, 401);
     }
 
@@ -210,6 +236,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       { methods: ['POST'], test: p => p.endsWith('/mcp/execute') },
       { methods: ['POST'], test: p => p.endsWith('/chat') },
       { methods: ['POST'], test: p => MFA_AUTO_SERVICO.test(p) },
+      { methods: ['POST'], test: p => SENHA_AUTO_SERVICO.test(p) },
     ];
     const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
     if (!isAllowed) {

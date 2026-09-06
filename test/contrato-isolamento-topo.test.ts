@@ -21,24 +21,19 @@ import indexSrc from '../src/index.ts?raw';
  * falha só por ausência; falha também por colocação. Só a resposta real
  * distingue as duas coisas.
  *
- * O QUE ESTE TESTE AFIRMA — e o que ele NÃO afirma.
+ * São DUAS varreduras, e a segunda existe porque a primeira não bastava.
  *
- * Afirma: (1) as rotas de topo são DESCOBERTAS do fonte, então uma rota nova não
- * escapa por esquecimento; (2) nenhuma delas responde sucesso ou erro de
- * servidor a um id inexistente vindo de um usuário escopado a outro projeto.
+ * 1. **Id inexistente.** Pega colocação errada de guarda: `PUT /api/v1/assets/:id`
+ *    chamava `requireResourceAccess` FORA do `try`, e a recusa virava 500 em vez
+ *    de 403. Mas NÃO pega guarda ausente — foi verificado por mutação: removida
+ *    a chamada de um handler de `evidence.ts`, esta varredura seguiu VERDE,
+ *    porque rota sem guarda responde 404 a id inexistente igual à guardada.
  *
- * NÃO afirma que existe guarda. Foi verificado por mutação: removida a chamada
- * de `requireResourceAccess` de um handler de `evidence.ts`, este teste
- * continuou VERDE — porque a rota sem guarda responde 404 para id inexistente, e
- * 404 satisfaz a asserção. A guarda só é detectada quando sua ausência produz
- * 2xx ou 5xx, que foi o caso dos dois handlers de webhooks (500).
- *
- * Detectar a ausência em geral exige semear um recurso REAL do outro tenant por
- * rota — aí a rota sem guarda devolve 200 com dado alheio, que é inconfundível.
- * É o que `idor-tenant.test.ts` faz à mão, recurso a recurso. Fechar essa lacuna
- * de forma automática está registrado no plano; até lá, este arquivo é rede de
- * descoberta e detector de 5xx, não prova de guarda — e dizer o contrário seria
- * exatamente o tipo de afirmação sem evidência que o `AGENTS.md` proíbe.
+ * 2. **Recurso REAL do outro tenant.** Fecha aquela lacuna. Com uma linha do
+ *    `proj-b` de fato no banco, a rota guardada recusa e a rota sem guarda
+ *    ENTREGA — 200 com dado alheio, que nenhum outro estado imita. A mesma
+ *    mutação em `evidence.ts` agora derruba o teste; é o critério de saída do
+ *    item 1.6 do `enterprise-grade-plan.md`.
  *
  * Rotas sob `/api/v1/projects/:projectId/*` ficam de fora: ali quem responde é
  * o `projectAccessMiddleware`, e há teste próprio.
@@ -64,19 +59,10 @@ const EXCECOES: Record<string, string> = {
   // que prova é a linha, e isso está afirmado em `idor-tenant.test.ts`.
   'PUT /api/v1/notifications/:id/read':
     'escopo por dono, não por projeto; a asserção real é sobre a linha, em idor-tenant.test.ts',
-
-  // Template de política é arquivo estático servido pelo binding ASSETS, que
-  // não existe no ambiente de teste (`wrangler.test.jsonc` não o declara) — o
-  // handler falha por falta de binding, não por falta de guarda. Não há dado de
-  // tenant envolvido: o mesmo template serve a todos os clientes.
-  //
-  // O sweep expôs, de passagem, que nome de template inexistente devolve 500 em
-  // vez de 404 (o `generate()` lança e o handler traduz tudo para `erro500`).
-  // Não é falha de isolamento e não dá para verificar a correção sem o binding,
-  // então está registrado no plano em vez de corrigido às cegas aqui.
-  'GET /api/v1/policies/templates/:templateName':
-    'arquivo estático, sem dado de tenant; depende do binding ASSETS, ausente no ambiente de teste',
 };
+
+/** Senha do usuário de teste; algumas rotas a exigem no corpo para assinar. */
+const SENHA_DO_USUARIO = 'password123';
 
 type Rota = { metodo: string; caminho: string; origem: string };
 
@@ -134,7 +120,7 @@ describe('Contrato de isolamento das rotas de topo', () => {
 
   beforeAll(async () => {
     await applySchema();
-    const senha = await hashPassword('password123');
+    const senha = await hashPassword(SENHA_DO_USUARIO);
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
         .bind('proj-a', 'Cliente A', 'ISO 27001', 'controller', 'Active'),
@@ -185,5 +171,171 @@ describe('Contrato de isolamento das rotas de topo', () => {
     }
 
     expect(falhas, `rotas de topo sem guarda efetiva:\n  ${falhas.join('\n  ')}`).toEqual([]);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  VARREDURA 2 — recurso REAL do outro tenant
+// ═════════════════════════════════════════════════════════════════════════════
+
+const ID_ALHEIO = 'recurso-do-outro-tenant';
+const PROJ_ALHEIO = 'proj-b';
+
+/**
+ * Rotas que respondem 2xx de propósito, mesmo apontando para a linha alheia.
+ *
+ * Separada de `EXCECOES` porque o motivo é outro: lá a rota é dispensada da
+ * varredura; aqui ela é varrida e o 2xx é o resultado CERTO. Misturar as duas
+ * listas esconderia a diferença entre "não sabemos" e "sabemos que pode".
+ */
+const CATALOGO_GLOBAL: Record<string, string> = {
+  // `policy_templates` não tem coluna `project_id` (ver `schema.sql`): é
+  // catálogo de modelo de política, o mesmo para todos os clientes, e a rota
+  // irmã `GET /api/v1/policy-templates` já lista tudo para qualquer sessão.
+  // Não há dado de tenant a vazar aqui.
+  'GET /api/v1/policy-templates/:id': 'catálogo global, sem coluna project_id',
+};
+
+/**
+ * Corpos mínimos para rotas que VALIDAM antes de autorizar.
+ *
+ * Sem isto o handler devolve 400 no `validateBody` e a requisição nunca chega à
+ * guarda — a rota entraria na varredura sem exercitar nada, e o teste ficaria
+ * verde por engano. A varredura recusa 400 justamente para forçar uma entrada
+ * aqui quando aparecer rota nova nessa forma.
+ */
+const CORPOS: Record<string, unknown> = {
+  // `handleControlApprove` exige `password` no corpo (assinatura eletrônica) e
+  // valida ANTES de chamar `requireResourceAccess`. A senha vai correta de
+  // propósito: o que precisa recusar o pedido é a guarda de tenant, não a senha.
+  'POST /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
+  'PUT /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
+};
+
+/**
+ * Semeia UMA linha por tabela, pertencente ao outro tenant, com id fixo.
+ *
+ * Derivada do banco, não escrita à mão: para cada tabela com coluna `id`,
+ * insere `id` = o id alheio, `project_id` = o projeto alheio quando a coluna
+ * existe, e um valor qualquer nas demais colunas NOT NULL sem default. Tabela
+ * nova entra sozinha — mesma razão de a descoberta de rotas ler o fonte.
+ */
+async function semearTenantAlheio(id: string, projeto: string): Promise<void> {
+  const { results: tabelas } = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'"
+  ).all<{ name: string }>();
+
+  const falhas: string[] = [];
+  for (const { name } of tabelas) {
+    if (name === 'projects') continue; // o projeto alheio é semeado à parte
+    const { results: cols } = await env.DB.prepare(`PRAGMA table_info("${name}")`).all<any>();
+    if (!(cols as any[]).some((c) => c.name === 'id')) continue;
+
+    const usadas: string[] = [];
+    const valores: unknown[] = [];
+    for (const c of cols as any[]) {
+      if (c.name === 'id') { usadas.push('id'); valores.push(id); continue; }
+      if (c.name === 'project_id') { usadas.push('project_id'); valores.push(projeto); continue; }
+      if (c.notnull && c.dflt_value === null) {
+        usadas.push(c.name);
+        valores.push(/INT|REAL|NUM/i.test(c.type ?? '') ? 0 : 'x');
+      }
+    }
+    try {
+      await env.DB.prepare(
+        `INSERT INTO "${name}" (${usadas.map((u) => `"${u}"`).join(',')}) VALUES (${usadas.map(() => '?').join(',')})`
+      ).bind(...valores).run();
+    } catch (e: any) {
+      falhas.push(`${name}: ${e?.message ?? e}`);
+    }
+  }
+
+  // Tabela que não semeia devolve a rota correspondente ao caso "id
+  // inexistente" — em silêncio, e sem provar guarda. Falhar aqui é o aviso.
+  expect(falhas, `não foi possível semear o tenant alheio:\n  ${falhas.join('\n  ')}`).toEqual([]);
+}
+
+/** Como `forjarCaminho`, mas apontando para o recurso REAL do outro tenant. */
+function forjarCaminhoAlheio(caminho: string): string {
+  // O "recurso" desta rota é o próprio projeto; o id alheio é o projeto alheio.
+  if (caminho === '/api/v1/projects/:id') return `/api/v1/projects/${PROJ_ALHEIO}`;
+  return caminho.replace(/:(\w+)/g, (_todo, nome: string) => {
+    // Token de auditor é público por desenho — quem tem o token entra. Usar um
+    // token VÁLIDO alheio testaria o desenho, não a guarda; segue inexistente.
+    if (nome.toLowerCase().includes('token')) return 'token-forjado-inexistente';
+    if (nome === 'num') return '1';
+    return ID_ALHEIO;
+  });
+}
+
+describe('Contrato de isolamento — recurso REAL do outro tenant', () => {
+  let headers: Record<string, string>;
+
+  beforeAll(async () => {
+    await applySchema();
+    const senha = await hashPassword(SENHA_DO_USUARIO);
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind('proj-a', 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(PROJ_ALHEIO, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', 'proj-a'),
+    ]);
+    await semearTenantAlheio(ID_ALHEIO, PROJ_ALHEIO);
+    const sessao = await sessionFor({
+      id: 'u-a', email: 'adm@a.com', role: 'org_admin', client_project_id: 'proj-a',
+    });
+    headers = { ...sessao, 'Content-Type': 'application/json' };
+  });
+
+  it('nenhuma rota entrega recurso de outro tenant', async () => {
+    const rotas = rotasDeTopo().filter(
+      (r) => !(`${r.metodo} ${r.caminho}` in EXCECOES) && !(`${r.metodo} ${r.caminho}` in CATALOGO_GLOBAL)
+    );
+    const entregou: string[] = [];
+    const naoChegou: string[] = [];
+
+    for (const r of rotas) {
+      const chave = `${r.metodo} ${r.caminho}`;
+      const corpo = chave in CORPOS ? JSON.stringify(CORPOS[chave]) : '{}';
+      const res = await pedir(worker, forjarCaminhoAlheio(r.caminho), {
+        method: r.metodo,
+        headers,
+        body: r.metodo === 'GET' ? undefined : corpo,
+      });
+
+      // 2xx com a linha do proj-b existindo é entrega de dado alheio, e 5xx
+      // continua sendo recusa transformada em erro de servidor.
+      if (res.status < 400 || res.status >= 500) {
+        entregou.push(`${res.status} ${chave}  (${r.origem})`);
+      } else if (res.status === 400) {
+        // 400 = o corpo foi recusado antes da autorização. A rota foi varrida
+        // sem exercitar guarda nenhuma; falhar aqui força uma entrada em
+        // `CORPOS` em vez de deixar a lacuna passar por verde.
+        naoChegou.push(`${chave}  (${r.origem})`);
+      }
+    }
+
+    expect(entregou, `rotas que entregaram recurso do outro tenant:\n  ${entregou.join('\n  ')}`).toEqual([]);
+    expect(
+      naoChegou,
+      `rotas que pararam no 400 e nunca chegaram à guarda — acrescente o corpo mínimo em CORPOS:\n  ${naoChegou.join('\n  ')}`
+    ).toEqual([]);
+  });
+
+  it('toda rota do catálogo global ainda existe', () => {
+    const existentes = new Set(rotasDeTopo().map((r) => `${r.metodo} ${r.caminho}`));
+    for (const chave of Object.keys(CATALOGO_GLOBAL)) {
+      expect(existentes.has(chave), `entrada órfã em CATALOGO_GLOBAL: "${chave}"`).toBe(true);
+    }
+  });
+
+  it('o recurso alheio existe de fato (senão a varredura 2 vira a varredura 1)', async () => {
+    // Sem esta asserção, um erro na semeadura faria a varredura inteira testar
+    // id inexistente de novo — verde, e sem provar nada além do que a 1 prova.
+    const linha = await env.DB.prepare('SELECT project_id FROM evidence WHERE id = ?').bind(ID_ALHEIO).first<any>();
+    expect(linha, 'a semeadura do tenant alheio não gravou').not.toBeNull();
+    expect(linha.project_id).toBe(PROJ_ALHEIO);
   });
 });

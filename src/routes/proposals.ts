@@ -10,8 +10,12 @@ export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables 
 // Proposta também não tem `project_id`. Sonda: o `org_admin` de um cliente lia
 // `content_html` e `total_price` da proposta de outro, marcava como aprovada e
 // excluía a linha — tudo com 200. O caminho legítimo do cliente para a própria
-// proposta é `/api/v1/client/proposal` (routes/platform.ts), filtrado por
-// `client_lead_id`, e continua aberto.
+// proposta é `/api/v1/client/proposal` (routes/platform.ts).
+//
+// Este comentário afirmava que aquele caminho "continua aberto" e citava um
+// filtro por `client_lead_id`. Era falso nas duas metades: a coluna não existe
+// e a rota respondia 404 para todo mundo. Hoje ela deriva o vínculo de
+// `projects.assessment_id`, e o filtro é o projeto do próprio usuário.
 proposalsApp.use('*', somenteNess);
 
 

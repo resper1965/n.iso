@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
 import { logAudit, genNumericCode, erro500, sendEmail, escapeHtml, rateLimit } from '../helpers';
+import { validateBody, otpPedidoSchema, otpVerificacaoSchema, aceiteDePoliticaSchema } from '../schemas';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -31,10 +32,9 @@ publicApp.get('/stats', async (c) => {
 
 publicApp.post('/policies/request-otp', async (c) => {
   try {
-    const { project_id, name, email } = await c.req.json();
-    if (!project_id || !email) {
-      return c.json({ error: 'Projeto e E-mail são obrigatórios' }, 400);
-    }
+    const v = await validateBody(c, otpPedidoSchema);
+    if (!v.success) return v.response;
+    const { project_id, name, email } = v.data;
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(project_id).first();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
@@ -93,10 +93,9 @@ publicApp.post('/policies/request-otp', async (c) => {
 
 publicApp.post('/policies/verify-otp', async (c) => {
   try {
-    const { project_id, email, otp } = await c.req.json();
-    if (!project_id || !email || !otp) {
-      return c.json({ error: 'Projeto, E-mail e Código OTP são obrigatórios' }, 400);
-    }
+    const v = await validateBody(c, otpVerificacaoSchema);
+    if (!v.success) return v.response;
+    const { project_id, email, otp } = v.data;
     const cleanEmail = email.trim().toLowerCase();
     const otpKey = `otp_${project_id}_${cleanEmail}`;
     const stored = await c.env.SESSIONS.get(otpKey);
@@ -183,8 +182,9 @@ publicApp.post('/policies/ack', async (c) => {
     if (!sessionRaw) return c.json({ error: 'Sessão expirada. Por favor, autentique-se novamente.' }, 401);
 
     const session = JSON.parse(sessionRaw);
-    const { policy_type, user_name, user_email } = await c.req.json();
-    if (!policy_type) return c.json({ error: 'Tipo/Nome da Política é obrigatório' }, 400);
+    const v = await validateBody(c, aceiteDePoliticaSchema);
+    if (!v.success) return v.response;
+    const { policy_type, user_name, user_email } = v.data;
 
     const nameToRecord = user_name || session.name;
     const emailToRecord = user_email || session.email;

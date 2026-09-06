@@ -124,12 +124,12 @@ Segue a análise de testes já feita, na ordem de risco.
 
 | # | Ação | Critério de saída |
 |---|---|---|
-| 1.1 | Teste de contrato da guarda de recurso — **PARCIAL** | Entregue: `test/contrato-isolamento-topo.test.ts` descobre as 77 rotas lendo o fonte e prova que nenhuma responde 2xx ou 5xx a id forjado (achou os dois 500 de webhooks). **Não** cumpre o critério original: por mutação, removida a guarda de um handler de `evidence.ts`, o teste seguiu VERDE — rota sem guarda devolve 404 para id inexistente, e 404 passa. Falta o 1.6 |
+| 1.1 | ~~Teste de contrato da guarda de recurso~~ **feito** (com o 1.6) | `test/contrato-isolamento-topo.test.ts` descobre as 77 rotas lendo o fonte e faz DUAS varreduras. A parcialidade anotada aqui antes — a de que a mutação em `evidence.ts` deixava o teste verde — foi fechada pelo 1.6 |
 | 1.2 | ~~Estender `idor-tenant.test.ts` aos 9 recursos faltantes~~ **feito** | 8 dos 9 respondem 403 ao tenant vizinho, com a linha conferida depois. O 9º (`notifications/:id/read`) responde **200** por desenho — o escopo dela é o dono, não o projeto — e ali a asserção é sobre a linha, não sobre o status |
 | 1.3 | ~~Portfólio e dashboards de cliente~~ **feito** | `platform.ts` de **26,1%** (medido na `main`) para **71,8%**. O "40%" citado numa versão anterior deste documento era a medição intermediária, depois do commit do item 1.2 — não a linha de base |
 | 1.4 | ~~Teste parametrizado dos 6 CRUDs de módulo~~ **feito** | os 6 acima de 70%: audits 92,7 · capa 90,9 · training 90,2 · certifications 82,8 · vendors 76,5 · ropa 76,4 |
 | 1.5 | Subir a catraca do backend — **PARCIAL** | Alvo original: ~70/55/72/70. Atingido: 65,5 / 54,1 / 72,4 / 68,0 — passa em `functions`, falha nas outras três. Pisos hoje em 62/50/69/64, abaixo do atingido, como degrau; o alvo permanece ~70/55/72/70 |
-| 1.6 | **NOVO** — semear recurso real do outro tenant por rota, para o contrato do 1.1 detectar guarda AUSENTE (e não só mal colocada) | remover `requireResourceAccess` de qualquer handler faz o teste falhar |
+| 1.6 | ~~Semear recurso real do outro tenant, para o contrato detectar guarda AUSENTE~~ **feito** | Critério cumprido e verificado por mutação: removida a chamada de `requireResourceAccess` em `src/routes/evidence.ts:18`, a varredura 1 segue verde e a **varredura 2 falha** com `200 GET /api/v1/evidence/:id/detail`. A semeadura é derivada do banco (`sqlite_master` + `PRAGMA table_info`), então tabela nova entra sozinha. Rota que para no 400 antes da guarda também falha o teste — força um corpo mínimo em `CORPOS` em vez de passar por verde sem exercitar nada |
 
 Fecha o eixo 2. É a onda que um auditor de certificação vai pedir para ver.
 
@@ -162,22 +162,24 @@ Fecha o eixo 2. É a onda que um auditor de certificação vai pedir para ver.
 
 ### Achados da onda 1 ainda em aberto
 
-Encontrados pelos testes acima e deliberadamente NÃO corrigidos junto: um exige
-migration (e a onda 2 traz o staging onde ensaiá-la), o outro não é verificável
-sem o binding `ASSETS`.
+Os três foram corrigidos depois — o A1 sem a migration que este documento
+previa, porque a previsão estava errada (ver a linha dele).
 
 | # | Achado | Encaminhamento |
 |---|---|---|
-| A1 | `/api/v1/client/assessment` e `/api/v1/client/proposal` estão **mortas**: as duas exigem `user.client_lead_id`, coluna que não existe em `schema.sql` nem em nenhuma das 25 migrations, e que o login não seleciona. O comentário que justifica o `somenteNess` em `routes/proposals.ts` afirma que esse é "o caminho legítimo do cliente para a própria proposta" — hoje o cliente não alcança a própria proposta por caminho nenhum | Precisa de migration + `SELECT` no login + quem grava o vínculo. `test/platform-portfolio.test.ts` fixa o 404 atual e FALHA quando a coluna aparecer, forçando revisitar o comentário no mesmo commit |
-| A2 | `GET /api/v1/policies/templates/:templateName` devolve **500** para nome inexistente, em vez de 404 — `generate()` lança e o handler traduz tudo para `erro500` | Mesma classe do 403-vs-500 já corrigido. Não dá para verificar a correção sem o binding `ASSETS`, ausente no ambiente de teste |
+| A1 | ~~`/api/v1/client/assessment` e `/api/v1/client/proposal` estão **mortas**~~ **corrigido, e sem migration** | O encaminhamento anterior dizia "precisa de migration + SELECT no login + quem grava o vínculo". Estava errado: o vínculo **já existe** no banco. `POST /assessments/:id/convert` grava `projects.assessment_id`, e as duas rotas que criam proposta gravam `proposals.assessment_id` — o caminho é `users.client_project_id → projects.assessment_id → assessments.id ↳ proposals.assessment_id`. Criar `users.client_lead_id` seria um terceiro lugar guardando o mesmo vínculo, livre para divergir. O isolamento sai de graça: o filtro é o projeto do próprio usuário, sem id vindo do chamador. O comentário mentiroso do `proposals.ts` foi corrigido no mesmo commit |
+| A2 | ~~`GET /api/v1/policies/templates/:templateName` devolve **500** para nome inexistente~~ **corrigido** | O bloqueio era o binding `ASSETS` ausente no teste; resolvido apontando o `wrangler.test.jsonc` para `src` (onde os templates moram), e não para `frontend/dist` — que amarraria a suíte a um build prévio. `generate()` passou a lançar `TemplateNaoEncontrado`, e só esse tipo vira 404: 5xx do ASSETS continua 500, porque aí a falha é nossa |
+| A4 | **NOVO** — três rotas de `/api/v1/auth` estavam MORTAS por ordem de montagem: `app.route('/api/v1/auth', authApp)` vem ANTES de `app.use('/api/v1/*', authMiddleware)`, e sub-router em Hono é handler — quando responde, a cadeia para. Conferido em produção: `GET /auth/me` devolvia **200 `{}`** sem credencial nenhuma, `POST /auth/reset-password-first` devolvia **403 sempre**, `POST /auth/change-password` estourava **500 sempre**. O primeiro é o fluxo obrigatório de primeiro acesso do `globals.js` | Corrigido: as três passam a declarar `authMiddleware` explicitamente, e entraram no allow-list de auto-serviço do papel read-only (sem isso um `org_user` novo recebia 403 ao definir a primeira senha e ficava trancado para fora). `/logout` fica público de propósito — sessão expirada tem de poder ser limpa |
+| A5 | **NOVO** — não havia **política de senha nenhuma**: `/change-password`, `/reset-password`, `/reset-password-first` e a criação de usuário aceitavam qualquer string, inclusive um caractere. É o controle que os relatórios gerados por este produto recomendam ao cliente | Piso de 8 caracteres (NIST SP 800-63B) em senha NOVA. `loginSchema` fica em `min(1)`: recusar no login uma senha curta já cadastrada trancaria a conta sem ganho de segurança |
+| A3 | **NOVO, achado ao fechar o A2** — o catálogo `listAvailableTemplates()` anunciava `soa-template`, arquivo que **nunca existiu**: o consultor clicava e recebia erro. E omitia `risk-policy` e `vendor-risk-assessment`, que existem e ficavam invisíveis. Havia teste afirmando que a lista contém `soa-template` — ele pinava a falha em vez de pegá-la | Catálogo corrigido para o que existe; `test/policies-templates.test.ts` busca CADA nome pelo ASSETS real e falha se algum não voltar 200. Falta o conteúdo: **não há template de Declaração de Aplicabilidade (SoA)**, que é documento central da ISO 27001 — lacuna de produto, no eixo de conteúdo, não de código |
 
 ### Onda 2 — Confiabilidade da mudança
 
 | # | Ação | Critério de saída |
 |---|---|---|
-| 2.1 | Ambiente `staging` no `wrangler.jsonc` (D1, KV, R2 e Vectorize próprios) | `wrangler deploy --env staging` publica; produção intocada |
-| 2.2 | Deploy em dois passos: `main` → staging → aprovação → produção | workflow com `environment: staging` antes de `production` |
-| 2.3 | Migration ensaiada em staging antes de produção | passo do `db-migrate.yml` que aplica em staging primeiro |
+| 2.1 | Ambiente `staging` no `wrangler.jsonc` — **PARCIAL** | `env.staging` escrito; D1 `niso-db-staging` **criado**. Faltam KV e R2: os comandos que os criam foram recusados neste ambiente, e criar recurso na conta do cliente não se faz às cegas. Os dois comandos estão em `docs/staging.md`. Sem Vectorize por decisão declarada — apontar staging para o índice de produção faria ingestão de teste gravar vetor no índice do cliente |
+| 2.2 | Deploy em dois passos — **escrito, inativo** | Job `staging` em `deploy.yml` roda antes de `deploy`, com sonda de fumaça. Gate: variável de repositório `STAGING_ATIVO`. Enquanto ela não for `true` o job é PULADO e produção segue como antes — um gate que não pode passar pararia toda a entrega |
+| 2.3 | Migration ensaiada em staging — **escrito, inativo** | Passo `Ensaiar migrations em staging` no `db-migrate.yml`, antes do apply de produção, sob o mesmo gate. Quando pulado, emite `::warning::` dizendo que a migration vai sem ensaio |
 | 2.4a | ~~Handler `scheduled` + cron trigger~~ **feito** | `src/manutencao.ts` + `triggers.crons` no `wrangler.jsonc`: purga de `rate_limits` e de token de auditor vencido. É a PRIMEIRA execução periódica do sistema |
 | 2.4b | ~~Backup diário verificado~~ **feito** | `.github/workflows/db-backup.yml`, agendado, com verificação do dump e issue automática se falhar |
 | 2.5 | ~~Runbook de incidente~~ **feito** | `docs/runbook-incidente.md`: sonda, reverter deploy, restaurar D1, migration ruim, MFA perdido, acesso indevido, comunicar |
@@ -199,10 +201,10 @@ Os itens 2.4 e 2.5 não exigem infraestrutura nova e estão feitos. Os itens
 |---|---|---|
 | 3.1 | OpenAPI gerado dos schemas Zod | `/api/v1/openapi.json` servido; spec versionada no repo |
 | 3.2 | `mcp-server-niso` consome o contrato gerado, não strings | build do MCP quebra se um endpoint mudar de forma |
-| 3.3 | Fechar as ~46 leituras de corpo sem schema semântico | nenhum `c.req.json()` sem `validateBody` em rota de escrita |
-| 3.4 | Reduzir `any` — começando por `middleware/`, `auth.ts`, `helpers.ts` | zero `any` nos caminhos de autorização |
+| 3.3 | Fechar as leituras de corpo sem schema semântico — **PARCIAL, com catraca** | De 53 para **45**. Fechadas as de maior custo: senha (`/change-password`, `/reset-password`, `/reset-password-first`, criação de usuário), escopo de acesso (`PUT /admin/users/:id`, que altera `role` e `client_project_id`) e as três rotas **sem autenticação** do portal público de políticas. As 45 restantes estão sob catraca em `test/validacao-corpo.test.ts`: o número pode cair, nunca subir. Fechar tudo de uma vez arriscaria recusar payload que a interface manda hoje |
+| 3.4 | ~~Reduzir `any` nos caminhos de autorização~~ **feito para o critério declarado** | `requireResourceAccess`, `requireProjectAccess` e `somenteNess` recebiam `user: any`; `resolveApiKeyUser` recebia `c: any`; o middleware lia `(user as any).mfa_pending` — o campo que decide se o segundo fator vale. Todos tipados (`AtorAutorizado`, `Context<…>`, `LinhaChaveApi`). Catraca em `test/validacao-corpo.test.ts`, verificada por mutação. O `any` do RESTO do projeto continua sendo dívida separada — o critério era "nos caminhos de autorização", e é só isso que está fechado |
 | 3.5 | SLO + alerta consumindo Analytics Engine | alerta dispara em taxa de erro 5xx e em p95 de latência |
-| 3.6 | Verificação externa de disponibilidade | uptime check no domínio de produção, notificando fora do GitHub |
+| 3.6 | Verificação externa de disponibilidade — **PARCIAL** | `.github/workflows/uptime.yml`: sonda a cada 15 min, de fora da Cloudflare, com as duas checagens da seção 0 do runbook (`/health` e o envelope de validação do login). Abre issue única `uptime` e fecha sozinha ao voltar. **Não** cumpre o "notificando fora do GitHub", e a latência de detecção é de dezenas de minutos porque o schedule do Actions atrasa por fila — melhor que "ninguém vê", pior que monitoramento de verdade |
 
 ### Onda 4 — Enterprise de verdade
 
@@ -214,7 +216,7 @@ padrão do Spec Kit antes do código.
 | 4.1 | SSO por OIDC (Entra ID, Okta, Google Workspace) | login federado com provisionamento no primeiro acesso |
 | 4.2 | SCIM 2.0 para provisionamento e **desprovisionamento** | usuário desligado no IdP perde acesso sem ação manual |
 | 4.3 | Política de segurança por tenant | MFA obrigatório, TTL de sessão e allowlist de IP configuráveis por cliente |
-| 4.4 | `audit_logs` imutável | trigger que barra `UPDATE`/`DELETE`; teste que prova a barreira |
+| 4.4 | `audit_logs` imutável — **parte já existe** | Os triggers `audit_logs_no_update`/`audit_logs_no_delete` (migration `0018_data_hardening.sql`) barram as duas operações e **estão em produção** (conferido em 2026-09-06 via `sqlite_master`). O `runbook-incidente.md` afirmava o contrário e foi corrigido. O que falta é o degrau seguinte: quem tem acesso ao D1 pode `DROP TRIGGER` — trilha à prova disso exige cópia append-only fora do D1, com retenção própria |
 | 4.5 | Retenção de trilha e evidência | política declarada, executada pelo cron da onda 2 |
 | 4.6 | Portabilidade do tenant | export assinado do cliente inteiro (LGPD art. 18, V) |
 

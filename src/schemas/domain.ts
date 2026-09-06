@@ -318,3 +318,35 @@ export const maturitySchema = z.object({
 }).passthrough();
 
 export const statusSchema = z.object({ status: curto }).passthrough();
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  PORTAL PÚBLICO DE POLÍTICAS — rotas SEM autenticação
+// ═════════════════════════════════════════════════════════════════════════════
+
+/*
+ * As três rotas abaixo eram lidas com `c.req.json()` cru e conferidas com
+ * `if (!campo)`. Isso aceita QUALQUER tipo desde que não seja vazio, e os
+ * handlers chamam `email.trim().toLowerCase()` logo depois — então
+ * `{"email": 123}` num endpoint público derrubava a requisição em 500 no
+ * `trim is not a function`. Recusar com 400 é o comportamento certo, e é o que
+ * a validação faz.
+ */
+
+export const otpPedidoSchema = z.object({
+  project_id: z.string().min(1, 'Projeto é obrigatório'),
+  email: z.string().email('E-mail inválido'),
+  name: z.string().optional(),
+});
+
+export const otpVerificacaoSchema = z.object({
+  project_id: z.string().min(1, 'Projeto é obrigatório'),
+  email: z.string().email('E-mail inválido'),
+  otp: z.string().min(1, 'Código OTP é obrigatório'),
+});
+
+/** Aceite de política. Nome e e-mail caem para os da sessão quando ausentes. */
+export const aceiteDePoliticaSchema = z.object({
+  policy_type: z.string().min(1, 'Tipo/Nome da Política é obrigatório'),
+  user_name: z.string().optional(),
+  user_email: z.string().email('E-mail inválido').optional(),
+});

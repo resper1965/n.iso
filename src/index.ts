@@ -73,7 +73,6 @@ export type Variables = {
     email: string;
     name?: string;
     role: string;
-    client_lead_id?: string | null;
     client_project_id?: string | null;
     /** Sessão autenticada por senha mas ainda sem o segundo fator. */
     mfa_pending?: boolean;
