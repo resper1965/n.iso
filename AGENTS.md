@@ -19,9 +19,20 @@ Entao:
 
 - **Mergeado** so depois de `git cat-file -e origin/main:<arquivo>` responder.
 - **Aplicado** so depois de `PRAGMA table_info(...)` mostrar a coluna.
-- **Em producao** so depois de uma sonda contra a API viva. Nem `/health` nem
-  401 em rota inexistente distinguem versao — os dois respondem igual com codigo
-  velho. A sonda que distingue hoje:
+- **Em producao** so depois de uma sonda contra a API viva. Desde o item 0.2 do
+  `enterprise-grade-plan.md`, `/health` distingue versao — ele devolve o SHA do
+  commit publicado, injetado no deploy:
+
+  ```
+  curl -s https://niso.ness.workers.dev/health
+  # {"status":"ok","version":"<sha>","deployment_id":"...","deployed_at":"..."}
+  ```
+
+  Compare o `version` com o SHA que voce espera. `"dev"` significa que a var nao
+  foi injetada — deploy feito fora do workflow.
+
+  A sonda antiga continua util como segunda evidencia, porque prova COMPORTAMENTO
+  e nao so um rotulo:
 
   ```
   curl -s -X POST -H "Content-Type: application/json" -d "{}" \

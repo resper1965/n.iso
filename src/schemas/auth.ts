@@ -51,3 +51,27 @@ export const mudarSenhaSchema = z.object({
   oldPassword: z.string().min(1, 'Senha atual é obrigatória'),
   newPassword: senhaNovaSchema
 });
+
+/** Só o e-mail: a tela de login pergunta por onde este endereço entra. */
+export const ssoInicioSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+});
+
+/**
+ * Configuração de SSO de um tenant.
+ *
+ * `issuer` exige https e sem query/fragmento: o documento de descoberta é
+ * montado a partir dele, e um issuer com query produziria uma URL que o IdP não
+ * reconhece — falha confusa em vez de erro claro na hora de configurar.
+ */
+export const ssoConfigSchema = z.object({
+  issuer: z.string().url().refine(
+    (u) => { try { const x = new URL(u); return x.protocol === 'https:' && !x.search && !x.hash; } catch { return false; } },
+    'issuer precisa ser uma URL https sem query nem fragmento'
+  ),
+  client_id: z.string().min(1, 'client_id é obrigatório'),
+  client_secret: z.string().min(1, 'client_secret é obrigatório'),
+  dominios: z.string().min(3, 'informe ao menos um domínio de e-mail'),
+  papel_padrao: z.string().min(1).default('org_user'),
+  ativo: z.coerce.boolean().default(false),
+});

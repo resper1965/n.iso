@@ -350,3 +350,50 @@ export const aceiteDePoliticaSchema = z.object({
   user_name: z.string().optional(),
   user_email: z.string().email('E-mail inválido').optional(),
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  MFA e direitos do titular — eram locais aos arquivos de rota
+// ═════════════════════════════════════════════════════════════════════════════
+
+/*
+ * Estes três viviam como `const` não exportada dentro de `routes/mfa.ts` e
+ * `routes/data-subject.ts`. Vieram para cá quando o `openapi.ts` passou a
+ * precisar deles: schema que só existe dentro do handler não entra no contrato
+ * publicado, e a rota sumiria da documentação sem que nada acusasse.
+ *
+ * `.passthrough()` é deliberado nos três — o corpo pode trazer campos extras que
+ * o handler ignora — e por isso o JSON Schema gerado sai com
+ * `additionalProperties: true`, que é a descrição correta.
+ */
+
+/** Código TOTP ou de recuperação. */
+export const codigoSchema = z.object({
+  codigo: z.string().trim().min(6).max(20),
+}).passthrough();
+
+/** Confirmação de senha onde a sessão sozinha não basta (desligar MFA, por ex.). */
+export const senhaConfirmacaoSchema = z.object({
+  password: z.string().min(1).max(500),
+}).passthrough();
+
+/** Pedido de direito do titular (LGPD): quem é, e por quê. */
+export const identificadorSchema = z.object({
+  identificador: z.string().trim().min(1).max(320),
+  justificativa: z.string().trim().min(1).max(2000),
+}).passthrough();
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  POLÍTICA DE SEGURANÇA POR TENANT (item 4.3)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * O `sessao_ttl_seg` tem PISO de 5 minutos: um TTL de poucos segundos, digitado
+ * por engano, expulsaria todo mundo do cliente a cada requisição, e o caminho de
+ * conserto passa por uma sessão. O teto de 24h é o máximo da plataforma — a
+ * política aperta, nunca afrouxa.
+ */
+export const politicaTenantSchema = z.object({
+  mfa_obrigatorio: z.coerce.boolean().optional(),
+  sessao_ttl_seg: z.coerce.number().int().min(300, 'TTL mínimo é 300 s').max(86400, 'TTL máximo é 86400 s').nullish(),
+  ip_allowlist: z.string().max(2000).nullish(),
+}).passthrough();

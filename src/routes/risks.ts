@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { genId, logAudit, requireResourceAccess, erro500 } from '../helpers';
-import { validateBody, createRiskSchema } from '../schemas';
+import { validateBody, createRiskSchema, riskUpdateSchema } from '../schemas';
 
 const risks = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -91,7 +91,9 @@ risks.put('/api/v1/risks/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'risks', id, c.get('user'));
-    const body = await c.req.json<any>();
+    const v = await validateBody(c, riskUpdateSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
     const impact = body.impact ?? 3;
     const probability = body.probability ?? 3;
     const level = riskLevel(impact * probability);

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
+import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 
@@ -166,6 +167,27 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
       `<h3>Erro ao gerar relatório DPIA</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`,
       500
     );
+  }
+});
+
+/**
+ * Verificação da cadeia da trilha arquivada (item 4.4 do plano).
+ *
+ * Existe como ROTA, e não só como teste, porque a pergunta "a trilha foi
+ * adulterada?" aparece durante um incidente ou uma auditoria — momentos em que
+ * ninguém vai rodar a suíte. A verificação percorre o R2 e RECALCULA cada
+ * digest; comparar só metadado seria teatro, porque quem reescreve o objeto
+ * reescreve o metadado junto.
+ *
+ * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
+ * quebra, que é informação de operação da plataforma, não de um tenant.
+ */
+platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+  try {
+    const r = await verificarCadeia(c.env);
+    return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
+  } catch (e: any) {
+    return erro500(c, 'Falha ao verificar a cadeia da trilha', e);
   }
 });
 

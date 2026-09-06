@@ -19,6 +19,13 @@
 		"enabled": true
 	},
 
+	// Identifica a versão publicada em `/health` (item 0.2). Binding nativo: não
+	// exige build step, e distingue dois deploys do MESMO commit — re-run do
+	// workflow, ou rollback e volta.
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA"
+	},
+
 	// Cron de manutenção (ver src/manutencao.ts). Diário às 04:10 UTC — fora do
 	// horário comercial no Brasil e deslocado da hora cheia, onde a fila de cron
 	// da Cloudflare é mais disputada. É a PRIMEIRA execução periódica do
@@ -49,6 +56,14 @@
 		{
 			"binding": "STORAGE",
 			"bucket_name": "niso-evidence"
+		},
+		{
+			// Trilha de auditoria arquivada (src/trilha.ts). Bucket SEPARADO do de
+			// evidências de propósito: o ponto do item 4.4 é a trilha viver fora do
+			// alcance de quem administra o banco, e um token com escopo só do
+			// bucket de evidência não deve conseguir reescrevê-la.
+			"binding": "TRILHA",
+			"bucket_name": "niso-trilha"
 		}
 	],
 	"vectorize": [
@@ -89,8 +104,11 @@
 	 *     índice de produção faria ingestão de teste gravar vetor no índice do
 	 *     cliente. Sem o binding, as rotas de IA que usam RAG falham em staging —
 	 *     é limitação declarada, não descuido.
-	 *   - `triggers`: o cron de manutenção não roda aqui. Dois workers apagando
-	 *     linha em bancos diferentes é ruído; a rotina tem teste próprio.
+	 *   - `triggers`: DESLIGADO explicitamente com uma lista vazia. Este
+	 *     comentário afirmava antes que o cron "não é herdado pelo env" — errado,
+	 *     e o primeiro deploy de staging mostrou: ele subiu com
+	 *     `schedule: 10 4 * * *`. Dois workers apagando linha em bancos
+	 *     diferentes é ruído, e a rotina tem teste próprio.
 	 *   - `assets`: herda o de cima (mesmo build do frontend).
 	 *
 	 * `ENVIRONMENT` = "staging" muda o comportamento de código que já lê essa
@@ -100,6 +118,9 @@
 		"staging": {
 			"vars": {
 				"ENVIRONMENT": "staging"
+			},
+			"triggers": {
+				"crons": []
 			},
 			"d1_databases": [
 				{
@@ -112,16 +133,21 @@
 			"kv_namespaces": [
 				{
 					"binding": "SESSIONS",
-					// PENDENTE DE PROVISIONAMENTO — ver docs/staging.md.
-					// `npx wrangler kv namespace create niso-sessions-staging`
-					"id": "PREENCHER_APOS_CRIAR_O_NAMESPACE"
+					"id": "65176c8eef4140f7a64cb366a66311b4"
 				}
 			],
 			"r2_buckets": [
 				{
 					"binding": "STORAGE",
-					// PENDENTE — `npx wrangler r2 bucket create niso-evidence-staging`
 					"bucket_name": "niso-evidence-staging"
+				},
+				{
+					// Em staging aponta para o MESMO bucket de produção? Não: para o
+					// de staging. Trilha de teste encadeada na trilha real quebraria a
+					// cadeia de produção — que é justamente o que ela existe para
+					// detectar.
+					"binding": "TRILHA",
+					"bucket_name": "niso-trilha-staging"
 				}
 			],
 			"ai": {

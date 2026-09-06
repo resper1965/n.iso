@@ -1,0 +1,36 @@
+# Objetos que EXISTEM no D1 de produção e NÃO estão em schema.sql.
+#
+# Levantados em 2026-09-06, ao construir o banco de staging a partir do
+# schema.sql canônico e comparar os dois `sqlite_master`. São 12 tabelas e 8
+# índices de uma implementação anterior: NENHUMA é referenciada pelo código de
+# `src/` (conferido com grep por FROM/INTO/UPDATE/JOIN), e três guardam dado que
+# ninguém lê mais — `evidence_control_links` (39 linhas), `phase_responses` (50)
+# e `security_kpis` (5).
+#
+# Este arquivo NÃO autoriza apagar nada. Ele existe para que o
+# `schema-drift.yml` alerte sobre drift NOVO em vez de repetir este todo dia, e
+# para que a decisão de descartar dado de cliente seja tomada por gente, com o
+# backup na mão. Tabela órfã com dado é item de RETENÇÃO (onda 4.5 do
+# enterprise-grade-plan.md), não faxina de CI.
+#
+# Ao remover uma destas de produção, remova a linha daqui no mesmo commit.
+index idx_ev_links_control
+index idx_ev_links_evidence
+index idx_phase_responses_project_phase
+index idx_policy_ack_employee
+index idx_policy_ack_project
+index idx_policy_acks_project
+index idx_scan_type
+index idx_security_kpis_project
+table consent_vault
+table controls_blueprint
+table discovery_answers
+table evidence_control_links
+table interviews
+table phase_responses
+table policies
+table policy_acknowledgements
+table project_nodes
+table scan_results
+table security_kpis
+table snapshots

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit } from '../helpers';
-import { validateBody } from '../schemas';
+import { validateBody, identificadorSchema } from '../schemas';
 import { z } from 'zod';
 import { localizarTitular, anonimizarTitular, ropaVencidos } from '../services/data-subject';
 
@@ -23,11 +23,6 @@ const PAPEIS_AUTORIZADOS = ['platform_admin', 'consultor', 'org_admin'];
 function autorizado(c: any): boolean {
   return PAPEIS_AUTORIZADOS.includes(c.get('user')?.role);
 }
-
-const identificadorSchema = z.object({
-  identificador: z.string().trim().min(1).max(320),
-  justificativa: z.string().trim().min(1).max(2000),
-}).passthrough();
 
 /**
  * Confirmação da existência + acesso (art. 18, I e II) e portabilidade (V).

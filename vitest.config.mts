@@ -56,10 +56,18 @@ export default defineConfig({
       //   inventário de IDOR, portfólio/portal do cliente e o CRUD dos seis
       //   módulos de projeto.
       thresholds: {
-        statements: 62,
-        branches: 50,
-        functions: 69,
-        lines: 64,
+        // 2026-09-06: o alvo do item 1.5 do enterprise-grade-plan.md (~70/55/72/70)
+        // foi batido nas QUATRO métricas — 70,71 / 58,33 / 77,35 / 73,21 — depois
+        // de cobrir o funil comercial (`routes/assessments.ts` saiu de 15,7%),
+        // SSO, SCIM, política por tenant, trilha e portabilidade.
+        //
+        // O piso fica um ponto abaixo do atingido: barra REGRESSÃO sem
+        // transformar flutuação normal em CI vermelho. Sobe junto quando os
+        // testes crescerem — nunca desce para caber num resultado pior.
+        statements: 69,
+        branches: 57,
+        functions: 76,
+        lines: 72,
       },
     },
   },

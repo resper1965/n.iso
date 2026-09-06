@@ -23,10 +23,12 @@ import { auditsApp, projectAuditsApp } from './routes/audits';
 import { capaApp, projectCapaApp } from './routes/capa';
 import { certificationsApp, projectCertificationsApp } from './routes/certifications';
 import { publicApp } from './routes/public';
+import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
+import { documentoOpenApi } from './openapi';
 import { mfaApp } from './routes/mfa';
 import { dataSubjectApp } from './routes/data-subject';
 
@@ -61,6 +63,12 @@ export type Bindings = {
   RESEND_API_KEY?: string;
   /** Analytics Engine. Opcional: sem o binding, a métrica é ignorada. */
   ANALYTICS?: AnalyticsEngineDataset;
+  /** SHA do commit publicado. Injetada no deploy; ausente em dev e em teste. */
+  VERSAO_SHA?: string;
+  /** Metadados da versão publicada (binding nativo do Workers). */
+  CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
+  /** Bucket da trilha de auditoria arquivada (src/trilha.ts). */
+  TRILHA?: R2Bucket;
 };
 
 export type Variables = {
@@ -189,8 +197,33 @@ app.use('*', async (c, next) => {
   metrica(c.env, [String(c.res.status)], [c.req.method, rota], [duracao]);
 });
 
-// 2. Health check (público)
-app.get('/health', (c) => c.json({ status: 'ok' }));
+/*
+ * Health check (público), agora com VERSÃO (item 0.2 do enterprise-grade-plan.md).
+ *
+ * O `AGENTS.md` dizia, com razão, que `/health` não distinguia versão: ele
+ * respondia `{"status":"ok"}` com código velho igual a código novo, e por isso a
+ * sonda de "está em produção?" precisava de uma heurística — mandar um login
+ * vazio e olhar o formato do erro. Isso funciona, mas é frágil: o dia em que o
+ * envelope de validação mudar, a sonda passa a mentir.
+ *
+ * `VERSAO_SHA` é injetada no deploy (`wrangler deploy --var VERSAO_SHA:<sha>`),
+ * não lida de arquivo: não há build step que a escreva, e um arquivo versionado
+ * com o próprio SHA seria impossível de manter correto. Em `wrangler dev` e nos
+ * testes a var não existe e o campo vem `"dev"` — o que é a verdade, não um
+ * placeholder.
+ *
+ * `version_metadata` acrescenta o id da versão publicada, que distingue dois
+ * deploys do MESMO commit (re-run do workflow, rollback e volta).
+ */
+app.get('/health', (c) => {
+  const meta = (c.env as { CF_VERSION_METADATA?: { id?: string; timestamp?: string } }).CF_VERSION_METADATA;
+  return c.json({
+    status: 'ok',
+    version: (c.env as { VERSAO_SHA?: string }).VERSAO_SHA ?? 'dev',
+    deployment_id: meta?.id ?? null,
+    deployed_at: meta?.timestamp ?? null,
+  });
+});
 
 // 2c. Teto automático de linhas em SELECT sem LIMIT. Antes de tudo que consulta.
 app.use('*', queryCapMiddleware);
@@ -203,6 +236,14 @@ app.route('/api/v1/auth', authApp);
 
 // 4. Public sub-router (público)
 app.route('/api/v1/public', publicApp);
+
+/*
+ * SCIM 2.0 (item 4.2). Montado em `/scim/v2/*` — o caminho que a RFC 7644
+ * padroniza e que os IdPs esperam — e ANTES do `authMiddleware` de propósito: o
+ * autenticador ali é um token por tenant, não uma sessão de usuário. Misturar os
+ * dois faria o caminho de sessão carregar um caso que não é dele.
+ */
+app.route('/scim/v2', scimApp);
 
 // 5. Auth Middleware para demais rotas /api/v1
 app.use('/api/v1/*', authMiddleware);
@@ -259,6 +300,19 @@ app.route('/api/v1', aiApp);
 app.route('/api/v1', governanceApp);
 app.route('/api/v1', auditorApp);
 app.route('/api/v1', platformApp);
+
+/*
+ * Contrato da API (item 3.1 do enterprise-grade-plan.md).
+ *
+ * Montado AQUI, depois do `authMiddleware`, e não junto do `/health`: exige
+ * sessão. Um OpenAPI público é o normal em API aberta; esta não é. O documento
+ * enumera caminho, método e a forma exata de cada corpo aceito — é mapa de
+ * superfície de ataque, e entregá-lo a quem não autenticou não compra nada.
+ * Quem consome (o mcp-server-niso) já autentica.
+ *
+ * `origem` sai da própria requisição para o `servers` não mentir em staging.
+ */
+app.get('/api/v1/openapi.json', (c) => c.json(documentoOpenApi(new URL(c.req.url).origin)));
 
 
 app.route('', risks);

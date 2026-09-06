@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, logAudit, requireResourceAccess, erro500 } from '../helpers';
-import { validateBody, trainingSchema, trainingImportSchema } from '../schemas';
+import { validateBody, trainingSchema, trainingImportSchema, trainingUpdateSchema } from '../schemas';
 
 export const trainingApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectTrainingApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -14,7 +14,9 @@ trainingApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'training_records', id, c.get('user'));
-    const body = await c.req.json<any>();
+    const v = await validateBody(c, trainingUpdateSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
 
     await c.env.DB.prepare(
       `UPDATE training_records SET employee_name=?, training_name=?, completion_date=?, score=?, status=?, evidence_file=? WHERE id=?`

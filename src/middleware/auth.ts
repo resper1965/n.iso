@@ -3,6 +3,7 @@ import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
 import { sha256Hex, sessionRevoked } from '../helpers';
 import { apiKeyRoleViolation } from '../auth-policy';
+import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 
 /**
  * Resolve o usuário a partir de uma API key (X-API-Key). Retorna o contexto de
@@ -241,6 +242,41 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
     if (!isAllowed) {
       return c.json({ error: 'Forbidden: Read-only role cannot perform write operations' }, 403);
+    }
+  }
+
+  /*
+   * Política de segurança do TENANT (item 4.3). Vem por último, depois de a
+   * identidade estar resolvida e do RBAC global — só faz sentido apertar para
+   * quem já provou quem é.
+   *
+   * Alcança apenas quem é escopado a um projeto: conta de staff não tem
+   * `client_project_id`, então nenhuma política a alcança. Isso não é folga, é a
+   * garantia de que uma allowlist de IP mal preenchida ainda possa ser corrigida
+   * por alguém.
+   *
+   * A consulta só acontece quando há projeto — tenant sem política é o caso
+   * comum, e a linha ausente devolve `null` sem custo adicional por requisição
+   * de staff.
+   */
+  if (user.client_project_id) {
+    const politica = await politicaDoProjeto(c.env, user.client_project_id);
+    if (politica) {
+      // `totp_enabled` sai do BANCO, não da sessão: a sessão foi gravada no
+      // login e não reflete um fator cadastrado depois. Ler daqui é o que
+      // permite alguém sair da exigência sem precisar deslogar.
+      const linha = await c.env.DB.prepare('SELECT totp_enabled FROM users WHERE id = ?')
+        .bind(user.id).first<{ totp_enabled: number | null }>();
+
+      const recusa = avaliarPolitica({
+        politica,
+        caminho: path,
+        ip: c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null,
+        totpAtivo: linha?.totp_enabled === 1,
+        iat: (user as { iat?: number }).iat,
+      });
+
+      if (recusa) return c.json({ error: recusa.erro, ...(recusa.extra ?? {}) }, recusa.status);
     }
   }
 

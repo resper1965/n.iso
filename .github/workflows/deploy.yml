@@ -71,7 +71,7 @@ jobs:
       - name: Deploy staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy --env staging
+        run: npx wrangler deploy --env staging --var VERSAO_SHA:${{ github.sha }}
 
       # A mesma sonda da seção 0 do runbook. `/health` só prova que ALGUM código
       # subiu; o login com corpo vazio prova que é o código esperado, porque a
@@ -134,10 +134,15 @@ jobs:
           echo "::error::Há migration não aplicada em produção. Faça backup (npm run db:backup), aplique com 'wrangler d1 migrations apply niso-db --remote' e rode este workflow de novo."
           exit 1
 
+      # `--var VERSAO_SHA`: é o que faz `/health` dizer QUAL código está no ar.
+      # Sem isso a sonda de produção depende de heurística — mandar um login
+      # vazio e olhar o formato do erro —, que passa a mentir no dia em que o
+      # envelope de validação mudar.
       - name: Deploy
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --var VERSAO_SHA:${{ github.sha }}
 
       # A falha mais cara aqui é a SILENCIOSA: o deploy parou (ex.: migration
       # pendente) e ninguém viu por dias, então `main` acumulou correções que

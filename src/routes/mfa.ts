@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, sha256Hex, verifyPassword, invalidateUserSessions, SESSION_TTL_SEC } from '../helpers';
-import { validateBody } from '../schemas';
+import { validateBody, codigoSchema, senhaConfirmacaoSchema } from '../schemas';
 import { z } from 'zod';
 import {
   gerarSegredoTotp, verificarCodigoTotp, uriProvisionamento, gerarCodigosRecuperacao,
@@ -16,14 +16,6 @@ import {
  * hora — e recuperar isso exige acesso ao banco.
  */
 export const mfaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-
-const codigoSchema = z.object({
-  codigo: z.string().trim().min(6).max(20),
-}).passthrough();
-
-const senhaSchema = z.object({
-  password: z.string().min(1).max(500),
-}).passthrough();
 
 /** Confere a senha da conta. Usado onde a sessão sozinha não é garantia bastante. */
 async function senhaConfere(c: any, userId: string, senha: string): Promise<boolean> {
@@ -41,7 +33,7 @@ async function senhaConfere(c: any, userId: string, senha: string): Promise<bool
  */
 mfaApp.post('/setup', async (c) => {
   const user = c.get('user');
-  const valid = await validateBody(c, senhaSchema);
+  const valid = await validateBody(c, senhaConfirmacaoSchema);
   if (!valid.success) return valid.response;
   if (!(await senhaConfere(c, user.id, valid.data.password))) {
     return c.json({ error: 'Senha incorreta' }, 401);
@@ -239,7 +231,7 @@ mfaApp.post('/disable', async (c) => {
     return c.json({ error: 'Muitas tentativas. Aguarde alguns minutos.' }, 429);
   }
 
-  const valid = await validateBody(c, senhaSchema);
+  const valid = await validateBody(c, senhaConfirmacaoSchema);
   if (!valid.success) return valid.response;
 
   if (!(await senhaConfere(c, user.id, valid.data.password))) {

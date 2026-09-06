@@ -132,15 +132,15 @@ export class PolicyGeneratorService {
    * lista diretório — só busca arquivo por caminho.
    *
    * Por isso ela envelhece em silêncio, e envelheceu: anunciava `soa-template`,
-   * que nunca existiu em `src/templates/policies/v2022/` (o consultor clicava e
+   * que não existia em `src/templates/policies/v2022/` (o consultor clicava e
    * recebia erro), e omitia `risk-policy` e `vendor-risk-assessment`, que
    * existem e ficavam invisíveis. Quem impede a repetição é
    * `test/policies-templates.test.ts`, que busca CADA nome daqui pelo ASSETS de
    * verdade e falha se algum não voltar 200.
    *
-   * A Declaração de Aplicabilidade (SoA) segue sem template — é lacuna de
-   * conteúdo do produto, registrada no `enterprise-grade-plan.md`, e não se
-   * conserta anunciando um arquivo que não está lá.
+   * `soa-template` voltou à lista porque agora o ARQUIVO existe — com os 93
+   * controles do Anexo A:2022 nomeados um a um, que é o que a Cl. 6.1.3 d) exige
+   * e o que um auditor de certificação lê antes de qualquer outra coisa.
    */
   async listAvailableTemplates(_version: StandardVersion = 'v2022'): Promise<string[]> {
     // Por enquanto, todos os nossos templates são v2022.
@@ -149,6 +149,7 @@ export class PolicyGeneratorService {
       'secure-development-policy', 'asset-policy', 'supplier-policy',
       'bcp-policy', 'isms-scope', 'risk-policy', 'risk-treatment-plan',
       'disaster-recovery-plan', 'training-plan', 'vendor-risk-assessment',
+      'soa-template',
       'dpia-template', 'asset-inventory', 'data-inventory-ropa',
       'risk-register', 'incident-log', 'management-review-minutes',
       'internal-audit-procedure', 'sdlc-standard', 'performance-dashboard',

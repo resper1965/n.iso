@@ -1,0 +1,118 @@
+name: SLO de produção (a cada 6h)
+
+# Fecha a metade que a sonda de disponibilidade NÃO cobre.
+#
+# `uptime.yml` pega o sistema fora do ar. Ele não pega o caso em que o sistema
+# RESPONDE: se 30% das requisições derem 500 e a sonda cair nos 70% que
+# respondem, ela passa verde. O runbook declarava essa lacuna com todas as
+# letras — "o Analytics Engine grava e ninguém lê".
+#
+# Aqui alguém lê. `scripts/slo.mjs` consulta o dataset `niso_metrics`, que o
+# `src/observability.ts` alimenta com um ponto por requisição desde sempre, e
+# avalia dois objetivos: taxa de 5xx e p95 de latência.
+#
+# A cada 6 horas, e não a cada 15 minutos como a sonda: a janela de medição é de
+# 24h, então medir de hora em hora responderia quase o mesmo número quatro vezes
+# e transformaria o alerta em ruído.
+
+on:
+  schedule:
+    - cron: '15 */6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  slo:
+    runs-on: ubuntu-latest
+    # O `CLOUDFLARE_API_TOKEN` é environment secret de `production`. O ID da
+    # conta NÃO é secret novo: o script o deriva do próprio token, que dá acesso
+    # a exatamente uma conta. Um identificador a menos no repositório.
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Medir
+        id: medir
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set +e
+          saida=$(node scripts/slo.mjs 2>erro.txt)
+          codigo=$?
+          set -e
+
+          echo "$saida"
+          cat erro.txt
+
+          # 2 = não conseguiu MEDIR (token, consulta ou dataset mudou de forma).
+          # Distinto de 1 = mediu e violou. Confundir os dois é como um backup
+          # que falha em silêncio: a ausência de alerta viraria prova de saúde.
+          if [ "$codigo" = "2" ]; then
+            echo "::error::não foi possível medir o SLO — ver erro acima"
+            exit 1
+          fi
+
+          {
+            echo 'medidas<<FIM'
+            echo "$saida"
+            echo FIM
+          } >> "$GITHUB_OUTPUT"
+
+          exit "$codigo"
+
+      - name: Abrir ou atualizar issue de SLO
+        if: failure() && steps.medir.outputs.medidas != ''
+        uses: actions/github-script@v7
+        env:
+          MEDIDAS: ${{ steps.medir.outputs.medidas }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const m = JSON.parse(process.env.MEDIDAS);
+            const body = [
+              '**SLO de produção violado** nas últimas 24 horas.',
+              '',
+              ...m.violacoes.map((v) => `- ${v}`),
+              '',
+              '| Medida | Valor |',
+              '| :--- | ---: |',
+              `| Requisições (24h) | ${m.total} |`,
+              `| 5xx | ${m.erros5xx} (${m.taxa_5xx_pct}%) |`,
+              `| 4xx | ${m.erros4xx} |`,
+              `| p95 fora das rotas de IA | ${m.p95_ms} ms |`,
+              `| p99 fora das rotas de IA | ${m.p99_ms} ms |`,
+              '',
+              'Primeiro passo: seção 0 do `docs/runbook-incidente.md`. `wrangler tail` mostra',
+              'o log ao vivo; cada requisição sai com `request_id`, `rota`, `status` e `duracao_ms`,',
+              'e é por `request_id` que se liga um 500 ao erro que o causou.',
+              '',
+              'Esta issue fecha sozinha quando a próxima medição voltar para dentro dos tetos.',
+              '',
+              `Run: ${run}`,
+            ].join('\n');
+            const abertas = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'slo' });
+            if (abertas.data.length) {
+              await github.rest.issues.update({ owner, repo, issue_number: abertas.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'SLO de produção violado', body, labels: ['slo'] });
+            }
+
+      - name: Fechar issue (SLO de volta)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const abertas = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'slo' });
+            for (const it of abertas.data) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: it.number, body: `SLO dentro dos tetos de novo (${run}). Fechando.\n\nSe houve degradação real, a seção 8 do runbook diz o que fazer depois.` });
+              await github.rest.issues.update({ owner, repo, issue_number: it.number, state: 'closed', state_reason: 'completed' });
+            }

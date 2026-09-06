@@ -90,11 +90,19 @@ authApp.post('/login', async (c) => {
     }
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled FROM users WHERE email = ?'
+      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
     
     if (!user || !(await verifyPassword(password, user.password_hash))) {
+      return c.json({ error: 'Invalid credentials' }, 401);
+    }
+
+    // Conta desativada (por SCIM, item 4.2) não autentica. A MESMA resposta de
+    // credencial errada, de propósito: distinguir "senha errada" de "conta
+    // desativada" diria a quem sonda que aquele e-mail existe aqui — e a pessoa
+    // legítima descobre pelo IdP, que é onde o desligamento aconteceu.
+    if (user.ativo === 0) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
     // ponytail: auto-migrate legacy SHA-256 hash to PBKDF2
@@ -109,6 +117,7 @@ authApp.post('/login', async (c) => {
     delete user.password_hash;
     delete user.requires_password_change;
     delete user.totp_enabled;
+    delete user.ativo;
     
     if (user.role === 'admin') {
       user.role = 'platform_admin';

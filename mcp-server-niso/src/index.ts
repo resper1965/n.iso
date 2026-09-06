@@ -6,6 +6,7 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type { Rota, Obrigatorios } from "./contrato-gerado.js";
 
 const NISO_BASE_URL = process.env.NISO_BASE_URL || "https://niso.ness.workers.dev";
 const NISO_API_KEY = process.env.NISO_API_KEY;
@@ -421,6 +422,54 @@ async function nisoGet(path: string) {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
+/**
+ * Chamada de escrita CONFERIDA CONTRA O CONTRATO da API (item 3.2 do
+ * `enterprise-grade-plan.md`).
+ *
+ * A diferença para `nisoPost` não é de conveniência, é de momento em que o erro
+ * aparece. `nisoPost` recebe uma string: método e caminho errados compilam,
+ * publicam e só falham em produção, no 404 que ninguém liga ao commit que o
+ * causou. Foi assim que `niso_respond_auditor_note` passou meses mandando POST
+ * para uma rota que só aceita PUT.
+ *
+ * Aqui `rota` é uma chave de `ROTAS`, gerado de `docs/openapi.json`, que sai dos
+ * schemas Zod do Worker. Rota removida, renomeada ou que troque de método deixa
+ * de existir na união e a chamada **para de compilar**. O tipo do corpo exige os
+ * campos que o schema marca como obrigatórios — faltar um também não compila.
+ *
+ * O que ele NÃO cobre, e por quê: as rotas de leitura e as de upload. O contrato
+ * só descreve o que passa por `validateBody`, então GET não está lá — e inventar
+ * entradas para GET seria descrever à mão o que ninguém valida.
+ */
+async function nisoContrato<R extends Rota>(
+  rota: R,
+  params: Record<string, string>,
+  corpo: Record<Obrigatorios<R>, unknown> & Record<string, unknown>
+) {
+  const [metodo, molde] = rota.split(" ") as [string, string];
+
+  const caminho = molde.replace(/\{(\w+)\}/g, (_todo, nome: string) => {
+    const valor = params[nome];
+    // Placeholder sem valor viraria o literal `{projectId}` na URL e um 404
+    // silencioso. O tipo garante a ROTA; este erro garante os PARÂMETROS.
+    if (valor === undefined || valor === "") {
+      throw new Error(`Parâmetro de caminho ausente: ${nome} (rota ${rota})`);
+    }
+    return encodeURIComponent(valor);
+  });
+
+  const response = await fetch(`${NISO_BASE_URL}${caminho}`, {
+    method: metodo,
+    headers: {
+      "X-API-Key": NISO_API_KEY ?? "",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(corpo),
+  });
+  const data = await response.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+
 async function nisoPost(path: string, body?: unknown, method: "POST" | "PUT" | "PATCH" = "POST") {
   const response = await fetch(`${NISO_BASE_URL}${path}`, {
     method,
@@ -516,7 +565,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const validated = schema.parse(args);
         assertProject(validated.projectId);
-        return await nisoPost(`/api/v1/projects/${validated.projectId}/risks`, validated);
+        return await nisoContrato("POST /api/v1/projects/{id}/risks", { id: validated.projectId }, validated);
       }
 
       case "niso_list_controls": {
@@ -648,9 +697,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const validated = schema.parse(args);
         assertProject(validated.projectId);
-        return await nisoPost(`/api/v1/projects/${validated.projectId}/training/import-external`, {
-          records: validated.records,
-        });
+        return await nisoContrato(
+          "POST /api/v1/projects/{projectId}/training/import-external",
+          { projectId: validated.projectId },
+          { records: validated.records }
+        );
       }
 
       case "niso_create_asset": {
@@ -695,14 +746,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           });
         const validated = schema.parse(args);
         assertProject(validated.projectId);
-        return await nisoPost(
-          `/api/v1/controls/${validated.controlId}`,
+        return await nisoContrato(
+          "PUT /api/v1/controls/{id}",
+          { id: validated.controlId },
           {
             status: validated.status,
             title: validated.title,
             description: validated.description,
-          },
-          "PUT"
+          }
         );
       }
 
@@ -718,14 +769,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const validated = schema.parse(args);
         assertProject(validated.projectId);
-        return await nisoPost(`/api/v1/audits/${validated.auditId}/findings`, {
-          project_id: validated.projectId,
-          control_id: validated.controlId,
-          finding_type: validated.findingType,
-          description: validated.description,
-          evidence_reviewed: validated.evidenceReviewed,
-          auditor_notes: validated.auditorNotes,
-        });
+        return await nisoContrato(
+          "POST /api/v1/audits/{auditId}/findings",
+          { auditId: validated.auditId },
+          {
+            project_id: validated.projectId,
+            control_id: validated.controlId,
+            finding_type: validated.findingType,
+            description: validated.description,
+            evidence_reviewed: validated.evidenceReviewed,
+            auditor_notes: validated.auditorNotes,
+          }
+        );
       }
 
       case "niso_create_auditor_note": {
@@ -736,11 +791,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: z.string(),
         });
         const validated = schema.parse(args);
-        return await nisoPost(`/api/v1/auditor/${validated.token}/notes`, {
-          control_id: validated.controlId,
-          note_type: validated.noteType || "question",
-          content: validated.content,
-        });
+        return await nisoContrato(
+          "POST /api/v1/auditor/{token}/notes",
+          { token: validated.token },
+          {
+            control_id: validated.controlId,
+            note_type: validated.noteType || "question",
+            content: validated.content,
+          }
+        );
       }
 
       case "niso_respond_auditor_note": {
@@ -749,9 +808,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           response: z.string(),
         });
         const validated = schema.parse(args);
-        return await nisoPost(`/api/v1/auditor-notes/${validated.noteId}/respond`, {
-          response: validated.response,
-        });
+        // Era `nisoPost(...)` — POST, porque o método é o default do helper. A
+        // rota é PUT (`routes/auditor.ts`), então a ferramenta respondia 404 e
+        // nenhum teste via isso: o MCP não tinha contrato para conferir contra.
+        // O tipo agora não deixa: não existe chave "POST .../respond" em ROTAS.
+        return await nisoContrato(
+          "PUT /api/v1/auditor-notes/{id}/respond",
+          { id: validated.noteId },
+          { response: validated.response }
+        );
       }
 
       default:

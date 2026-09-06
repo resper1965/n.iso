@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
 import { logAudit, genNumericCode, erro500, sendEmail, escapeHtml, rateLimit } from '../helpers';
-import { validateBody, otpPedidoSchema, otpVerificacaoSchema, aceiteDePoliticaSchema } from '../schemas';
+import { validateBody, otpPedidoSchema, otpVerificacaoSchema, aceiteDePoliticaSchema, ssoInicioSchema } from '../schemas';
+import {
+  configPorDominio, descobrir, iniciarLogin, consumirState, trocarCodigo,
+  validarIdToken, provisionar, segredoDoCliente,
+} from '../sso';
+import { resolveHostIsPublic } from './integrations';
+import { genToken, SESSION_TTL_SEC } from '../helpers';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -211,5 +217,115 @@ publicApp.post('/policies/ack', async (c) => {
     });
   } catch (e: any) {
     return erro500(c, 'Erro ao registrar ciência eletrônica', e);
+  }
+});
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SSO por OIDC (item 4.1). Rotas PÚBLICAS — são o caminho de entrar.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** `https://host/api/v1/public/sso/callback`, derivado da própria requisição. */
+function redirectUriDe(c: any): string {
+  return `${new URL(c.req.url).origin}/api/v1/public/sso/callback`;
+}
+
+/**
+ * Descobre se o e-mail entra por SSO e devolve para onde mandar o navegador.
+ *
+ * Responde JSON em vez de redirecionar: quem chama é a tela de login, que
+ * precisa saber se DEVE seguir para o IdP ou pedir a senha. E responde a mesma
+ * coisa — `sso: false` — para domínio desconhecido e para tenant sem SSO, sem
+ * dizer se o e-mail existe: a rota é pública e enumerar contas por aqui seria
+ * de graça.
+ */
+publicApp.post('/sso/iniciar', async (c) => {
+  try {
+    const v = await validateBody(c, ssoInicioSchema);
+    if (!v.success) return v.response;
+    const { email } = v.data as any;
+
+    const cfg = await configPorDominio(c.env, email);
+    if (!cfg) return c.json({ sso: false });
+
+    const d = await descobrir(c.env, cfg.issuer, fetch, (host) => resolveHostIsPublic(host));
+    const { url } = await iniciarLogin(c.env, cfg, d, redirectUriDe(c));
+    return c.json({ sso: true, autorizacao: url });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao iniciar o login federado', e);
+  }
+});
+
+/**
+ * Retorno do IdP. Valida tudo e devolve a sessão no FRAGMENTO da URL.
+ *
+ * Fragmento (`#`) e não query (`?`): o fragmento não é enviado ao servidor nem
+ * vai no cabeçalho `Referer`, então o token de sessão não termina em log de
+ * proxy nem no analytics de terceiro. É a mesma razão de o fluxo implícito do
+ * OAuth usar fragmento.
+ */
+publicApp.get('/sso/callback', async (c) => {
+  const falha = (motivo: string) =>
+    c.redirect(`/#sso_erro=${encodeURIComponent(motivo)}`, 302);
+
+  try {
+    const erroIdp = c.req.query('error');
+    if (erroIdp) return falha(erroIdp);
+
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    if (!code || !state) return falha('resposta do IdP incompleta');
+
+    // Uso único: lê e apaga. Replay do callback não pode virar sessão nova.
+    const guardado = await consumirState(c.env, state);
+    if (!guardado) return falha('pedido de login expirado ou já usado');
+
+    const cfg = await c.env.DB.prepare('SELECT * FROM project_sso WHERE project_id = ? AND ativo = 1')
+      .bind(guardado.project_id).first<any>();
+    if (!cfg) return falha('SSO não está ativo para este cliente');
+
+    const d = await descobrir(c.env, cfg.issuer, fetch, (host) => resolveHostIsPublic(host));
+    const segredo = await segredoDoCliente(c.env, cfg);
+
+    const { id_token } = await trocarCodigo(
+      d, { client_id: cfg.client_id, client_secret: segredo },
+      code, guardado.verifier, guardado.redirectUri
+    );
+
+    const jwksRes = await fetch(d.jwks_uri);
+    if (!jwksRes.ok) return falha('não foi possível obter as chaves do IdP');
+    const jwks = (await jwksRes.json()) as { keys: any[] };
+
+    const claims = await validarIdToken(id_token, {
+      jwks, issuer: cfg.issuer, clientId: cfg.client_id, nonce: guardado.nonce,
+    });
+
+    const usuario = await provisionar(c.env, cfg, claims);
+
+    const token = genToken();
+    const sessao = {
+      id: usuario.id,
+      email: usuario.email,
+      name: claims.name ?? usuario.email,
+      role: usuario.role,
+      client_project_id: usuario.client_project_id,
+      iat: Date.now(),
+    };
+    await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
+    await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
+
+    await logAudit(
+      c.env.DB, usuario.criado ? 'auth.sso_provisioned' : 'auth.sso_login', usuario.email,
+      `Login federado via ${cfg.issuer}${usuario.criado ? ' (conta criada no primeiro acesso)' : ''}`,
+      '', '', usuario.client_project_id
+    );
+
+    return c.redirect(`/#sso_token=${encodeURIComponent(token)}`, 302);
+  } catch (e: any) {
+    // A mensagem do erro vai para a TRILHA, não para a URL: ela distingue
+    // "assinatura inválida" de "nonce errado", e isso ajuda quem ataca mais do
+    // que quem tenta entrar.
+    await logAudit(c.env.DB, 'auth.sso_failed', 'anonimo', `Falha no callback de SSO: ${e?.message ?? e}`);
+    return falha('falha na autenticação federada');
   }
 });

@@ -93,6 +93,79 @@ describe('manutenção diária', () => {
     });
   });
 
+  describe('política de retenção', () => {
+    it('apaga notificação e chat velhos, e NÃO toca nos recentes', async () => {
+      await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind('proj-r', 'Cliente R', 'ISO 27001', 'controller', 'Active').run();
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO notifications (id, type, title, created_at) VALUES (?,?,?, datetime('now','-200 days'))`).bind('n-velha', 'x', 'Velha'),
+        env.DB.prepare(`INSERT INTO notifications (id, type, title, created_at) VALUES (?,?,?, datetime('now','-30 days'))`).bind('n-nova', 'x', 'Nova'),
+        env.DB.prepare(`INSERT INTO ai_chat_history (id, project_id, role, content, created_at) VALUES (?,?,?,?, datetime('now','-200 days'))`).bind('c-velho', 'proj-r', 'user', 'texto antigo'),
+        env.DB.prepare(`INSERT INTO ai_chat_history (id, project_id, role, content, created_at) VALUES (?,?,?,?, datetime('now','-10 days'))`).bind('c-novo', 'proj-r', 'user', 'texto recente'),
+      ]);
+
+      const r = await manutencaoDiaria(env as any);
+      expect(r.retencao.notifications).toBe(1);
+      expect(r.retencao.ai_chat_history).toBe(1);
+
+      const { results } = await env.DB.prepare(
+        `SELECT id FROM notifications UNION ALL SELECT id FROM ai_chat_history ORDER BY id`
+      ).all();
+      expect((results as any[]).map((x) => x.id)).toEqual(['c-novo', 'n-nova']);
+    });
+
+    it('NÃO apaga registro de GRC, por mais velho que seja', async () => {
+      // A asserção que impede a política de virar destruição de trabalho do
+      // cliente. Evidência, risco e controle são a razão de o produto existir, e
+      // o prazo deles é decisão do cliente — muitas vezes de norma, porque
+      // certificação exige o histórico dos ciclos anteriores.
+      await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind('proj-g', 'Cliente G', 'ISO 27001', 'controller', 'Active').run();
+
+      // Preenche toda coluna NOT NULL sem default a partir do PRAGMA. Listar as
+      // colunas à mão aqui já custou três rodadas de "NOT NULL constraint
+      // failed" — e o que este teste quer afirmar não tem nada a ver com o
+      // formato da linha.
+      for (const [tabela, id] of [['risks', 'r-antigo'], ['evidence', 'e-antiga']] as const) {
+        const { results: cols } = await env.DB.prepare(`PRAGMA table_info("${tabela}")`).all<any>();
+        const usadas: string[] = [];
+        const valores: unknown[] = [];
+        for (const col of cols as any[]) {
+          if (col.name === 'id') { usadas.push('id'); valores.push(id); continue; }
+          if (col.name === 'project_id') { usadas.push('project_id'); valores.push('proj-g'); continue; }
+          if (col.name === 'created_at') { continue; }
+          if (col.notnull && col.dflt_value === null) {
+            usadas.push(col.name);
+            valores.push(/INT|REAL|NUM/i.test(col.type ?? '') ? 1 : 'x');
+          }
+        }
+        usadas.push('created_at');
+        await env.DB.prepare(
+          `INSERT INTO "${tabela}" (${usadas.map((u) => `"${u}"`).join(',')}) VALUES (${usadas.slice(0, -1).map(() => '?').join(',')}, datetime('now','-3000 days'))`
+        ).bind(...valores).run();
+      }
+
+      await manutencaoDiaria(env as any);
+
+      expect(await env.DB.prepare('SELECT id FROM risks WHERE id = ?').bind('r-antigo').first()).not.toBeNull();
+      expect(await env.DB.prepare('SELECT id FROM evidence WHERE id = ?').bind('e-antiga').first()).not.toBeNull();
+    });
+
+    it('a trilha de auditoria NÃO é purgada — nem pela política, nem por acidente', async () => {
+      // Duas barreiras somadas: a tabela não está na política, e os triggers da
+      // migration 0018 recusam DELETE no nível do banco. O teste confere as duas.
+      await env.DB.prepare(`INSERT INTO audit_logs (id, action, actor, created_at) VALUES (?,?,?, datetime('now','-3000 days'))`)
+        .bind(crypto.randomUUID(), 'acao.antiga', 'quem@x.com').run();
+
+      const r = await manutencaoDiaria(env as any);
+      expect(Object.keys(r.retencao)).not.toContain('audit_logs');
+
+      await expect(
+        env.DB.prepare(`DELETE FROM audit_logs WHERE action = 'acao.antiga'`).run()
+      ).rejects.toThrow(/append-only/);
+    });
+  });
+
   describe('tolerância a falha', () => {
     it('uma tarefa que estoura não impede as outras, e a falha vai no resultado', async () => {
       // Sem a tabela, a purga de rate_limits estoura; a de tokens tem de rodar

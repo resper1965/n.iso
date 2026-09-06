@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, logAudit, requireResourceAccess, erro500 } from '../helpers';
-import { validateBody, createVendorSchema } from '../schemas';
+import { validateBody, createVendorSchema, vendorUpdateSchema } from '../schemas';
 
 export const vendorsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectVendorsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -35,7 +35,9 @@ vendorsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'vendors', id, c.get('user'));
-    const body = await c.req.json<any>();
+    const v = await validateBody(c, vendorUpdateSchema);
+    if (!v.success) return v.response;
+    const body = v.data as any;
     const ts = calculateTrustScore(body);
     const dl = diligenceLevel(ts);
 

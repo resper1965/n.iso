@@ -67,6 +67,29 @@ describe('Templates de política', () => {
     expect(JSON.stringify(await res.json())).not.toContain('passwd');
   });
 
+  it('a SoA traz os 93 controles do Anexo A:2022, nomeados um a um', async () => {
+    // A Declaração de Aplicabilidade é o único documento obrigatório que LISTA
+    // os 93 controles individualmente (Cl. 6.1.3 d). Um arquivo truncado passa
+    // no teste de "devolve 200" e falha na auditoria; o que prova o documento é
+    // a contagem, não o status.
+    const res = await pedir(worker, '/api/v1/policies/templates/soa-template', { headers });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const { markdown } = await res.json<any>();
+
+    const controles = markdown.match(/^\| A\.\d+\.\d+ \|/gm) ?? [];
+    expect(controles.length, 'a SoA não lista os 93 controles do Anexo A:2022').toBe(93);
+
+    // Distribuição por tema — pega arquivo com 93 linhas mas de um tema só.
+    const porTema = (t: string) => (markdown.match(new RegExp(`^\\| ${t}\\.\\d+ \\|`, 'gm')) ?? []).length;
+    expect([porTema('A\\.5'), porTema('A\\.6'), porTema('A\\.7'), porTema('A\\.8')]).toEqual([37, 8, 14, 34]);
+
+    // Três dos onze controles NOVOS de 2022: um arquivo montado a partir da
+    // lista de 2013 tem 93 linhas plausíveis e nenhum destes.
+    for (const novo of ['A.5.7', 'A.5.23', 'A.8.28']) {
+      expect(markdown, `controle novo de 2022 ausente: ${novo}`).toContain(`| ${novo} |`);
+    }
+  });
+
   it('template real volta com o nome da organização já substituído', async () => {
     const res = await pedir(worker, '/api/v1/policies/templates/isms-policy', { headers });
     expect(res.status).toBe(200);

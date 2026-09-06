@@ -46,9 +46,14 @@ jobs:
           base=https://niso.ness.workers.dev
           for tentativa in 1 2 3; do
             motivo=""
-            código=$(curl -s -m 15 -o /dev/null -w "%{http_code}" "$base/health" || echo "000")
+            saude=$(curl -s -m 15 -w "\n%{http_code}" "$base/health" || echo $'\n000')
+            código=$(printf '%s' "$saude" | tail -n1)
             if [ "$código" != "200" ]; then
               motivo="/health devolveu $código"
+            elif ! printf '%s' "$saude" | grep -q '"version"'; then
+              # `/health` sem o campo `version` = código anterior ao item 0.2 no
+              # ar. Não é queda, mas é deploy que não saiu — e vale alerta.
+              motivo="/health respondeu sem o campo version — código antigo publicado"
             else
               corpo=$(curl -s -m 15 -X POST -H "Content-Type: application/json" -d '{}' "$base/api/v1/auth/login" || echo "")
               echo "$corpo" | grep -q 'Payload inválido' || motivo="login com corpo vazio não devolveu o envelope de validação"
