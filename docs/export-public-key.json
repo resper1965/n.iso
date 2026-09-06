@@ -1,0 +1,11 @@
+{
+  "alg": "Ed25519",
+  "chave": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "x": "O3ZgAaEwY6Z1dpYvyFhSiLiC3zCug94vydjMfRrAuGs",
+    "kty": "OKP"
+  },
+  "gerada_em": "2026-09-06",
+  "para_que": "Verificar a assinatura de um export de portabilidade (docs/portabilidade.md). Serve tambem em GET /api/v1/public/export-public-key."
+}

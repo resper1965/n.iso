@@ -37,28 +37,61 @@ veio deixa o resto parecer inexistente.
 O manifesto sempre traz `sha256` do payload — isso prova **integridade**: o
 arquivo não foi alterado depois de gerado.
 
-Prova de **origem** exige assinatura, e para isso configure o segredo:
+Prova de **origem** é a assinatura, e ela é **Ed25519**, não HMAC. A diferença
+importa e é o motivo de o desenho ter mudado: uma assinatura existe para provar
+origem a **quem recebe**, e com HMAC quem consegue verificar também consegue
+forjar. O recipiente de um export de portabilidade é o cliente — às vezes o
+sucessor dele, que nem conta tem aqui — e entregar a ele uma chave capaz de
+fabricar exports falsos anularia o objetivo.
+
+Com Ed25519 a chave privada nunca sai do Worker; a pública é publicada:
 
 ```bash
-npx wrangler secret put EXPORT_SIGNING_KEY
+curl https://niso.ness.workers.dev/api/v1/public/export-public-key
+# {"alg":"Ed25519","chave":{"kty":"OKP","crv":"Ed25519","x":"..."}}
 ```
 
-Chave própria, e não a `TOKEN_ENC_KEY` que já existe: reusar uma chave para
-cifrar token e para assinar export junta dois domínios de comprometimento que
-não têm por que se tocar.
+Também versionada em `docs/export-public-key.json`, para quem quiser conferir
+que a chave servida é a mesma que o repositório declara.
 
-Sem o segredo o export **continua saindo**, com `assinatura: null` e o motivo
-escrito em `assinatura_ausente`. Recusar o export por falta de configuração
-transformaria um direito do titular em refém de setup; dizer que está assinado
-quando não está seria pior. Fica explícito.
+### Verificar um export recebido
 
-Conferir uma assinatura recebida:
+```js
+// Node 22+, sem dependência
+import { webcrypto as c } from 'node:crypto';
+const { manifesto, dados } = JSON.parse(await fs.readFile('export.json', 'utf8'));
+const { chave } = await (await fetch('https://niso.ness.workers.dev/api/v1/public/export-public-key')).json();
+
+const pub = await c.subtle.importKey('jwk', chave, { name: 'Ed25519' }, false, ['verify']);
+const ok  = await c.subtle.verify(
+  { name: 'Ed25519' }, pub,
+  Uint8Array.from(atob(manifesto.assinatura), ch => ch.charCodeAt(0)),
+  new TextEncoder().encode(JSON.stringify(dados)),   // sem indentação: a forma assinada
+);
+console.log(ok ? 'assinatura confere' : 'ASSINATURA INVÁLIDA');
+```
+
+### Configurar (ou rotacionar) a chave
 
 ```bash
-# `dados` é o objeto sob a chave "dados", serializado sem espaços — a mesma
-# forma que o Worker assinou (JSON.stringify sem indentação).
-jq -cj '.dados' export.json | openssl dgst -sha256 -hmac "$EXPORT_SIGNING_KEY"
+node -e "const{webcrypto:c}=require('crypto');(async()=>{
+  const p=await c.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
+  console.log('PRIVADA:', Buffer.from(await c.subtle.exportKey('pkcs8',p.privateKey)).toString('base64'));
+  const j=await c.subtle.exportKey('jwk',p.publicKey); delete j.key_ops; delete j.ext;
+  console.log('PUBLICA:', JSON.stringify(j));})()"
+
+npx wrangler secret put EXPORT_SIGNING_KEY     # cole a PRIVADA
+# e ponha a PUBLICA em `vars.EXPORT_PUBLIC_KEY` do wrangler.jsonc + docs/export-public-key.json
 ```
+
+Sem a chave o export **continua saindo**, com `assinatura: null` e o motivo em
+`assinatura_ausente`. Recusar o export por falta de configuração transformaria
+um direito do titular em refém de setup; dizer que está assinado quando não está
+seria pior.
+
+Chave presente mas ilegível é reportada de forma **diferente** de chave ausente
+(`"presente mas inválida"`): uma rotação malfeita que passasse como "ainda não
+configurado" não seria investigada por ninguém.
 
 ## Quem pode baixar
 

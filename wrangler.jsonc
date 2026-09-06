@@ -176,6 +176,12 @@
 	// claro (fallback legado). Após provisionar, rode uma vez
 	// `POST /api/v1/projects/admin/encrypt-tokens` (platform_admin) para migrar o legado.
 	"vars": {
-		"ENVIRONMENT": "production"
+		"ENVIRONMENT": "production",
+		// Chave PÚBLICA de verificação dos exports de portabilidade (item 4.6).
+		// É `var` e não `secret` DE PROPÓSITO: ela existe para ser publicada — o
+		// Worker a serve em `GET /api/v1/public/export-public-key`, e quem recebe
+		// um export precisa dela para conferir a assinatura. A privada
+		// correspondente (`EXPORT_SIGNING_KEY`) é secret e nunca sai daqui.
+		"EXPORT_PUBLIC_KEY": "{\"alg\":\"Ed25519\",\"crv\":\"Ed25519\",\"x\":\"O3ZgAaEwY6Z1dpYvyFhSiLiC3zCug94vydjMfRrAuGs\",\"kty\":\"OKP\"}"
 	}
 }

@@ -65,6 +65,10 @@ export type Bindings = {
   ANALYTICS?: AnalyticsEngineDataset;
   /** SHA do commit publicado. Injetada no deploy; ausente em dev e em teste. */
   VERSAO_SHA?: string;
+  /** Chave PRIVADA (PKCS#8 base64) que assina o export de portabilidade. Secret. */
+  EXPORT_SIGNING_KEY?: string;
+  /** Chave PÚBLICA correspondente, em JWK. `var`, não secret — é para publicar. */
+  EXPORT_PUBLIC_KEY?: string;
   /** Metadados da versão publicada (binding nativo do Workers). */
   CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
   /** Bucket da trilha de auditoria arquivada (src/trilha.ts). */

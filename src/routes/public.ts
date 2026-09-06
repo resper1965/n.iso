@@ -7,6 +7,7 @@ import {
   validarIdToken, provisionar, segredoDoCliente,
 } from '../sso';
 import { resolveHostIsPublic } from './integrations';
+import { chavePublicaJwk, ALG_ASSINATURA } from '../portabilidade';
 import { genToken, SESSION_TTL_SEC } from '../helpers';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
@@ -220,6 +221,25 @@ publicApp.post('/policies/ack', async (c) => {
   }
 });
 
+
+/**
+ * Chave PÚBLICA de assinatura dos exports de portabilidade (item 4.6).
+ *
+ * Pública de propósito, e sem sessão: uma assinatura só prova origem se QUEM
+ * RECEBE puder verificá-la, e o recipiente de um export de portabilidade é o
+ * cliente — às vezes o sucessor dele, que não tem conta aqui. Exigir
+ * autenticação para obter a chave de verificação anularia o objetivo.
+ *
+ * Ed25519 e não HMAC exatamente por isso: com chave simétrica, quem verifica
+ * também forja.
+ */
+publicApp.get('/export-public-key', async (c) => {
+  const jwk = await chavePublicaJwk(c.env);
+  if (!jwk) {
+    return c.json({ error: 'Assinatura de export não está configurada nesta instalação.' }, 503);
+  }
+  return c.json({ alg: ALG_ASSINATURA, chave: jwk });
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  SSO por OIDC (item 4.1). Rotas PÚBLICAS — são o caminho de entrar.

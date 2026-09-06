@@ -45,6 +45,8 @@ export type Manifesto = {
   total_linhas: number;
   sha256: string;
   assinatura: string | null;
+  /** Algoritmo da assinatura, quando há. Ausente não é o mesmo que \"qualquer um\". */
+  assinatura_alg?: string;
   /** Por que não há assinatura, quando não há. Nunca fica em branco em silêncio. */
   assinatura_ausente?: string;
   nao_incluido: string[];
@@ -65,35 +67,82 @@ async function sha256(texto: string): Promise<string> {
 }
 
 /**
- * HMAC-SHA256 sobre o payload canônico.
+ * Assinatura Ed25519 sobre o payload canônico.
  *
- * Chave PRÓPRIA (`EXPORT_SIGNING_KEY`), e não a `TOKEN_ENC_KEY` que já existe:
- * reusar uma chave para cifrar token e para assinar export junta dois domínios
- * de comprometimento que não têm por que se tocar.
+ * POR QUE ASSIMÉTRICA, e não o HMAC que estava aqui antes.
  *
- * Sem a chave o export continua saindo — com `assinatura: null` e o motivo
- * escrito no manifesto. Recusar o export por falta de assinatura transformaria
- * um direito do titular em refém de configuração; mentir dizendo que está
- * assinado seria pior. Fica explícito.
+ * Uma assinatura existe para provar ORIGEM a QUEM RECEBE. HMAC é simétrico:
+ * quem consegue verificar consegue também forjar, então o verificador precisa
+ * de uma chave que, tendo, o torna capaz de fabricar um export falso. Para
+ * "prove que este arquivo saiu do nISO", isso não fecha — e o modo de falha era
+ * pior que a ausência: o manifesto diria `assinado`, mas ninguém de fora
+ * conseguiria conferir sem receber uma chave que não deveria receber.
+ *
+ * Com Ed25519 a chave privada nunca sai do Worker e a pública é publicada
+ * (`GET /api/v1/public/export-public-key`, e `docs/export-public-key.json` no
+ * repositório). Qualquer um verifica; ninguém forja; não há segredo para
+ * custodiar do lado de quem recebe.
+ *
+ * Sem a chave configurada o export continua saindo — com `assinatura: null` e o
+ * motivo escrito. Recusar o export por falta de configuração transformaria um
+ * direito do titular em refém de setup; dizer que está assinado quando não está
+ * seria pior.
  */
+export const ALG_ASSINATURA = 'Ed25519';
+
+function desb64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function b64(buf: ArrayBuffer): string {
+  let s = '';
+  for (const b of new Uint8Array(buf)) s += String.fromCharCode(b);
+  return btoa(s);
+}
+
+/** Importa a chave privada do segredo (PKCS#8 em base64). */
+async function chavePrivada(env: Bindings): Promise<CryptoKey | null> {
+  const material = (env as any).EXPORT_SIGNING_KEY as string | undefined;
+  if (!material) return null;
+  return crypto.subtle.importKey('pkcs8', desb64(material), { name: ALG_ASSINATURA }, false, ['sign']);
+}
+
 async function assinar(env: Bindings, payload: string): Promise<{ assinatura: string | null; motivo?: string }> {
-  const segredo = (env as any).EXPORT_SIGNING_KEY as string | undefined;
-  if (!segredo) {
+  let chave: CryptoKey | null;
+  try {
+    chave = await chavePrivada(env);
+  } catch (e: any) {
+    // Chave presente mas ilegível é DIFERENTE de chave ausente, e o manifesto
+    // precisa dizer qual dos dois — senão uma rotação malfeita passa como
+    // "ainda não configurado" e ninguém investiga.
+    return { assinatura: null, motivo: `EXPORT_SIGNING_KEY presente mas inválida (PKCS#8/base64): ${e?.message ?? e}` };
+  }
+  if (!chave) {
     return {
       assinatura: null,
       motivo:
         'EXPORT_SIGNING_KEY não configurada — o sha256 abaixo prova INTEGRIDADE do arquivo, ' +
-        'não ORIGEM. Para export assinado, configure o segredo (ver docs/portabilidade.md).',
+        'não ORIGEM. Ver docs/portabilidade.md.',
     };
   }
-  const chave = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(segredo),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  return { assinatura: hex(await crypto.subtle.sign('HMAC', chave, new TextEncoder().encode(payload))) };
+  const sig = await crypto.subtle.sign({ name: ALG_ASSINATURA }, chave, new TextEncoder().encode(payload));
+  return { assinatura: b64(sig) };
+}
+
+/** Chave PÚBLICA correspondente, em JWK. Publicada para quem recebe verificar. */
+export async function chavePublicaJwk(env: Bindings): Promise<JsonWebKey | null> {
+  const material = (env as any).EXPORT_SIGNING_KEY as string | undefined;
+  if (!material) return null;
+  // O PKCS#8 de Ed25519 carrega só a privada; a pública é derivada dela pelo
+  // runtime ao importar como par. `importKey` de pkcs8 não devolve a pública,
+  // então ela vem do var `EXPORT_PUBLIC_KEY` — publicada de propósito, e por
+  // isso é `var` e não `secret`.
+  const pub = (env as any).EXPORT_PUBLIC_KEY as string | undefined;
+  if (!pub) return null;
+  return JSON.parse(pub) as JsonWebKey;
 }
 
 /** Tabelas com coluna `project_id`, descobertas do próprio banco. */
@@ -149,6 +198,7 @@ export async function exportarProjeto(env: Bindings, projectId: string): Promise
     total_linhas: total,
     sha256: digest,
     assinatura,
+    ...(assinatura ? { assinatura_alg: ALG_ASSINATURA } : {}),
     ...(motivo ? { assinatura_ausente: motivo } : {}),
     nao_incluido: [
       'Arquivos de evidência (R2): vão as chaves, os hashes e os tamanhos na tabela `evidence`; o conteúdo sai por download individual.',

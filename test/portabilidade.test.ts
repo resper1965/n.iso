@@ -109,19 +109,60 @@ describe('Export de portabilidade', () => {
     expect(manifesto.assinatura_ausente, 'null sem motivo').toContain('EXPORT_SIGNING_KEY');
   });
 
-  it('com EXPORT_SIGNING_KEY o manifesto sai assinado, e a assinatura muda com o conteúdo', async () => {
-    const comChave = { ...env, EXPORT_SIGNING_KEY: 'chave-de-teste-nao-usar-em-producao' } as any;
+  it('assina com Ed25519, e QUEM RECEBE consegue verificar com a chave pública', async () => {
+    // A asserção que justifica ter trocado HMAC por assimétrico: a verificação
+    // abaixo usa SÓ a chave pública. Com HMAC, quem verificasse também
+    // conseguiria forjar — e uma assinatura que o recipiente não pode conferir
+    // sem poder falsificar não prova origem a ninguém.
+    const par = await crypto.subtle.generateKey({ name: 'Ed25519' } as any, true, ['sign', 'verify']);
+    const pkcs8 = await crypto.subtle.exportKey('pkcs8', (par as any).privateKey);
+    const b64 = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b)));
+    const comChave = { ...env, EXPORT_SIGNING_KEY: b64(pkcs8) } as any;
 
     const um = await exportarProjeto(comChave, A);
-    expect(um.manifesto.assinatura).toMatch(/^[0-9a-f]{64}$/);
+    expect(um.manifesto.assinatura_alg).toBe('Ed25519');
     expect(um.manifesto.assinatura_ausente).toBeUndefined();
 
-    // Sem esta segunda metade, um HMAC de constante passaria no teste acima.
+    const sig = Uint8Array.from(atob(um.manifesto.assinatura!), (ch) => ch.charCodeAt(0));
+    const ok = await crypto.subtle.verify(
+      { name: 'Ed25519' } as any,
+      (par as any).publicKey,
+      sig,
+      new TextEncoder().encode(JSON.stringify(um.dados))
+    );
+    expect(ok, 'a assinatura não confere com a chave pública').toBe(true);
+  });
+
+  it('a assinatura NÃO confere se o conteúdo mudar', async () => {
+    // Sem esta metade, uma assinatura de constante passaria no teste acima.
+    const par = await crypto.subtle.generateKey({ name: 'Ed25519' } as any, true, ['sign', 'verify']);
+    const pkcs8 = await crypto.subtle.exportKey('pkcs8', (par as any).privateKey);
+    const b64 = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b)));
+    const comChave = { ...env, EXPORT_SIGNING_KEY: b64(pkcs8) } as any;
+
+    const um = await exportarProjeto(comChave, A);
     await env.DB.prepare('INSERT INTO vendors (id, project_id, name) VALUES (?,?,?)')
       .bind('v-a2', A, 'Outro fornecedor').run();
     const dois = await exportarProjeto(comChave, A);
+
     expect(dois.manifesto.assinatura).not.toBe(um.manifesto.assinatura);
     expect(dois.manifesto.sha256).not.toBe(um.manifesto.sha256);
+
+    const sigVelha = Uint8Array.from(atob(um.manifesto.assinatura!), (ch) => ch.charCodeAt(0));
+    const confere = await crypto.subtle.verify(
+      { name: 'Ed25519' } as any, (par as any).publicKey, sigVelha,
+      new TextEncoder().encode(JSON.stringify(dois.dados))
+    );
+    expect(confere, 'assinatura antiga validou conteúdo novo').toBe(false);
+  });
+
+  it('chave presente mas ilegível é DIFERENTE de chave ausente', async () => {
+    // Rotação malfeita não pode passar como "ainda não configurado" — ninguém
+    // investigaria.
+    const ruim = { ...env, EXPORT_SIGNING_KEY: 'isto-nao-e-pkcs8' } as any;
+    const r = await exportarProjeto(ruim, A);
+    expect(r.manifesto.assinatura).toBeNull();
+    expect(r.manifesto.assinatura_ausente).toContain('presente mas inválida');
   });
 });
 

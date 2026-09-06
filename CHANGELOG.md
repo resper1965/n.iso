@@ -10,13 +10,17 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 > o item 0.3 do `enterprise-grade-plan.md`; a lacuna fica registrada em vez de
 > apagada.
 
-## [Não publicado] — será a 9.0.0
+## [Não publicado]
+
+- Assinatura do export de portabilidade passa de HMAC para **Ed25519**. Uma
+  assinatura prova origem a QUEM RECEBE, e com chave simétrica quem verifica
+  também forja — o recipiente de um export é o cliente, às vezes o sucessor
+  dele. A pública é publicada; a privada nunca sai do Worker.
+
+## [9.0.0] - 2026-09-06
 
 Ondas 3 e 4 do plano enterprise. **Major** por causa de duas mudanças de
 comportamento em rotas existentes (ver *Alterado*), não por tamanho.
-
-A tag `v9.0.0` sai no merge, não antes: tag em commit que ainda pode mudar é
-tag que mente.
 
 ### Adicionado
 - **SSO por OIDC, por tenant** (4.1): PKCE S256, `state` de uso único, `nonce`
