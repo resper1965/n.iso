@@ -1,0 +1,30 @@
+# Cabeçalhos de segurança dos ARQUIVOS ESTÁTICOS.
+#
+# O `secureHeaders` de src/index.ts diz, em comentário, valer "inclusive no
+# catch-all estático". Não valia: sem `assets.run_worker_first` (o padrão), o
+# Workers Assets responde ANTES de o Worker rodar, então o HTML — justamente o
+# documento que carrega e executa os scripts — saía sem CSP, sem HSTS e sem
+# anti-framing. O CSP endurecido do S2 cobria só as respostas JSON da API, onde
+# script injetado não executa de qualquer forma.
+#
+# Este é o mecanismo próprio do Workers Assets: é lido pelo Workers, não é
+# servido como asset e não custa invocação de Worker — que é o que
+# `run_worker_first: true` cobraria, em TODA requisição de arquivo estático.
+#
+# Os valores repetem os do Worker de propósito: `_headers` não alcança resposta
+# de Worker, e o Worker não alcança asset, então não existe fonte única possível.
+# `test/cabecalhos-assets.test.ts` compara os dois lados e falha se divergirem.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Origin-Agent-Cluster: ?1
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  X-DNS-Prefetch-Control: off
+  X-Download-Options: noopen
+  X-Frame-Options: SAMEORIGIN
+  X-Permitted-Cross-Domain-Policies: none
+  X-XSS-Protection: 0

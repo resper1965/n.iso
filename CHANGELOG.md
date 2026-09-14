@@ -37,6 +37,9 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - `scripts/gerar-openapi.mjs` montava caminhos com `URL.pathname`, que em Windows sai como `/C:/...` com acentos percent-encoded; passa a usar `fileURLToPath`.
 - `POST /controls/:id/trilha/desfazer` lia o corpo cru; passa por `trilhaDesfazerSchema` e entra no contrato OpenAPI, junto das rotas de documentos legais.
 
+### Segurança
+- **Os cabeçalhos de segurança não alcançavam o HTML.** O `secureHeaders` do Worker só vale para resposta que o Worker gera; sem `assets.run_worker_first`, o Workers Assets serve o arquivo estático antes disso. Na prática o documento que carrega e executa os scripts saía sem CSP, sem HSTS, sem `nosniff` e sem anti-framing — o CSP endurecido do S2 (treze PRs para tirar `unsafe-inline` de `script-src`) cobria apenas as respostas JSON da API, onde script injetado não executa de qualquer forma, e a console de GRC ficava enquadrável em iframe. Os mesmos cabeçalhos passam a ser declarados em `frontend/public/_headers`, que é o mecanismo do Workers Assets para isso (sem custo de invocação de Worker); `test/cabecalhos-assets.test.ts` compara os dois lados e falha se divergirem.
+
 ## [9.0.0] - 2026-09-06
 
 Ondas 3 e 4 do plano enterprise. **Major** por causa de duas mudanças de
