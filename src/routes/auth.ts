@@ -123,7 +123,13 @@ authApp.post('/login', async (c) => {
 
     const ip = clientIp(c);
     const chaves = chavesTentativa(email, ip);
-    const desafioVerificavel = Boolean((c.env as any).TURNSTILE_SECRET_KEY);
+    // As DUAS chaves, não só o segredo. O segredo sozinho fazia o servidor
+    // exigir um desafio que a tela não tinha como montar: quem errasse a senha
+    // uma vez ficava sem entrar até a janela de 15 min expirar. Meia
+    // configuração agora não exige nada, que é a falha segura — o bloqueio
+    // temporário e o teto por conta continuam valendo sem o Turnstile.
+    const siteKeyDesafio = (c.env as any).TURNSTILE_SITE_KEY as string | undefined;
+    const desafioVerificavel = Boolean((c.env as any).TURNSTILE_SECRET_KEY && siteKeyDesafio);
 
     if (await c.env.SESSIONS.get(chaves.bloqueio)) {
       return c.json({ error: mensagemBloqueio(), locked: true }, 429);
@@ -138,6 +144,10 @@ authApp.post('/login', async (c) => {
       return c.json({
         error: 'Conclua a verificação de segurança para continuar.',
         challengeRequired: true,
+        // A tela monta o widget com isto. Vem daqui, e não do build do frontend,
+        // porque é o servidor que sabe SE o desafio é exigido — e é no mesmo
+        // instante que ele sabe COM QUE chave montá-lo.
+        challengeSiteKey: siteKeyDesafio,
         attemptsRemaining: antes.tentativasRestantes,
       }, 401);
     }
@@ -178,6 +188,7 @@ authApp.post('/login', async (c) => {
       return c.json({
         error: mensagemCredencialInvalida(depois.tentativasRestantes),
         challengeRequired: depois.exigeDesafio,
+        ...(depois.exigeDesafio ? { challengeSiteKey: siteKeyDesafio } : {}),
         attemptsRemaining: depois.tentativasRestantes,
       }, 401);
     }

@@ -47,8 +47,21 @@ describe('Cabeçalhos de segurança', () => {
     const scriptSrc = csp.split(';').find(d => d.trim().startsWith('script-src')) || '';
     expect(scriptSrc).toContain('script-src');
     expect(scriptSrc).not.toContain('unsafe-inline');
-    // script-src fica em 'self' apenas (nenhum inline, nenhuma CDN).
-    expect(scriptSrc.replace('script-src', '').trim()).toBe("'self'");
+    expect(scriptSrc).not.toContain('unsafe-eval');
+    expect(scriptSrc).not.toContain('*');
+
+    // Allowlist FECHADA, não "contém 'self'": a lista é comparada inteira, então
+    // host novo só entra passando por aqui — e quem passar tem de escrever o
+    // motivo, como o de baixo. Era `toBe("'self'")` até o widget do desafio
+    // existir; afrouxar para um `toContain` teria trocado a garantia por nada.
+    const fontes = scriptSrc.replace('script-src', '').trim().split(/\s+/).sort();
+    expect(fontes).toEqual([
+      "'self'",
+      // Turnstile: o desafio anti-abuso do login carrega o script de lá (e monta
+      // um iframe no mesmo domínio — ver `frame-src`). Exigência documentada do
+      // produto; sem isto o widget não roda.
+      'https://challenges.cloudflare.com',
+    ].sort());
   });
 
   it('permite exatamente as origens externas que o frontend usa', async () => {

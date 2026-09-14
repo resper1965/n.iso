@@ -51,15 +51,19 @@ export type Bindings = {
   STORAGE: R2Bucket;
   AI: Ai;
   SETUP_KEY?: string;
-  /** Segredo do desafio anti-abuso do login. Sem ele o desafio não é exigido
-      nem anunciado; o bloqueio temporário continua valendo.
+  /** Segredo do desafio anti-abuso do login, conferido contra o siteverify do
+      Turnstile. Sem ele o desafio não é exigido nem anunciado; o bloqueio
+      temporário continua valendo.
 
-      NÃO É CONFIGURAÇÃO OPCIONAL ISOLADA — é um interruptor de duas pontas.
-      Defini-lo faz o servidor EXIGIR `challengeToken` a partir da 2ª falha, e a
-      tela de entrada ainda não monta widget nenhum (o container existe, o script
-      do Turnstile e a site key não). Ligar só este segredo tranca para fora quem
-      errar a senha uma vez. O que falta está na issue #170. */
+      Só liga o desafio EM PAR com `TURNSTILE_SITE_KEY` — ver `desafioVerificavel`
+      em routes/auth.ts. Meia configuração não exige desafio nenhum: exigir um
+      que a tela não tem como montar trancaria para fora quem errasse a senha
+      uma vez. */
   TURNSTILE_SECRET_KEY?: string;
+  /** Site key do Turnstile. Pública (vai no HTML); declarada em wrangler.jsonc.
+      O servidor a devolve junto do aviso de desafio, para a tela montar o widget
+      sem precisar dela no build. */
+  TURNSTILE_SITE_KEY?: string;
   /** Chave para cifrar segredos em repouso (repository_token). Secret:
    *  `npx wrangler secret put TOKEN_ENC_KEY`. Sem ela, tokens são gravados em
    *  texto claro (fallback legado) — configure em produção. */
@@ -137,7 +141,11 @@ app.use('*', secureHeaders({
     // inline nem <script> inline: quebram sob este CSP e reabrem o buraco.
     // (style-src mantém 'unsafe-inline' — os atributos style="" são pervasivos
     // e de baixo risco; nonce não cobre atributo de estilo.)
-    scriptSrc: ["'self'"],
+    // `challenges.cloudflare.com` é o desafio anti-abuso do login: o Turnstile
+    // carrega o próprio script de lá e monta um iframe no mesmo domínio (exigência
+    // documentada). São as duas únicas origens de terceiro no CSP, e só existem
+    // porque o widget não roda de outro jeito.
+    scriptSrc: ["'self'", 'https://challenges.cloudflare.com'],
     styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
     imgSrc: ["'self'", 'data:', 'blob:'],
@@ -149,7 +157,7 @@ app.use('*', secureHeaders({
     // ar antes e depois desta linha. O `srcdoc` do preview de proposta não passa
     // por aqui (herda a política do pai), e foi conferido do mesmo jeito.
     // Baixar não precisa de diretiva: `<a download href="blob:">` é navegação.
-    frameSrc: ["'self'", 'blob:'],
+    frameSrc: ["'self'", 'blob:', 'https://challenges.cloudflare.com'],
     // Estas valem mesmo com 'unsafe-inline': fecham injecao de <base>, de
     // plugin, exfiltracao por <form action> e clickjacking por iframe.
     objectSrc: ["'none'"],

@@ -128,20 +128,22 @@ describe('desafio anti-abuso', () => {
   });
 
   // Deixar Entrar desabilitado sem ter como resolver o desafio trancaria o
-  // usuário para fora — e hoje não há widget montado.
-  it('sem widget para resolver, NÃO desabilita o Entrar', async () => {
+  // usuário para fora. É o caso de servidor pedindo desafio sem dizer com que
+  // chave montá-lo — meia configuração, que o servidor já não deveria produzir.
+  it('sem site key, NÃO desabilita o Entrar', async () => {
     apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true }));
     await window.doLogin();
     expect(document.getElementById('login-submit').disabled).toBe(false);
   });
 
   it('com widget montado, o Entrar só libera quando o desafio é resolvido', async () => {
-    document.getElementById('login-challenge-widget').innerHTML = '<iframe></iframe>';
-    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true }));
+    window.turnstile = { render: vi.fn(() => 'w1'), reset: vi.fn(), remove: vi.fn() };
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xTESTE' }));
     await window.doLogin();
     expect(document.getElementById('login-submit').disabled).toBe(true);
     window.setLoginChallengeToken('tok-123');
     expect(document.getElementById('login-submit').disabled).toBe(false);
+    delete window.turnstile;
   });
 
   it('o token resolvido vai no corpo do login', async () => {
@@ -159,6 +161,82 @@ describe('desafio anti-abuso', () => {
     apiMock.mockResolvedValue({ token: 't', user: {} });
     await window.doLogin();
     expect(apiMock.mock.calls[0][2]).not.toHaveProperty('challengeToken');
+  });
+});
+
+describe('widget do Turnstile', () => {
+  let turnstile;
+
+  beforeEach(async () => {
+    turnstile = { render: vi.fn(() => 'w1'), reset: vi.fn(), remove: vi.fn() };
+    window.turnstile = turnstile;
+    // O handle do widget é estado de módulo e sobrevive entre testes. Um login
+    // bem-sucedido chama `escondeDesafio`, que o descarta — é a única porta
+    // pública para isso, e usá-la evita espiar o interior do módulo.
+    apiMock.mockResolvedValue({ token: 't', user: {} });
+    await window.doLogin();
+    apiMock.mockReset();
+    turnstile.render.mockClear();
+    turnstile.reset.mockClear();
+    turnstile.remove.mockClear();
+  });
+
+  afterEach(() => { delete window.turnstile; });
+
+  it('monta o widget com a site key que o SERVIDOR mandou', async () => {
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xDOSERVIDOR' }));
+    await window.doLogin();
+
+    expect(turnstile.render).toHaveBeenCalledTimes(1);
+    const [alvo, opcoes] = turnstile.render.mock.calls[0];
+    expect(alvo).toBe('#login-challenge-widget');
+    expect(opcoes.sitekey).toBe('0xDOSERVIDOR');
+  });
+
+  // A regra que mais quebra integração de Turnstile: o token é de uso único e o
+  // desafio é conferido ANTES da senha, então uma tentativa com senha errada já
+  // gastou o token. Sem reiniciar, a próxima é recusada por "token já usado" e a
+  // pessoa fica presa — o mesmo sintoma de não haver widget nenhum.
+  it('a segunda falha REINICIA o widget em vez de montar outro', async () => {
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xDOSERVIDOR' }));
+    await window.doLogin();
+    await window.doLogin();
+
+    expect(turnstile.render).toHaveBeenCalledTimes(1);
+    expect(turnstile.reset).toHaveBeenCalledWith('w1');
+  });
+
+  it('o token que o widget devolve é o que vai no corpo da tentativa seguinte', async () => {
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xDOSERVIDOR' }));
+    await window.doLogin();
+
+    // O Turnstile chama o callback quando a pessoa resolve.
+    turnstile.render.mock.calls[0][1].callback('tok-do-widget');
+
+    apiMock.mockReset();
+    apiMock.mockResolvedValue({ token: 't', user: {} });
+    await window.doLogin();
+    expect(apiMock.mock.calls[0][2].challengeToken).toBe('tok-do-widget');
+  });
+
+  it('token expirado volta a travar o Entrar', async () => {
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xDOSERVIDOR' }));
+    await window.doLogin();
+    const opcoes = turnstile.render.mock.calls[0][1];
+
+    opcoes.callback('tok');
+    expect(document.getElementById('login-submit').disabled).toBe(false);
+    opcoes['expired-callback']();
+    expect(document.getElementById('login-submit').disabled).toBe(true);
+  });
+
+  it('erro no widget libera o botão — não deixa a pessoa sem saída', async () => {
+    apiMock.mockRejectedValue(erroApi('erro', { challengeRequired: true, challengeSiteKey: '0xDOSERVIDOR' }));
+    await window.doLogin();
+    expect(document.getElementById('login-submit').disabled).toBe(true);
+
+    turnstile.render.mock.calls[0][1]['error-callback']();
+    expect(document.getElementById('login-submit').disabled).toBe(false);
   });
 });
 

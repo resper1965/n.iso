@@ -154,19 +154,77 @@ window.setLoginChallengeToken = function setLoginChallengeToken(token) {
         if (btn) btn.disabled = !desafioResolvido;
     };
 
+/** Promessa do script do Turnstile: carregado uma vez, sob demanda. */
+let turnstilePromessa = null;
+/** Handle do widget montado, para poder reiniciá-lo. */
+let turnstileWidget = null;
+
 /**
- * Mostra o bloco de verificação. Só é chamado quando o SERVIDOR diz que o
- * desafio é exigido — e ele só diz isso quando sabe conferir. Se não houver
- * widget montável, o bloco não trava o botão: deixar `Entrar` desabilitado sem
- * ter como resolver o desafio seria trancar o usuário para fora.
+ * Carrega o script do Turnstile. Só quando o servidor pede desafio — não faz
+ * sentido buscar script de terceiro em toda visita à tela de entrada, e a
+ * maioria dos logins nunca chega aqui.
  */
-function mostraDesafio() {
+function carregaTurnstile() {
+        if (turnstilePromessa) return turnstilePromessa;
+        turnstilePromessa = new Promise((resolve, reject) => {
+            if (window.turnstile) return resolve();
+            const tag = document.createElement('script');
+            // `render=explicit`: quem decide quando montar é o código, não o
+            // script varrendo o DOM — o bloco começa escondido.
+            tag.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+            tag.async = true;
+            tag.onload = () => resolve();
+            tag.onerror = () => reject(new Error('turnstile indisponível'));
+            document.head.appendChild(tag);
+        });
+        return turnstilePromessa;
+    }
+
+/**
+ * Mostra o bloco de verificação e monta (ou reinicia) o widget.
+ *
+ * REINICIAR é a parte que não pode faltar: o token do Turnstile é de uso único
+ * e o desafio é conferido ANTES da senha, então uma tentativa com senha errada
+ * já gastou o token. Sem o reset, a tentativa seguinte é recusada por "token já
+ * usado" e a pessoa fica presa — o mesmo sintoma de não haver widget nenhum.
+ *
+ * Se o widget não puder ser montado (script bloqueado, sem site key), o botão
+ * NÃO fica travado: deixar `Entrar` desabilitado sem ter como resolver o desafio
+ * seria trancar o usuário para fora. Ele tenta, o servidor recusa, e a mensagem
+ * do servidor é que explica.
+ */
+async function mostraDesafio(siteKey) {
         const bloco = document.getElementById('login-challenge');
-        if (!bloco || !bloco.hidden) return;
+        if (!bloco) return;
         bloco.hidden = false;
-        const temWidget = Boolean(document.querySelector('#login-challenge-widget *'));
         const btn = document.getElementById('login-submit');
-        if (btn) btn.disabled = temWidget && !desafioResolvido;
+
+        if (!siteKey || !window.document.getElementById('login-challenge-widget')) {
+            if (btn) btn.disabled = false;
+            return;
+        }
+
+        if (btn) btn.disabled = true;
+        try {
+            await carregaTurnstile();
+            if (turnstileWidget === null) {
+                turnstileWidget = window.turnstile.render('#login-challenge-widget', {
+                    sitekey: siteKey,
+                    theme: 'dark',
+                    callback: (token) => window.setLoginChallengeToken(token),
+                    // Token do Turnstile expira sozinho depois de alguns minutos.
+                    'expired-callback': () => window.setLoginChallengeToken(null),
+                    'error-callback': () => {
+                        window.setLoginChallengeToken(null);
+                        if (btn) btn.disabled = false;
+                    },
+                });
+            } else {
+                window.turnstile.reset(turnstileWidget);
+            }
+        } catch (e) {
+            if (btn) btn.disabled = false;
+        }
     }
 
 function escondeDesafio() {
@@ -174,6 +232,11 @@ function escondeDesafio() {
         if (bloco) bloco.hidden = true;
         const btn = document.getElementById('login-submit');
         if (btn) btn.disabled = false;
+        // Login deu certo: o widget montado não vale para a próxima sessão.
+        if (turnstileWidget !== null && window.turnstile) {
+            try { window.turnstile.remove(turnstileWidget); } catch (e) { /* já foi */ }
+            turnstileWidget = null;
+        }
     }
 
 /** Borda vermelha e tremor: dizem "recomece" sem dizer QUAL campo errou. */
@@ -272,7 +335,7 @@ window.doLogin = async function doLogin() {
                 limpaSinalDeErro();
                 return;
             }
-            if (corpo.challengeRequired) mostraDesafio();
+            if (corpo.challengeRequired) mostraDesafio(corpo.challengeSiteKey);
             err.style.display = 'block';
             err.textContent = e.message;
             // Falha de rede não é credencial errada: não vale tremer o campo.

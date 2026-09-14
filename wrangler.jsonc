@@ -182,6 +182,17 @@
 		// Worker a serve em `GET /api/v1/public/export-public-key`, e quem recebe
 		// um export precisa dela para conferir a assinatura. A privada
 		// correspondente (`EXPORT_SIGNING_KEY`) é secret e nunca sai daqui.
-		"EXPORT_PUBLIC_KEY": "{\"alg\":\"Ed25519\",\"crv\":\"Ed25519\",\"x\":\"O3ZgAaEwY6Z1dpYvyFhSiLiC3zCug94vydjMfRrAuGs\",\"kty\":\"OKP\"}"
+		"EXPORT_PUBLIC_KEY": "{\"alg\":\"Ed25519\",\"crv\":\"Ed25519\",\"x\":\"O3ZgAaEwY6Z1dpYvyFhSiLiC3zCug94vydjMfRrAuGs\",\"kty\":\"OKP\"}",
+
+		// Site key do Turnstile. `var` e não `secret` pelo mesmo motivo da de
+		// cima: ela nasce para ser publicada — vai no atributo `sitekey` do
+		// widget, visível no fonte da página de quem abrir a tela de entrada. A
+		// secret key correspondente (`TURNSTILE_SECRET_KEY`) é secret, fica só
+		// no Cloudflare e é o que prova ao siteverify que somos nós.
+		//
+		// As duas juntas é que ligam o desafio (ver `desafioVerificavel` em
+		// routes/auth.ts): meia configuração não exige desafio nenhum, em vez de
+		// exigir um que a tela não tem como montar.
+		"TURNSTILE_SITE_KEY": "0x4AAAAAAE0CsIG61nlQBahR"
 	}
 }

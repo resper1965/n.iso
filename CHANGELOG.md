@@ -20,6 +20,9 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Documentos legais versionados** (migration 0029): classificação `comum | material`; material barra o acesso até o aceite, registrado com data, IP e user-agent.
 - **Trilha por campo** (migration 0030): `campo: antes → depois` com autor e `operation_id` que agrupa o lote; histórico exibido no detalhe do controle.
 
+- **Desafio anti-abuso do login (Turnstile), ponta a ponta.** A tela passa a carregar o widget sob demanda — só quando o servidor diz que o desafio é exigido, não em toda visita — e a montá-lo com a site key que vem na própria resposta, sem acoplar chave ao build. O widget é REINICIADO a cada falha: o token do Turnstile é de uso único e o desafio é conferido antes da senha, então uma tentativa com senha errada já o gastou; sem o reset, a seguinte seria recusada por "token já usado" e a pessoa ficaria presa. Se o script não carregar, o botão `Entrar` não fica travado — sem meio de resolver o desafio, travá-lo seria trancar o usuário para fora.
+- **O desafio agora só liga com as DUAS chaves.** Antes o interruptor era só `TURNSTILE_SECRET_KEY`, e defini-la sozinha fazia o servidor exigir um desafio que a tela não tinha como montar. Aconteceu em produção em 14/09/2026: quem errasse a senha uma vez não entrava mais até a janela de 15 min expirar. A falha segura é não exigir desafio — perder uma camada extra é menos grave que trancar quem sabe a própria senha, e o bloqueio de 15 min na 5ª falha e o teto atômico por conta seguram a força bruta sem o Turnstile. `test/turnstile-interruptor.test.ts` reprova o retorno da armadilha.
+
 ### Changed
 - Assinatura do export de portabilidade passa de HMAC para **Ed25519**. Uma
   assinatura prova origem a QUEM RECEBE, e com chave simétrica quem verifica
