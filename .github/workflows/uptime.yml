@@ -47,9 +47,9 @@ jobs:
           for tentativa in 1 2 3; do
             motivo=""
             saude=$(curl -s -m 15 -w "\n%{http_code}" "$base/health" || echo $'\n000')
-            código=$(printf '%s' "$saude" | tail -n1)
-            if [ "$código" != "200" ]; then
-              motivo="/health devolveu $código"
+            codigo=$(printf '%s' "$saude" | tail -n1)
+            if [ "$codigo" != "200" ]; then
+              motivo="/health devolveu $codigo"
             elif ! printf '%s' "$saude" | grep -q '"version"'; then
               # `/health` sem o campo `version` = código anterior ao item 0.2 no
               # ar. Não é queda, mas é deploy que não saiu — e vale alerta.

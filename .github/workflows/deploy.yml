@@ -80,8 +80,8 @@ jobs:
         run: |
           set -o pipefail
           base=https://niso-staging.ness.workers.dev
-          código=$(curl -s -o /dev/null -w "%{http_code}" "$base/health")
-          [ "$código" = "200" ] || { echo "::error::/health devolveu $código"; exit 1; }
+          codigo=$(curl -s -o /dev/null -w "%{http_code}" "$base/health")
+          [ "$codigo" = "200" ] || { echo "::error::/health devolveu $codigo"; exit 1; }
           corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{}' "$base/api/v1/auth/login")
           echo "$corpo"
           echo "$corpo" | grep -q 'Payload inválido' || {
