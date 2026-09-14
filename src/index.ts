@@ -142,6 +142,14 @@ app.use('*', secureHeaders({
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
     imgSrc: ["'self'", 'data:', 'blob:'],
     connectSrc: ["'self'"],
+    // `blob:` aqui é o preview de PDF de evidência: o arquivo é baixado pela
+    // API, vira Object URL e é mostrado num iframe (frontend/src/globals.js).
+    // Sem `frame-src`, a diretiva cai para `default-src 'self'`, e `blob:` não é
+    // `'self'` — o navegador bloqueava com violação de `frame-src`, conferido no
+    // ar antes e depois desta linha. O `srcdoc` do preview de proposta não passa
+    // por aqui (herda a política do pai), e foi conferido do mesmo jeito.
+    // Baixar não precisa de diretiva: `<a download href="blob:">` é navegação.
+    frameSrc: ["'self'", 'blob:'],
     // Estas valem mesmo com 'unsafe-inline': fecham injecao de <base>, de
     // plugin, exfiltracao por <form action> e clickjacking por iframe.
     objectSrc: ["'none'"],
