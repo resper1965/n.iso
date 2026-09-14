@@ -45,7 +45,7 @@ jobs:
       # e justamente quando falha que se quer o detalhe.
       - name: Upload relatorios de teste
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: |
@@ -78,7 +78,7 @@ jobs:
         run: cd frontend && npm run test:e2e
       - name: Upload relatorios E2E
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-reports
           path: |

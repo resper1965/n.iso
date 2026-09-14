@@ -97,7 +97,7 @@ jobs:
 
       - name: Abrir ou atualizar issue de drift
         if: failure() && steps.comparar.outputs.novo != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           NOVO: ${{ steps.comparar.outputs.novo }}
           SUMIU: ${{ steps.comparar.outputs.sumiu }}

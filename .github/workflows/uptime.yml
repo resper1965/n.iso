@@ -71,7 +71,7 @@ jobs:
       # que transformaria o alerta em ruído que ninguém lê.
       - name: Abrir ou atualizar issue
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -99,7 +99,7 @@ jobs:
       # ignorar alerta.
       - name: Fechar issue (produção respondendo)
         if: success()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
