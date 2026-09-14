@@ -230,16 +230,50 @@ que aconteceu com a copia inline do ponytail).
 
 | Skill | Quando atua |
 |---|---|
+| `using-superpowers` | Abertura de qualquer conversa. Injetada automaticamente pelo hook de SessionStart: consultar skill antes de responder ou agir. |
 | `ponytail` | Toda tarefa de codigo. Escada YAGNI, menor diff que funciona, reusar antes de escrever. Nunca simplifica: entendimento do problema, validacao em trust boundary, tratamento de erro, seguranca, acessibilidade. |
+| `brainstorming` | Antes de construir feature ou mudar comportamento: extrair intencao e requisito antes de codigo |
+| `writing-plans` | Virar spec em plano de implementacao executavel |
+| `executing-plans` | Executar plano escrito em sessao separada, com checkpoint de revisao |
+| `subagent-driven-development` | Executar plano com tarefas independentes na sessao atual |
+| `dispatching-parallel-agents` | 2+ tarefas independentes, sem estado compartilhado |
+| `using-git-worktrees` | Isolar workspace antes de executar plano |
+| `test-driven-development` | RED-GREEN-REFACTOR durante implementacao |
+| `systematic-debugging` | Bug, teste falhando ou comportamento inesperado — antes de propor correcao |
+| `verification-before-completion` | Antes de dizer "pronto"/"passou": rodar o comando e conferir a saida |
+| `requesting-code-review` | Entre tarefas; achado critico bloqueia |
+| `receiving-code-review` | Ao receber feedback de review: verificar tecnicamente antes de implementar |
+| `code-review` | Review de diff contra padrao do repo e contra a spec |
+| `finishing-a-development-branch` | Fechamento de branch |
+| `writing-skills` | Criar ou editar skill |
 | `security-threat-model` | Modelagem de ameaca de uma area do codigo, sob pedido explicito |
 | `security-audit` | Caca a vulnerabilidade exploravel |
-| `code-review` | Review de diff contra padrao do repo e contra a spec |
-| `requesting-code-review` | Entre tarefas; achado critico bloqueia |
-| `test-driven-development` | RED-GREEN-REFACTOR durante implementacao |
-| `finishing-a-development-branch` | Fechamento de branch |
 | `webapp-testing` | Teste de UI via navegador |
 | `iso27001` / `iso27701` | Referencia normativa: Annex A, clausulas, SoA, DPIA, ROPA |
 | `find-skills` | Descobrir e instalar skill nova |
+
+### Superpowers
+
+As 14 skills de processo acima (de `using-superpowers` a `writing-skills`) sao o
+[Superpowers](https://github.com/obra/superpowers) (MIT, `LICENSE.txt` em cada
+pasta), vendorizado em vez de instalado como plugin — assim a versao fica travada
+em `skills-lock.json` e vale para todo mundo que clona o repo, sem cada um instalar
+marketplace na mao.
+
+O bootstrap e `.claude/hooks/superpowers-session-start.sh`, registrado como
+SessionStart em `.claude/settings.json`: ele injeta o texto de `using-superpowers`
+no inicio da sessao. Sem esse hook as skills ficam no disco e o agente nao sabe que
+precisa consultar uma antes de agir — que e o ponto do Superpowers.
+
+Atualizar: `npx skills update` (reescreve `skills-lock.json`). O CLI copia para
+`.claude/skills/`; devolva ao padrao do repo movendo a pasta para `.agents/skills/`
+e refazendo o symlink.
+
+**Telemetria:** o companion visual do `brainstorming` carrega um logo do site do
+autor, o que revela versao e uso. `.claude/settings.json` define
+`SUPERPOWERS_DISABLE_TELEMETRY=1` — nao remova. Os scripts em
+`brainstorming/scripts/` sobem servidor HTTP **local** (localhost, com token) e so
+rodam sob pedido explicito.
 
 **Aviso sobre `iso27001` / `iso27701`:** sao material de terceiro (Socket e Snyk
 limpos, so markdown, sem script). Os scanners verificam malware, **nao** a
