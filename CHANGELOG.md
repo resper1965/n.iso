@@ -10,6 +10,13 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 > o item 0.3 do `enterprise-grade-plan.md`; a lacuna fica registrada em vez de
 > apagada.
 
+## [Não publicado]
+
+### Segurança
+- **Vinte e dois alertas de dependência fechados.** Ativar as atualizações de segurança do Dependabot revelou o acúmulo: dezenove no `mcp-server-niso`, cujo lockfile tinha ficado para trás, e três na raiz. Os de maior peso eram `fast-uri` (alta, duas advisories), `ip-address` (alta) e `hono` no MCP, parado na 4.12.27 com travessia de diretório em `toSSG()` e problemas em `Suspense`/`ErrorBoundary`. Corrigidos só pelo lockfile — nenhum manifesto do MCP mudou, porque `hono` é transitivo do SDK e o código de lá não o importa; declará-lo como dependência direta seria afirmar algo falso.
+- `sharp` (alta) chega por `@cloudflare/vitest-pool-workers` → `miniflare`. A correção que o npm propunha era rebaixar o pool de teste em versão MAIOR, o que quebraria a suíte inteira; entrou como `overrides` para `^0.35.4`, que é o caminho certo para corrigir dependência transitiva sem mexer no pai. É dependência de desenvolvimento e nunca chega ao bundle de produção.
+- `vitest` e `@vitest/mocker` (média) na raiz: 4.1.10 → 4.1.11. A 10.0.0 subiu o vitest do frontend e esqueceu o da raiz.
+
 ## [10.0.0] - 2026-09-14
 
 Interface refeita no padrão ness., autenticação com desafio anti-abuso,

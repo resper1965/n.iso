@@ -19,12 +19,15 @@
     "@cloudflare/vitest-pool-workers": "^0.20.3",
     "hono": "^4.13.7",
     "typescript": "^5.5.2",
-    "vitest": "^4.1.10",
     "wrangler": "^4.107.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",
-    "@vitest/coverage-istanbul": "^4.1.10"
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "sharp": "^0.35.4"
   }
 }
