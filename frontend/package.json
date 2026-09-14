@@ -14,10 +14,10 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^30.0.1",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "qrcode-generator": "^1.4.4"
