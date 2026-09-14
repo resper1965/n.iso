@@ -229,9 +229,22 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     -- NOT NULL aqui derrubaria o registro dessas ações — perder trilha para
     -- ganhar constraint é o inverso do objetivo.
     project_id TEXT,
+    -- Trilha por CAMPO (migration 0025). Nullable: a maioria das chamadas de
+    -- logAudit registra acao de plataforma, que nao tem campo antes/depois.
+    -- `operation_id` agrupa a operacao — uma acao em lote sobre 3 controles
+    -- gera 3 linhas com o mesmo id — e liga a operacao ao registro de que ela
+    -- foi desfeita. Desfazer NAO apaga linha: a tabela e append-only.
+    entity_type TEXT,
+    entity_id TEXT,
+    field TEXT,
+    old_value TEXT,
+    new_value TEXT,
+    operation_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_operation ON audit_logs(operation_id);
 -- Retenção x imutabilidade (S-log): esta tabela é append-only por design
 -- (integridade de log, ISO 27001 A.8.15). Isso está em TENSÃO com um limite de
 -- retenção por expurgo (LGPD/ISO 27701 minimização): não se pode DELETE sem
@@ -917,6 +930,37 @@ CREATE TABLE IF NOT EXISTS rate_limits (
     count INTEGER NOT NULL,
     window_start INTEGER NOT NULL
 );
+
+-- -----------------------------------------------
+-- Documentos legais do n.iso (migration 0024)
+-- -----------------------------------------------
+-- A `classification` é CAMPO DO DOCUMENTO, não julgamento de quem publica: é
+-- ela que decide se uma versão nova apenas avisa ('comum') ou barra o acesso
+-- até o aceite ('material' — mudança de base legal ou de retenção).
+CREATE TABLE IF NOT EXISTS legal_documents (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    version TEXT NOT NULL,
+    classification TEXT NOT NULL CHECK (classification IN ('comum', 'material')),
+    title TEXT NOT NULL,
+    url TEXT,
+    published_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (kind, version)
+);
+CREATE INDEX IF NOT EXISTS idx_legal_documents_kind ON legal_documents(kind, published_at);
+
+-- Data, IP e user-agent: sem os três o registro não prova nada em disputa.
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    document_id TEXT NOT NULL REFERENCES legal_documents(id),
+    accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ip TEXT,
+    user_agent TEXT,
+    UNIQUE (user_id, document_id)
+);
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances(user_id);
 
 -- -----------------------------------------------
 -- ÍNDICES em colunas quentes (filtros frequentes)

@@ -2,13 +2,15 @@
 // aparencia aqui; testa-se ESCAPE (o CSP tem 'unsafe-inline', entao escapar e a
 // unica defesa contra XSS refletido da API) e a traducao de status, que decide
 // o que o cliente le na tela.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     escapeHTML,
     renderPageHeader,
     renderStatCards,
     renderStatusBadge,
     renderDataTable,
+    showToast,
+    TOAST_MS,
     traduzStatus,
 } from '../src/ui.js';
 
@@ -55,19 +57,37 @@ describe('renderStatusBadge()', () => {
     it('aceita (tipo, texto)', () => {
         const html = renderStatusBadge('success', 'Tudo certo');
         expect(html).toContain('Tudo certo');
-        expect(html).toContain('#34c759');
+        expect(html).toContain('#10b981');
     });
 
     it('aceita (texto, tipo) — ordem invertida', () => {
         const html = renderStatusBadge('Tudo certo', 'success');
         expect(html).toContain('Tudo certo');
-        expect(html).toContain('#34c759');
+        expect(html).toContain('#10b981');
     });
 
     it('sem tipo conhecido cai em neutral', () => {
         const html = renderStatusBadge('Rascunho', 'inexistente');
         expect(html).toContain('Rascunho');
-        expect(html).toContain('var(--text-dim)');
+        expect(html).toContain('#94a3b8');
+    });
+
+    it('preenche por color-mix e NAO desenha borda', () => {
+        const html = renderStatusBadge('danger', 'Gap');
+        expect(html).toContain('color-mix(in oklab, #ef4444 16%, transparent)');
+        expect(html).toContain('border:0');
+        expect(html).not.toMatch(/border:1px/);
+    });
+
+    it('usa a mono em caixa alta, sem raio', () => {
+        const html = renderStatusBadge('info', '');
+        expect(html).toContain('var(--font-mono)');
+        expect(html).toContain('text-transform:uppercase');
+        expect(html).toContain('border-radius:0');
+    });
+
+    it('traduz "na" para N/A — a aplicabilidade tem rotulo proprio', () => {
+        expect(renderStatusBadge('na', 'neutral')).toContain('N/A');
     });
 
     it.each([
@@ -101,7 +121,7 @@ describe('renderStatusBadge()', () => {
     // mas o dia em que cair, a celula fica vazia em silencio.
     it('ARESTA: texto que coincide com nome de tipo e lido como tipo', () => {
         const html = renderStatusBadge('info', 'warning');
-        expect(html).toContain('#00ade8'); // venceu 'info' como TIPO
+        expect(html).toContain('color:#00ade8'); // venceu 'info' como TIPO
         expect(html).toContain('>warning<'); // e 'warning' virou o TEXTO
     });
 });
@@ -149,6 +169,23 @@ describe('renderPageHeader()', () => {
 
     it('actionsHtml entra CRU (e o contrato: sao botoes montados pela view)', () => {
         expect(renderPageHeader('T', '', '<button id="x">ok</button>')).toContain('<button id="x">');
+    });
+
+    // Decisao registrada no cartao 6a: o titulo nomeia A TELA e a banda nao
+    // carrega metadado de tenant/projeto. O subtitulo continua aceito na
+    // assinatura, mas sai da banda e vira kicker - primeira linha do conteudo.
+    it('o subtitulo NAO fica na banda do titulo: desce para o kicker', () => {
+        const html = renderPageHeader('SoA', 'A.8.12 - Tecnologico');
+        const banda = html.slice(html.indexOf('page-header-band'), html.indexOf('</div>'));
+        expect(banda).not.toContain('A.8.12');
+        expect(html).toContain('class="page-kicker"');
+        expect(html.indexOf('page-kicker')).toBeGreaterThan(html.indexOf('page-title'));
+    });
+
+    it('as acoes ficam NA banda, ao lado do titulo', () => {
+        const html = renderPageHeader('SoA', '', '<button>Exportar</button>');
+        const banda = html.slice(html.indexOf('page-header-band'), html.indexOf('</div>'));
+        expect(banda).toContain('header-actions-group');
     });
 });
 
@@ -221,7 +258,108 @@ describe('renderDataTable()', () => {
             { name: 'a', status: 'x' },
             { name: 'b', status: 'y' },
         ]);
-        expect((html.match(/<tr /g) || []).length).toBe(3); // 1 cabecalho + 2 dados
+        expect((html.match(/<tr>/g) || []).length).toBe(3); // 1 cabecalho + 2 dados
+    });
+
+    it('TODA th e sticky com fundo opaco - inclusive a coluna de selecao', () => {
+        const html = renderDataTable(
+            [{ label: '', key: 'sel' }, { label: 'Nome', key: 'name' }],
+            [{ sel: '', name: 'a' }]
+        );
+        const ths = html.match(/<th [^>]*>/g);
+        expect(ths).toHaveLength(2);
+        // A th vazia de selecao e a que costuma escapar e virar buraco
+        // transparente no cabecalho fixo.
+        ths.forEach(th => {
+            expect(th).toContain('position:sticky');
+            expect(th).toContain('background:var(--bg)');
+        });
+    });
+
+    it('so emite aria-sort quando a coluna declara ordenacao', () => {
+        expect(renderDataTable([{ label: 'Ctrl', key: 'a', sort: 'ascending' }], [{ a: 1 }]))
+            .toContain('aria-sort="ascending"');
+        expect(renderDataTable([{ label: 'Ctrl', key: 'a' }], [{ a: 1 }])).not.toContain('aria-sort');
+    });
+
+    it('coluna a direita ganha tabular-nums sem a view pedir', () => {
+        const html = renderDataTable([{ label: 'CMMI', key: 'c', align: 'right' }], [{ c: 3 }]);
+        expect((html.match(/tabular-nums/g) || []).length).toBe(2); // th + td
+    });
+
+    it('numeric:true alinha tabular mesmo a esquerda (codigo de controle)', () => {
+        const html = renderDataTable([{ label: 'Ctrl', key: 'c', numeric: true }], [{ c: 'A.5.7' }]);
+        expect(html).toContain('tabular-nums');
+        expect(html).toContain('text-align:left');
+    });
+
+    it('coluna comum a esquerda NAO recebe tabular-nums', () => {
+        expect(renderDataTable([{ label: 'Nome', key: 'n' }], [{ n: 'x' }])).not.toContain('tabular-nums');
+    });
+
+    it('densidade compacta encolhe o padding da celula', () => {
+        expect(renderDataTable(colunas, [{ name: 'a' }])).toContain('padding:12px 10px');
+        expect(renderDataTable(colunas, [{ name: 'a' }], { dense: true })).toContain('padding:7px 10px');
+    });
+
+    it('o hover saiu do inline: nada de onmouseenter/onmouseleave', () => {
+        const html = renderDataTable(colunas, [{ name: 'a' }, { name: 'b' }]);
+        expect(html).not.toContain('onmouseenter');
+        expect(html).not.toContain('onmouseleave');
+    });
+
+    it('o container nao corta o overflow - sticky morre dentro de overflow:hidden', () => {
+        expect(renderDataTable(colunas, [{ name: 'a' }])).not.toContain('overflow:hidden');
+    });
+});
+
+describe('showToast()', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        document.body.innerHTML = '<div id="live-region" role="status" aria-live="polite"></div>';
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('escreve na regiao ja montada, sem cria-la junto da mensagem', () => {
+        showToast('Dono atribuido a 3 controles');
+        // A regiao e a MESMA de antes: recriar a cada toast nao e anunciado.
+        expect(document.querySelectorAll('[role="status"]')).toHaveLength(1);
+        expect(document.getElementById('live-region').textContent).toBe('Dono atribuido a 3 controles');
+    });
+
+    it('nao injeta HTML da mensagem (a mensagem ecoa texto do servidor)', () => {
+        showToast('<img src=x onerror=alert(1)>');
+        expect(document.querySelector('.toast img')).toBeNull();
+        expect(document.querySelector('.toast-text').textContent).toContain('<img');
+    });
+
+    it('sem callback nao ha botao Desfazer', () => {
+        showToast('salvo');
+        expect(document.querySelector('.toast-undo')).toBeNull();
+    });
+
+    it('com callback, Desfazer dispara e fecha o toast na hora', () => {
+        const desfaz = vi.fn();
+        showToast('3 controles marcados', 'info', desfaz);
+        const btn = document.querySelector('.toast-undo');
+        expect(btn.textContent).toBe('Desfazer');
+        btn.click();
+        expect(desfaz).toHaveBeenCalledTimes(1);
+        expect(document.querySelector('.toast')).toBeNull();
+    });
+
+    it('some sozinho em 4200ms, nao antes', () => {
+        showToast('salvo');
+        vi.advanceTimersByTime(TOAST_MS - 1);
+        expect(document.querySelector('.toast')).not.toBeNull();
+        vi.advanceTimersByTime(1);
+        expect(document.querySelector('.toast')).toBeNull();
+    });
+
+    it('desfazer nao deixa o timer removendo um toast que ja saiu', () => {
+        showToast('x', 'info', () => {});
+        document.querySelector('.toast-undo').click();
+        expect(() => vi.advanceTimersByTime(TOAST_MS * 2)).not.toThrow();
     });
 });
 

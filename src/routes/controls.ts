@@ -1,13 +1,40 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, requireResourceAccess, verifyPassword, erro500 } from '../helpers';
-import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema } from '../schemas';
+import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema } from '../schemas';
+import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
+import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
 
 // Sub-router de controles, montado em /api/v1/controls (FORA de
 // /api/v1/projects/:projectId/*, portanto o projectAccessMiddleware não roda
 // aqui — o isolamento de tenant é feito por requireResourceAccess em cada rota).
 // Extraído de routes/projects.ts para reduzir aquele arquivo sem mudar rota.
 export const controlsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// ——— Gate de aplicabilidade ————————————————————————————————————————————
+// Uma guarda só, chamada por TODA rota que grava status ou descrição. Antes a
+// regra vivia na tela; `PUT /:id/status` era o caminho por onde um curl marcava
+// N/A sem justificativa nenhuma.
+type EstadoControle = { status?: string | null; description?: string | null };
+
+/**
+ * Devolve a mensagem de recusa, ou null se o estado resultante for válido.
+ * Avalia o ESTADO FINAL (o que já está gravado + o que veio no corpo), não só o
+ * que a requisição mandou: marcar N/A num controle que já tem justificativa é
+ * legítimo, e mandar `description: ''` num controle já N/A não é.
+ */
+export function recusaAplicabilidade(atual: EstadoControle, entrada: EstadoControle): string | null {
+  const statusFinal = entrada.status !== undefined && entrada.status !== null && entrada.status !== ''
+    ? entrada.status
+    : atual.status;
+  if (statusFinal !== NA_STATUS) return null;
+
+  const justificativaFinal = entrada.description !== undefined ? entrada.description : atual.description;
+  if (hasValidApplicability({ controlId: '', isApplicable: false, justification: justificativaFinal })) {
+    return null;
+  }
+  return 'Controle não aplicável exige justificativa de exclusão: a SoA não aceita exclusão de escopo sem registro.';
+}
 
 controlsApp.get('/', async (c) => {
   const user = c.get('user');
@@ -42,11 +69,14 @@ controlsApp.put('/:id', async (c) => {
     const { status, title, description, owner } = v.data as any;
 
     const atual = await c.env.DB.prepare(
-      'SELECT project_id, description FROM compliance_controls WHERE id = ?'
+      'SELECT project_id, status, title, description, maturity, owner FROM compliance_controls WHERE id = ?'
     ).bind(id).first() as any;
     // requireResourceAccess devolve true sem checar existência para papéis de
     // staff, então o 404 precisa ser explícito.
     if (!atual) return c.json({ error: 'Controle não encontrado' }, 404);
+
+    const recusa = recusaAplicabilidade(atual, { status, description });
+    if (recusa) return c.json({ error: recusa }, 400);
 
     const updates: string[] = [];
     const values: any[] = [];
@@ -56,6 +86,13 @@ controlsApp.put('/:id', async (c) => {
     // `owner` é metadado organizacional: grava sem tocar aprovações/maturity/status.
     if (owner !== undefined) { updates.push('owner = ?'); values.push(owner); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+
+    // Controle fora do escopo não tem grau de implementação nem responsável por
+    // implementá-lo: manter CMMI e dono deixaria o relatório afirmando as duas
+    // coisas. Zera no servidor e não em duas chamadas do cliente, senão a
+    // segunda pode nunca chegar.
+    const virouNA = status === NA_STATUS && atual.status !== NA_STATUS;
+    if (virouNA) updates.push('maturity = 0', 'owner = NULL');
 
     // `description` é onde mora o texto da política do controle. Um documento
     // aprovado cujo conteúdo mudou não está mais aprovado — manter o carimbo do
@@ -80,11 +117,36 @@ controlsApp.put('/:id', async (c) => {
     await c.env.DB.prepare(`UPDATE compliance_controls SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
 
     const ator = c.get('user')?.email ?? 'system';
-    await logAudit(c.env.DB, 'control.updated', ator, `Controle ${id} atualizado`, '', '', atual.project_id);
+
+    // Trilha por campo, com rótulo em PT-BR — nunca a chave interna: quem lê o
+    // histórico é o consultor e o auditor, não quem escreveu o schema.
+    const operacao = c.req.header('X-Operacao') || undefined;
+    await registrarAlteracoes(c.env.DB, {
+      acao: 'control.updated',
+      autor: ator,
+      entidade: 'compliance_controls',
+      entidadeId: id,
+      projectId: atual.project_id,
+      operacao,
+      alteracoes: [
+        { campo: 'Status', antes: atual.status, depois: status ?? atual.status },
+        { campo: 'Título', antes: atual.title, depois: title ?? atual.title },
+        { campo: 'Justificativa', antes: atual.description, depois: description !== undefined ? description : atual.description },
+        ...(virouNA ? [
+          { campo: 'Maturidade CMMI', antes: atual.maturity, depois: null },
+          { campo: 'Responsável', antes: atual.owner, depois: null },
+        ] : []),
+      ],
+    });
     // Evento próprio: a perda da aprovação é o que o auditor precisa enxergar,
     // e ela ficaria invisível dentro de um "controle atualizado" genérico.
     if (textoMudou) {
       await logAudit(c.env.DB, 'control.approvals_invalidated', ator, `Aprovações do controle ${id} invalidadas: o texto da política mudou`, '', '', atual.project_id);
+    }
+    // Exclusão de escopo é o evento que o auditor procura primeiro: precisa de
+    // entrada própria, não diluída num "controle atualizado".
+    if (virouNA) {
+      await logAudit(c.env.DB, 'control.excluded_from_scope', ator, `Controle ${id} excluído do escopo com justificativa; maturidade e dono zerados`, '', '', atual.project_id);
     }
     return c.json({ ok: true });
   } catch (e: any) {
@@ -105,12 +167,30 @@ controlsApp.put('/:id/maturity', async (c) => {
       return c.json({ error: 'Maturidade deve ser entre 0 e 5' }, 400);
     }
 
+    const antes = await c.env.DB.prepare(
+      'SELECT project_id, status, maturity FROM compliance_controls WHERE id = ?'
+    ).bind(id).first() as any;
+    if (!antes) return c.json({ error: 'Controle nao encontrado' }, 404);
+
+    // Controle fora do escopo nao tem grau de implementacao: aceitar maturidade
+    // nele contradiria o gate de N/A, que zera justamente este campo.
+    if (antes.status === NA_STATUS) {
+      return c.json({ error: 'Controle nao aplicavel nao tem maturidade: esta fora do escopo.' }, 400);
+    }
+
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET maturity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(maturity, id).run();
 
-    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
-    await logAudit(c.env.DB, 'control.maturity_updated', c.get('user')?.email || 'system', `Maturidade do controle ${id} atualizada para ${maturity}`, '', '', projRow?.project_id);
+    await registrarAlteracoes(c.env.DB, {
+      acao: 'control.maturity_updated',
+      autor: c.get('user')?.email || 'system',
+      entidade: 'compliance_controls',
+      entidadeId: id,
+      projectId: antes.project_id,
+      operacao: c.req.header('X-Operacao') || undefined,
+      alteracoes: [{ campo: 'Maturidade CMMI', antes: antes.maturity, depois: maturity }],
+    });
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
@@ -128,12 +208,36 @@ controlsApp.put('/:id/status', async (c) => {
     if (!v.success) return v.response;
     const { status } = v.data;
 
+    const atual = await c.env.DB.prepare(
+      'SELECT project_id, status, description FROM compliance_controls WHERE id = ?'
+    ).bind(id).first() as any;
+    if (!atual) return c.json({ error: 'Controle não encontrado' }, 404);
+
+    // Esta rota era o bypass do gate: aceita `status` sem `description`, então
+    // marcava N/A sem justificativa nenhuma. A guarda é a MESMA do PUT /:id —
+    // duas cópias da regra viram duas regras diferentes na primeira alteração.
+    const recusa = recusaAplicabilidade(atual, { status });
+    if (recusa) return c.json({ error: recusa }, 400);
+
+    const virouNA = status === NA_STATUS && atual.status !== NA_STATUS;
+    const extras = virouNA ? ', maturity = 0, owner = NULL' : '';
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      `UPDATE compliance_controls SET status = ?${extras}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(status, id).run();
 
-    const projRow = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(id).first() as any;
-    await logAudit(c.env.DB, 'control.status_updated', c.get('user')?.email || 'system', `Status do controle ${id} atualizado para ${status}`, '', '', projRow?.project_id);
+    const ator = c.get('user')?.email || 'system';
+    await registrarAlteracoes(c.env.DB, {
+      acao: 'control.status_updated',
+      autor: ator,
+      entidade: 'compliance_controls',
+      entidadeId: id,
+      projectId: atual.project_id,
+      operacao: c.req.header('X-Operacao') || undefined,
+      alteracoes: [{ campo: 'Status', antes: atual.status, depois: status }],
+    });
+    if (virouNA) {
+      await logAudit(c.env.DB, 'control.excluded_from_scope', ator, `Controle ${id} excluído do escopo com justificativa; maturidade e dono zerados`, '', '', atual.project_id);
+    }
     return c.json({ ok: true });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
@@ -197,6 +301,59 @@ const handleControlApprove = async (c: any) => {
 
 controlsApp.post('/:id/approve', handleControlApprove);
 controlsApp.put('/:id/approve', handleControlApprove);
+
+/**
+ * Histórico do controle: `campo: antes → depois`, autor, quando e o marcador de
+ * lote. É o que a tela de detalhe da SoA mostra — a trilha já era gravada e não
+ * tinha por onde ser lida.
+ */
+controlsApp.get('/:id/trilha', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
+    return c.json({ ok: true, registros: await lerTrilha(c.env.DB, 'compliance_controls', id) });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return erro500(c, 'Falha ao ler a trilha do controle', e);
+  }
+});
+
+/**
+ * Marca uma operação como desfeita. NÃO apaga linha: `audit_logs` é append-only
+ * por trigger do banco. A leitura da trilha é que esconde o par operação+desfazer
+ * (ver src/trilha.ts) — o banco guarda os dois fatos para quem exporta a trilha
+ * crua, e a tela mostra o que aconteceu de líquido.
+ */
+controlsApp.post('/:id/trilha/desfazer', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
+    const v = await validateBody(c, trilhaDesfazerSchema);
+    if (!v.success) return v.response;
+    const { operacao } = v.data;
+
+    // Só se desfaz operação que existe E que tocou ESTE controle: sem a segunda
+    // checagem, um id de operação de outro tenant sumiria da trilha dele.
+    const linha = await c.env.DB.prepare(
+      `SELECT project_id FROM audit_logs
+        WHERE operation_id = ? AND entity_type = 'compliance_controls' AND entity_id = ?
+        LIMIT 1`
+    ).bind(operacao, id).first() as any;
+    if (!linha) return c.json({ error: 'Operação não encontrada para este controle' }, 404);
+
+    await registrarDesfazer(c.env.DB, {
+      autor: c.get('user')?.email || 'system',
+      operacao,
+      projectId: linha.project_id,
+      entidade: 'compliance_controls',
+      entidadeId: id,
+    });
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    return erro500(c, 'Falha ao registrar o desfazer', e);
+  }
+});
 
 // Colunas de sign-off por papel. Revogar limpa as quatro do papel indicado.
 export const COLUNAS_REVOGACAO: Record<'ciso' | 'ceo', string> = {

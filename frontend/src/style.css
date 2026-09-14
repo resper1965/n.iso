@@ -1,154 +1,222 @@
-        :root {
-            --bg: #070b14;
-            --surface: rgba(20, 27, 46, 0.75);
-            --surface-hover: rgba(25, 35, 55, 0.8);
-            --accent: #00ade8;
-            --accent-glow: rgba(0, 173, 232, 0.3);
-            --text: #f5f5f7;
-            /* 0.6 é o valor do design system (design.md §2). Sobre o fundo #070b14
-               isso dá 6.29:1 de contraste (WCAG AA exige 4.5:1); a 0.5 ficava em
-               4.66:1, no limite, e qualquer texto menor já reprovava. */
-            --text-dim: rgba(229, 235, 255, 0.6);
-            --muted: rgba(229, 235, 255, 0.6);
-            --border: rgba(255, 255, 255, 0.11);
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --glass-blur: blur(24px);
-            color-scheme: dark;
-        }
+/* ============================================================
+   Tokens ness. — base do design system (Industry).
+   Os nomes existentes (--bg, --text, --text-dim, --surface, --border,
+   --accent, --muted, --surface-hover) são preservados: o restante do CSS
+   e das views tem centenas de referências a eles.
+   ============================================================ */
+:root {
+    /* ——— Marca ——— */
+    --accent: #00ade8;            /* BlueDot: accent único do ecossistema */
+    --accent-hover: #008ebf;
+    --accent-active: #007aa3;
+    --accent-dim: rgba(0, 173, 232, 0.12);
+    --accent-ink: #04121c;        /* tinta SOBRE preenchimento ciano — #fff dá 2.6:1 */
+    --accent-glow: rgba(0, 173, 232, 0.3);
+
+    /* ——— Superfícies ———
+       O ground era #070b14 (OLED puro). O guia ness. usa #0b1326 como ground e
+       #162244 para cards: o card se separa do fundo sem precisar de blur. */
+    --bg: #0b1326;                /* ground da página e do header */
+    --surface: #162244;           /* sidebar, cards, popovers, drawer */
+    --surface-2: #1e2d52;         /* hover, tiles, skeleton, toast */
+    --surface-hover: #1e2d52;
+    --border: rgba(255, 255, 255, 0.10);
+
+    /* ——— Tinta ———
+       --text-dim era rgba(229,235,255,.6) ≈ 3.4:1 sobre o card: abaixo do piso
+       de 4.5:1 para texto pequeno. Valores fixos, medidos sobre --surface: */
+    --text: #f1f5f9;              /* 14.8:1 */
+    --text-2: #cbd5e1;            /* 9.6:1  — corpo secundário */
+    --text-dim: #94a3b8;          /* 6.1:1  — rótulos, meta */
+    --text-faint: #8fa0b6;        /* 5.9:1  — MÍNIMO para texto pequeno */
+    --muted: #94a3b8;
+
+    /* ——— Semânticos (paleta ness., não iOS) ——— */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #00ade8;
+
+    /* ——— Tipografia ——— */
+    --font-head: 'Montserrat', system-ui, sans-serif;  /* marca 500 · títulos 600 */
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    /* ——— Geometria: o sistema é quadrado ——— */
+    --radius: 0;
+
+    /* ——— Elevação — sem blur, sem gradiente ——— */
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    --glass-blur: none;           /* neutraliza o backdrop-filter herdado */
+
+    /* ——— Motion ——— */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --fast: 150ms;
+    --normal: 200ms;
+    --slow: 300ms;
+
+    /* ——— Métricas do shell (aplicadas na etapa do shell) ——— */
+    --hdr-h: 64px;                /* banda da marca E banda de título: iguais */
+    --side-w: 232px;
+    --side-w-rail: 72px;
+
+    color-scheme: dark;
+}
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; display: flex; height: 100vh; font-weight: 300; }
 
         /* â€”â€”â€” LOGIN â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: grid; grid-template-columns: 1.2fr 1fr; transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-        #login-overlay.hidden { opacity: 0; pointer-events: none; transform: scale(1.05); }
-        .login-hero { position: relative; overflow: hidden; background: url('/hero.png') center/cover no-repeat; }
-        .login-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, var(--bg) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 40%); }
-        .login-hero-content { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 5rem; }
-        .login-brand-logo { font-family: 'Montserrat', sans-serif; font-size: 4rem; font-weight: 500; letter-spacing: -0.05em; color: #fff; }
+        /* ——— AUTENTICAÇÃO ———————————————————————————————————————————
+           Cartão centralizado, não mais hero + coluna. É a tela onde o usuário
+           decide confiar antes de entregar credencial: nada compete com ela. */
+        #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; transition: opacity var(--slow) var(--ease-out); }
+        #login-overlay.hidden { opacity: 0; pointer-events: none; }
+        .login-form-side { width: 100%; display: flex; align-items: center; justify-content: center; }
+        .login-box { width: min(420px, 100%); background: var(--surface); border: 1px solid var(--border); padding: 28px 32px 24px; display: flex; flex-direction: column; gap: 16px; animation: rise 220ms var(--ease-out); }
+        .login-brand-logo { font-family: var(--font-head); font-size: 26px; font-weight: 500; letter-spacing: -0.015em; color: var(--text); margin-bottom: 4px; }
         .login-brand-logo span { color: var(--accent); }
-        .login-form-side { display: flex; align-items: center; justify-content: center; padding: 4rem; border-left: 1px solid var(--border); }
-        .login-box { width: 100%; max-width: 380px; }
+        .login-title { font-family: var(--font-head); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: var(--text); margin: 0; }
+        .login-lede { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 0; }
+        .login-field { display: flex; flex-direction: column; gap: 6px; }
+        .login-label { font-size: 12px; color: var(--text-dim); }
 
-        /* â€”â€”â€” SIDEBAR â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .sidebar { width: 260px; background: rgba(5, 8, 15, 0.8); backdrop-filter: var(--glass-blur); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 100; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .sidebar.collapsed { width: 80px; }
-        .sidebar.collapsed .sidebar-nav-text, .sidebar.collapsed .sidebar-label, .sidebar.collapsed .sidebar-brand, .sidebar.collapsed #sidebar-project-selector-container { display: none; }
-        .sidebar.collapsed .sidebar-nav { justify-content: center; padding: 0.8rem; margin: 0.2rem 0.5rem; }
-        .sidebar-logo { height: 56px; padding: 0 1.5rem; display: flex; align-items: center; font-family: 'Montserrat', sans-serif; font-size: 1.4rem; font-weight: 500; border-bottom: 1px solid var(--border); overflow: hidden; white-space: nowrap; }
-        .sidebar-nav-list { flex: 1; overflow-y: auto; padding: 1rem 0; scrollbar-width: none; }
+        /* A assinatura ness. é obrigatória AQUI: é onde o usuário decide em quem
+           confia. Na área de trabalho ela não aparece. */
+        .login-sign { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--border); }
+        .login-sign-house { font-family: var(--font-head); font-size: 13px; font-weight: 500; color: var(--text-2); }
+        .login-sign-house span { color: var(--accent); }
+        .login-sign-links { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
+        .login-sign-links a { color: inherit; text-decoration: none; }
+        .login-sign-links a:hover { color: var(--text-2); }
+
+        /* Erro de credencial: a borda vermelha e o tremor dizem "recomece este
+           campo" sem que a MENSAGEM diga qual dos dois errou. */
+        .form-input.is-invalid { border-color: var(--danger); }
+        @keyframes shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-3px); } 40%, 60% { transform: translateX(3px); } }
+        .shake { animation: shake 260ms cubic-bezier(.36, .07, .19, .97); }
+
+        .login-error { color: var(--danger); font-size: 12.5px; line-height: 1.5; margin: 0; }
+        .login-note { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: 0; }
+        .login-link { font-size: 12.5px; color: var(--accent); text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; font-family: var(--font-body); }
+        .login-link:hover { color: var(--accent-hover); }
+
+        /* Segundo fator: um campo só, seis dígitos, que valida ao completar. */
+        .mfa-code { font-family: var(--font-mono); font-size: 24px; letter-spacing: 0.5em; text-indent: 0.5em; text-align: center; padding: 10px 0; font-variant-numeric: tabular-nums; }
+        .mfa-countdown { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); text-align: center; }
+        .mfa-countdown.is-urgent { color: var(--warning); }
+
+        /* Verificação anti-abuso: sem marca de fornecedor na interface. */
+        .login-challenge { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface-2); border-left: 2px solid var(--accent); }
+        .login-challenge-label { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+        @media (max-width: 480px) {
+            .login-box { padding: 22px 20px 18px; }
+        }
+
+        /* ——— SIDEBAR ————————————————————————————————————————————————
+           A largura precisa vir do flex-basis: a sidebar é filha de um
+           container flex e só `width` não vence o basis.
+           A sidebar NÃO rola; quem encolhe é a lista de navegação, para o
+           rodapé de conta nunca sair da viewport. */
+        .sidebar { flex: 0 0 var(--side-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; overflow: hidden; z-index: 100; transition: flex-basis var(--normal) var(--ease-out); }
+        .sidebar.collapsed { flex-basis: var(--side-w-rail); }
+        .sidebar.collapsed .sidebar-nav-text, .sidebar.collapsed .sidebar-label, .sidebar.collapsed .sidebar-brand { display: none; }
+        .sidebar.collapsed .sidebar-nav { justify-content: center; padding: 0 24px; }
+
+        /* Banda da marca: mesma altura da banda de título, para as duas
+           hairlines fecharem na mesma linha. */
+        .sidebar-logo { height: var(--hdr-h); flex-shrink: 0; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--font-head); font-size: 22px; font-weight: 500; letter-spacing: -0.015em; border-bottom: 1px solid var(--border); overflow: hidden; white-space: nowrap; }
+        .sidebar.collapsed .sidebar-logo { padding: 0 18px; }
+        .brand-tail { display: inline; }
+        .sidebar.collapsed .brand-tail { display: none; }
+        .sidebar-logo-mark { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-toggle { width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; padding: 0; cursor: pointer; color: var(--text-faint); font-size: 13px; line-height: 1; }
+        .sidebar-toggle:hover { color: var(--text); }
+
+        /* Seletor de tenant: uma linha de 34px — nome + norma + caret.
+           Nada de fase, percentual ou contagem aqui; esse contexto é da
+           Jornada e do Dashboard. O <select> nativo fica por cima, invisível:
+           preserva teclado e leitor de tela sem reimplementar um combobox. */
+        #sidebar-project-selector-container { position: relative; margin: 12px; flex-shrink: 0; }
+        .tenant-face { height: 34px; padding: 0 10px; background: var(--surface-2); display: flex; align-items: center; gap: 8px; overflow: hidden; }
+        .tenant-name { font-family: var(--font-body); font-weight: 500; font-size: 12.5px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tenant-norm { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+        .tenant-caret { font-size: 10px; color: var(--text-faint); }
+        #sidebar-project-select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        #sidebar-project-select:focus-visible + .tenant-face { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .sidebar.collapsed #sidebar-project-selector-container { margin: 12px 18px; }
+        .sidebar.collapsed .tenant-face { width: 36px; height: 36px; padding: 0; justify-content: center; }
+        .sidebar.collapsed .tenant-name, .sidebar.collapsed .tenant-norm, .sidebar.collapsed .tenant-caret { display: none; }
+        .tenant-initials { display: none; font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-2); }
+        .sidebar.collapsed .tenant-initials { display: block; }
+
+        .sidebar-nav-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 0 8px; scrollbar-width: none; }
         .sidebar-nav-list::-webkit-scrollbar { display: none; }
 
-        .sidebar-nav { display: flex; align-items: center; padding: 0.6rem 1.1rem; margin: 0.15rem 0.5rem; border-radius: 8px; color: rgba(245, 245, 247, 0.75); cursor: pointer; transition: all 0.2s; gap: 0.75rem; font-size: 0.82rem; position: relative; font-weight: 400; border-left: 3px solid transparent; }
-        .sidebar-nav svg { width: 18px; height: 18px; stroke-width: 1.6; fill: none; stroke: currentColor; opacity: 0.75; flex-shrink: 0; color: rgba(245, 245, 247, 0.7); }
-        .sidebar-nav:hover { background: rgba(0, 173, 232, 0.08); color: #ffffff; }
-        .sidebar-nav:hover svg { opacity: 1; color: var(--accent); }
-        .sidebar-nav.active { background: linear-gradient(90deg, rgba(0, 173, 232, 0.18) 0%, rgba(0, 173, 232, 0.04) 100%); color: #ffffff; font-weight: 600; border-left-color: var(--accent); }
+        .sidebar-nav { display: flex; align-items: center; height: 32px; padding: 0 20px; gap: 10px; color: var(--text-dim); cursor: pointer; transition: color var(--fast), background var(--fast); font-family: var(--font-body); font-size: 13px; font-weight: 400; position: relative; }
+        .sidebar-nav svg { width: 16px; height: 16px; stroke-width: 1.5; fill: none; stroke: currentColor; opacity: 0.5; flex-shrink: 0; }
+        .sidebar-nav:hover { background: var(--surface-2); color: var(--text); }
+        .sidebar-nav:hover svg { opacity: 1; }
+        .sidebar-nav.active { background: transparent; color: var(--text); font-weight: 500; box-shadow: inset 2px 0 0 var(--accent); }
         .sidebar-nav.active svg { opacity: 1; color: var(--accent); }
         .sidebar-nav-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sidebar-nav .tooltip { display: none; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.7rem; white-space: nowrap; z-index: 200; pointer-events: none; }
+        .sidebar-nav .tooltip { display: none; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); padding: 0.4rem 0.8rem; font-size: 0.7rem; white-space: nowrap; z-index: 200; pointer-events: none; }
         .sidebar.collapsed .sidebar-nav:hover .tooltip { display: block; }
 
-        .sidebar-label { padding: 1.1rem 1.25rem 0.35rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-family: 'Montserrat', sans-serif; cursor: pointer; display: flex; justify-content: space-between; align-items: center; opacity: 0.9; }
-        .sidebar-label::after { content: '\25BE'; font-size: 0.75rem; transition: 0.3s; color: rgba(245,245,247,0.5); }
+        .sidebar-label { padding: 14px 20px 8px; font-family: var(--font-mono); font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-faint); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .sidebar-label::after { content: '\25BE'; font-size: 0.75rem; transition: transform var(--normal); color: var(--text-faint); }
         .sidebar-label.collapsed::after { transform: rotate(-90deg); }
 
         .sidebar-group { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
         .sidebar-group.expanded { max-height: 1000px; }
 
-        .sidebar-bottom { padding: 0.75rem 0; border-top: 1px solid var(--border); margin-top: auto; }
-        .sidebar-brand { padding: 0.6rem 1.25rem; font-family: 'Montserrat', sans-serif; font-size: 0.75rem; color: rgba(245,245,247,0.5); font-weight: 500; display: flex; align-items: center; justify-content: space-between; opacity: 0.85; }
-        .sidebar-brand span { color: inherit; }
-        .sidebar-status { padding: 0 1.5rem 0.5rem; font-size: 0.55rem; color: rgba(255,255,255,0.1); }
+        /* ——— RODAPÉ DE CONTA ————————————————————————————————————————— */
+        .sidebar-bottom { margin-top: auto; flex-shrink: 0; margin-inline: 20px; padding: 14px 0 18px; border-top: 1px solid var(--border); position: relative; }
+        .sidebar.collapsed .sidebar-bottom { margin-inline: 12px; }
+        .sidebar-user-card { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; width: 100%; text-align: left; cursor: pointer; }
+        .sidebar-user-avatar { width: 30px; height: 30px; background: var(--surface-2); color: var(--text-2); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 500; flex-shrink: 0; }
+        .sidebar-user-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+        .sidebar-user-name { font-family: var(--font-body); font-size: 12px; color: var(--text); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-user-role { font-family: var(--font-mono); font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-user-caret { font-size: 10px; color: var(--text-faint); flex-shrink: 0; }
+        .sidebar.collapsed .sidebar-user-info, .sidebar.collapsed .sidebar-user-caret { display: none; }
+        .sidebar.collapsed .sidebar-user-card { justify-content: center; }
 
-        /* â€”â€”â€” SIDEBAR USER CARD â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .sidebar-user-card {
-            display: flex;
-            align-items: center;
-            padding: 0.6rem 0.8rem;
-            margin: 0.5rem 0.75rem 0.25rem;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            cursor: pointer;
-            gap: 0.6rem;
-            transition: all 0.2s;
-            position: relative;
-        }
-        .sidebar-user-card:hover {
-            background: var(--surface-hover);
-            border-color: rgba(255, 255, 255, 0.12);
-        }
-        .sidebar-user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            background: rgba(0, 173, 232, 0.15);
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            font-family: 'Montserrat', sans-serif;
-            flex-shrink: 0;
-        }
-        .sidebar-user-info {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            flex: 1;
-        }
-        .sidebar-user-name {
-            font-size: 0.75rem;
-            color: var(--text);
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .sidebar-user-role {
-            font-size: 0.72rem;
-            color: var(--text-dim);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .sidebar-user-logout {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--danger);
-            opacity: 0.6;
-            transition: all 0.2s;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .sidebar-user-logout:hover {
-            background: rgba(239, 68, 68, 0.15);
-            opacity: 1;
-        }
-        .sidebar.collapsed .sidebar-user-card {
-            padding: 0.4rem;
-            margin: 0.5rem 0.5rem 0.25rem;
-            justify-content: center;
-        }
-        .sidebar.collapsed .sidebar-user-info,
-        .sidebar.collapsed .sidebar-user-logout {
-            display: none;
-        }
+        /* ——— MENU DE CONTA ———————————————————————————————————————————
+           Popover ancorado no rodapé: substitui o botão de logout solto. */
+        .account-menu { position: absolute; left: 0; right: 0; bottom: 100%; max-height: calc(100vh - 140px); overflow-y: auto; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; z-index: 300; animation: rise 180ms var(--ease-out); }
+        .account-menu[hidden] { display: none; }
+        .account-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .account-id-tile { width: 32px; height: 32px; background: var(--surface-2); color: var(--text-2); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 500; flex-shrink: 0; }
+        .account-id-text { min-width: 0; }
+        .account-id-name { font-family: var(--font-body); font-size: 12.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .account-id-mail { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .account-rule { height: 1px; background: var(--border); }
+        .account-group { font-family: var(--font-mono); font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-faint); }
+        .account-item { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 5px 6px; margin: 0 -6px; text-align: left; font-family: var(--font-body); font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+        .account-item:hover { background: var(--surface-2); color: var(--text); }
+        .account-item svg { width: 12px; height: 12px; stroke-width: 1.5; fill: none; stroke: currentColor; flex-shrink: 0; opacity: 0.7; }
+        .account-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .account-item-aside { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); flex-shrink: 0; }
+        .account-item-check { width: 12px; flex-shrink: 0; color: transparent; }
+        .account-item.is-current .account-item-check { color: var(--accent); }
+        .account-item.danger { color: var(--danger); }
+        .account-item.danger:hover { background: rgba(239, 68, 68, 0.10); color: var(--danger); }
+        .account-sign { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .account-sign-house { font-family: var(--font-head); font-size: 13px; font-weight: 500; color: var(--text-2); }
+        .account-sign-house span { color: var(--accent); }
+        .account-sign-ver { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
 
-        /* â€”â€”â€” HEADER â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .header { height: 56px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; background: rgba(7, 11, 20, 0.6); backdrop-filter: var(--glass-blur); }
-        .header-left { display: flex; align-items: center; gap: 1rem; }
+        @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+        /* ——— HEADER ————————————————————————————————————————————————— */
+        .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+        .header { height: var(--hdr-h); flex-shrink: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 28px; background: var(--bg); }
+        .header-left { display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0; }
         .header-right { display: flex; align-items: center; gap: 1rem; }
-        .header-title { font-family: 'Montserrat', sans-serif; font-size: 1rem; font-weight: 500; }
+        .header-title { font-family: var(--font-head); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
         .header-actions { display: flex; align-items: center; gap: 0.5rem; }
 
         /* â€”â€”â€” NOTIFICATIONS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
@@ -160,7 +228,7 @@
         .notif-item { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; cursor: pointer; transition: 0.2s; }
         .notif-item:hover { background: var(--surface-hover); }
         .notif-item.unread { border-left: 3px solid var(--accent); }
-        .notif-time { font-size: 0.72rem; color: var(--text-dim); margin-top: 0.25rem; }
+        .notif-time { font-size: 0.6rem; color: var(--text-dim); margin-top: 0.25rem; }
 
         /* â€”â€”â€” CONTENT â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .content { flex: 1; overflow-y: auto; padding: 2rem; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
@@ -174,14 +242,14 @@
         .toggle-context { position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; z-index: 10; }
         .toggle-context-open { position: fixed; right: 0; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); border-right: none; color: var(--text-dim); padding: 0.5rem 0.3rem; border-radius: 8px 0 0 8px; cursor: pointer; z-index: 50; font-size: 0.7rem; }
         .ctx-inner { font-size: 0.8rem; }
-        .ctx-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); margin: 0.15rem; }
+        .ctx-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); margin: 0.15rem; }
         .ctx-tag-green { background: rgba(34,197,94,0.1); color: var(--success); border-color: rgba(34,197,94,0.2); }
-        .ctx-label { font-size: 0.72rem; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; margin-top: 1rem; }
+        .ctx-label { font-size: 0.6rem; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; margin-top: 1rem; }
 
         /* â€”â€”â€” CARDS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; backdrop-filter: var(--glass-blur); transition: all 0.3s; margin-bottom: 1rem; }
         .card:hover { border-color: rgba(255,255,255,0.12); }
-        .card-label { font-size: 0.72rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.75rem; font-family: 'Montserrat', sans-serif; }
+        .card-label { font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.75rem; font-family: 'Montserrat', sans-serif; }
 
         /* â€”â€”â€” STATS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
@@ -213,7 +281,7 @@
 
         /* â€”â€”â€” DATA TABLES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-        .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
+        .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
         .data-table td { padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
         .data-table tr:hover td { background: rgba(255,255,255,0.02); }
 
@@ -227,8 +295,8 @@
         @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
         /* â€”â€”â€” BADGES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
-        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; }
+        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.65rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; }
         .badge-implemented { background: rgba(34, 197, 94, 0.12); color: #22c55e; border-color: rgba(34, 197, 94, 0.25); }
         .badge-pending { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.25); }
 
@@ -245,9 +313,9 @@
         /* â€”â€”â€” PHASES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .phase-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: 0.2s; cursor: pointer; }
         .phase-item:hover { border-color: rgba(255,255,255,0.12); }
-        .phase-num { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--text-dim); font-family: 'Montserrat', sans-serif; flex-shrink: 0; }
+        .phase-num { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: var(--text-dim); font-family: 'Montserrat', sans-serif; flex-shrink: 0; }
         .phase-title { font-size: 0.8rem; flex: 1; }
-        .phase-status { font-size: 0.72rem; font-weight: 500; padding: 0.2rem 0.5rem; border-radius: 6px; }
+        .phase-status { font-size: 0.6rem; font-weight: 500; padding: 0.2rem 0.5rem; border-radius: 6px; }
 
         /* â€”â€”â€” WIZARD â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .wizard-layout { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; min-height: 60vh; }
@@ -371,7 +439,7 @@
             display: inline-block; 
             padding: 0.15rem 0.4rem; 
             border-radius: 4px; 
-            font-size: 0.72rem; 
+            font-size: 0.6rem; 
             font-weight: 500; 
             text-transform: uppercase; 
             letter-spacing: 0.02em;
@@ -394,7 +462,7 @@
         }
         
         .checklist-actions { display: flex; gap: 0.5rem; }
-        .btn-inline-action { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: 0.2s; }
+        .btn-inline-action { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.65rem; cursor: pointer; transition: 0.2s; }
         .btn-inline-action:hover { border-color: var(--accent); color: var(--text); }
         .btn-inline-action.primary { background: rgba(0, 173, 232, 0.12); border-color: rgba(0, 173, 232, 0.25); color: var(--accent); }
         .btn-inline-action.primary:hover { background: var(--accent); color: #000; }
@@ -415,7 +483,7 @@
         
         .roadmap-j-header { display: flex; justify-content: space-between; align-items: flex-start; }
         .roadmap-j-name { font-family: 'Montserrat', sans-serif; font-size: 0.85rem; font-weight: 500; color: var(--text); }
-        .roadmap-j-desc { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.15rem; }
+        .roadmap-j-desc { font-size: 0.65rem; color: var(--text-dim); margin-top: 0.15rem; }
         .roadmap-j-pct { font-size: 0.85rem; font-weight: 600; color: var(--accent); }
         
         .roadmap-nodes-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
@@ -429,7 +497,7 @@
         .roadmap-node.blocked { background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: var(--danger); }
         .roadmap-node.skipped { background: rgba(255,255,255,0.01); border-color: rgba(255,255,255,0.05); color: var(--text-dim); text-decoration: line-through; }
         
-        .roadmap-node .tooltip { visibility: hidden; width: 180px; background-color: rgba(10,15,25,0.98); border: 1px solid var(--border); color: #fff; text-align: center; border-radius: 8px; padding: 0.6rem; position: absolute; z-index: 10; bottom: 125%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.75rem; pointer-events: none; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+        .roadmap-node .tooltip { visibility: hidden; width: 180px; background-color: rgba(10,15,25,0.98); border: 1px solid var(--border); color: #fff; text-align: center; border-radius: 8px; padding: 0.6rem; position: absolute; z-index: 10; bottom: 125%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.65rem; pointer-events: none; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
         .roadmap-node:hover .tooltip { visibility: visible; opacity: 1; }
         
         @keyframes pulse-node {
@@ -445,13 +513,41 @@
         .empty-state h3 { font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1rem; margin-bottom: 0.5rem; color: var(--text); }
 
         /* â€”â€”â€” TOAST â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
-        .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 0.8rem 1.5rem; border-radius: 12px; font-size: 0.8rem; z-index: 9000; animation: toastIn 0.3s ease-out; background: rgba(12,16,28,0.95); border: 1px solid var(--border); color: var(--text); backdrop-filter: var(--glass-blur); }
-        @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        /* Toast: canto inferior ESQUERDO, para não disputar espaço com a barra
+           de lote (centro) nem com o drawer (direita). 4200ms — o desfazer
+           precisa de tempo de leitura antes de sumir. */
+        .toast { position: fixed; bottom: 28px; left: 28px; display: flex; align-items: center; gap: 14px; padding: 12px 16px; font-family: var(--font-body); font-size: 13px; z-index: 9000; animation: toastIn var(--normal) var(--ease-out); background: var(--surface-2); border: 1px solid var(--border); border-left: 2px solid var(--accent); color: var(--text); box-shadow: var(--shadow-lg); }
+        .toast-danger { border-left-color: var(--danger); }
+        .toast-warning { border-left-color: var(--warning); }
+        .toast-success { border-left-color: var(--success); }
+        .toast-text { min-width: 0; }
+        .toast-undo { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font-family: var(--font-body); font-size: 12.5px; font-weight: 500; flex-shrink: 0; }
+        .toast-undo:hover { color: var(--accent-hover); }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Região de anúncio permanente: fora da tela, nunca display:none —
+           leitor de tela ignora conteúdo escondido assim. */
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+        /* Banda de título da view (renderPageHeader). Sem subtítulo aqui: o
+           contexto de registro é o kicker, primeira linha do conteúdo. */
+        .page-header { margin-bottom: 1.5rem; }
+        .page-header-band { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .page-title { font-family: var(--font-head); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; color: var(--text); margin: 0; }
+        .page-header-band .header-actions-group { display: flex; gap: 0.75rem; align-items: center; }
+        .page-kicker { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); margin: 8px 0 0; }
+
+        /* Hover de linha em CSS: era onmouseenter/onmouseleave inline em cada
+           uma das 19 tabelas. A última linha não leva régua. */
+        .table-container { overflow: visible; }
+        .table-container tbody tr { transition: background var(--fast); }
+        .table-container tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+        .table-container tbody tr:last-child td { border-bottom: 0; }
 
         /* â€”â€”â€” PRICING â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
         .pricing-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         .pricing-table th, .pricing-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
-        .pricing-table th { color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; }
+        .pricing-table th { color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; }
         .pricing-slider { width: 100%; accent-color: var(--accent); }
 
         /* â€”â€”â€” GROUP PROJECT ONLY â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
@@ -480,7 +576,7 @@
             writing-mode: vertical-lr;
             transform: rotate(180deg);
             text-align: center;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 500;
             color: var(--text-dim);
             letter-spacing: 0.1em;
@@ -531,7 +627,7 @@
             grid-column: 3;
             grid-row: 3;
             text-align: center;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 500;
             color: var(--text-dim);
             letter-spacing: 0.1em;
@@ -563,7 +659,7 @@
         .cell-counter {
             background: #ffffff;
             color: #070b14;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 700;
             width: 18px;
             height: 18px;
@@ -721,7 +817,7 @@
             color: var(--accent);
             text-transform: uppercase;
             font-family: 'Montserrat', sans-serif;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             font-weight: 500;
             letter-spacing: 0.05em;
             padding: 0.6rem 0.8rem;
@@ -799,6 +895,26 @@
         }
 
         /* Collapsible Accordion Panels */
+
+        /* ——— SoA: carregamento, seleção e lote ——————————————————————— */
+
+        /* Skeleton nas linhas, não spinner: as colunas já entram dimensionadas,
+           então a tabela não pula quando os dados chegam. */
+        .sk-bar { height: 8px; background: var(--surface-2); display: inline-block; animation: sk-pulse 1400ms ease-in-out infinite; }
+        @keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+        .soa-check, .soa-check-all { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+        .soa-row:has(.soa-check:checked) { background: rgba(0, 173, 232, 0.07); }
+        /* Linha sob o cursor de TECLADO: precisa se distinguir da selecionada,
+           senao nao da para saber onde o `x` vai agir. */
+        .soa-row-cursor { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+
+        /* Barra de lote: aparece só com seleção. Precisa quebrar linha, senão o
+           ✕ some quando o texto da contagem cresce. */
+        .soa-batch-bar { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); z-index: 8000; animation: rise 200ms var(--ease-out); max-width: calc(100vw - 56px); }
+        .soa-batch-bar .btn { height: 30px; padding: 0 12px; font-size: 12.5px; }
+        .soa-batch-count { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); }
+        .soa-batch-close { width: 30px; padding: 0; }
         .soa-accordion {
             background: rgba(255, 255, 255, 0.01);
             border: 1px solid rgba(255, 255, 255, 0.06);
@@ -966,13 +1082,15 @@
             background: rgba(255, 255, 255, 0.02);
             box-shadow: 0 0 0 1px rgba(0, 173, 232, 0.2);
         }
+        /* Justificativa ausente em controle N/A trava a producao da SoA:
+           e bloqueio, nao aviso — por isso vermelho e nao ambar. */
         .soa-justification-input.required-missing {
-            border-color: rgba(245, 158, 11, 0.4);
-            background: rgba(245, 158, 11, 0.02);
+            border-color: var(--danger);
+            background: rgba(239, 68, 68, 0.06);
         }
         .soa-justification-input.required-missing:focus {
-            border-color: var(--warning);
-            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+            border-color: var(--danger);
+            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
         }
 
         /* ————— GOVERNANCE & TEAM OVERHAUL ————— */
@@ -1046,7 +1164,7 @@
             line-height: 1.2;
         }
         .gov-member-email {
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             color: rgba(229, 235, 255, 0.4);
             margin-top: 2px;
             white-space: nowrap;
@@ -1062,146 +1180,6 @@
             border: 1px dashed rgba(255, 255, 255, 0.06);
             border-radius: 8px;
             background: rgba(0, 0, 0, 0.1);
-        }
-
-        /* ————— ORGANOGRAMA DE GOVERNANÇA (D6) —————
-           Âncora (DPO/Líder) no topo → tronco → ramificações por área. Os
-           conectores são desenhados com pseudo-elementos e só aparecem no layout
-           em linha (desktop); no empilhamento mobile eles somem para não cruzar. */
-        .org-chart {
-            margin-bottom: 1.5rem;
-            padding: 24px 20px 20px;
-            background: rgba(255, 255, 255, 0.01);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            backdrop-filter: blur(24px);
-        }
-        .org-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .org-header-title {
-            font-family: 'Montserrat', sans-serif;
-            font-weight: 500;
-            font-size: 0.85rem;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .org-badge {
-            font-weight: 700;
-            font-size: 0.68rem;
-            color: #00ade8;
-            background: rgba(0, 173, 232, 0.12);
-            border: 1px solid rgba(0, 173, 232, 0.2);
-            padding: 1px 6px;
-            border-radius: 4px;
-            margin-left: 6px;
-            text-transform: uppercase;
-            font-family: 'Montserrat', sans-serif;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
-        }
-        /* Nó âncora: centralizado, destacado. */
-        .org-anchor {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            max-width: 420px;
-            margin: 0 auto;
-            padding: 16px 20px;
-            background: linear-gradient(135deg, rgba(0, 173, 232, 0.08), rgba(0, 173, 232, 0.02));
-            border: 1px solid rgba(0, 173, 232, 0.28);
-            border-radius: 14px;
-            box-shadow: 0 6px 24px rgba(0, 173, 232, 0.08);
-        }
-        .org-anchor-empty {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 4px;
-            border-style: dashed;
-            border-color: rgba(255, 255, 255, 0.12);
-            background: rgba(0, 0, 0, 0.12);
-        }
-        .org-anchor-avatar {
-            width: 48px;
-            height: 48px;
-            font-size: 0.95rem;
-            background: rgba(0, 173, 232, 0.14);
-            border-color: rgba(0, 173, 232, 0.3);
-        }
-        .org-anchor-info { min-width: 0; }
-        .org-anchor-name {
-            font-family: 'Montserrat', sans-serif;
-            font-weight: 700;
-            font-size: 0.95rem;
-            color: var(--text);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-        .org-anchor-title {
-            font-size: 0.78rem;
-            color: rgba(229, 235, 255, 0.7);
-            margin-top: 2px;
-        }
-        .org-anchor-email { margin-top: 3px; }
-        /* Tronco vertical descendo da âncora. */
-        .org-trunk {
-            width: 2px;
-            height: 28px;
-            margin: 0 auto;
-            background: linear-gradient(to bottom, rgba(0, 173, 232, 0.4), rgba(0, 173, 232, 0.15));
-        }
-        /* Ramificações: uma linha de cards, com barramento horizontal e “gotas”. */
-        .org-branches {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            position: relative;
-            padding-top: 24px;
-        }
-        /* Barramento horizontal ligando o tronco às gotas de cada ramo. */
-        .org-branches::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 10%;
-            right: 10%;
-            height: 2px;
-            background: rgba(0, 173, 232, 0.22);
-        }
-        .org-branch { position: relative; }
-        /* Gota vertical do barramento até o topo de cada card. */
-        .org-branch::before {
-            content: '';
-            position: absolute;
-            top: -24px;
-            left: 50%;
-            width: 2px;
-            height: 24px;
-            background: rgba(0, 173, 232, 0.22);
-        }
-        .gov-section-title {
-            font-size: 0.75rem;
-            color: var(--accent);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            padding-bottom: 6px;
-            margin-bottom: 8px;
-        }
-        /* Mobile: uma coluna só — os conectores horizontais/gotas cruzariam feio,
-           então somem; o empilhamento vertical já comunica a hierarquia. */
-        @media (max-width: 640px) {
-            .org-branches { padding-top: 0; }
-            .org-branches::before,
-            .org-branch::before,
-            .org-trunk { display: none; }
         }
 /* ─── ACESSIBILIDADE ─────────────────────────────────────────────────────
    O app é operável por teclado (o observador em globals.js dá tabindex/role/
@@ -1243,4 +1221,29 @@ textarea:focus-visible {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* ——— Correções de superfície herdadas ————————————————————————
+   Três coisas saem do sistema: gradiente no item ativo, raio e
+   backdrop-filter. O blur já morreu no token (--glass-blur: none).
+   Precisam vir no fim do arquivo para vencer as regras originais.
+   Os raios inline espalhados pelas views vão a 0 conforme cada tela é
+   revisitada — regra de CSS não vence atributo style. */
+.sidebar-nav.active {
+    background: transparent;
+    border-left-color: var(--accent);
+    box-shadow: inset 2px 0 0 var(--accent);
+    font-weight: 500;
+}
+.sidebar-nav,
+.sidebar-nav.active,
+.btn, .btn-primary, .btn-secondary,
+.chip,
+.form-input, .form-select,
+.stat-card, .card,
+.table-container,
+.toast,
+.badge,
+.modal {
+    border-radius: var(--radius);
 }

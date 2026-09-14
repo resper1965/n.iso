@@ -7,11 +7,15 @@ import app from '../src/index';
 import { hashPassword } from '../src/helpers';
 import { applySchema, resetData, resetSessions } from './helpers/d1';
 
+// IP diferente a cada chamada: a política de tentativas (auth-policy.ts) bloqueia
+// o par conta+IP na 5a falha, ANTES do teto por conta. Variar o IP isola o que
+// este teste prova: que o teto S6 vale por conta, venha de onde vier.
+let seq = 0;
 const tentativa = (email: string, password = 'senha-errada') =>
   app.fetch(
     new Request('http://localhost/api/v1/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': `10.0.${Math.floor(seq / 250)}.${(seq++ % 250) + 1}` },
       body: JSON.stringify({ email, password }),
     }),
     env as any

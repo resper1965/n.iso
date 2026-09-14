@@ -139,13 +139,99 @@ window.toggleGroup = function toggleGroup(groupId) {
         }
     }
 
+// ——— Autenticação: caminho de conta local ————————————————————————————
+// O caminho federado (SSO) fica para quando a federação entrar: hoje toda
+// conta é local, então não há segunda rota a descobrir.
+
+/** Token do desafio anti-abuso resolvido, quando existe verificação ativa. */
+let desafioResolvido = null;
+/** Handle do contador do bloqueio temporário. */
+let bloqueioTimer = null;
+
+window.setLoginChallengeToken = function setLoginChallengeToken(token) {
+        desafioResolvido = token || null;
+        const btn = document.getElementById('login-submit');
+        if (btn) btn.disabled = !desafioResolvido;
+    };
+
+/**
+ * Mostra o bloco de verificação. Só é chamado quando o SERVIDOR diz que o
+ * desafio é exigido — e ele só diz isso quando sabe conferir. Se não houver
+ * widget montável, o bloco não trava o botão: deixar `Entrar` desabilitado sem
+ * ter como resolver o desafio seria trancar o usuário para fora.
+ */
+function mostraDesafio() {
+        const bloco = document.getElementById('login-challenge');
+        if (!bloco || !bloco.hidden) return;
+        bloco.hidden = false;
+        const temWidget = Boolean(document.querySelector('#login-challenge-widget *'));
+        const btn = document.getElementById('login-submit');
+        if (btn) btn.disabled = temWidget && !desafioResolvido;
+    }
+
+function escondeDesafio() {
+        const bloco = document.getElementById('login-challenge');
+        if (bloco) bloco.hidden = true;
+        const btn = document.getElementById('login-submit');
+        if (btn) btn.disabled = false;
+    }
+
+/** Borda vermelha e tremor: dizem "recomece" sem dizer QUAL campo errou. */
+function sinalizaCredencialInvalida() {
+        const campos = [document.getElementById('login-email'), document.getElementById('login-password')];
+        campos.forEach(el => {
+            if (!el) return;
+            el.classList.add('is-invalid', 'shake');
+            setTimeout(() => el.classList.remove('shake'), 300);
+        });
+        const senha = document.getElementById('login-password');
+        if (senha) { senha.value = ''; senha.focus(); }
+    }
+
+function limpaSinalDeErro() {
+        ['login-email', 'login-password'].forEach(id => {
+            document.getElementById(id)?.classList.remove('is-invalid');
+        });
+    }
+
+/** Bloqueio temporário: o formulário para, com contagem visível. */
+function aplicaBloqueio(mensagem) {
+        const btn = document.getElementById('login-submit');
+        const err = document.getElementById('login-error');
+        const rotulo = btn ? btn.textContent : '';
+        let restam = 15 * 60;
+        clearInterval(bloqueioTimer);
+
+        const tick = () => {
+            if (restam <= 0) {
+                clearInterval(bloqueioTimer);
+                bloqueioTimer = null;
+                if (btn) { btn.disabled = false; btn.textContent = rotulo; }
+                if (err) err.style.display = 'none';
+                return;
+            }
+            const m = Math.floor(restam / 60);
+            const s = String(restam % 60).padStart(2, '0');
+            if (btn) { btn.disabled = true; btn.textContent = `Bloqueado — ${m}:${s}`; }
+            restam--;
+        };
+        if (err) { err.style.display = 'block'; err.textContent = mensagem; }
+        tick();
+        bloqueioTimer = setInterval(tick, 1000);
+    }
+
 window.doLogin = async function doLogin() {
         const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-password').value;
         const err = document.getElementById('login-error');
         err.style.display = 'none';
+        limpaSinalDeErro();
         try {
-            const res = await api('POST', '/api/v1/auth/login', { email, password: pass });
+            const corpo = { email, password: pass };
+            if (desafioResolvido) corpo.challengeToken = desafioResolvido;
+            const res = await api('POST', '/api/v1/auth/login', corpo);
+            escondeDesafio();
+            desafioResolvido = null;
             S.token = res.token; S.user = res.user;
             localStorage.setItem('niso_token', res.token);
             localStorage.setItem('niso_user', JSON.stringify(res.user));
@@ -157,10 +243,11 @@ window.doLogin = async function doLogin() {
                 document.getElementById('standard-login-box').style.display = 'none';
                 document.getElementById('first-login-reset-box').style.display = 'none';
                 document.getElementById('forgot-password-box').style.display = 'none';
-                document.getElementById('mfa-login-box').style.display = 'block';
+                document.getElementById('mfa-login-box').style.display = 'flex';
                 document.getElementById('mfa-login-error').textContent = '';
                 document.getElementById('mfa-login-code').value = '';
                 document.getElementById('mfa-login-code').focus();
+                iniciaContadorMfa();
                 // Uma conta pode exigir as DUAS coisas: segundo fator e troca de
                 // senha temporária. O segundo fator vem primeiro, mas a troca não
                 // pode se perder no caminho — senão a senha provisória vira
@@ -168,7 +255,7 @@ window.doLogin = async function doLogin() {
                 window._pendenteTrocaSenha = !!res.requiresPasswordChange;
             } else if (res.requiresPasswordChange) {
                 document.getElementById('standard-login-box').style.display = 'none';
-                document.getElementById('first-login-reset-box').style.display = 'block';
+                document.getElementById('first-login-reset-box').style.display = 'flex';
                 document.getElementById('forgot-password-box').style.display = 'none';
                 document.getElementById('first-reset-error').style.display = 'none';
             } else {
@@ -176,8 +263,20 @@ window.doLogin = async function doLogin() {
                 initApp();
             }
         } catch(e) {
+            const corpo = e.body || {};
+            // O token de desafio é de uso único: resolvido ou não, não vale
+            // para a próxima tentativa.
+            desafioResolvido = null;
+            if (corpo.locked) {
+                aplicaBloqueio(e.message);
+                limpaSinalDeErro();
+                return;
+            }
+            if (corpo.challengeRequired) mostraDesafio();
             err.style.display = 'block';
             err.textContent = e.message;
+            // Falha de rede não é credencial errada: não vale tremer o campo.
+            if (e.status === 401) sinalizaCredencialInvalida();
         }
     }
 
@@ -188,12 +287,76 @@ window.doLogin = async function doLogin() {
  * recuperação — o backend tenta o TOTP primeiro e cai para a lista de
  * recuperação, então aqui é um campo só.
  */
+// ——— Segundo fator ————————————————————————————————————————————————————
+// TOTP, sem SMS. O campo é um só, de 6 dígitos, que valida ao completar: o
+// código tem tamanho fixo e conhecido, então exigir um clique a mais depois do
+// sexto dígito é trabalho sem informação nova.
+
+/** true enquanto o usuário está digitando um código de recuperação. */
+let usandoRecuperacao = false;
+let mfaTimer = null;
+
+/** Janela do TOTP: 30 s alinhados ao relógio, como o autenticador mostra. */
+function iniciaContadorMfa() {
+        const el = document.getElementById('mfa-countdown');
+        if (!el) return;
+        clearInterval(mfaTimer);
+        const tick = () => {
+            if (usandoRecuperacao) { el.textContent = ''; return; }
+            const restam = 30 - (Math.floor(Date.now() / 1000) % 30);
+            el.textContent = `expira em ${restam}s`;
+            el.classList.toggle('is-urgent', restam <= 10);
+        };
+        tick();
+        mfaTimer = setInterval(tick, 1000);
+    }
+
+function paraContadorMfa() {
+        clearInterval(mfaTimer);
+        mfaTimer = null;
+    }
+window.iniciaContadorMfa = iniciaContadorMfa;
+
+/** Valida sozinho ao completar os 6 dígitos. Recuperação não tem tamanho fixo. */
+window.onMfaCodeInput = function onMfaCodeInput() {
+        const campo = document.getElementById('mfa-login-code');
+        if (!campo) return;
+        if (!usandoRecuperacao) {
+            campo.value = campo.value.replace(/\D/g, '').slice(0, 6);
+            if (campo.value.length === 6) window.doMfaLogin();
+        }
+    };
+
+/** O código de recuperação é a alternativa quando o aparelho se perdeu. */
+window.toggleRecoveryCode = function toggleRecoveryCode() {
+        usandoRecuperacao = !usandoRecuperacao;
+        const campo = document.getElementById('mfa-login-code');
+        const rotulo = document.getElementById('mfa-login-label');
+        const lede = document.getElementById('mfa-login-lede');
+        const botao = document.getElementById('mfa-toggle-recovery');
+        const contador = document.getElementById('mfa-countdown');
+        if (!campo) return;
+
+        campo.value = '';
+        campo.classList.toggle('mfa-code', !usandoRecuperacao);
+        campo.setAttribute('maxlength', usandoRecuperacao ? '20' : '6');
+        campo.setAttribute('inputmode', usandoRecuperacao ? 'text' : 'numeric');
+        if (rotulo) rotulo.textContent = usandoRecuperacao ? 'Código de recuperação' : 'Código';
+        if (lede) lede.textContent = usandoRecuperacao
+            ? 'Use um dos códigos de recuperação guardados na ativação do segundo fator. Cada um vale uma vez.'
+            : 'Digite o código de 6 dígitos do seu autenticador.';
+        if (botao) botao.textContent = usandoRecuperacao ? 'Usar o autenticador' : 'Usar código de recuperação';
+        if (contador) { contador.textContent = ''; contador.classList.remove('is-urgent'); }
+        campo.focus();
+    };
+
 window.doMfaLogin = async function doMfaLogin() {
         const codigo = (document.getElementById('mfa-login-code').value || '').trim();
         const err = document.getElementById('mfa-login-error');
         err.textContent = '';
         if (!codigo) { err.textContent = 'Informe o código.'; return; }
         try {
+            paraContadorMfa();
             await api('POST', '/api/v1/auth/mfa/verify', { codigo });
             // O backend reescreveu a sessão removendo `mfa_pending`; o token é o
             // mesmo, então não há nada a regravar no localStorage.
@@ -204,18 +367,21 @@ window.doMfaLogin = async function doMfaLogin() {
             if (window._pendenteTrocaSenha) {
                 window._pendenteTrocaSenha = false;
                 document.getElementById('standard-login-box').style.display = 'none';
-                document.getElementById('first-login-reset-box').style.display = 'block';
+                document.getElementById('first-login-reset-box').style.display = 'flex';
                 document.getElementById('first-reset-error').style.display = 'none';
                 document.getElementById('first-new-password').focus();
                 return;
             }
 
-            document.getElementById('standard-login-box').style.display = 'block';
+            document.getElementById('standard-login-box').style.display = 'flex';
             document.getElementById('login-overlay').classList.add('hidden');
             initApp();
         } catch(e) {
             err.textContent = e.message;
             document.getElementById('mfa-login-code').select();
+            // O código errado pode ser só o da janela anterior: o contador volta
+            // para o usuário saber quanto falta para o próximo.
+            if (!usandoRecuperacao) iniciaContadorMfa();
         }
     }
 
@@ -223,10 +389,12 @@ window.doMfaLogin = async function doMfaLogin() {
 window.cancelMfaLogin = function cancelMfaLogin() {
         S.token = null; S.user = null;
         window._pendenteTrocaSenha = false;
+        paraContadorMfa();
+        if (usandoRecuperacao) window.toggleRecoveryCode();
         localStorage.removeItem('niso_token');
         localStorage.removeItem('niso_user');
         document.getElementById('mfa-login-box').style.display = 'none';
-        document.getElementById('standard-login-box').style.display = 'block';
+        document.getElementById('standard-login-box').style.display = 'flex';
         document.getElementById('login-password').value = '';
     }
 
@@ -279,15 +447,18 @@ window.openPricingOverrideModal = function openPricingOverrideModal(id) {
 window.toggleSidebar = function toggleSidebar() {
         const sb = document.getElementById('sidebar');
         sb.classList.toggle('collapsed');
-        const textEl = document.getElementById('toggle-sidebar-text');
-        const svgEl = document.getElementById('toggle-sidebar-svg');
-        if (sb.classList.contains('collapsed')) {
-            if (textEl) textEl.textContent = 'Expandir';
-            if (svgEl) svgEl.innerHTML = '<polyline points="13 7 18 12 13 17"/><polyline points="6 7 11 12 6 17"/>';
-        } else {
-            if (textEl) textEl.textContent = 'Recolher';
-            if (svgEl) svgEl.innerHTML = '<polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>';
+        const collapsed = sb.classList.contains('collapsed');
+        const btn = document.getElementById('toggle-sidebar');
+        const glyphEl = document.getElementById('toggle-sidebar-svg');
+        const label = collapsed ? 'Expandir' : 'Recolher';
+        if (glyphEl) glyphEl.textContent = collapsed ? '»' : '«';
+        if (btn) {
+            btn.title = label;
+            btn.setAttribute('aria-label', label + ' navegação');
+            btn.setAttribute('aria-expanded', String(!collapsed));
         }
+        // Recolhida o menu de conta não cabe ancorado no rodapé estreito.
+        if (collapsed && typeof closeAccountMenu === 'function') closeAccountMenu();
     }
 
 window.toggleContext = function toggleContext() {
@@ -331,7 +502,189 @@ window.updateSidebarProjectSelector = function updateSidebarProjectSelector() {
         } else {
             selectEl.value = '';
         }
+        updateTenantFace();
     }
+
+// A face visível do seletor: uma linha de 34px com nome + norma + caret. O
+// <select> nativo continua por cima, invisível, para não reimplementar um
+// combobox acessível. Fase, prazo e percentual NÃO entram aqui: esse contexto
+// pertence à Jornada e ao Dashboard.
+window.updateTenantFace = function updateTenantFace() {
+        const nameEl = document.getElementById('tenant-name');
+        if (!nameEl) return;
+        const normEl = document.getElementById('tenant-norm');
+        const initialsEl = document.getElementById('tenant-initials');
+        const p = S.activeProject;
+        const name = p ? (p.project_name || p.client_name || 'Projeto') : 'Selecione um projeto';
+        nameEl.textContent = name;
+        if (normEl) normEl.textContent = p ? (p.standard || p.standards || 'ISO 27001:2022') : '';
+        if (initialsEl) initialsEl.textContent = p ? name.slice(0, 2).toUpperCase() : '—';
+    }
+
+// ——— Menu de conta ——————————————————————————————————————————————————
+// Substitui o botão de logout solto no card: encerrar sessão é uma decisão,
+// não um alvo de 28px ao lado do nome. Abre pelo card, fecha com Esc e com
+// clique fora.
+// ponytail: sem item "Tema". O toggle foi removido de propósito (ver o topo
+// deste arquivo) — não existe CSS de tema claro, e item que não faz nada é
+// pior que item ausente.
+const NISO_VERSION = 'n.iso 1.8.0';
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+const LOGOUT_SHORTCUT = IS_MAC ? '⇧⌘Q' : '⇧Ctrl+Q';
+
+const ICON_KEY = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.5-8.5"/><path d="m17 6 3 3"/></svg>';
+const ICON_HISTORY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>';
+const ICON_LOGOUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+
+window.renderAccountMenu = function renderAccountMenu() {
+        const box = document.getElementById('account-menu');
+        if (!box) return;
+        const u = S.user || {};
+        const name = u.name || u.email || 'Consultor';
+        const initials = name.trim().slice(0, 2).toUpperCase();
+        const tenants = Array.isArray(S.projects) ? S.projects : [];
+        const activeId = S.activeProject ? S.activeProject.id : '';
+
+        const tenantRows = tenants.map(p => {
+            const label = p.project_name || p.client_name || p.id;
+            const norm = p.standard || p.standards || '';
+            const current = String(p.id) === String(activeId);
+            return `<button type="button" role="menuitemradio" aria-checked="${current}" class="account-item${current ? ' is-current' : ''}" data-action="accountMenuAction" data-args='["changeActiveProject","${escapeHTML(String(p.id))}"]'>
+                <span class="account-item-check">${current ? ICON_CHECK : ''}</span>
+                <span class="account-item-label">${escapeHTML(label)}</span>
+                <span class="account-item-aside">${escapeHTML(norm)}</span>
+            </button>`;
+        }).join('');
+
+        box.innerHTML = `
+            <div class="account-id">
+                <span class="account-id-tile">${escapeHTML(initials)}</span>
+                <span class="account-id-text">
+                    <span class="account-id-name">${escapeHTML(name)}</span>
+                    <span class="account-id-mail">${escapeHTML(u.email || '')}</span>
+                </span>
+            </div>
+            <div class="account-rule"></div>
+            ${tenantRows ? `<div class="account-group">Tenant</div>${tenantRows}<div class="account-rule"></div>` : ''}
+            <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openProfileModal"]'>
+                ${ICON_KEY}<span class="account-item-label">Minha conta e MFA</span>
+            </button>
+            <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openSessionTrail"]'>
+                ${ICON_HISTORY}<span class="account-item-label">Trilha da minha sessão</span>
+            </button>
+            <div class="account-rule"></div>
+            <button type="button" role="menuitem" class="account-item danger" data-action="accountMenuAction" data-args='["doLogout"]'>
+                ${ICON_LOGOUT}<span class="account-item-label">Encerrar sessão</span>
+                <span class="account-item-aside">${LOGOUT_SHORTCUT}</span>
+            </button>
+            <div class="account-rule"></div>
+            <div class="account-sign">
+                <span class="account-sign-house">ness<span>.</span></span>
+                <span class="account-sign-ver">${NISO_VERSION}</span>
+            </div>`;
+    }
+
+/**
+ * O percurso desta sessão: senha, segundo fator, bloqueio, aceite. Só o do
+ * próprio usuário — o servidor filtra pelo ator, e não há parâmetro para pedir
+ * o de outra conta.
+ */
+window.openSessionTrail = async function openSessionTrail() {
+        openModal('<div style="padding:1.5rem"><p style="color:var(--text-dim);font-size:0.8rem">Carregando trilha da sessão...</p></div>');
+        let registros = [];
+        try {
+            const res = await api('GET', '/api/v1/auth/sessao/trilha');
+            registros = Array.isArray(res) ? res : (res.registros || []);
+        } catch (e) {
+            openModal(`<div style="padding:1.5rem"><p class="login-error">${escapeHTML(e.message)}</p></div>`);
+            return;
+        }
+
+        const badge = tipo => {
+            const cor = tipo.includes('lockout') ? 'danger'
+                : tipo.includes('password') ? 'warning'
+                : 'info';
+            return window.renderStatusBadge(cor, tipo);
+        };
+
+        openModal(`
+            <div style="padding:1.5rem 1.75rem;max-width:560px">
+                <h3 style="font-family:var(--font-head);font-weight:600;font-size:17px;margin:0 0 4px">Trilha da minha sessão</h3>
+                <p style="font-size:12.5px;color:var(--text-2);margin:0 0 16px">Os eventos de autenticação da sua conta, do mais recente para o mais antigo.</p>
+                ${registros.length ? `
+                    <div style="border:1px solid var(--border)">
+                        ${registros.map(r => `
+                            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+                                <span style="flex-shrink:0">${badge(r.tipo || 'evento')}</span>
+                                <span style="flex:1;min-width:0;font-size:12.5px;color:var(--text-2);line-height:1.5">
+                                    ${escapeHTML(r.descricao || '')}
+                                    <span style="display:block;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:2px">${escapeHTML(r.quando || '')}</span>
+                                </span>
+                            </div>`).join('')}
+                    </div>`
+                    : '<p style="font-size:12.5px;color:var(--text-dim)">Nenhum evento de autenticação registrado ainda.</p>'}
+                <div style="display:flex;justify-content:flex-end;margin-top:18px">
+                    <button class="btn btn-secondary" data-action="closeModal">Fechar</button>
+                </div>
+            </div>`);
+    };
+
+// Item do menu de conta: fecha o popover e executa a ação. Um wrapper só,
+// porque a delegação chama uma função por elemento e cada item fazia duas coisas.
+window.accountMenuAction = function accountMenuAction(fn, ...args) {
+    closeAccountMenu();
+    if (typeof window[fn] === 'function') window[fn](...args);
+};
+
+window.closeAccountMenu = function closeAccountMenu() {
+        const box = document.getElementById('account-menu');
+        const card = document.getElementById('sidebar-user-card');
+        if (box) box.hidden = true;
+        if (card) card.setAttribute('aria-expanded', 'false');
+    }
+
+window.toggleAccountMenu = function toggleAccountMenu() {
+        const box = document.getElementById('account-menu');
+        const card = document.getElementById('sidebar-user-card');
+        if (!box) return;
+        if (!box.hidden) { closeAccountMenu(); return; }
+        // Na trilha de 72px o popover não cabe: expande antes de abrir.
+        const sb = document.getElementById('sidebar');
+        if (sb && sb.classList.contains('collapsed')) toggleSidebar();
+        renderAccountMenu();
+        box.hidden = false;
+        if (card) card.setAttribute('aria-expanded', 'true');
+        const first = box.querySelector('.account-item');
+        if (first) first.focus();
+    }
+
+document.addEventListener('click', (e) => {
+        const box = document.getElementById('account-menu');
+        if (!box || box.hidden) return;
+        if (e.target.closest('#account-menu') || e.target.closest('#sidebar-user-card')) return;
+        closeAccountMenu();
+    });
+
+document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const box = document.getElementById('account-menu');
+            if (box && !box.hidden) {
+                closeAccountMenu();
+                const card = document.getElementById('sidebar-user-card');
+                if (card) card.focus();
+                // Cascata do Esc: o menu de conta é o primeiro da fila e
+                // consome a tecla — não cai no fechamento de modal logo abaixo.
+                e.stopImmediatePropagation();
+            }
+            return;
+        }
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'Q' || e.key === 'q')) {
+            e.preventDefault();
+            closeAccountMenu();
+            doLogout();
+        }
+    });
 
 window.updateHeaderUser = function updateHeaderUser() {
         const avatarEl = document.getElementById('sidebar-user-avatar');
@@ -714,6 +1067,172 @@ window.loadAll = async function loadAll() {
         }
     }
 
+// ——— Reautenticação após expirar por inatividade ——————————————————————
+// Expirar por inatividade não é o mesmo que sessão inválida: o usuário continua
+// sendo quem era e pode ter edição aberta. Derrubar tudo perderia o trabalho —
+// por isso a reautenticação acontece AQUI, preservando o rascunho.
+
+/** Rascunho preservado durante a reautenticação, em PT-BR e por registro. */
+window.rascunhoPendente = null;
+
+/**
+ * Declara o que está sendo editado, para a tela de expiração poder dizer o que
+ * está preservado. `campos` são RÓTULOS em português, nunca as chaves internas.
+ */
+window.registrarRascunho = function registrarRascunho(registro, campos) {
+        window.rascunhoPendente = (campos && campos.length) ? { registro, campos } : null;
+    };
+
+/** Plural pela palavra inteira, não por sufixo: "alteração"/"alterações". */
+function descreveRascunho(r) {
+        if (!r || !r.campos || !r.campos.length) return '';
+        const n = r.campos.length;
+        const palavra = n === 1 ? 'alteração não salva' : 'alterações não salvas';
+        return `${r.registro} · ${n} ${palavra} — ${r.campos.join(', ')}`;
+    }
+window.descreveRascunho = descreveRascunho;
+
+window.pedirReautenticacao = function pedirReautenticacao() {
+        const caixa = document.getElementById('reauth-box');
+        if (!caixa || caixa.style.display === 'flex') return;
+
+        const email = document.getElementById('reauth-email');
+        if (email) email.textContent = (S.user && S.user.email) || 'sua conta';
+
+        const linha = document.getElementById('reauth-draft');
+        const texto = descreveRascunho(window.rascunhoPendente);
+        if (linha) {
+            linha.style.display = texto ? 'block' : 'none';
+            linha.textContent = texto ? `Preservado: ${texto}` : '';
+        }
+
+        ['standard-login-box', 'first-login-reset-box', 'mfa-login-box', 'forgot-password-box', 'legal-accept-box']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        caixa.style.display = 'flex';
+        document.getElementById('login-overlay').classList.remove('hidden');
+        document.getElementById('reauth-password')?.focus();
+    };
+
+window.doReauth = async function doReauth() {
+        const senha = document.getElementById('reauth-password').value;
+        const err = document.getElementById('reauth-error');
+        if (err) err.style.display = 'none';
+        try {
+            const res = await api('POST', '/api/v1/auth/login', { email: S.user?.email, password: senha });
+            S.token = res.token;
+            S.user = res.user;
+            localStorage.setItem('niso_token', res.token);
+            localStorage.setItem('niso_user', JSON.stringify(res.user));
+            document.getElementById('reauth-box').style.display = 'none';
+            document.getElementById('standard-login-box').style.display = 'flex';
+            document.getElementById('reauth-password').value = '';
+            document.getElementById('login-overlay').classList.add('hidden');
+            // NÃO re-renderiza a view: o rascunho vive no DOM da tela por baixo,
+            // e redesenhar seria justamente perdê-lo.
+            showToast('Sessão retomada');
+        } catch (e) {
+            if (err) { err.style.display = 'block'; err.textContent = e.message; }
+            document.getElementById('reauth-password').value = '';
+        }
+    };
+
+// ——— Aceite de documentos legais ——————————————————————————————————————
+// Versão nova apenas AVISA quando a mudança é comum, e BARRA o acesso quando é
+// material (base legal ou retenção). Quem decide é a classificação gravada no
+// documento; a tela só obedece.
+
+let legalPendentes = [];
+
+/**
+ * Devolve true quando a entrada foi BARRADA e o cartão de aceite assumiu a
+ * tela. Falha de rede não barra: o servidor recusa com 403 de qualquer forma,
+ * e travar a entrada por indisponibilidade nossa seria pior que deixar passar.
+ */
+window.checkLegalGate = async function checkLegalGate() {
+        let situacao;
+        try {
+            situacao = await api('GET', '/api/v1/legal/pending');
+        } catch (e) {
+            return false;
+        }
+        if (!situacao) return false;
+        legalPendentes = situacao.pendentes || [];
+
+        if (situacao.bloqueia) {
+            renderLegalAcceptCard();
+            return true;
+        }
+        if (situacao.avisa) renderLegalBanner();
+        return false;
+    };
+
+function renderLegalAcceptCard() {
+        const lista = document.getElementById('legal-accept-list');
+        const caixa = document.getElementById('legal-accept-box');
+        if (!lista || !caixa) return;
+
+        lista.innerHTML = legalPendentes.map((d, i) => `
+            <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+                <input type="checkbox" class="legal-check" data-id="${escapeHTML(String(d.id))}"
+                       style="margin-top:3px;accent-color:var(--accent)"
+                       data-action-change="updateLegalAcceptButton">
+                <span style="font-size:12.5px;color:var(--text-2);line-height:1.5">
+                    Li e aceito ${escapeHTML(d.title)}
+                    <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim)">${escapeHTML(d.version)}</span>
+                    ${d.url ? `<br><a href="${escapeHTML(d.url)}" target="_blank" rel="noopener" class="login-link">ler o documento</a>` : ''}
+                </span>
+            </label>`).join('');
+
+        ['standard-login-box', 'first-login-reset-box', 'mfa-login-box', 'forgot-password-box']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        caixa.style.display = 'flex';
+        document.getElementById('login-overlay').classList.remove('hidden');
+        window.updateLegalAcceptButton();
+    }
+
+/** Aceitar e entrar só habilita com TODOS marcados — aceite parcial não existe. */
+window.updateLegalAcceptButton = function updateLegalAcceptButton() {
+        const caixas = Array.from(document.querySelectorAll('.legal-check'));
+        const btn = document.getElementById('legal-accept-submit');
+        if (!btn) return;
+        const todos = caixas.length > 0 && caixas.every(c => c.checked);
+        btn.disabled = !todos;
+        btn.title = todos ? 'Registra o aceite com data e IP' : 'Marque todos os documentos para continuar';
+    };
+
+window.doAcceptLegal = async function doAcceptLegal() {
+        const ids = Array.from(document.querySelectorAll('.legal-check:checked')).map(c => c.dataset.id);
+        const err = document.getElementById('legal-accept-error');
+        if (err) err.style.display = 'none';
+        try {
+            await api('POST', '/api/v1/legal/accept', { documentIds: ids });
+            document.getElementById('legal-accept-box').style.display = 'none';
+            document.getElementById('standard-login-box').style.display = 'flex';
+            await initApp();
+        } catch (e) {
+            if (err) { err.style.display = 'block'; err.textContent = e.message; }
+        }
+    };
+
+/** Mudança comum: faixa de aviso, sem travar nada. */
+function renderLegalBanner() {
+        if (!legalPendentes.length || document.getElementById('legal-banner')) return;
+        const alvo = document.getElementById('content');
+        if (!alvo || !alvo.parentElement) return;
+        const faixa = document.createElement('div');
+        faixa.id = 'legal-banner';
+        faixa.setAttribute('role', 'status');
+        faixa.style.cssText = 'background:rgba(245,158,11,0.10);border-left:2px solid var(--warning);padding:12px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--text-2)';
+        const nomes = legalPendentes.map(d => `${d.title} ${d.version}`).join(' · ');
+        faixa.innerHTML = `<span style="flex:1;min-width:240px">Documentos atualizados: ${escapeHTML(nomes)}.</span>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.textContent = 'Ler e aceitar';
+        btn.onclick = () => renderLegalAcceptCard();
+        faixa.appendChild(btn);
+        alvo.parentElement.insertBefore(faixa, alvo);
+    }
+
 window.initApp = async function initApp() {
         // Sprint C: Check for public assessment self-service link
         const assessmentToken = new URLSearchParams(location.search).get('assessment');
@@ -739,9 +1258,14 @@ window.initApp = async function initApp() {
             return;
         }
 
+        // Pendência legal MATERIAL barra a entrada: o servidor já recusa tudo
+        // com 403, então entrar na aplicação sem aceitar só renderia uma tela
+        // de erro atrás da outra.
+        if (await window.checkLegalGate()) return;
+
         document.getElementById('login-overlay').classList.add('hidden');
         await loadAll();
-        
+
         const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
         if (isClient && S.user.client_project_id) {
             if (S.projects && S.projects.length > 0) {
@@ -776,15 +1300,15 @@ window.initApp = async function initApp() {
 window.showForgotPasswordForm = function() {
         document.getElementById('standard-login-box').style.display = 'none';
         document.getElementById('first-login-reset-box').style.display = 'none';
-        document.getElementById('forgot-password-box').style.display = 'block';
-        document.getElementById('forgot-email-step').style.display = 'block';
+        document.getElementById('forgot-password-box').style.display = 'flex';
+        document.getElementById('forgot-email-step').style.display = 'flex';
         document.getElementById('forgot-code-step').style.display = 'none';
         document.getElementById('forgot-error').style.display = 'none';
         document.getElementById('forgot-success').style.display = 'none';
     }
 
 window.showStandardLoginForm = function() {
-        document.getElementById('standard-login-box').style.display = 'block';
+        document.getElementById('standard-login-box').style.display = 'flex';
         document.getElementById('first-login-reset-box').style.display = 'none';
         document.getElementById('forgot-password-box').style.display = 'none';
         document.getElementById('login-error').style.display = 'none';
@@ -840,7 +1364,7 @@ window.doForgotPasswordRequest = async function() {
             }
             
             document.getElementById('forgot-email-step').style.display = 'none';
-            document.getElementById('forgot-code-step').style.display = 'block';
+            document.getElementById('forgot-code-step').style.display = 'flex';
         } catch (e) {
             err.textContent = e.message || 'Falha ao solicitar código';
             err.style.display = 'block';

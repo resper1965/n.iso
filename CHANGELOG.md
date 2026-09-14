@@ -12,10 +12,30 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não publicado]
 
+### Added
+- **Handoff ness. (`niso-handoff-v1`)**: tokens do design system, shell (sidebar 232/72, bandas de 64px, menu de conta), primitivas de `ui.js` (cabeçalho sem subtítulo, badge por `color-mix`, tabela com cabeçalho fixo, toast com Desfazer e região `aria-live` permanente).
+- **Gate de aplicabilidade N/A da SoA**: justificativa obrigatória na tela e no servidor (`recusaAplicabilidade` em `routes/controls.ts`, `assertSoAExportable` em `services/soa-logic.ts`); marcar N/A zera CMMI e dono; a SoA não é produzida com exclusão sem justificativa.
+- **SoA**: ordenação natural do código do Anexo A, seleção em lote com Desfazer, cursor de teclado (`j`/`k`/`Enter`/`x`/`a`), skeleton, estados de erro com código de requisição e paginação explícita de 25.
+- **Autenticação (conta local)**: erro de credencial genérico com tentativas restantes, desafio anti-abuso a partir da 2ª falha, bloqueio de 15 min com `auth.lockout`, expiração por inatividade (30 min Cliente / 8 h consultor), segundo fator de 6 dígitos que valida ao completar, reautenticação preservando rascunho e trilha da própria sessão.
+- **Documentos legais versionados** (migration 0029): classificação `comum | material`; material barra o acesso até o aceite, registrado com data, IP e user-agent.
+- **Trilha por campo** (migration 0030): `campo: antes → depois` com autor e `operation_id` que agrupa o lote; histórico exibido no detalhe do controle.
+
+### Changed
 - Assinatura do export de portabilidade passa de HMAC para **Ed25519**. Uma
   assinatura prova origem a QUEM RECEBE, e com chave simétrica quem verifica
   também forja — o recipiente de um export é o cliente, às vezes o sucessor
   dele. A pública é publicada; a privada nunca sai do Worker.
+- Paleta iOS (`#34c759`/`#ffcc00`/`#ff3b30`) → paleta ness. (`#10b981`/`#f59e0b`/`#ef4444`); `--text-dim` deixa de ser alpha (estava em ≈3,4:1 sobre o card) e passa a `#94a3b8`.
+- `--glass-blur: none` remove todos os `backdrop-filter` herdados.
+- Migrations do handoff renumeradas para 0029 e 0030: 0024–0028 já existiam na `main` (rate limit, enum de avaliação, política por tenant, SSO, SCIM).
+- Handlers inline (`onclick`, `onchange`…) das telas do handoff convertidos para a delegação de eventos (`data-action`), exigida pelo CSP sem `unsafe-inline`.
+- `src/trilha.ts` (arquivamento encadeado no R2) e a trilha por campo (`src/trilha-campo.ts`) passam a ser módulos distintos; o arquivamento inclui as colunas por campo.
+
+### Fixed
+- `PUT /api/v1/controls/:id/status` aceitava marcar N/A sem justificativa nenhuma, contornando o gate da tela.
+- `forceCloseModal()` lançava quando os elementos de modal não existiam, matando a cascata de Esc.
+- `scripts/gerar-openapi.mjs` montava caminhos com `URL.pathname`, que em Windows sai como `/C:/...` com acentos percent-encoded; passa a usar `fileURLToPath`.
+- `POST /controls/:id/trilha/desfazer` lia o corpo cru; passa por `trilhaDesfazerSchema` e entra no contrato OpenAPI, junto das rotas de documentos legais.
 
 ## [9.0.0] - 2026-09-06
 

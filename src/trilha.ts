@@ -17,6 +17,10 @@ import type { Bindings } from './index';
  * ADULTERAÇÃO DELIBERADA por quem tem esse acesso, ela precisa existir em outro
  * lugar, com outro controle de acesso.
  *
+ * As colunas da trilha por campo (`entity_*`, `field`, `old_value`, `new_value`,
+ * `operation_id` — migration 0030) entram no arquivo: sem elas o "antes → depois"
+ * que a tela mostra não estaria no que o auditor exporta.
+ *
  * COMO ISTO FUNCIONA. Uma vez por dia o cron arquiva o dia anterior num objeto
  * JSONL no R2 (bucket `niso-trilha`, separado do de evidências), e cada objeto
  * carrega o SHA-256 do ANTERIOR. Os dias formam uma cadeia: alterar um dia
@@ -96,7 +100,8 @@ export async function arquivarDia(env: Bindings, dia: string): Promise<Resultado
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT id, action, actor, details, justification, ip_address, project_id, created_at
+    `SELECT id, action, actor, details, justification, ip_address, project_id, created_at,
+            entity_type, entity_id, field, old_value, new_value, operation_id
      FROM audit_logs
      WHERE date(created_at) = ?
      ORDER BY created_at, id`

@@ -94,6 +94,33 @@ describe('schema contract (real D1)', () => {
     expect(s.n).toBe(1);
   });
 
+  it('tem as tabelas de documentos legais e as colunas da trilha por campo', async () => {
+    await env.DB.prepare(
+      `INSERT INTO legal_documents (id, kind, version, classification, title, published_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`
+    ).bind('ld1', 'termos', '2026-09', 'material', 'Termos de uso').run();
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-legal', 'legal@x', 'h', 'Legal', 'org_user')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO legal_acceptances (id, document_id, user_id, accepted_at, ip, user_agent)
+       VALUES (?, ?, ?, datetime('now'), ?, ?)`
+    ).bind('la1', 'ld1', 'u-legal', '127.0.0.1', 'vitest').run();
+    // CHECK do enum: qualquer outro valor virou bloqueio por digitação errada.
+    await expect(
+      env.DB.prepare(`INSERT INTO legal_documents (id, kind, version, classification, title) VALUES ('ld2','x','1','urgente','t')`).run()
+    ).rejects.toThrow(/CHECK/);
+
+    await env.DB.prepare(
+      `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id,
+                               entity_type, entity_id, field, old_value, new_value, operation_id, created_at)
+       VALUES (?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+    ).bind('al-campo', 'control.updated', 'u@x', 'Status: Gap → Implementado', 'p1',
+           'compliance_controls', 'c1', 'Status', 'Gap', 'Implementado', 'op1').run();
+    const row = await env.DB.prepare("SELECT field, old_value, new_value, operation_id FROM audit_logs WHERE id='al-campo'").first<any>();
+    expect(row).toEqual({ field: 'Status', old_value: 'Gap', new_value: 'Implementado', operation_id: 'op1' });
+  });
+
   it('stores project_id on audit_logs (project-scoped export depends on it)', async () => {
     await env.DB.prepare(
       `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id, created_at)

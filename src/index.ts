@@ -8,6 +8,7 @@ import { log, requestId, metrica, resumoErro } from './observability';
 import { queryCapMiddleware } from './middleware/query-cap';
 import { bodyGuard } from './middleware/body-guard';
 import { rateLimitMiddleware } from './middleware/rate-limit';
+import { sessaoApp } from './routes/auth';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
@@ -15,6 +16,7 @@ import { proposalsApp } from './routes/proposals';
 import { assessmentsApp } from './routes/assessments';
 import { projectsApp } from './routes/projects';
 import { controlsApp } from './routes/controls';
+import { legalApp } from './routes/legal';
 import { evidenceApp, projectEvidenceApp } from './routes/evidence';
 import { vendorsApp, projectVendorsApp } from './routes/vendors';
 import { trainingApp, projectTrainingApp } from './routes/training';
@@ -49,6 +51,9 @@ export type Bindings = {
   STORAGE: R2Bucket;
   AI: Ai;
   SETUP_KEY?: string;
+  /** Segredo do desafio anti-abuso do login. Sem ele o desafio não é exigido
+      nem anunciado; o bloqueio temporário continua valendo. */
+  TURNSTILE_SECRET_KEY?: string;
   /** Chave para cifrar segredos em repouso (repository_token). Secret:
    *  `npx wrangler secret put TOKEN_ENC_KEY`. Sem ela, tokens são gravados em
    *  texto claro (fallback legado) — configure em produção. */
@@ -90,6 +95,8 @@ export type Variables = {
     mfa_pending?: boolean;
     /** Instante de emissão, usado para revogação. */
     iat?: number;
+    /** Última atividade vista pelo middleware; relógio da expiração por inatividade. */
+    seen?: number;
   };
 };
 
@@ -265,6 +272,7 @@ app.route('/api/v1/admin/users', usersApp);
 
 // MFA fica DEPOIS do authMiddleware: exige sessão de senha já estabelecida.
 app.route('/api/v1/auth/mfa', mfaApp);
+app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
 app.route('/api/v1/proposals', proposalsApp);
@@ -276,6 +284,10 @@ app.route('/api/v1/projects/:projectId/phase-answers', projectPhaseAnswersApp);
 app.route('/api/v1/projects/:projectId/journey-dossier', journeyDossierApp);
 app.route('/api/v1/projects/:projectId/control-adequacao', controlAdequacaoApp);
 app.route('/api/v1/controls', controlsApp);
+// Documentos legais: a rota de pendencia/aceite precisa continuar alcancavel
+// quando ha bloqueio material, senao o usuario barrado nao tem como sair dele
+// (ver legal-policy.ts).
+app.route('/api/v1/legal', legalApp);
 
 app.route('/api/v1/evidence', evidenceApp);
 app.route('/api/v1/projects/:projectId/evidence', projectEvidenceApp);

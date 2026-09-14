@@ -8,8 +8,51 @@ function clientIp(c: any): string {
 }
 import { authMiddleware } from '../middleware/auth';
 import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema, primeiroAcessoSchema, mudarSenhaSchema } from '../schemas';
+import {
+  decisaoLogin, mensagemCredencialInvalida, mensagemBloqueio,
+  BLOQUEIO_SEG, JANELA_FALHAS_SEG,
+} from '../auth-policy';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+/**
+ * Contagem de falhas por (e-mail digitado + IP), exista a conta ou não: se só
+ * contasse conta existente, o próprio número de tentativas restantes diria ao
+ * atacante quais e-mails são válidos.
+ */
+function chavesTentativa(email: string, ip: string) {
+  const conta = email.trim().toLowerCase();
+  return {
+    conta,
+    falhas: `login_fail:${conta}:${ip}`,
+    bloqueio: `login_lock:${conta}:${ip}`,
+  };
+}
+
+/**
+ * Confere o desafio anti-abuso. Sem segredo configurado não há o que conferir,
+ * e o desafio não é exigido nem anunciado (ver decisaoLogin) — o bloqueio
+ * temporário é que segura a força bruta.
+ *
+ * O nome do fornecedor fica aqui, na implementação; a interface não o menciona.
+ */
+async function desafioResolvido(c: any, token: string | undefined, ip: string): Promise<boolean> {
+  const secret = c.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  if (!token) return false;
+  try {
+    const body = new FormData();
+    body.append('secret', secret);
+    body.append('response', token);
+    if (ip && ip !== 'unknown') body.append('remoteip', ip);
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body });
+    const out = await res.json() as { success?: boolean };
+    return out.success === true;
+  } catch {
+    // Falha fechada: verificador fora do ar não vira passe livre.
+    return false;
+  }
+}
 
 
 /*
@@ -76,6 +119,28 @@ authApp.post('/login', async (c) => {
     const valid = await validateBody(c, loginSchema);
     if (!valid.success) return valid.response;
     const { email, password } = valid.data;
+    const challengeToken = (valid.data as any).challengeToken as string | undefined;
+
+    const ip = clientIp(c);
+    const chaves = chavesTentativa(email, ip);
+    const desafioVerificavel = Boolean((c.env as any).TURNSTILE_SECRET_KEY);
+
+    if (await c.env.SESSIONS.get(chaves.bloqueio)) {
+      return c.json({ error: mensagemBloqueio(), locked: true }, 429);
+    }
+
+    const falhas = parseInt((await c.env.SESSIONS.get(chaves.falhas)) || '0', 10) || 0;
+    const antes = decisaoLogin(falhas, desafioVerificavel);
+
+    // O desafio é conferido ANTES da senha: depois da primeira falha, cada nova
+    // tentativa custa um desafio resolvido, e não só mais um POST.
+    if (antes.exigeDesafio && !(await desafioResolvido(c, challengeToken, ip))) {
+      return c.json({
+        error: 'Conclua a verificação de segurança para continuar.',
+        challengeRequired: true,
+        attemptsRemaining: antes.tentativasRestantes,
+      }, 401);
+    }
 
     // S6: além do teto por IP acima, um teto por CONTA-ALVO. O limite por IP não
     // freia um ataque distribuído (muitos IPs) contra uma única conta; este fecha
@@ -93,9 +158,28 @@ authApp.post('/login', async (c) => {
       'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
-    
     if (!user || !(await verifyPassword(password, user.password_hash))) {
-      return c.json({ error: 'Invalid credentials' }, 401);
+      const total = falhas + 1;
+      await c.env.SESSIONS.put(chaves.falhas, String(total), { expirationTtl: JANELA_FALHAS_SEG });
+      const depois = decisaoLogin(total, desafioVerificavel);
+
+      if (depois.bloqueado) {
+        await c.env.SESSIONS.put(chaves.bloqueio, '1', { expirationTtl: BLOQUEIO_SEG });
+        // Conta E IP na trilha: é o par que o auditor precisa para distinguir
+        // usuário que esqueceu a senha de tentativa de força bruta distribuída.
+        await logAudit(
+          c.env.DB, 'auth.lockout', chaves.conta,
+          `Bloqueio temporário de ${BLOQUEIO_SEG / 60} min após ${total} tentativas incorretas (IP ${ip})`
+        );
+        return c.json({ error: mensagemBloqueio(), locked: true }, 429);
+      }
+
+      // Mensagem única: nunca diz se o e-mail existe ou se foi a senha.
+      return c.json({
+        error: mensagemCredencialInvalida(depois.tentativasRestantes),
+        challengeRequired: depois.exigeDesafio,
+        attemptsRemaining: depois.tentativasRestantes,
+      }, 401);
     }
 
     // Conta desativada (por SCIM, item 4.2) não autentica. A MESMA resposta de
@@ -105,6 +189,10 @@ authApp.post('/login', async (c) => {
     if (user.ativo === 0) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
+
+    // Credencial correta zera a contagem: a janela existe para tentativa
+    // seguida de erro, não para punir quem errou uma vez ontem.
+    await c.env.SESSIONS.delete(chaves.falhas);
     // ponytail: auto-migrate legacy SHA-256 hash to PBKDF2
     if (!user.password_hash.includes(':')) {
       const newHash = await hashPassword(password);
@@ -131,7 +219,12 @@ authApp.post('/login', async (c) => {
     // Sessão nasce PENDENTE quando o usuário tem segundo fator: o
     // authMiddleware só libera /auth/mfa/* até o código ser conferido. Sem
     // isto o MFA seria decorativo — o token do login já daria acesso a tudo.
-    const sessao = { ...user, iat: Date.now(), ...(exigeMfa ? { mfa_pending: true } : {}) };
+    // `seen` é o relógio da inatividade (30 min para Cliente, 8 h para
+    // consultor — ver auth-policy.ts). O middleware o renova a cada requisição;
+    // o teto absoluto de 24 h continua sendo o `expirationTtl` abaixo, que a
+    // renovação NÃO estica: é ele que garante a revalidação diária.
+    const agora = Date.now();
+    const sessao = { ...user, iat: agora, seen: agora, ...(exigeMfa ? { mfa_pending: true } : {}) };
     await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     
@@ -290,5 +383,43 @@ authApp.post('/change-password', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao alterar senha', e);
+  }
+});
+
+// Router PRÓPRIO: `/api/v1/auth` é montado ANTES do authMiddleware (é por onde
+// se entra), então `c.get('user')` ali é sempre undefined. Este vai montado
+// depois, como o de MFA já fazia.
+export const sessaoApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+/**
+ * Trilha da própria sessão: o percurso que o usuário fez para entrar (senha,
+ * segundo fator, bloqueio, aceite). Montada a partir da trilha de auditoria.
+ *
+ * Escopada ao ATOR de propósito: cada um vê o seu percurso, e não o de ninguém.
+ * Sem esse filtro seria um leitor de trilha alheia disfarçado.
+ */
+sessaoApp.get('/trilha', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) return c.json({ error: 'Não autorizado' }, 401);
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT action, details, created_at
+         FROM audit_logs
+        WHERE actor = ? AND action LIKE 'auth.%'
+        ORDER BY created_at DESC
+        LIMIT 20`
+    ).bind(user.email).all();
+
+    return c.json({
+      ok: true,
+      registros: (results || []).map((r: any) => ({
+        tipo: String(r.action).replace(/^auth\./, ''),
+        descricao: r.details,
+        quando: r.created_at,
+      })),
+    });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao ler a trilha da sessão', e);
   }
 });

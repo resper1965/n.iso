@@ -220,6 +220,11 @@ const CORPOS: Record<string, unknown> = {
  * existe, e um valor qualquer nas demais colunas NOT NULL sem default. Tabela
  * nova entra sozinha — mesma razão de a descoberta de rotas ler o fonte.
  */
+/** Colunas com CHECK de enum: `'x'` não passa, e o PRAGMA não expõe o CHECK. */
+const VALOR_FIXO: Record<string, Record<string, unknown>> = {
+  legal_documents: { classification: 'comum' },
+};
+
 async function semearTenantAlheio(id: string, projeto: string): Promise<void> {
   const { results: tabelas } = await env.DB.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'"
@@ -230,6 +235,11 @@ async function semearTenantAlheio(id: string, projeto: string): Promise<void> {
     if (name === 'projects') continue; // o projeto alheio é semeado à parte
     const { results: cols } = await env.DB.prepare(`PRAGMA table_info("${name}")`).all<any>();
     if (!(cols as any[]).some((c) => c.name === 'id')) continue;
+    // Chave estrangeira NOT NULL recebe o id alheio (ou o projeto alheio): a
+    // linha referenciada já foi semeada nesta mesma passada, porque as tabelas
+    // saem do sqlite_master na ordem em que foram criadas.
+    const { results: fks } = await env.DB.prepare(`PRAGMA foreign_key_list("${name}")`).all<any>();
+    const alvoFk = new Map((fks as any[]).map((f) => [f.from as string, f.table as string]));
 
     const usadas: string[] = [];
     const valores: unknown[] = [];
@@ -238,7 +248,10 @@ async function semearTenantAlheio(id: string, projeto: string): Promise<void> {
       if (c.name === 'project_id') { usadas.push('project_id'); valores.push(projeto); continue; }
       if (c.notnull && c.dflt_value === null) {
         usadas.push(c.name);
-        valores.push(/INT|REAL|NUM/i.test(c.type ?? '') ? 0 : 'x');
+        const fixo = VALOR_FIXO[name]?.[c.name];
+        if (fixo !== undefined) valores.push(fixo);
+        else if (alvoFk.has(c.name)) valores.push(alvoFk.get(c.name) === 'projects' ? projeto : id);
+        else valores.push(/INT|REAL|NUM/i.test(c.type ?? '') ? 0 : 'x');
       }
     }
     try {

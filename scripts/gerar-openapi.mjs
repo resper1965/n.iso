@@ -19,13 +19,14 @@
  * Uso: `npm run openapi`
  */
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import esbuild from 'esbuild';
 
 // O bundle sai DENTRO do projeto, e não em /tmp: `zod` fica externo (não faz
 // sentido embutir uma cópia só para ler schemas), e módulo em /tmp não enxerga
 // o node_modules daqui.
-const saida = new URL('../node_modules/.cache/niso-openapi.mjs', import.meta.url).pathname;
+// fileURLToPath, não .pathname: em Windows, .pathname vem como /C:/... com acentos percent-encoded.
+const saida = fileURLToPath(new URL('../node_modules/.cache/niso-openapi.mjs', import.meta.url));
 
 // ─── 1. Reescrever a tabela rota↔schema de src/openapi.ts a partir do fonte ───
 //
@@ -33,8 +34,8 @@ const saida = new URL('../node_modules/.cache/niso-openapi.mjs', import.meta.url
 // fonte. Regerá-la aqui é o que impede a divergência de nascer; o teste de
 // contrato é a rede para quem esquecer de rodar isto.
 
-const raiz = new URL('..', import.meta.url).pathname;
-const idx = readFileSync(`${raiz}/src/index.ts`, 'utf8');
+const raiz = fileURLToPath(new URL('..', import.meta.url)); // termina em separador
+const idx = readFileSync(`${raiz}src/index.ts`, 'utf8');
 
 const mount = {};
 for (const m of idx.matchAll(/app\.route\(\s*'([^']*)'\s*,\s*(\w+)\s*\)/g)) mount[m[2]] = m[1];
@@ -50,7 +51,7 @@ for (const [routerVar, modulo] of Object.entries(moduloDe)) {
   if (!(routerVar in mount)) continue;
   let src;
   try {
-    src = readFileSync(`${raiz}/src/routes/${modulo}.ts`, 'utf8');
+    src = readFileSync(`${raiz}src/routes/${modulo}.ts`, 'utf8');
   } catch {
     continue;
   }
@@ -80,7 +81,7 @@ const bloco = [
   '// ─── FIM DA TABELA GERADA ───',
 ].join('\n');
 
-const arquivoOpenapi = `${raiz}/src/openapi.ts`;
+const arquivoOpenapi = `${raiz}src/openapi.ts`;
 let fonte = readFileSync(arquivoOpenapi, 'utf8');
 fonte = fonte.replace(
   /\/\/ ─── INÍCIO DA TABELA GERADA[\s\S]*?\/\/ ─── FIM DA TABELA GERADA ───/,
@@ -96,7 +97,7 @@ console.log(`src/openapi.ts: ${entradas.length} rotas na tabela`);
 // ─── 2. Emitir docs/openapi.json a partir do módulo já atualizado ───
 
 await esbuild.build({
-  entryPoints: [new URL('../src/openapi.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../src/openapi.ts', import.meta.url))],
   outfile: saida,
   bundle: true,
   format: 'esm',

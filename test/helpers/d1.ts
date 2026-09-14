@@ -74,7 +74,14 @@ export async function resetSessions(): Promise<void> {
  */
 export async function sessionFor(user: Record<string, unknown>): Promise<Record<string, string>> {
   const id = `sess-${crypto.randomUUID()}`;
-  await env.SESSIONS.put(`session_${id}`, JSON.stringify(user));
+  // `iat` e `seen` são carimbados pelo login real (routes/auth.ts): `iat` é o
+  // que permite revogar a sessão, `seen` é o relógio da expiração por
+  // inatividade. Sem eles a fixture produzia uma sessão de formato que o login
+  // nunca emite — e que o middleware, com razão, recusa.
+  // Quem quiser testar sessão velha passa o próprio `seen`.
+  const agora = Date.now();
+  const sessao = { iat: agora, seen: agora, ...user };
+  await env.SESSIONS.put(`session_${id}`, JSON.stringify(sessao));
   return { Authorization: `Bearer ${id}` };
 }
 

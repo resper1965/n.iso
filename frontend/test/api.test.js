@@ -217,6 +217,25 @@ describe('api()', () => {
             await expect(api('GET', '/api/v1/projects')).rejects.toThrow('Unauthorized');
         });
 
+        // Expirar por inatividade NAO e sessao invalida: o usuario continua
+        // sendo quem era e pode ter edicao aberta na tela.
+        it('401 por INATIVIDADE reautentica no lugar, sem deslogar', async () => {
+            window.doLogout = vi.fn();
+            window.pedirReautenticacao = vi.fn();
+            fetchMock.mockResolvedValue(resposta({ error: 'expirou', expired: 'inactivity' }, { status: 401 }));
+            await expect(api('GET', '/api/v1/projects')).rejects.toThrow('inatividade');
+            expect(window.pedirReautenticacao).toHaveBeenCalledTimes(1);
+            expect(window.doLogout).not.toHaveBeenCalled();
+        });
+
+        it('sem a tela de reautenticacao registrada, cai no logout de sempre', async () => {
+            window.doLogout = vi.fn();
+            delete window.pedirReautenticacao;
+            fetchMock.mockResolvedValue(resposta({ error: 'expirou', expired: 'inactivity' }, { status: 401 }));
+            await expect(api('GET', '/api/v1/projects')).rejects.toThrow('Unauthorized');
+            expect(window.doLogout).toHaveBeenCalledTimes(1);
+        });
+
         it('403 nao desloga (falta de permissao nao e sessao expirada)', async () => {
             window.doLogout = vi.fn();
             fetchMock.mockResolvedValue(resposta({ error: 'Somente leitura' }, { status: 403 }));

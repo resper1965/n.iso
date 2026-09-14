@@ -1,9 +1,13 @@
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { sha256Hex, sessionRevoked } from '../helpers';
-import { apiKeyRoleViolation } from '../auth-policy';
+import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
+import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
+import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
+
+/** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
+const RENOVA_ATIVIDADE_MS = 60 * 1000;
 
 /**
  * Resolve o usuário a partir de uma API key (X-API-Key). Retorna o contexto de
@@ -195,6 +199,32 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     // própria sessão ao confirmar o código.
     c.set('sessionId', sessionId);
 
+    // Expiração por INATIVIDADE, separada do teto absoluto de 24 h: 30 min para
+    // papel de Cliente, 8 h para consultor. Antes só existia o teto, então uma
+    // sessão de cliente aberta num navegador compartilhado seguia válida o dia
+    // inteiro sem ninguém tocar nela.
+    const agora = Date.now();
+    // Sessão sem marca nenhuma não expira por inatividade aqui: `sessionRevoked` já a recusou acima.
+    const visto = user.seen ?? user.iat ?? agora;
+    if (expirouPorInatividade(agora, visto, user.role)) {
+      await c.env.SESSIONS.delete(`session_${sessionId}`);
+      await c.env.SESSIONS.delete(sessionId);
+      return c.json({ error: 'Unauthorized: Session expired due to inactivity', expired: 'inactivity' }, 401);
+    }
+
+    // Renova a marca de atividade, mas só de minuto em minuto: reescrever a
+    // sessão a cada requisição seria uma escrita de KV por chamada de API.
+    // O TTL é o RESTANTE do teto de 24 h, nunca 24 h de novo — renovar o teto
+    // faria a sessão viver para sempre e a revalidação diária nunca chegaria.
+    if (agora - visto > RENOVA_ATIVIDADE_MS) {
+      const restante = Math.floor((SESSION_TTL_SEC * 1000 - (agora - (user.iat ?? agora))) / 1000);
+      if (restante > 60) {
+        const renovada = { ...user, seen: agora };
+        await c.env.SESSIONS.put(`session_${sessionId}`, JSON.stringify(renovada), { expirationTtl: restante });
+        await c.env.SESSIONS.put(sessionId, JSON.stringify(renovada), { expirationTtl: restante });
+      }
+    }
+
     // Legacy role mapping for backward compatibility.
     // Keep consistent with the login handler (routes/auth.ts): 'admin' is a
     // platform-level admin, not a project-scoped org_admin.
@@ -213,6 +243,39 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+  }
+
+  // Documento legal MATERIAL pendente barra o acesso até o aceite — muda base
+  // legal ou retenção, e seguir usando o produto sem aceitar seria tratar o
+  // usuário como se já tivesse concordado. Mudança comum não passa por aqui:
+  // ela apenas rende a faixa de aviso que a tela monta a partir de /pending.
+  //
+  // Só vale para sessão humana: uma API key não tem a quem apresentar o texto,
+  // e barrá-la derrubaria integração por decisão que não é dela.
+  if (!apiKey && !rotaLiberadaComBloqueio(path)) {
+    const docs = await c.env.DB.prepare(
+      `SELECT id, kind, version, classification, title, url, published_at
+         FROM legal_documents WHERE published_at IS NOT NULL`
+    ).all().then(r => (r.results || []).map((d: any) => ({
+      id: d.id, kind: d.kind, version: d.version, classification: d.classification,
+      title: d.title, url: d.url, publishedAt: d.published_at,
+    }))).catch(() => []);
+
+    // Sem documento publicado não há o que aceitar, e o caminho custa uma
+    // consulta vazia. Só busca os aceites quando existe documento.
+    if (docs.length) {
+      const aceitos = await c.env.DB.prepare(
+        'SELECT document_id FROM legal_acceptances WHERE user_id = ?'
+      ).bind(user.id).all().then(r => (r.results || []).map((a: any) => a.document_id)).catch(() => []);
+      const situacao = situacaoLegal(docs, aceitos);
+      if (situacao.bloqueia) {
+        return c.json({
+          error: 'É necessário aceitar os documentos atualizados para continuar',
+          legal_acceptance_required: true,
+          pendentes: situacao.pendentes,
+        }, 403);
+      }
+    }
   }
 
   // Global RBAC enforcement for org_user / client roles (aplica a sessões E API keys).

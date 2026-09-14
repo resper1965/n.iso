@@ -19,105 +19,195 @@
     <a href="#content" class="skip-link">Pular para o conteudo</a>
 
     <div id="login-overlay">
-        <div class="login-hero">
-            <div class="login-hero-content">
-                <h1 class="login-brand-logo">n<span>.</span>iso</h1>
-            </div>
-        </div>
         <div class="login-form-side">
-            <!-- Standard Login Box -->
+            <!-- Entrada com senha (conta local) -->
             <div class="login-box" id="standard-login-box">
-                <form data-action-submit="doLogin" data-prevent>
-                    <div style="margin-bottom:1.5rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail</label>
-                        <input type="email" id="login-email" class="form-input" placeholder="seu@email.com" autocomplete="username" required>
+                <form data-action-submit="doLogin" data-prevent style="display:flex;flex-direction:column;gap:16px">
+                    <div>
+                        <div class="login-brand-logo">n<span>.</span>iso</div>
+                        <p class="login-lede">Entre com a conta do seu projeto.</p>
                     </div>
-                    <div style="margin-bottom:2rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Senha</label>
+                    <div class="login-field">
+                        <label class="login-label" for="login-email">E-mail</label>
+                        <input type="email" id="login-email" class="form-input" placeholder="voce@empresa.com.br" autocomplete="username" required>
+                    </div>
+                    <div class="login-field">
+                        <label class="login-label" for="login-password">Senha</label>
                         <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
-                    <div style="margin-top:1.5rem; text-align:center;">
-                        <a href="#" data-action="showForgotPasswordForm" data-prevent style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Esqueceu sua senha?</a>
+
+                    <!-- Verificação anti-abuso: invisível no caminho normal, aparece
+                         a partir da 2ª falha. Sem marca de fornecedor na interface. -->
+                    <div class="login-challenge" id="login-challenge" hidden>
+                        <span class="login-challenge-label">Conclua a verificação de segurança para continuar.</span>
+                        <div id="login-challenge-widget"></div>
                     </div>
-                    <p id="login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+
+                    <button type="submit" class="btn btn-primary" id="login-submit" style="width:100%">Entrar</button>
+                    <p id="login-error" class="login-error" role="alert" style="display:none"></p>
+                    <div style="text-align:center">
+                        <button type="button" class="login-link" data-action="showForgotPasswordForm">Esqueceu sua senha?</button>
+                    </div>
                 </form>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links"><a href="/politicas.html">privacidade</a> · <a href="/politicas.html">termos</a> · n.iso 1.8.0</span>
+                </div>
             </div>
 
-            <!-- First Login Password Change Box -->
+            <!-- Troca obrigatória de senha no primeiro acesso -->
             <div class="login-box" id="first-login-reset-box" style="display:none">
-                <form data-action-submit="doFirstLoginReset" data-prevent>
-                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Nova Senha Obrigatória</h2>
-                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Como este é seu primeiro acesso, você deve cadastrar uma nova senha segura para prosseguir.</p>
-                    <div style="margin-bottom:1.5rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
+                <form data-action-submit="doFirstLoginReset" data-prevent style="display:flex;flex-direction:column;gap:16px">
+                    <div>
+                        <h2 class="login-title">Defina sua senha</h2>
+                        <p class="login-lede">Este é o primeiro acesso desta conta. A senha provisória não continua valendo.</p>
+                    </div>
+                    <div class="login-field">
+                        <label class="login-label" for="first-new-password">Nova senha</label>
                         <input type="password" id="first-new-password" class="form-input" placeholder="Nova senha segura" autocomplete="new-password" required>
                     </div>
-                    <div style="margin-bottom:2rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Confirme a Nova Senha</label>
-                        <input type="password" id="first-confirm-password" class="form-input" placeholder="Confirme a nova senha" autocomplete="new-password" required>
+                    <div class="login-field">
+                        <label class="login-label" for="first-confirm-password">Confirme a nova senha</label>
+                        <input type="password" id="first-confirm-password" class="form-input" placeholder="Repita a nova senha" autocomplete="new-password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width:100%">Definir Senha e Entrar</button>
-                    <p id="first-reset-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
+                    <button type="submit" class="btn btn-primary" style="width:100%">Definir senha e entrar</button>
+                    <p id="first-reset-error" class="login-error" role="alert" style="display:none"></p>
                 </form>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links">n.iso 1.8.0</span>
+                </div>
             </div>
 
-            <!-- Segundo Fator (TOTP) -->
+            <!-- Segundo fator (TOTP). Sem SMS. -->
             <div class="login-box" id="mfa-login-box" style="display:none">
-                <form data-action-submit="doMfaLogin" data-prevent>
-                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Verificação em duas etapas</h2>
-                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Digite o código de 6 dígitos do seu autenticador. Se perdeu o acesso ao aparelho, use um dos seus códigos de recuperação.</p>
-                    <div style="margin-bottom:2rem">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Código</label>
-                        <input type="text" id="mfa-login-code" class="form-input" placeholder="000000" inputmode="numeric" maxlength="20" autocomplete="one-time-code" style="text-align:center;letter-spacing:6px;font-weight:600" required>
+                <form data-action-submit="doMfaLogin" data-prevent style="display:flex;flex-direction:column;gap:16px">
+                    <div>
+                        <h2 class="login-title">Verificação em duas etapas</h2>
+                        <p class="login-lede" id="mfa-login-lede">Digite o código de 6 dígitos do seu autenticador.</p>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width:100%">Verificar</button>
-                    <div style="margin-top:1.5rem; text-align:center;">
-                        <a href="#" data-action="cancelMfaLogin" data-prevent style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Entrar com outra conta</a>
+                    <div class="login-field">
+                        <label class="login-label" for="mfa-login-code" id="mfa-login-label">Código</label>
+                        <input type="text" id="mfa-login-code" class="form-input mfa-code" placeholder="000000"
+                               inputmode="numeric" maxlength="6" autocomplete="one-time-code" required
+                               data-action-input="onMfaCodeInput">
+                        <span class="mfa-countdown" id="mfa-countdown" aria-live="off"></span>
                     </div>
-                    <p id="mfa-login-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;min-height:1rem"></p>
+                    <button type="submit" class="btn btn-primary" id="mfa-submit" style="width:100%">Verificar</button>
+                    <p id="mfa-login-error" class="login-error" role="alert" style="min-height:1rem"></p>
+                    <div style="display:flex;flex-direction:column;gap:8px;text-align:center">
+                        <button type="button" class="login-link" id="mfa-toggle-recovery" data-action="toggleRecoveryCode">Usar código de recuperação</button>
+                        <button type="button" class="login-link" data-action="cancelMfaLogin">Entrar com outra conta</button>
+                    </div>
                 </form>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links">n.iso 1.8.0</span>
+                </div>
             </div>
 
-            <!-- Forgot Password Box -->
-            <div class="login-box" id="forgot-password-box" style="display:none">
-                <form data-action-submit="__noop" data-prevent>
-                    <h2 style="font-family:'Montserrat';margin-bottom:1rem">Recuperar Senha</h2>
-                    <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:1.5rem">Insira seu e-mail para receber um código numérico de 6 dígitos.</p>
-                    <div style="margin-bottom:1.5rem" id="forgot-email-step">
-                        <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">E-mail Cadastrado</label>
-                        <input type="email" id="forgot-email" class="form-input" placeholder="seu@email.com">
-                        <button type="button" class="btn btn-primary" style="width:100%;margin-top:1.5rem" data-action="doForgotPasswordRequest">Solicitar Código</button>
+            <!-- Sessão expirada por inatividade. Reautentica AQUI, sem levar
+                 embora o que estava sendo editado. -->
+            <div class="login-box" id="reauth-box" style="display:none">
+                <form data-action-submit="doReauth" data-prevent style="display:flex;flex-direction:column;gap:16px">
+                    <div>
+                        <h2 class="login-title">Sessão expirada</h2>
+                        <p class="login-lede">Ficou um tempo sem atividade. Entre de novo para continuar de onde parou.</p>
                     </div>
-                    <div style="display:none" id="forgot-code-step">
-                        <div style="margin-bottom:1.5rem">
-                            <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Código de 6 dígitos</label>
-                            <input type="text" id="forgot-code" class="form-input" placeholder="123456" maxlength="6" style="text-align:center;letter-spacing:4px;font-weight:bold;">
-                        </div>
-                        <div style="margin-bottom:1.5rem">
-                            <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:0.5rem">Nova Senha</label>
-                            <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha" autocomplete="new-password">
-                        </div>
-                        <button type="button" class="btn btn-primary" style="width:100%" data-action="doForgotPasswordReset">Alterar Senha e Entrar</button>
+                    <p class="login-note" id="reauth-draft" style="display:none"></p>
+                    <div class="login-field">
+                        <label class="login-label" for="reauth-password">Senha de <span id="reauth-email"></span></label>
+                        <input type="password" id="reauth-password" class="form-input" placeholder="••••••••" autocomplete="current-password" required>
                     </div>
-                    <div style="margin-top:1.5rem; text-align:center;">
-                        <a href="#" data-action="showStandardLoginForm" data-prevent style="font-size:0.75rem;color:var(--accent);text-decoration:none;">Voltar para o Login</a>
+                    <button type="submit" class="btn btn-primary" style="width:100%">Continuar</button>
+                    <p id="reauth-error" class="login-error" role="alert" style="display:none"></p>
+                    <div style="text-align:center">
+                        <button type="button" class="login-link" data-action="doLogout">Sair e descartar</button>
                     </div>
-                    <p id="forgot-error" style="color:var(--danger);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
-                    <p id="forgot-success" style="color:var(--accent);font-size:0.75rem;margin-top:1rem;text-align:center;display:none"></p>
                 </form>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links">n.iso 1.8.0</span>
+                </div>
+            </div>
+
+            <!-- Aceite de documentos legais atualizados. Aparece quando há
+                 pendência MATERIAL: mudança de base legal ou de retenção não
+                 se aceita por omissão. -->
+            <div class="login-box" id="legal-accept-box" style="display:none">
+                <div>
+                    <h2 class="login-title">Documentos atualizados</h2>
+                    <p class="login-lede">Estes documentos mudaram desde o seu último aceite. Leia e confirme para continuar.</p>
+                </div>
+                <div id="legal-accept-list" style="display:flex;flex-direction:column;gap:12px"></div>
+                <button type="button" class="btn btn-primary" id="legal-accept-submit" style="width:100%" disabled
+                        title="Marque os dois documentos para continuar"
+                        data-action="doAcceptLegal">Aceitar e entrar</button>
+                <p id="legal-accept-error" class="login-error" role="alert" style="display:none"></p>
+                <p class="login-note">O aceite é registrado com data e endereço IP.</p>
+                <div style="text-align:center">
+                    <button type="button" class="login-link" data-action="doLogout">Recusar e sair</button>
+                </div>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links">n.iso 1.8.0</span>
+                </div>
+            </div>
+
+            <!-- Recuperação de senha -->
+            <div class="login-box" id="forgot-password-box" style="display:none">
+                <form data-action-submit="__noop" data-prevent style="display:flex;flex-direction:column;gap:16px">
+                    <div>
+                        <h2 class="login-title">Recuperar senha</h2>
+                        <p class="login-lede">Informe o e-mail da conta para receber um código de 6 dígitos.</p>
+                    </div>
+                    <div id="forgot-email-step" style="display:flex;flex-direction:column;gap:16px">
+                        <div class="login-field">
+                            <label class="login-label" for="forgot-email">E-mail</label>
+                            <input type="email" id="forgot-email" class="form-input" placeholder="voce@empresa.com.br" autocomplete="username">
+                        </div>
+                        <button type="button" class="btn btn-primary" style="width:100%" data-action="doForgotPasswordRequest">Solicitar código</button>
+                    </div>
+                    <div id="forgot-code-step" style="display:none;flex-direction:column;gap:16px">
+                        <div class="login-field">
+                            <label class="login-label" for="forgot-code">Código de 6 dígitos</label>
+                            <input type="text" id="forgot-code" class="form-input mfa-code" placeholder="000000" inputmode="numeric" maxlength="6">
+                        </div>
+                        <div class="login-field">
+                            <label class="login-label" for="forgot-new-password">Nova senha</label>
+                            <input type="password" id="forgot-new-password" class="form-input" placeholder="Nova senha segura" autocomplete="new-password">
+                        </div>
+                        <button type="button" class="btn btn-primary" style="width:100%" data-action="doForgotPasswordReset">Alterar senha e entrar</button>
+                    </div>
+                    <p id="forgot-error" class="login-error" role="alert" style="display:none"></p>
+                    <p id="forgot-success" class="login-note" role="status" style="display:none;color:var(--accent)"></p>
+                    <div style="text-align:center">
+                        <button type="button" class="login-link" data-action="showStandardLoginForm">Voltar para a entrada</button>
+                    </div>
+                </form>
+                <div class="login-sign">
+                    <span class="login-sign-house">ness<span>.</span></span>
+                    <span class="login-sign-links">n.iso 1.8.0</span>
+                </div>
             </div>
         </div>
     </div>
 
     <nav class="sidebar" id="sidebar" aria-label="Navegação principal">
-        <div class="sidebar-logo">n<span style="color:var(--accent)">.</span>iso</div>
-        <div style="padding: 0 1rem 1.2rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0.8rem;" id="sidebar-project-selector-container">
-            <label style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 1px; display: block; margin-bottom: 0.4rem; font-family:'Montserrat',sans-serif; font-weight:500;">Projeto Ativo</label>
-            <select class="form-input" id="sidebar-project-select" data-action-change="changeActiveProject" data-arg-val style="background: rgba(7, 11, 20, 0.6); border: 1px solid rgba(0, 173, 232, 0.2); color: var(--text); padding: 0.4rem 0.6rem; font-size: 0.8rem; height: auto; cursor: pointer; width: 100%; border-radius: 8px; backdrop-filter: blur(8px);">
+        <div class="sidebar-logo">
+            <span class="sidebar-logo-mark" id="sidebar-logo-mark">n<span style="color:var(--accent)">.</span><span class="brand-tail">iso</span></span>
+            <button type="button" class="sidebar-toggle" id="toggle-sidebar" data-action="toggleSidebar" aria-label="Recolher navegação" aria-expanded="true" title="Recolher"><span id="toggle-sidebar-svg" aria-hidden="true">&#171;</span></button>
+        </div>
+        <div id="sidebar-project-selector-container">
+            <select id="sidebar-project-select" data-action-change="changeActiveProject" data-arg-val aria-label="Projeto ativo">
                 <option value="">Selecione um projeto...</option>
             </select>
-            <a href="#" data-action="navigate" data-args='["projects"]' data-prevent style="font-size:0.7rem; color:var(--accent); text-decoration:none; display:inline-block; margin-top:6px; font-weight:500;">Gerenciar Projetos</a>
+            <div class="tenant-face" aria-hidden="true">
+                <span class="tenant-initials" id="tenant-initials">—</span>
+                <span class="tenant-name" id="tenant-name">Selecione um projeto</span>
+                <span class="tenant-norm" id="tenant-norm"></span>
+                <span class="tenant-caret">&#9662;</span>
+            </div>
         </div>
         <div class="sidebar-nav-list">
             <div class="sidebar-nav active" id="nav-dashboard" data-action="navigate" data-args='["dashboard"]'>
@@ -263,22 +353,15 @@
             </div>
         </div>
         <div class="sidebar-bottom">
-            <!-- Perfil de Usuário no Sidebar -->
-            <div class="sidebar-user-card" id="sidebar-user-card" data-action="openProfileModal">
-                <div class="sidebar-user-avatar" id="sidebar-user-avatar">C</div>
-                <div class="sidebar-user-info">
-                    <div class="sidebar-user-name" id="sidebar-user-name">Consultor</div>
-                    <div class="sidebar-user-role" id="sidebar-user-role">Administrador</div>
-                </div>
-                <div class="sidebar-user-logout" data-action="doLogout" title="Sair" role="button" aria-label="Sair da conta">
-                    <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                </div>
-            </div>
-            <div class="sidebar-brand">
-                <span>n<span style="color:var(--accent)">.</span>iso</span>
-                <span class="sidebar-version-badge" style="font-size: 0.75rem; color:var(--accent); font-weight:500; font-family:inherit; background:rgba(0,173,232,0.1); border:1px solid rgba(0,173,232,0.25); padding:1px 6px; border-radius:4px">v1.8.0</span>
-            </div>
-            <div class="sidebar-status"></div>
+            <button type="button" class="sidebar-user-card" id="sidebar-user-card" data-action="toggleAccountMenu" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">
+                <span class="sidebar-user-avatar" id="sidebar-user-avatar">C</span>
+                <span class="sidebar-user-info">
+                    <span class="sidebar-user-name" id="sidebar-user-name">Consultor</span>
+                    <span class="sidebar-user-role" id="sidebar-user-role">Administrador</span>
+                </span>
+                <span class="sidebar-user-caret" aria-hidden="true">&#9652;</span>
+            </button>
+            <div class="account-menu" id="account-menu" role="menu" aria-labelledby="sidebar-user-card" hidden></div>
         </div>
     </nav>
 
@@ -297,7 +380,11 @@
             </div>
         </header>
         <div style="display:flex;flex:1;overflow:hidden">
-            <div class="content" id="content" style="flex:1;overflow-y:auto;padding:2rem" aria-live="polite"></div>
+            <!-- `aria-live` saiu do #content: o container troca de innerHTML
+                 inteiro a cada navegação, então o leitor de tela lia a view
+                 toda e o toast ficava enterrado no meio. O anúncio agora tem
+                 região própria (#live-region), montada e vazia. -->
+            <div class="content" id="content" style="flex:1;overflow-y:auto;padding:2rem"></div>
             <div class="context-panel collapsed" id="context-panel">
                 <button class="toggle-context" data-action="toggleContext" aria-label="Fechar painel de contexto">x</button>
                 <div class="ctx-inner" id="ctx-content"></div>
@@ -321,6 +408,11 @@
         </div>
     </div>
 
+
+    <!-- Região de anúncio permanente e VAZIA. Leitor de tela só anuncia
+         mudança de conteúdo numa região que já estava no DOM; criar a região
+         junto da mensagem não anuncia nada. showToast escreve aqui. -->
+    <div id="live-region" class="sr-only" role="status" aria-live="polite"></div>
 
     <script type="module" src="/src/main.js"></script>
 </body>

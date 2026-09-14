@@ -23,7 +23,10 @@ export const senhaNovaSchema = z
 
 export const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
-  password: z.string().min(1, 'Senha é obrigatória')
+  password: z.string().min(1, 'Senha é obrigatória'),
+  // Token do desafio anti-abuso. Só é exigido a partir da 2ª tentativa
+  // (ver auth-policy.ts); por isso é opcional no schema.
+  challengeToken: z.string().max(4096).optional()
 });
 
 export const setupSchema = z.object({
