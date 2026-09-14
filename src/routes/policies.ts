@@ -12,9 +12,9 @@ const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 //  POLICY AGENT — Geração Automática de Políticas
 // ═══════════════════════════════════════════════════════════════════════════════
 
-policies.post('/api/v1/projects/:id/generate-policy', async (c) => {
+policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const body = await c.req.json<{ control_id?: string; phase_number?: number }>().catch(() => ({} as any));
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
@@ -112,9 +112,9 @@ function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // POST /api/v1/projects/:id/generate-document
-policies.post('/api/v1/projects/:id/generate-document', async (c) => {
+policies.post('/api/v1/projects/:projectId/generate-document', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const body = await c.req.json<{ itemId: string; fields: Record<string, string> }>().catch(() => ({} as any));
     const { itemId, fields } = body;
     if (!itemId || !fields) return c.json({ error: 'itemId and fields are required' }, 400);
@@ -182,9 +182,9 @@ REQUISITOS:
 });
 
 // POST /api/v1/projects/:id/approve-document
-policies.post('/api/v1/projects/:id/approve-document', async (c) => {
+policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const body = await c.req.json<{ itemId: string; content: string }>().catch(() => ({} as any));
     const { itemId, content } = body;
     if (!itemId || !content) return c.json({ error: 'itemId and content are required' }, 400);
@@ -243,9 +243,9 @@ policies.post('/api/v1/projects/:id/approve-document', async (c) => {
 });
 
 // POST /api/v1/projects/:id/checklist/:itemId/generate
-policies.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
+policies.post('/api/v1/projects/:projectId/checklist/:itemId/generate', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const itemId = c.req.param('itemId');
     const userEmail = c.get('user')?.email ?? 'system';
 
@@ -325,9 +325,9 @@ policies.post('/api/v1/projects/:id/checklist/:itemId/generate', async (c) => {
 //  BULK POLICY GENERATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-policies.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
+policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
@@ -415,8 +415,8 @@ policies.post('/api/v1/projects/:id/generate-policies-bulk', async (c) => {
   }
 });
 
-policies.get('/api/v1/projects/:id/controls/:controlId/versions', async (c) => {
-  const projectId = c.req.param('id');
+policies.get('/api/v1/projects/:projectId/controls/:controlId/versions', async (c) => {
+  const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
   const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
   
@@ -427,8 +427,8 @@ policies.get('/api/v1/projects/:id/controls/:controlId/versions', async (c) => {
   return c.json(result.results || []);
 });
 
-policies.get('/api/v1/projects/:id/controls/:controlId/versions/:versionId', async (c) => {
-  const projectId = c.req.param('id');
+policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionId', async (c) => {
+  const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
   const versionId = c.req.param('versionId');
   const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -441,8 +441,8 @@ policies.get('/api/v1/projects/:id/controls/:controlId/versions/:versionId', asy
   return c.json(row);
 });
 
-policies.post('/api/v1/projects/:id/controls/:controlId/restore-version', async (c) => {
-  const projectId = c.req.param('id');
+policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version', async (c) => {
+  const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
   const { version_id } = await c.req.json<{ version_id: string }>();
   const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -478,9 +478,9 @@ policies.post('/api/v1/projects/:id/controls/:controlId/restore-version', async 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // POST /api/v1/projects/:id/controls/:controlId/policy
-policies.post('/api/v1/projects/:id/controls/:controlId/policy', async (c) => {
+policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const controlIdRaw = c.req.param('controlId');
     const body = await c.req.json<{ text?: string }>().catch(() => ({} as any));
     const { text } = body;
@@ -559,9 +559,9 @@ policies.get('/api/v1/policies/templates/:templateName', async (c) => {
   }
 });
 
-policies.post('/api/v1/projects/:id/policies/generate-from-template', async (c) => {
+policies.post('/api/v1/projects/:projectId/policies/generate-from-template', async (c) => {
   try {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('projectId');
     const { template_name, control_id } = await c.req.json<{ template_name: string; control_id: string }>();
 
     if (!template_name || !control_id) {

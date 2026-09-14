@@ -565,7 +565,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const validated = schema.parse(args);
         assertProject(validated.projectId);
-        return await nisoContrato("POST /api/v1/projects/{id}/risks", { id: validated.projectId }, validated);
+        return await nisoContrato("POST /api/v1/projects/{projectId}/risks", { projectId: validated.projectId }, validated);
       }
 
       case "niso_list_controls": {

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
+import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
@@ -25,7 +26,9 @@ platformApp.put('/assets/:id', async (c) => {
     if (user && user.role === 'org_user') {
       return c.json({ error: 'Forbidden: Cannot edit asset' }, 403);
     }
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, assetSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     await c.env.DB.prepare(
       `UPDATE assets SET name=?, type=?, category=?, owner=?, criticality=?, description=? WHERE id=?`
     ).bind(body.name, body.type, body.category, body.owner, body.criticality, body.description, id).run();
@@ -33,7 +36,6 @@ platformApp.put('/assets/:id', async (c) => {
     await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Asset ${id} updated`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar ativo', e);
   }
 });
@@ -52,7 +54,6 @@ platformApp.delete('/assets/:id', async (c) => {
     await logAudit(c.env.DB, 'asset.deleted', user?.email || 'system', `Asset ${id} deleted`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao deletar ativo', e);
   }
 });
@@ -62,7 +63,9 @@ platformApp.put('/dpia/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, dpiaSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     await c.env.DB.prepare(
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
     ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
@@ -70,7 +73,6 @@ platformApp.put('/dpia/:id', async (c) => {
     await logAudit(c.env.DB, 'dpia_updated', user?.email || 'system', `DPIA ${id} updated`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar DPIA', e);
   }
 });

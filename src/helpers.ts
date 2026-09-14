@@ -1,5 +1,25 @@
 import { log, requestId, resumoErro } from './observability';
 
+/**
+ * Negação de acesso — um TIPO, não um prefixo de mensagem.
+ *
+ * Antes disto, 39 handlers escolhiam entre 403 e 500 comparando
+ * `e.message.startsWith('Forbidden')`. Quem negasse com outra mensagem recebia
+ * 500: a recusa virava falha de servidor, e tanto a resposta quanto o log
+ * passavam a mentir sobre o que aconteceu. Com um tipo, quem nega não precisa
+ * acertar o texto — só lançar isto.
+ *
+ * A mensagem VAI para o cliente (ao contrário do 500, que a esconde): dizer
+ * "sem acesso a este projeto" responde sobre o pedido dele, não sobre o
+ * interior do banco.
+ */
+export class ForbiddenError extends Error {
+  constructor(message = 'Forbidden') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
@@ -21,10 +41,16 @@ export function genId(): string {
  * A mensagem de negócio ('Falha ao criar assessment') continua indo ao cliente:
  * ela diz qual operação falhou sem dizer nada sobre como o banco é feito.
  *
- * Não use para 403 nem para 400 — autorização e validação respondem sobre o
- * pedido do cliente, não sobre o estado interno, e a mensagem delas é útil.
+ * Não use para 400 — validação responde sobre o pedido do cliente, não sobre o
+ * estado interno, e a mensagem dela é útil.
+ *
+ * Para 403 não é preciso desviar: uma `ForbiddenError` que chegue aqui sai como
+ * 403 com a própria mensagem. Isso existe porque o `catch` de um handler pega
+ * TUDO — inclusive a negação lançada lá dentro por `requireProjectAccess` /
+ * `requireResourceAccess` — e sem esta guarda a recusa sairia como 500.
  */
 export function erro500(c: any, mensagem: string, e: unknown) {
+  if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
   return c.json({ error: mensagem, request_id: registraErro(c, e) }, 500);
 }
 
@@ -132,7 +158,7 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
   if (!row || row.project_id !== user.client_project_id) {
-    throw new Error('Forbidden: No access to this resource');
+    throw new ForbiddenError('Forbidden: No access to this resource');
   }
   return true;
 }
@@ -145,7 +171,7 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 export function requireProjectAccess(user: AtorAutorizado, projectId: string): true {
   if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
   if (user.client_project_id === projectId) return true;
-  throw new Error('Forbidden: No access to this project');
+  throw new ForbiddenError('Forbidden: No access to this project');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

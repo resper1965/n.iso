@@ -319,6 +319,60 @@ export const maturitySchema = z.object({
 
 export const statusSchema = z.object({ status: curto }).passthrough();
 
+// ─── Auditoria, ativos e DPIA ────────────────────────────────────────────────
+// Estes quatro nasceram para fechar os writes que liam `c.req.json<any>()` e
+// gravavam direto. Mesma regra do resto do arquivo: o que o INSERT grava como
+// NOT NULL é obrigatório, todo texto tem teto, campo desconhecido passa.
+
+export const auditScheduleSchema = z.object({
+  // NOT NULL em `audit_schedule`: sem eles o INSERT vira 500 do SQLite.
+  audit_type: curto,
+  title: curto,
+  scheduled_date: curto,
+  auditor_name: curtoOpcional,
+  scope: longoOpcional,
+  status: curtoOpcional,
+  findings_count: z.coerce.number().int().min(0).max(100_000).optional().nullable(),
+  notes: longoOpcional,
+}).passthrough();
+
+/** Notas de 1..5 do trio C-I-D do ativo; fora disso é dado corrompido. */
+const notaCID = z.coerce.number().int().min(1).max(5).optional().nullable();
+
+export const assetSchema = z.object({
+  name: curto, // NOT NULL em `assets`
+  type: curtoOpcional,
+  category: curtoOpcional,
+  classification: curtoOpcional,
+  criticality: curtoOpcional,
+  description: longoOpcional,
+  owner: curtoOpcional,
+  location: curtoOpcional,
+  confidentiality_rating: notaCID,
+  integrity_rating: notaCID,
+  availability_rating: notaCID,
+}).passthrough();
+
+/**
+ * Update parcial de ativo: o handler monta o SET só com os campos presentes, e
+ * responde 400 quando nenhum veio. Por isso `name` é opcional AQUI — mas
+ * continua tendo que ser texto quando vem, que é o que faltava.
+ */
+export const assetUpdateSchema = assetSchema.partial();
+
+export const dpiaSchema = z.object({
+  // Nenhuma coluna de `dpia_assessments` é NOT NULL — então nada é obrigatório.
+  // O que este schema acrescenta é tipo e teto: sem eles, um POST enchia o D1.
+  ropa_id: idOpcional,
+  processing_name: longoOpcional,
+  data_category_risk: longoOpcional,
+  necessity_proportionality: longoOpcional,
+  technical_measures: longoOpcional,
+  residual_risk_level: curtoOpcional,
+  dpo_recommendations: longoOpcional,
+  status: curtoOpcional,
+}).passthrough();
+
 // ——— Documentos legais ————————————————————————————————————————————————
 // A classificação é enum fechado de propósito: é ela que decide se uma versão
 // nova avisa ou barra o acesso, e um valor livre ali viraria bloqueio por

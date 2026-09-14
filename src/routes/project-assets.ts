@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, erro500 } from '../helpers';
+import { validateBody, assetSchema, assetUpdateSchema } from '../schemas';
 
 // Rotas de ativos dentro do projeto (/api/v1/projects/:id/assets*). Extraídas de
 // routes/projects.ts para reduzir aquele arquivo. Registradas no MESMO projectsApp
@@ -37,7 +38,9 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       if (user && (user.role === 'org_user' || (user.client_project_id && user.client_project_id !== projectId))) {
         return c.json({ error: 'Forbidden: Cannot create asset in this project' }, 403);
       }
-      const body = await c.req.json<any>();
+      const valid = await validateBody(c, assetSchema);
+      if (!valid.success) return valid.response;
+      const body = valid.data as any;
       const id = genId();
       await c.env.DB.prepare(
         `INSERT INTO assets (id, project_id, name, type, category, owner, criticality, description, created_at)
@@ -59,7 +62,9 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       if (user && (user.role === 'org_user' || (user.client_project_id && user.client_project_id !== projectId))) {
         return c.json({ error: 'Forbidden: Cannot update asset in this project' }, 403);
       }
-      const body = await c.req.json<any>();
+      const valid = await validateBody(c, assetUpdateSchema);
+      if (!valid.success) return valid.response;
+      const body = valid.data as any;
 
       const updates: string[] = [];
       const values: any[] = [];

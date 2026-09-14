@@ -30,7 +30,6 @@ certificationsApp.put('/:id', async (c) => {
     const updated = await c.env.DB.prepare('SELECT * FROM certification_tracking WHERE id = ?').bind(id).first();
     return c.json({ ok: true, certification: updated });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar certificação', e);
   }
 });
@@ -50,7 +49,6 @@ certificationsApp.delete('/:id', async (c) => {
     await c.env.DB.prepare('DELETE FROM certification_tracking WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao remover certificação', e);
   }
 });
@@ -67,7 +65,9 @@ projectCertificationsApp.post('/', async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const user = c.get('user');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, certificationSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const existing = await c.env.DB.prepare('SELECT id FROM certification_tracking WHERE project_id = ?').bind(projectId).first();
     if (existing) {
       await c.env.DB.prepare(

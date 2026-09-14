@@ -7,7 +7,7 @@ import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
-import { validateBody, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
+import { validateBody, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
 import { COLUNAS_REVOGACAO } from './controls';
@@ -933,7 +933,9 @@ projectsApp.get('/:id/dpia', async (c) => {
 projectsApp.post('/:id/dpia', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const body = await c.req.json<any>();
+    const valid = await validateBody(c, dpiaSchema);
+    if (!valid.success) return valid.response;
+    const body = valid.data as any;
     const id = genId();
     const now = new Date().toISOString();
     await c.env.DB.prepare(

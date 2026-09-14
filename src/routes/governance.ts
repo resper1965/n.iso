@@ -44,7 +44,6 @@ governanceApp.put('/stakeholders/:id', async (c) => {
       ).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar stakeholder', e);
   }
 });
@@ -56,7 +55,6 @@ governanceApp.delete('/stakeholders/:id', async (c) => {
     await c.env.DB.prepare('DELETE FROM stakeholders WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao deletar stakeholder', e);
   }
 });
@@ -185,7 +183,6 @@ governanceApp.get('/audits/:auditId/findings', async (c) => {
     const rows = await c.env.DB.prepare('SELECT * FROM audit_findings WHERE audit_id = ? ORDER BY created_at DESC').bind(auditId).all();
     return c.json(rows.results || []);
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao listar achados de auditoria', e);
   }
 });
@@ -235,7 +232,6 @@ governanceApp.post('/audits/:auditId/findings', async (c) => {
     await logAudit(c.env.DB, 'audit_finding.created', c.get('user')?.email || 'system', `Achado ${findingId} criado para auditoria ${auditId}`);
     return c.json({ ok: true, id: findingId, capa_id: capaId });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao criar achado de auditoria', e);
   }
 });
@@ -256,7 +252,6 @@ governanceApp.put('/audit-findings/:id', async (c) => {
     `).bind(description || null, auditor_notes || null, status || null, id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar achado de auditoria', e);
   }
 });
@@ -268,7 +263,6 @@ governanceApp.delete('/audit-findings/:id', async (c) => {
     await c.env.DB.prepare('DELETE FROM audit_findings WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao deletar achado de auditoria', e);
   }
 });
@@ -347,7 +341,6 @@ governanceApp.put('/management-reviews/:id', async (c) => {
     ).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao atualizar reunião de análise crítica', e);
   }
 });
@@ -390,7 +383,6 @@ governanceApp.put('/metrics/:id', async (c) => {
 
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Error updating metric', e);
   }
 });
@@ -402,7 +394,6 @@ governanceApp.delete('/metrics/:id', async (c) => {
     await c.env.DB.prepare('DELETE FROM performance_metrics WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Error deleting metric', e);
   }
 });

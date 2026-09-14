@@ -72,7 +72,6 @@ auditorApp.put('/auditor-notes/:id/respond', async (c) => {
     await logAudit(c.env.DB, 'auditor_note.responded', user.email, `Nota de auditor ${id} respondida`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
     return erro500(c, 'Falha ao responder nota de auditor', e);
   }
 });

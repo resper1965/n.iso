@@ -10,9 +10,9 @@ describe('Risks Router', () => {
   it('should have route handlers registered', () => {
     const routes = risks.routes;
     const paths = routes.map(r => r.path);
-    expect(paths).toContain('/api/v1/projects/:id/risks');
+    expect(paths).toContain('/api/v1/projects/:projectId/risks');
     expect(paths).toContain('/api/v1/risks/:id');
-    expect(paths).toContain('/api/v1/projects/:id/risks/history');
+    expect(paths).toContain('/api/v1/projects/:projectId/risks/history');
   });
 
   it('GET /api/v1/projects/test-id/risks returns error without DB (route is wired)', async () => {

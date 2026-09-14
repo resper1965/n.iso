@@ -186,14 +186,14 @@ function safeCsvCell(val: any): string {
 
 // ─── 7A. Webhooks (CRUD + Test) ─────────────────────────────────────────────
 
-integrations.get('/api/v1/projects/:id/webhooks', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/webhooks', async (c) => {
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
   return c.json({ ok: true, webhooks: result.results });
 });
 
-integrations.post('/api/v1/projects/:id/webhooks', async (c) => {
-  const projectId = c.req.param('id');
+integrations.post('/api/v1/projects/:projectId/webhooks', async (c) => {
+  const projectId = c.req.param('projectId');
   const valid = await validateBody(c, createWebhookSchema);
   if (!valid.success) return valid.response;
   const body = valid.data;
@@ -276,11 +276,11 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
 
 // ─── 7B. API Keys ───────────────────────────────────────────────────────────
 
-integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
+integrations.post('/api/v1/projects/:projectId/api-keys', async (c) => {
   if (c.get('user').role !== 'platform_admin') {
     return c.json({ error: 'Forbidden: gestão de API keys é exclusiva do Platform Admin' }, 403);
   }
-  const projectId = c.req.param('id');
+  const projectId = c.req.param('projectId');
   const valid = await validateBody(c, createApiKeySchema);
   if (!valid.success) return valid.response;
   const body = valid.data;
@@ -303,11 +303,11 @@ integrations.post('/api/v1/projects/:id/api-keys', async (c) => {
   return c.json({ ok: true, id, key: plainKey }, 201);
 });
 
-integrations.get('/api/v1/projects/:id/api-keys', async (c) => {
+integrations.get('/api/v1/projects/:projectId/api-keys', async (c) => {
   if (c.get('user').role !== 'platform_admin') {
     return c.json({ error: 'Forbidden: gestão de API keys é exclusiva do Platform Admin' }, 403);
   }
-  const projectId = c.req.param('id');
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare(
     'SELECT id, name, permissions, status, last_used_at, created_at FROM api_keys WHERE project_id = ? ORDER BY created_at DESC'
   ).bind(projectId).all();
@@ -329,8 +329,8 @@ integrations.delete('/api/v1/api-keys/:id', async (c) => {
 
 // ─── 7C. Bulk Export (CSV) ──────────────────────────────────────────────────
 
-integrations.get('/api/v1/projects/:id/export/risks', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/export/risks', async (c) => {
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM risks WHERE project_id = ?').bind(projectId).all();
   const rows = (result.results || []) as any[];
   const headers = 'asset,threat,vulnerability,impact,probability,risk_level,treatment,owner,status';
@@ -340,8 +340,8 @@ integrations.get('/api/v1/projects/:id/export/risks', async (c) => {
   return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="risks.csv"' } });
 });
 
-integrations.get('/api/v1/projects/:id/export/vendors', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/export/vendors', async (c) => {
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM vendors WHERE project_id = ?').bind(projectId).all();
   const rows = (result.results || []) as any[];
   const headers = 'name,category,trust_score,diligence_level,has_iso27001,has_soc2,dpa_signed';
@@ -351,8 +351,8 @@ integrations.get('/api/v1/projects/:id/export/vendors', async (c) => {
   return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="vendors.csv"' } });
 });
 
-integrations.get('/api/v1/projects/:id/export/training', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/export/training', async (c) => {
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM training_records WHERE project_id = ?').bind(projectId).all();
   const rows = (result.results || []) as any[];
   const headers = 'employee_name,training_name,status,score,completion_date';
@@ -362,8 +362,8 @@ integrations.get('/api/v1/projects/:id/export/training', async (c) => {
   return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="training.csv"' } });
 });
 
-integrations.get('/api/v1/projects/:id/export/audit-log', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/export/audit-log', async (c) => {
+  const projectId = c.req.param('projectId');
   const user = c.get('user');
   // Escopado ao PROJETO (antes filtrava por actor, exportando as ações do próprio
   // requisitante). Fallback LIKE cobre linhas legadas sem project_id populado.
@@ -378,8 +378,8 @@ integrations.get('/api/v1/projects/:id/export/audit-log', async (c) => {
   return new Response(csv, { headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="audit-log.csv"' } });
 });
 
-integrations.get('/api/v1/projects/:id/export/assets', async (c) => {
-  const projectId = c.req.param('id');
+integrations.get('/api/v1/projects/:projectId/export/assets', async (c) => {
+  const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM assets WHERE project_id = ?').bind(projectId).all();
   const rows = (result.results || []) as any[];
   const headers = 'name,category,classification,owner,location,status,description,confidentiality_rating,integrity_rating,availability_rating';

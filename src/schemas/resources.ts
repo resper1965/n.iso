@@ -105,7 +105,17 @@ export const vendorUpdateSchema = z.object({
   name: z.string().min(1, 'Nome do fornecedor é obrigatório'),
 }).passthrough();
 
-export const riskUpdateSchema = z.object({
-  asset: z.string().min(1, 'Ativo é obrigatório'),
-  threat: z.string().min(1, 'Ameaça é obrigatória'),
-}).passthrough();
+/**
+ * Update de risco: MESMA regra do create, de propósito.
+ *
+ * A versão anterior só exigia `asset` e `threat` como texto não vazio, e deixava
+ * `impact`/`probability` passarem crus. Isso abria pelo PUT o buraco que o POST
+ * fechava: `impact: 99` entrava e corrompia a matriz 5x5 — a mesma nota que
+ * depois vira nível de risco em relatório e em SoA. Quem escreve tem de respeitar
+ * a matriz, seja qual for o verbo.
+ *
+ * Os obrigatórios não mudam (`asset` e `threat` já eram), então nenhum corpo que
+ * era aceito e válido passa a ser recusado; o que passa a ser recusado é nota
+ * fora de 1..5, que nunca deveria ter sido gravada.
+ */
+export const riskUpdateSchema = createRiskSchema;

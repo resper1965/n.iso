@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError } from '../helpers';
 import { validateBody, ropaSchema, ropaApprovalSchema } from '../schemas';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -27,7 +27,7 @@ ropaApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao atualizar ROPA', detail: e.message }, 500);
   }
 });
@@ -41,7 +41,7 @@ ropaApp.delete('/:id', async (c) => {
     await logAudit(c.env.DB, 'ropa_deleted', user?.email || 'system', `ROPA ${id} deleted`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
+    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
     return c.json({ error: 'Falha ao excluir ROPA', detail: e.message }, 500);
   }
 });
