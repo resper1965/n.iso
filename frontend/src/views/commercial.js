@@ -90,14 +90,16 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
         if (raw.length !== 14) { el.textContent = 'CNPJ deve ter 14 digitos'; return; }
         el.textContent = 'Consultando...';
         try {
-            const res = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + raw);
-            if (!res.ok) { el.textContent = 'CNPJ nao encontrado'; return; }
-            const d = await res.json();
-            el.innerHTML = '<span style="color:var(--accent)">'+escapeHTML(d.razao_social)+'</span> — '+escapeHTML(d.municipio||'')+'/'+escapeHTML(d.uf||'')+' — '+escapeHTML(d.descricao_situacao_cadastral||'');
+            // Pelo backend, não direto na brasilapi: o CSP da página é
+            // `connect-src 'self'` e bloquearia a chamada a terceiro. O servidor
+            // já fazia essa consulta no enrich, e assim o IP de quem digita não
+            // vai para fora.
+            const d = await api('GET', '/api/v1/leads/consulta-cnpj/' + raw);
+            el.innerHTML = '<span style="color:var(--accent)">'+escapeHTML(d.razao_social||'')+'</span> — '+escapeHTML(d.municipio||'')+'/'+escapeHTML(d.uf||'')+' — '+escapeHTML(d.descricao_situacao_cadastral||'');
             // auto-fill company name if empty
             const cn = document.getElementById('lead-company');
             if (!cn.value) cn.value = d.razao_social || d.nome_fantasia || '';
-        } catch(e) { el.textContent = 'Erro: ' + e.message; }
+        } catch(e) { el.textContent = e.message; }
     }
 
     async function doCreateLead() {

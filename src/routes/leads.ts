@@ -54,6 +54,50 @@ leadsApp.get('/', async (c) => {
   }
 });
 
+/**
+ * Consulta de CNPJ para PREVIEW, enquanto o lead ainda está sendo digitado.
+ *
+ * Era um `fetch` do NAVEGADOR direto para a brasilapi, em
+ * `frontend/src/views/commercial.js`. Funcionava porque o HTML saía sem CSP
+ * nenhum; quando os cabeçalhos de segurança passaram a alcançar o arquivo
+ * estático, `connect-src 'self'` passou a bloquear a chamada — e o preview
+ * morria com "Failed to fetch".
+ *
+ * A saída não é abrir o `connect-src` para um terceiro. A mesma consulta já
+ * acontece no servidor em `/:id/enrich-cnpj`; trazer o preview para cá mantém o
+ * CSP fechado e, de quebra, para de expor o IP de quem digita para a brasilapi.
+ *
+ * Devolve só os campos que o preview mostra — quem grava o cadastro completo
+ * continua sendo o enrich, que tem o fallback para a ReceitaWS. Aqui um
+ * provedor fora do ar vira "não encontrado", que é o que o navegador já fazia.
+ *
+ * Sem risco de SSRF: o caminho é montado com dígitos, e só com 14 deles.
+ * `somenteNess` (o `use('*')` acima) vale aqui como nas outras: lead é registro
+ * comercial da ness., e sem isso a rota viraria proxy de consulta para qualquer
+ * sessão de cliente.
+ */
+leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
+  try {
+    const limpo = (c.req.param('cnpj') || '').replace(/\D/g, '');
+    if (limpo.length !== 14) return c.json({ error: 'CNPJ inválido (14 dígitos)' }, 400);
+
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${limpo}`);
+    if (!res.ok) return c.json({ error: 'CNPJ não encontrado' }, 404);
+    const d = await res.json() as Record<string, unknown>;
+
+    return c.json({
+      ok: true,
+      razao_social: d.razao_social ?? null,
+      nome_fantasia: d.nome_fantasia ?? null,
+      municipio: d.municipio ?? null,
+      uf: d.uf ?? null,
+      descricao_situacao_cadastral: d.descricao_situacao_cadastral ?? null,
+    });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao consultar o CNPJ', e);
+  }
+});
+
 leadsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
