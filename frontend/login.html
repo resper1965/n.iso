@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>n.iso | ness. Agentic GRC</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
+    <!-- O arquivo é SVG, e é o mesmo que a landing usa (public/index.html).
+         Apontava para um `favicon.png` que nunca existiu no projeto: toda visita
+         à tela de entrada tomava um 404, visível no console de quem abrisse o
+         DevTools — e a aba ficava sem ícone. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
     <!-- marked v15.0.12, servido pelo nosso domínio (frontend/public/marked.min.js).
