@@ -64,9 +64,15 @@ export type Bindings = {
       O servidor a devolve junto do aviso de desafio, para a tela montar o widget
       sem precisar dela no build. */
   TURNSTILE_SITE_KEY?: string;
-  /** Chave para cifrar segredos em repouso (repository_token). Secret:
-   *  `npx wrangler secret put TOKEN_ENC_KEY`. Sem ela, tokens são gravados em
-   *  texto claro (fallback legado) — configure em produção. */
+  /** Chave para cifrar segredos em repouso (`client_secret` do IdP,
+   *  `repository_token`). Secret: `npx wrangler secret put TOKEN_ENC_KEY`.
+   *
+   *  Sem ela o caminho FALHA FECHADO: `PUT /projects/:projectId/sso` devolve 503
+   *  em vez de gravar o segredo do IdP em claro (`routes/projects.ts`). O
+   *  comentário anterior aqui dizia o contrário — "tokens são gravados em texto
+   *  claro (fallback legado)" — e ficou desatualizado quando o fallback foi
+   *  removido. Documentação que descreve um risco que já não existe é tão ruim
+   *  quanto a que esconde um que existe: manda procurar no lugar errado. */
   TOKEN_ENC_KEY?: string;
   ENVIRONMENT?: string;
   ASSETS?: Fetcher;
