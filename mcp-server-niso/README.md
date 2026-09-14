@@ -84,6 +84,30 @@ Ferramentas de escrita trazem no próprio texto de descrição o aviso de que
 escrita em projeto de cliente exige contrato ativo e aprovação humana prévia. O
 agente lê isso antes de decidir chamar.
 
+### O agente recebe o contexto do papel no handshake
+
+Além do filtro, o servidor entrega ao cliente um texto de contexto no
+`initialize` (campo `instructions`), montado a partir de `NISO_ROLE`,
+`NISO_READONLY` e `NISO_PROJECT_ID`. Antes disso o agente só descobria a própria
+fronteira por tentativa e erro: pedia uma ferramenta e recebia "indisponível para
+o papel configurado".
+
+O texto diz três coisas, e não mais que isso:
+
+- **quem ele é** e o que faz;
+- **o que não faz**, com o motivo — a cláusula 9.2, não preferência de produto;
+- **a postura** que o papel exige. Para o auditor: achado é fato com evidência
+  apontada, e pré-qualificação de IA não é veredito. Para o consultor: rascunho
+  de IA é rascunho até revisão humana, geração em lote nunca roda sozinha, e
+  `niso_create_evidence` aceita só texto — transcrever um PDF não é o documento.
+
+Os dois recebem também o limite de projeto: a chave de API é vinculada a **um**
+projeto, e nenhum agente alcança outro. Com `NISO_PROJECT_ID`, o contexto nomeia
+qual.
+
+Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 22 ferramentas
+estão na mesma sessão e que isso mistura os dois lados que a norma separa.
+
 ## Chave de API: `read` não escreve
 
 O nISO cria chaves com `permissions: 'read'` por padrão. Uma chave `read` recebe
