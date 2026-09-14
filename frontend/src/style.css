@@ -64,6 +64,18 @@
     color-scheme: dark;
 }
 
+/* `hidden` tem de esconder, sempre.
+   Regra do agente (`[hidden] { display: none }`) perde para QUALQUER regra de
+   autor que declare `display`, porque folha de autor vence folha do agente
+   independentemente de especificidade. Na prática, toda classe daqui que
+   declara `display: flex` desliga o atributo em silêncio — e o bug não aparece
+   em teste de jsdom, que não carrega este arquivo.
+   Aconteceu duas vezes: `.account-menu` ganhou um remendo próprio na linha de
+   baixo, e `.login-challenge` ficou VISÍVEL em produção, anunciando "Conclua a
+   verificação de segurança" para quem só tinha aberto a tela de entrada.
+   Uma linha aqui resolve a classe inteira do problema, inclusive a próxima. */
+[hidden] { display: none !important; }
+
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; display: flex; height: 100vh; font-weight: 300; }
 
@@ -187,6 +199,8 @@
         /* ——— MENU DE CONTA ———————————————————————————————————————————
            Popover ancorado no rodapé: substitui o botão de logout solto. */
         .account-menu { position: absolute; left: 0; right: 0; bottom: 100%; max-height: calc(100vh - 140px); overflow-y: auto; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; z-index: 300; animation: rise 180ms var(--ease-out); }
+        /* Redundante desde a regra global de `[hidden]` lá em cima; fica como
+           lembrete de que esta classe declara `display` e por isso precisava dela. */
         .account-menu[hidden] { display: none; }
         .account-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .account-id-tile { width: 32px; height: 32px; background: var(--surface-2); color: var(--text-2); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 500; flex-shrink: 0; }
