@@ -116,7 +116,7 @@ export class PolicyGeneratorService {
       '{{status}}': context.status,
       '{{next_review_date}}': nextYear.toLocaleDateString('pt-BR'),
       'POL-[A-Z]+-[0-9]+': dynamicDocId, // Substitui o ID estático do template
-      'Document ID: [^|]+': `Document ID: ${dynamicDocId} `,
+      'Identificação: [^|]+': `Identificação: ${dynamicDocId} `,
     };
 
     for (const [key, value] of Object.entries(replacements)) {
