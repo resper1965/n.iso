@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, linhaDoFunilDaConta, AtorAutorizado } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
@@ -19,13 +19,16 @@ leadsApp.post('/', async (c) => {
     const body = valid.data as any;
 
     const id = genId();
+    // Dono do lead é quem o cria — mesma regra de `resolveCliente`/`contaCriadora`:
+    // não existe "registro de origem" anterior a este ponto do funil.
+    const contaId = (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     await c.env.DB.prepare(
       `INSERT INTO leads (id, company_name, contact_name, contact_email, source, status,
        cnpj, razao_social, nome_fantasia, natureza_juridica, porte, capital_social,
        cnae_fiscal, cnae_fiscal_descricao, data_inicio_atividade, situacao_cadastral,
        logradouro, numero, complemento, bairro, municipio, uf, cep,
-       telefone, qsa, cnpj_fetched_at, created_at)
-       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       telefone, qsa, cnpj_fetched_at, conta_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       id, body.company_name, body.contact_name || null, body.contact_email || null, body.source || null,
       body.cnpj || null, body.razao_social || null, body.nome_fantasia || null,
@@ -35,7 +38,7 @@ leadsApp.post('/', async (c) => {
       body.logradouro || null, body.numero || null, body.complemento || null,
       body.bairro || null, body.municipio || null, body.uf || null, body.cep || null,
       body.telefone || null, body.qsa ? JSON.stringify(body.qsa) : null,
-      body.cnpj ? new Date().toISOString() : null
+      body.cnpj ? new Date().toISOString() : null, contaId
     ).run();
 
     await logAudit(c.env.DB, 'lead.created', c.get('user')?.email ?? 'system', `Lead ${id} criado para ${body.company_name}`);
@@ -47,7 +50,11 @@ leadsApp.post('/', async (c) => {
 
 leadsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const contaId = user?.role === 'platform_admin' ? null : (user?.conta_id ?? null);
+    const { results } = contaId
+      ? await c.env.DB.prepare('SELECT * FROM leads WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
+      : await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
     return c.json(results);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar leads', e);
@@ -101,9 +108,11 @@ leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
 leadsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const lead = await linhaDoFunilDaConta(c.env.DB, 'leads', id, c.get('user') as AtorAutorizado | undefined);
+    // Mesma resposta para inexistente e para alheio: 403 aqui confirmaria a
+    // existência do lead na consultoria concorrente.
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
-    
+
     const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ?').bind(id).all();
     const { results: proposals } = await c.env.DB.prepare('SELECT id, status, total_price, created_at FROM proposals WHERE lead_id = ?').bind(id).all();
 
@@ -115,7 +124,12 @@ leadsApp.get('/:id', async (c) => {
 
 leadsApp.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  await c.env.DB.prepare('DELETE FROM leads WHERE id = ?').bind(id).run();
+  const user = c.get('user') as AtorAutorizado | undefined;
+  const sql = user?.role === 'platform_admin'
+    ? 'DELETE FROM leads WHERE id = ?'
+    : 'DELETE FROM leads WHERE id = ? AND conta_id = ?';
+  const binds = user?.role === 'platform_admin' ? [id] : [id, user?.conta_id ?? null];
+  await c.env.DB.prepare(sql).bind(...binds).run();
   return c.json({ success: true });
 });
 
@@ -125,7 +139,12 @@ leadsApp.put('/:id/status', async (c) => {
     const valid = await validateBody(c, leadStatusSchema);
     if (!valid.success) return valid.response;
     const { status } = valid.data;
-    await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?').bind(status, id).run();
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const sql = user?.role === 'platform_admin'
+      ? 'UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?'
+      : 'UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ? AND conta_id = ?';
+    const binds = user?.role === 'platform_admin' ? [status, id] : [status, id, user?.conta_id ?? null];
+    await c.env.DB.prepare(sql).bind(...binds).run();
     return c.json({ ok: true, status });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar lead', e);
@@ -141,7 +160,7 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
     const cleanCnpj = (cnpj || '').replace(/\D/g, '');
     if (cleanCnpj.length !== 14) return c.json({ error: 'CNPJ inválido (14 dígitos)' }, 400);
 
-    const lead = await c.env.DB.prepare('SELECT id FROM leads WHERE id = ?').bind(id).first();
+    const lead = await linhaDoFunilDaConta(c.env.DB, 'leads', id, c.get('user') as AtorAutorizado | undefined);
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
 
     let res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);

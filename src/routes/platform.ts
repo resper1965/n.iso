@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff, hidrataEscopo, AtorAutorizado } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -246,32 +246,55 @@ platformApp.get('/dashboard/stats', async (c) => {
   try {
     const user = c.get('user');
 
-    // Mesma inversão do `/portfolio` acima, pelos mesmos dois motivos: só
-    // staff conta a plataforma inteira; qualquer outro papel — inclusive
-    // um fora da lista conhecida, e inclusive sem projeto — é escopado.
+    // Três ramos, na mesma ordem de prioridade do `/portfolio` acima:
     //
-    // UMA variável decide tudo: `null` é o ramo de staff (sem WHERE), string é
-    // o escopo do cliente. A string pode ser VAZIA, e é esse o ponto —
-    // `WHERE id = ''` não casa com nada, então cliente sem projeto conta zero
-    // em vez de contar a plataforma inteira.
-    const escopo: string | null = ehStaffDeConta(user) ? null : (user?.client_project_id ?? '');
+    // 1. `platform_admin` conta a plataforma inteira — sem WHERE nenhum.
+    // 2. Staff de UMA conta (consultor/consultant) conta só a PRÓPRIA
+    //    carteira. `leads` já carrega `conta_id` (Task 9) e filtra direto; os
+    //    demais recursos não têm `conta_id` próprio e alcançam a conta via
+    //    `project_id IN (projetos da conta)` — a mesma cadeia
+    //    `projects.cliente_id → clientes.conta_id` do `/portfolio`.
+    // 3. Qualquer outro papel — inclusive um fora da lista conhecida, e
+    //    inclusive sem projeto — é escopado ao próprio `client_project_id`
+    //    (que pode ser string VAZIA: `WHERE id = ''` não casa com nada, então
+    //    cliente sem projeto conta zero em vez de contar a plataforma
+    //    inteira). O funil comercial não é dele (`somenteMsp`), e a
+    //    contagem de leads fica em 0 por construção, sem depender de mais uma
+    //    checagem de papel.
+    let leadsStmt: any;
+    let projectsStmt: any;
+    let resourceWhere: string;
+    let resourceParams: unknown[];
 
-    const whereResource = escopo === null ? '' : 'WHERE project_id = ?';
-    const whereProject = escopo === null ? '' : 'WHERE id = ?';
-    const params = escopo === null ? [] : [escopo];
+    if (user?.role === 'platform_admin') {
+      leadsStmt = c.env.DB.prepare('SELECT count(*) as count FROM leads');
+      projectsStmt = c.env.DB.prepare('SELECT count(*) as count FROM projects');
+      resourceWhere = '';
+      resourceParams = [];
+    } else if (ehStaffDeConta(user)) {
+      await hidrataEscopo(c.env.DB, user as AtorAutorizado);
+      const contaId = (user as AtorAutorizado)?.conta_id ?? '';
+      const projetosDaConta = 'SELECT p.id FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id WHERE cl.conta_id = ?';
+      leadsStmt = c.env.DB.prepare('SELECT count(*) as count FROM leads WHERE conta_id = ?').bind(contaId);
+      projectsStmt = c.env.DB.prepare(`SELECT count(*) as count FROM (${projetosDaConta})`).bind(contaId);
+      resourceWhere = `project_id IN (${projetosDaConta})`;
+      resourceParams = [contaId];
+    } else {
+      const projectId = user?.client_project_id ?? '';
+      leadsStmt = c.env.DB.prepare('SELECT 0 as count');
+      projectsStmt = c.env.DB.prepare('SELECT count(*) as count FROM projects WHERE id = ?').bind(projectId);
+      resourceWhere = 'project_id = ?';
+      resourceParams = [projectId];
+    }
+
+    const comEscopo = (condicao: string) => (resourceWhere ? `${resourceWhere} AND ${condicao}` : condicao);
 
     const stats = await c.env.DB.batch<{ count: number }>([
-      // O funil comercial é restrito (ver `somenteMsp` em helpers.ts): cliente
-      // não vê lead — nem o conteúdo, nem quantos existem. A contagem era
-      // global para todo mundo. O `SELECT 0` mantém o alinhamento posicional do
-      // batch, para os índices abaixo não dependerem do papel de quem pergunta.
-      escopo === null
-        ? c.env.DB.prepare('SELECT count(*) as count FROM leads')
-        : c.env.DB.prepare('SELECT 0 as count'),
-      c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM evidence ${whereResource} ${whereResource ? "AND" : "WHERE"} evaluation_status = 'pending'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM risks ${whereResource} ${whereResource ? "AND" : "WHERE"} impact * probability >= 15`).bind(...params)
+      leadsStmt,
+      projectsStmt,
+      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls WHERE ${comEscopo("status = 'Completed'")}`).bind(...resourceParams),
+      c.env.DB.prepare(`SELECT count(*) as count FROM evidence WHERE ${comEscopo("evaluation_status = 'pending'")}`).bind(...resourceParams),
+      c.env.DB.prepare(`SELECT count(*) as count FROM risks WHERE ${comEscopo('impact * probability >= 15')}`).bind(...resourceParams),
     ]);
 
     return c.json({
@@ -417,16 +440,33 @@ platformApp.get('/portfolio', async (c) => {
     //
     // Quem decide é `ehStaffDeConta`, e o lado CLIENTE cai no lado seguro
     // (escopo ausente significa NADA, nunca TUDO — `WHERE id = ''` não casa
-    // com nada). O lado STAFF não é isolamento, e não deve ser lido como se
-    // fosse: `SELECT * FROM projects` sem `WHERE conta_id` devolve o
+    // com nada). Isso resolvia quem entra no ramo de STAFF, mas não fechava o
+    // ramo em si: `SELECT * FROM projects` sem `WHERE conta_id` devolvia o
     // portfólio de TODAS as consultorias para QUALQUER staff de QUALQUER
-    // conta — vazamento real entre tenants, não decisão de produto. Era
-    // verdade que "staff vê tudo" quando só havia uma consultoria; hoje é
-    // pendência conhecida (mesma lacuna em `/dashboard/stats`, logo abaixo),
-    // de escopo maior do que esta rota — não corrigida aqui.
-    const stmt = ehStaffDeConta(user)
-      ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
-      : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+    // conta `msp` — vazamento real entre tenants, não decisão de produto (Task
+    // 9 fecha isto, junto com a mesma lacuna em `/dashboard/stats`, abaixo).
+    //
+    // `platform_admin` é o ÚNICO papel global — ele opera o SaaS. Os demais
+    // papéis de `PAPEIS_STAFF` (consultor/consultant) são staff de UMA conta e
+    // veem só a própria carteira, pela cadeia que `requireProjectAccess` já
+    // usa (Task 5): `projects.cliente_id → clientes.conta_id`. Não
+    // desnormaliza `conta_id` em `projects` pelo mesmo motivo de lá — cliente
+    // que troca de consultoria move `clientes.conta_id`, e uma cópia que não
+    // acompanhe em transação deixaria a consultoria antiga enxergando o
+    // projeto depois da troca.
+    let stmt;
+    if (user?.role === 'platform_admin') {
+      stmt = c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
+    } else if (ehStaffDeConta(user)) {
+      await hidrataEscopo(c.env.DB, user as AtorAutorizado);
+      const contaId = (user as AtorAutorizado)?.conta_id ?? '';
+      stmt = c.env.DB.prepare(
+        `SELECT p.* FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id
+         WHERE cl.conta_id = ? ORDER BY p.created_at DESC`
+      ).bind(contaId);
+    } else {
+      stmt = c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+    }
     const { results } = await stmt.all();
     return c.json({ ok: true, portfolio: results || [], projects: results || [] });
   } catch (e: any) {

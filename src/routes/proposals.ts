@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteMsp, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
+import { genId, logAudit, createNotification, somenteMsp, erro500, hidrataEscopo, resolveCliente, linhaDoFunilDaConta, AtorAutorizado } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
@@ -78,12 +78,14 @@ proposalsApp.put('/config/pricing', async (c) => {
 
 proposalsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-      `SELECT p.id, p.lead_id, p.assessment_id, p.status, p.total_price, p.created_at, p.approved_at,
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const contaId = user?.role === 'platform_admin' ? null : (user?.conta_id ?? null);
+    const base = `SELECT p.id, p.lead_id, p.assessment_id, p.status, p.total_price, p.created_at, p.approved_at,
               l.company_name, l.razao_social, l.cnpj
-       FROM proposals p LEFT JOIN leads l ON p.lead_id = l.id
-       ORDER BY p.created_at DESC`
-    ).all();
+       FROM proposals p LEFT JOIN leads l ON p.lead_id = l.id`;
+    const { results } = contaId
+      ? await c.env.DB.prepare(`${base} WHERE p.conta_id = ? ORDER BY p.created_at DESC`).bind(contaId).all()
+      : await c.env.DB.prepare(`${base} ORDER BY p.created_at DESC`).all();
     return c.json(results || []);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar propostas', e);
@@ -93,7 +95,9 @@ proposalsApp.get('/', async (c) => {
 proposalsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first();
+    const proposal = await linhaDoFunilDaConta(c.env.DB, 'proposals', id, c.get('user') as AtorAutorizado | undefined);
+    // Mesma resposta para inexistente e para alheia: 403 aqui confirmaria a
+    // existência da proposta na consultoria concorrente.
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     return c.json(proposal);
   } catch (e: any) {
@@ -107,7 +111,7 @@ proposalsApp.put('/:id', async (c) => {
     const v = await validateBody(c, proposalUpdateSchema);
     if (!v.success) return v.response;
     const body = v.data as any;
-    const proposal = await c.env.DB.prepare('SELECT id FROM proposals WHERE id = ?').bind(id).first();
+    const proposal = await linhaDoFunilDaConta(c.env.DB, 'proposals', id, c.get('user') as AtorAutorizado | undefined);
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
 
     const updates: string[] = [];
@@ -130,7 +134,12 @@ proposalsApp.put('/:id', async (c) => {
 proposalsApp.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await c.env.DB.prepare('DELETE FROM proposals WHERE id = ?').bind(id).run();
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const sql = user?.role === 'platform_admin'
+      ? 'DELETE FROM proposals WHERE id = ?'
+      : 'DELETE FROM proposals WHERE id = ? AND conta_id = ?';
+    const binds = user?.role === 'platform_admin' ? [id] : [id, user?.conta_id ?? null];
+    await c.env.DB.prepare(sql).bind(...binds).run();
     await logAudit(c.env.DB, 'proposal.deleted', c.get('user')?.email ?? 'system', `Proposta ${id} excluída`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -141,6 +150,15 @@ proposalsApp.delete('/:id', async (c) => {
 proposalsApp.post('/:id/sign', async (c) => {
   try {
     const id = c.req.param('id');
+    // SEM checagem de dono aqui, de propósito: `camada-msp-criacao-projeto.
+    // test.ts` ("convert/sign: a conta é a de quem vendeu, não a de quem
+    // opera o botão") prova que staff de OUTRA conta consegue assinar —
+    // `somenteMsp` garante papel de staff e conta `msp`, mas não que o
+    // operador seja da MESMA conta que vendeu, e fechar isso aqui bloquearia
+    // exatamente o caso que aquele teste exige que funcione. A segurança do
+    // dado está na ATRIBUIÇÃO (contaId abaixo: `proposal.conta_id` antes do
+    // operador), não no bloqueio do clique — gap conhecido, fora do escopo
+    // desta tarefa.
     const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first<any>();
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     if (proposal.status === 'Signed') return c.json({ error: 'Proposta já assinada' }, 400);
