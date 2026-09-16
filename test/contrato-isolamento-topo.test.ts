@@ -223,6 +223,7 @@ const CORPOS: Record<string, unknown> = {
 /** Colunas com CHECK de enum: `'x'` não passa, e o PRAGMA não expõe o CHECK. */
 const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   legal_documents: { classification: 'comum' },
+  contas: { tipo: 'msp' },
 };
 
 async function semearTenantAlheio(id: string, projeto: string): Promise<void> {
