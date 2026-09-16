@@ -702,18 +702,10 @@ CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
 -- SPRINT 8: MARKET READY
 -- ═══════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS organizations (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-    plan TEXT DEFAULT 'trial',
-    max_projects INTEGER DEFAULT 3,
-    max_users INTEGER DEFAULT 5,
-    owner_id TEXT,
-    logo_url TEXT,
-    status TEXT DEFAULT 'Active',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- `organizations` (Sprint 8) foi removida pela migration 0032: nunca teve FK
+-- apontando para ela nem uso em código, e foi substituída pelo modelo
+-- contas/clientes. Sem o CREATE aqui, para que schema.sql (usado por
+-- applySchema() nos testes) não fique com uma tabela que produção não tem.
 
 CREATE TABLE IF NOT EXISTS certification_tracking (
     id TEXT PRIMARY KEY,
