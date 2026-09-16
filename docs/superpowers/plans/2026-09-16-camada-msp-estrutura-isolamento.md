@@ -1343,6 +1343,32 @@ git commit -m "feat(msp): restringe pre-venda a conta do tipo msp"
 > tem de nascer em `conta-a`. Sem esse teste a regressão volta em silêncio, porque
 > foi assim que ela passou a primeira vez.
 
+> **ESCOPO AMPLIADO — duas rotas fora do funil que vazam a carteira inteira.**
+>
+> A revisão da Task 8 achou que a guarda de papel nunca foi acompanhada de filtro
+> de linha em dois lugares que não são pré-venda, e os dois entregam dado de todas
+> as consultorias a qualquer staff. Corrija junto, porque é o mesmo tipo de
+> correção e porque nenhuma outra tarefa deste plano os alcança:
+>
+> - **`src/routes/platform.ts:422` — `GET /api/v1/portfolio`.** Hoje é
+>   `ehStaffDeConta(user) ? 'SELECT * FROM projects ORDER BY created_at DESC' : …`.
+>   Um `consultor` de `conta-a` recebe TODOS os projetos de TODAS as consultorias.
+>   É a carteira inteira, que é o ativo mais sensível de um MSP.
+> - **`src/routes/platform.ts:257-268` — contagens do dashboard.** Com
+>   `escopo === null` (todo staff), as contagens rodam sem `WHERE`, incluindo
+>   `SELECT count(*) FROM leads`: staff de `conta-a` mede o tamanho do funil de
+>   `conta-b`, e staff de conta `direto` mede o funil que `somenteMsp` acabou de
+>   proibi-lo de ver.
+>
+> Para as duas, o escopo é a cadeia que a Task 5 já usa: `projects` alcança a conta
+> por `cliente_id → clientes.conta_id`. `platform_admin` segue global.
+>
+> E corrija o comentário de `platform.ts:418-419`, que hoje apresenta o alcance
+> global como decisão de design — era verdade quando havia uma consultoria só.
+>
+> Teste obrigatório: `consultor` de `conta-a` chamando `/portfolio` **não** recebe
+> `proj-b1-27001`, e a contagem de leads dele não inclui os de `conta-b`.
+
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
