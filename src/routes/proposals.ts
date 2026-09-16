@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteNess, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
+import { genId, logAudit, createNotification, somenteMsp, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
@@ -16,7 +16,7 @@ export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables 
 // filtro por `client_lead_id`. Era falso nas duas metades: a coluna não existe
 // e a rota respondia 404 para todo mundo. Hoje ela deriva o vínculo de
 // `projects.assessment_id`, e o filtro é o projeto do próprio usuário.
-proposalsApp.use('*', somenteNess);
+proposalsApp.use('*', somenteMsp);
 
 
 proposalsApp.post('/', async (c) => {

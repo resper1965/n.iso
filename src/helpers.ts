@@ -327,7 +327,13 @@ export async function requireProjectAccess(
 
   if (!alvo) throw new ForbiddenError('Forbidden: No access to this project');
 
-  if (user.conta_id && alvo.conta_id && alvo.conta_id === user.conta_id) return true;
+  // Allowlist de PAPEL também aqui, simétrica à do ramo de cliente logo abaixo.
+  // Sem `PAPEIS_STAFF.has(...)`, qualquer papel com `users.conta_id` preenchido
+  // herdava a carteira inteira da conta — inclusive um papel que não deveria,
+  // como `auditor` (fora de `PAPEIS_STAFF` de propósito: audita, não administra
+  // a conta). Hoje nada em `src/` escreve `conta_id` fora do login, então isto
+  // era inalcançável — mas a assimetria era frágil, e `PAPEIS_STAFF` já existe.
+  if (user.conta_id && PAPEIS_STAFF.has(user.role ?? '') && alvo.conta_id && alvo.conta_id === user.conta_id) return true;
 
   if (user.cliente_id && alvo.cliente_id && alvo.cliente_id === user.cliente_id) {
     if (PAPEIS_ADMIN_CLIENTE.has(user.role ?? '')) return true;
@@ -438,51 +444,71 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
   return null;
 }
 
-/** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
-const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
+/**
+ * Papéis que OPERAM a plataforma ou prestam serviço — nunca papéis de cliente.
+ *
+ * Deliberadamente FORA daqui: `auditor`. O backfill (migration 0032) dá
+ * `conta_id` a `consultor`, `consultant` E `auditor`, porque os três pertencem
+ * à consultoria — mas isso responde só a "alcança projeto da conta?" (auditor
+ * sim, é por isso que tem `conta_id`), que é uma pergunta DIFERENTE de "vê o
+ * funil comercial?" (auditor não: ele audita o que já foi vendido, não vende).
+ * Não é inconsistência — não acrescente `auditor` aqui achando que é.
+ */
+const PAPEIS_STAFF = new Set(['consultor', 'consultant', 'platform_admin']);
 
 /**
- * O usuário é da equipe ness. (e não de um cliente)?
+ * O usuário é staff (e não gente do lado do cliente)?
  *
- * Existe para que a decisão "vê a plataforma inteira" seja tomada por
- * ALLOWLIST DE STAFF, nunca por allowlist de papel-cliente. A diferença é de
- * direção de falha, e ela já custou caro: `users.role` é TEXT livre e
- * `createUserSchema.role` é `z.string()`, então a lista de papéis-cliente
- * (`org_admin`/`org_user`/`client`) nunca é exaustiva — um papel fora dela,
- * como `ciso`, caía no ramo de plataforma e enxergava a carteira de TODOS os
- * tenants. Invertida, a lista desconhecida cai no ramo escopado, que é o lado
- * seguro de errar.
+ * Continua sendo ALLOWLIST DE STAFF, nunca allowlist de papel-cliente, e a razão
+ * está registrada em `src/helpers.ts` desde o incidente do `ciso`: `users.role` é
+ * TEXT livre, então a lista de papéis-cliente nunca é exaustiva, e um papel fora
+ * dela caía no ramo de plataforma e enxergava a carteira de todos os tenants.
+ * Invertida, o papel desconhecido cai no ramo escopado — o lado seguro de errar.
  *
- * É o mesmo conjunto que `requireResourceAccess` e `requireProjectAccess` já
- * usam acima — deliberadamente a mesma fonte, para não haver duas definições
- * de "staff" que possam divergir.
+ * Perdeu o nome da ness porque a plataforma deixou de ser de uma consultoria só.
  */
-export function ehEquipeNess(user: { role?: string } | undefined | null): boolean {
-  return !!user && PAPEIS_NESS.has(user.role ?? '');
+export function ehStaffDeConta(user: { role?: string } | undefined | null): boolean {
+  return !!user && PAPEIS_STAFF.has(user.role ?? '');
 }
 
 /**
- * Guarda de papel para o pipeline comercial da ness. (lead → assessment →
- * proposta). Estes registros não pertencem a projeto nenhum: não existe
- * `project_id` para comparar, então `requireResourceAccess` não alcança essas
- * rotas e o isolamento tem de ser por PAPEL.
+ * Guarda do funil comercial (lead → assessment → proposta).
  *
- * Sem esta guarda, o `org_admin` de um cliente — que o RBAC global deixa
- * escrever, porque a lista read-only só cobre `org_user` e `client` — lia a
- * carteira comercial inteira (contato, CNPJ, preço, HTML da proposta) de TODOS
- * os outros clientes e ainda aprovava ou excluía proposta alheia. Confirmado
- * por sonda: `GET /api/v1/proposals/:id` devolvia 200 com o `content_html` de
- * outro cliente e `DELETE` removia a linha.
+ * Duas condições, e a segunda é nova: ser staff NÃO basta, a conta precisa ser
+ * do tipo `msp`. Conta `direto` é o cliente final que assina sozinho — ele não
+ * vende para ninguém, então pré-venda não existe para ele.
+ *
+ * O escopo por `conta_id` é o que falta para dois MSPs conviverem: estas tabelas
+ * não têm `project_id`, então `requireResourceAccess` nunca as alcançou e o
+ * isolamento era só por papel. Com duas consultorias na base, isso é pipeline
+ * comercial de uma visível para a outra.
  */
-export async function somenteNess(
-  c: { get: (k: 'user') => AtorAutorizado | undefined; json: (b: unknown, s: 403) => Response },
+export async function somenteMsp(
+  c: {
+    get: (k: 'user') => AtorAutorizado | undefined;
+    env: { DB: D1Database };
+    json: (b: unknown, s: 403) => Response;
+  },
   next: () => Promise<void>
 ) {
   const user = c.get('user');
-  if (!user || !PAPEIS_NESS.has(user.role ?? '')) {
-    return c.json({ error: 'Forbidden: Área comercial restrita à equipe ness.' }, 403);
+  if (!ehStaffDeConta(user)) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
   }
-  await next();
+  if (user!.role === 'platform_admin') return next();
+
+  await hidrataEscopo(c.env.DB, user!);
+  if (!user!.conta_id) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  const conta = await c.env.DB
+    .prepare('SELECT tipo FROM contas WHERE id = ?')
+    .bind(user!.conta_id)
+    .first<{ tipo: string }>();
+  if (conta?.tipo !== 'msp') {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  return next();
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */

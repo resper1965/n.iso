@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteMsp } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -184,7 +184,7 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteMsp, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
@@ -246,22 +246,22 @@ platformApp.get('/dashboard/stats', async (c) => {
   try {
     const user = c.get('user');
 
-    // Mesma inversão do `/portfolio` acima, pelos mesmos dois motivos: só a
-    // equipe ness. conta a plataforma inteira; qualquer outro papel — inclusive
+    // Mesma inversão do `/portfolio` acima, pelos mesmos dois motivos: só
+    // staff conta a plataforma inteira; qualquer outro papel — inclusive
     // um fora da lista conhecida, e inclusive sem projeto — é escopado.
     //
-    // UMA variável decide tudo: `null` é o ramo da ness. (sem WHERE), string é
+    // UMA variável decide tudo: `null` é o ramo de staff (sem WHERE), string é
     // o escopo do cliente. A string pode ser VAZIA, e é esse o ponto —
     // `WHERE id = ''` não casa com nada, então cliente sem projeto conta zero
     // em vez de contar a plataforma inteira.
-    const escopo: string | null = ehEquipeNess(user) ? null : (user?.client_project_id ?? '');
+    const escopo: string | null = ehStaffDeConta(user) ? null : (user?.client_project_id ?? '');
 
     const whereResource = escopo === null ? '' : 'WHERE project_id = ?';
     const whereProject = escopo === null ? '' : 'WHERE id = ?';
     const params = escopo === null ? [] : [escopo];
 
     const stats = await c.env.DB.batch<{ count: number }>([
-      // O funil comercial é da ness. (ver `somenteNess` em helpers.ts): cliente
+      // O funil comercial é restrito (ver `somenteMsp` em helpers.ts): cliente
       // não vê lead — nem o conteúdo, nem quantos existem. A contagem era
       // global para todo mundo. O `SELECT 0` mantém o alinhamento posicional do
       // batch, para os índices abaixo não dependerem do papel de quem pergunta.
@@ -415,11 +415,11 @@ platformApp.get('/portfolio', async (c) => {
     //    `users.role` é TEXT livre — um papel fora da lista, como `ciso`
     //    (que a própria suíte usa), enxergava a carteira de TODOS os tenants.
     //
-    // Agora quem decide é `ehEquipeNess`: só a equipe ness. vê a plataforma
+    // Agora quem decide é `ehStaffDeConta`: só staff vê a plataforma
     // inteira, e todo o resto é escopado ao próprio projeto. Papel desconhecido
     // cai no lado seguro. Com o escopo vazio, `WHERE id = ''` não casa com
     // nada — escopo ausente significa NADA, nunca TUDO.
-    const stmt = ehEquipeNess(user)
+    const stmt = ehStaffDeConta(user)
       ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
       : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
     const { results } = await stmt.all();

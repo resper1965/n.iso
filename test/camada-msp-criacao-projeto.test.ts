@@ -117,6 +117,37 @@ describe('criação de projeto pendura o cliente', () => {
     expect(row?.n).toBe(0);
   });
 
+  it('USUÁRIO DE CLIENTE NÃO CRIA PROJETO (poluiria a tabela clientes da consultoria)', async () => {
+    const headers = await sessionFor({
+      id: 'u-a1-admin', email: 'admin@acme.com', role: 'org_admin',
+      conta_id: null, cliente_id: 'cli-a1',
+    });
+    const res = await pedir(worker, '/api/v1/projects', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Cliente Não Devia Criar', standards: 'ISO 27001' }),
+    });
+    expect(res.status).toBe(403);
+
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) n FROM clientes WHERE nome = 'Cliente Não Devia Criar'`
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(0);
+  });
+
+  it('staff de conta DIRETA também cria projeto (ehStaffDeConta, não somenteMsp — pré-venda não existe para ela)', async () => {
+    const headers = await sessionFor({
+      id: 'u-c-staff', email: 'staff@c.com', role: 'consultor',
+      conta_id: 'conta-c', cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/projects', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Cliente Direto Novo', standards: 'ISO 27001' }),
+    });
+    expect(res.status, await res.clone().text()).toBeLessThan(300);
+  });
+
   it('conta_id inexistente no corpo é recusado com 400 — não depende da FK para isso', async () => {
     const headers = await sessionFor({
       id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin',
@@ -149,8 +180,9 @@ describe('convert/sign: a conta é a de quem vendeu, não a de quem opera o bot�
       `INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-x', 'Cliente Vendido Por A', 'in_progress', 'conta-a')`
     ).run();
 
-    // consultor de OUTRA consultoria aperta converter — somenteNess é
-    // allowlist de PAPEL, não de conta (Task 8 fecha essa porta depois).
+    // consultor de OUTRA consultoria aperta converter — somenteMsp exige papel
+    // de staff e conta tipo msp, mas não que o operador pertença à MESMA conta
+    // da origem da venda (gap que fica para outra tarefa fechar).
     const headersB = await sessionFor({
       id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor',
       conta_id: 'conta-b', cliente_id: null,

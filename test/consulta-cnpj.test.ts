@@ -44,7 +44,10 @@ describe('consulta de CNPJ para preview', () => {
     await applySchema();
     await resetData();
     await resetSessions();
-    ness = await sessionFor({ id: 'u-ness', email: 'c@ness.lat', role: 'consultor' });
+    // Camada MSP (Task 8): `somenteMsp` exige conta tipo `msp`, não só papel de
+    // staff — daí a conta aqui, sem a qual esta sessão tomaria 403 na rota.
+    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-ness', 'msp', 'ness', 'Active')`).run();
+    ness = await sessionFor({ id: 'u-ness', email: 'c@ness.lat', role: 'consultor', conta_id: 'conta-ness' });
     cliente = await sessionFor({
       id: 'u-cli', email: 'a@cliente.com', role: 'org_admin', client_project_id: 'p1',
     });
@@ -95,7 +98,7 @@ describe('consulta de CNPJ para preview', () => {
   });
 
   it('sessão de cliente não usa a rota como proxy de consulta', async () => {
-    // `somenteNess` vale para todo o roteador de leads. Sem isto, mover a
+    // `somenteMsp` vale para todo o roteador de leads. Sem isto, mover a
     // consulta para o servidor teria transformado um fetch do navegador do
     // consultor num serviço de consulta aberto a qualquer tenant.
     const res = await consulta(CNPJ_VALIDO, cliente);

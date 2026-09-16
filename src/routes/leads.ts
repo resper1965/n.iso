@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
@@ -10,7 +10,7 @@ export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 // `project_id` aqui para o isolamento multi-tenant comparar. Sonda: o
 // `org_admin` de um cliente listava todos os leads (com contato e CNPJ) e
 // mudava o status de lead alheio com 200.
-leadsApp.use('*', somenteNess);
+leadsApp.use('*', somenteMsp);
 
 leadsApp.post('/', async (c) => {
   try {
@@ -72,9 +72,9 @@ leadsApp.get('/', async (c) => {
  * provedor fora do ar vira "não encontrado", que é o que o navegador já fazia.
  *
  * Sem risco de SSRF: o caminho é montado com dígitos, e só com 14 deles.
- * `somenteNess` (o `use('*')` acima) vale aqui como nas outras: lead é registro
- * comercial da ness., e sem isso a rota viraria proxy de consulta para qualquer
- * sessão de cliente.
+ * `somenteMsp` (o `use('*')` acima) vale aqui como nas outras: lead é registro
+ * comercial, e sem isso a rota viraria proxy de consulta para qualquer sessão
+ * de cliente.
  */
 leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
   try {
