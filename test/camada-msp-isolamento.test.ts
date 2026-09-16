@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
+import worker from '../src/index';
 import { applySchema, seedMatrizMsp } from './helpers/d1';
-import { requireProjectAccess, ForbiddenError } from '../src/helpers';
+import { requireProjectAccess, ForbiddenError, sha256Hex } from '../src/helpers';
 
 const consultorA = { id: 'u-a-consultor', role: 'consultor', conta_id: 'conta-a', cliente_id: null };
 const consultorB = { id: 'u-b-consultor', role: 'consultor', conta_id: 'conta-b', cliente_id: null };
@@ -52,5 +53,48 @@ describe('isolamento entre consultorias', () => {
 
   it('projeto inexistente é recusa, não vazamento de existência', async () => {
     await expect(requireProjectAccess(env.DB, consultorA, 'nao-existe')).rejects.toThrow(ForbiddenError);
+  });
+
+  it('a mensagem de projeto inexistente é idêntica à de projeto alheio', async () => {
+    // Fixa a mensagem, não só o tipo: uma edição futura que diferencie os dois
+    // casos ("não existe" vs. "sem acesso") passaria pelo teste acima, que só
+    // olha `ForbiddenError`, e vazaria quais ids existem. Este trava o texto.
+    const mensagemDe = async (projectId: string) => {
+      try {
+        await requireProjectAccess(env.DB, consultorA, projectId);
+        throw new Error('esperava ForbiddenError');
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    expect(await mensagemDe('nao-existe')).toBe(await mensagemDe('proj-b1-27001'));
+  });
+});
+
+describe('chave de API pelo caminho HTTP (não passa por hidrataEscopo)', () => {
+  // Estes 11 testes acima usam atores literais com conta_id/cliente_id já
+  // prontos — nunca exercitam hidrataEscopo nem o pipeline HTTP de verdade.
+  // Foi assim que a quebra de toda chave de API (ela não tem linha em `users`
+  // para hidrataEscopo achar) passou despercebida na primeira rodada.
+  const CHAVE = 'chave-msp-a1';
+
+  beforeAll(async () => {
+    await env.DB.prepare(
+      `INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES (?,?,?,?,?,?)`
+    ).bind('key-msp-a1', 'proj-a1-27001', await sha256Hex(CHAVE), 'chave msp a1', 'read', 'Active').run();
+  });
+
+  it('chave alcança o próprio projeto e não alcança o de outra consultoria', async () => {
+    const propria = await worker.fetch(
+      new Request('http://localhost/api/v1/projects/proj-a1-27001/risks', { headers: { 'X-API-Key': CHAVE } }),
+      env as any
+    );
+    expect(propria.status, await propria.clone().text()).toBe(200);
+
+    const alheio = await worker.fetch(
+      new Request('http://localhost/api/v1/projects/proj-b1-27001/risks', { headers: { 'X-API-Key': CHAVE } }),
+      env as any
+    );
+    expect(alheio.status).toBe(403);
   });
 });
