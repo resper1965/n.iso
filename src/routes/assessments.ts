@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -133,10 +133,16 @@ assessmentsApp.post('/', async (c) => {
 
     const id = genId();
     const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
+    // Melhor esforço: grava a conta de quem está criando agora, para que
+    // /convert e /generate-proposal mais adiante já tenham registro de
+    // origem. `hidrataEscopo` completa sessão velha sem `conta_id`; sem
+    // sessão de staff reconhecida, fica NULL — como sempre foi.
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     await c.env.DB.prepare(
-      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, created_at)
-       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, datetime('now'))`
-    ).bind(id, body.lead_id || null, body.client_name, accessToken).run();
+      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, conta_id, created_at)
+       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
+    ).bind(id, body.lead_id || null, body.client_name, accessToken, contaId).run();
 
     if (body.lead_id) {
       await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
@@ -418,10 +424,14 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 
     const proposalId = genId();
     const contentHtml = `<p>Proposta ${escapeHtml(meta.proposalNum)} para ${escapeHtml(meta.razaoSocial)}</p>`; // HTML proposal template
+    // A proposta herda a conta de quem vendeu o assessment que a origina. Sem
+    // isso, /sign teria só o operador de então como fonte de conta.
+    await hidrataEscopo(c.env.DB, user ?? {});
+    const contaId = assessment.conta_id ?? (user as AtorAutorizado | undefined)?.conta_id ?? null;
     await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'Draft', datetime('now'))`
-    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal).run();
+      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, conta_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'Draft', ?, datetime('now'))`
+    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal, contaId).run();
 
     await logAudit(c.env.DB, 'proposal.generated', user?.email ?? 'system', `Proposta ${proposalId} gerada automaticamente do assessment ${id}.`);
     await createNotification(c.env.DB, 'proposal_ready', `Proposta gerada: ${clientName}`, `Tier ${pricing.tier.name}`, user?.id, `/proposals/${proposalId}`);
@@ -450,14 +460,22 @@ assessmentsApp.post('/:id/convert', async (c) => {
     const standards = answerMap.get('target_standard') ?? 'ISO 27001';
     const orgRole = answerMap.get('data_role') ?? '';
 
-    // A conta sai do registro de origem — o assessment nasceu numa venda
-    // conduzida por uma conta específica — com o usuário como segunda opção.
+    // A conta é a de quem CONDUZIU A VENDA, não a de quem clicou em converter:
+    // este roteador não garante que o operador pertence à conta de origem
+    // (`somenteNess` é allowlist de PAPEL, não de conta), então usuário
+    // primeiro materializaria a venda de uma consultoria na carteira de
+    // outra. Origem primeiro; usuário só entra quando a origem não tem conta
+    // gravada (assessment anterior à Task 6 / migration 0031).
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = contaCriadora(c.get('user'), assessment.conta_id);
+    const contaId = assessment.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     if (!contaId) {
       return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
     }
-    const clienteId = await resolveCliente(c.env.DB, contaId, assessment.client_name);
+    // CNPJ mora no lead (a um join de distância), não no assessment.
+    const leadDoAssessment = assessment.lead_id
+      ? await c.env.DB.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(assessment.lead_id).first<{ cnpj: string | null }>()
+      : null;
+    const clienteId = await resolveCliente(c.env.DB, contaId, assessment.client_name, leadDoAssessment?.cnpj);
 
     await c.env.DB.prepare(
       `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)

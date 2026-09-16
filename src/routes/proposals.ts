@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteNess, erro500, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
+import { genId, logAudit, createNotification, somenteNess, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
@@ -26,11 +26,17 @@ proposalsApp.post('/', async (c) => {
     const body = v.data as any;
     if (!body.lead_id || !body.assessment_id) return c.json({ error: 'lead_id e assessment_id obrigatórios' }, 400);
 
+    // A conta é a do assessment que originou esta proposta (quem vendeu),
+    // com o usuário como segunda opção — mesma regra de /sign e /convert.
+    const assessmentOrigem = await c.env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(body.assessment_id).first<{ conta_id: string | null }>();
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = assessmentOrigem?.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+
     const id = genId();
     await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, content_html, created_at)
-       VALUES (?, ?, ?, 'Draft', ?, ?, datetime('now'))`
-    ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html).run();
+      `INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, content_html, conta_id, created_at)
+       VALUES (?, ?, ?, 'Draft', ?, ?, ?, datetime('now'))`
+    ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html, contaId).run();
 
     await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
 
@@ -139,6 +145,38 @@ proposalsApp.post('/:id/sign', async (c) => {
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     if (proposal.status === 'Signed') return c.json({ error: 'Proposta já assinada' }, 400);
 
+    // Tudo o que pode recusar com 400 vem ANTES de qualquer mutação. Antes
+    // desta ordem, uma recusa aqui deixava a proposta 'Signed', o contrato
+    // criado e o lead 'Won' — sem projeto e sem chance de tentar de novo (a
+    // linha 140 acima recusa reassinatura). Ver Important 4 da revisão.
+    const leadData = proposal.lead_id
+      ? await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(proposal.lead_id).first<any>()
+      : null;
+    const assessmentDaProposta = proposal.assessment_id
+      ? await c.env.DB.prepare('SELECT client_name FROM assessments WHERE id = ?').bind(proposal.assessment_id).first<{ client_name: string }>()
+      : null;
+
+    // A conta é a de quem CONDUZIU A VENDA, não a de quem clicou em assinar:
+    // este roteador não garante que o operador pertence à conta de origem, e
+    // usuário-primeiro materializaria a venda de uma consultoria na carteira
+    // de outra. Origem primeiro; usuário só entra quando a origem não tem
+    // conta gravada (proposta anterior à Task 6 / migration 0031).
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = proposal.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    // `leadData?.company_name || 'Cliente'` era um balde: toda proposta sem
+    // lead (assessment sem lead → generate-proposal → sign) caía no MESMO
+    // cliente literal "Cliente" dentro da conta — chave de autorização
+    // compartilhada entre empresas sem relação nenhuma. Sem nome real, recusa
+    // em vez de inventar um balde.
+    const clientName = leadData?.razao_social || leadData?.company_name || assessmentDaProposta?.client_name || null;
+    if (!clientName) {
+      return c.json({ error: 'Não foi possível determinar o cliente desta proposta (sem lead e sem assessment de origem com nome)' }, 400);
+    }
+    const clienteId = await resolveCliente(c.env.DB, contaId, clientName, leadData?.cnpj);
+
     await c.env.DB.prepare(
       "UPDATE proposals SET status = 'Signed', approved_at = datetime('now') WHERE id = ?"
     ).bind(id).run();
@@ -156,17 +194,6 @@ proposalsApp.post('/:id/sign', async (c) => {
     await logAudit(c.env.DB, 'proposal.signed', c.get('user')?.email ?? 'system', `Proposta ${id} assinada. Contrato ${contractId} criado.`);
 
     const projectId = genId();
-    const leadData = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(proposal.lead_id).first<any>();
-
-    // A conta sai do registro de origem — a proposta nasceu numa venda
-    // conduzida por uma conta específica — com o usuário como segunda opção.
-    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = contaCriadora(c.get('user'), proposal.conta_id);
-    if (!contaId) {
-      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
-    }
-    const clientName = leadData?.company_name || 'Cliente';
-    const clienteId = await resolveCliente(c.env.DB, contaId, clientName);
 
     await c.env.DB.prepare(
       `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)
@@ -184,7 +211,7 @@ proposalsApp.post('/:id/sign', async (c) => {
 
     await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${projectId} criado automaticamente com 41 fases a partir da proposta ${id}.`);
 
-    await createNotification(c.env.DB, 'contract_signed', `Contrato assinado: ${leadData?.company_name || 'Cliente'}`, `Projeto criado automaticamente com 41 fases.`, c.get('user')?.id, `/projects/${projectId}`);
+    await createNotification(c.env.DB, 'contract_signed', `Contrato assinado: ${clientName}`, `Projeto criado automaticamente com 41 fases.`, c.get('user')?.id, `/projects/${projectId}`);
 
     return c.json({ ok: true, contract_id: contractId, project_id: projectId, proposal_status: 'Signed', lead_status: 'Won' });
   } catch (e: any) {
