@@ -160,6 +160,17 @@ export interface AtorAutorizado {
  * Sem isto, escopo ausente cairia no ramo escopado e a pessoa tomaria 403 em
  * tudo. Fail-closed é a direção certa para papel DESCONHECIDO, mas trancar quem
  * tem direito por causa do formato da sessão é o outro erro — e é o caro.
+ *
+ * Janela de validade: a cadeia `projeto → cliente → conta` que `requireProjectAccess`
+ * consulta depois é lida AO VIVO a cada chamada — cliente que muda de consultoria
+ * tem efeito imediato, que é o caso que mais importa. Quem fica velho é o escopo
+ * DO PRÓPRIO USUÁRIO (`conta_id`/`cliente_id`), porque ele mora na sessão: uma
+ * sessão emitida antes do desligamento de um consultor continua com o `conta_id`
+ * antigo até expirar (teto de `SESSION_TTL_SEC`, até 24 h) ou até a sessão ser
+ * invalidada explicitamente com `invalidateUserSessions` (definida mais abaixo
+ * neste mesmo arquivo). Um fluxo de desligamento/troca de consultoria que só
+ * atualize `users.conta_id`/`cliente_id` sem chamar `invalidateUserSessions`
+ * deixa a pessoa desligada com acesso por até 24 h.
  */
 export async function hidrataEscopo(db: D1Database, user: AtorAutorizado): Promise<void> {
   if (user.conta_id !== undefined || user.cliente_id !== undefined) return;
@@ -236,6 +247,13 @@ export async function requireProjectAccess(
       .first();
     if (concedido) return true;
   }
+
+  // Chave de API carrega o escopo na PRÓPRIA linha da chave (`api_keys.project_id`):
+  // não existe linha em `users` para `hidrataEscopo` achar, nem concessão a emitir.
+  // A dupla condição — ser ator de chave E o projeto bater — mantém isto fora do
+  // alcance de sessão humana, cuja `client_project_id` pode estar velha e cujo
+  // caminho legítimo é a concessão em `acesso_projeto`.
+  if (user.id?.startsWith('apikey:') && user.client_project_id === projectId) return true;
 
   throw new ForbiddenError('Forbidden: No access to this project');
 }
