@@ -106,7 +106,9 @@ Três funções mudam junto, pelo mesmo motivo:
 
 - `requireResourceAccess` — compara `row.project_id !== user.client_project_id`,
   que deixa de ser o critério
-- `ehEquipeNess` → **`ehStaffDaConta(user, contaId)`** — a marca sai do código
+- `ehEquipeNess` → **`ehStaffDeConta(user)`** — a marca sai do código. Continua
+  respondendo só "é staff?"; o escopo por conta é checagem separada, para não
+  haver duas definições de staff que possam divergir
 - `somenteNess` → **`somenteMsp`** — exige staff de conta `tipo='msp'` e escopa o
   funil por `conta_id`
 
