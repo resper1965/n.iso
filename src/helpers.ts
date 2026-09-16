@@ -184,6 +184,63 @@ export async function hidrataEscopo(db: D1Database, user: AtorAutorizado): Promi
   user.cliente_id = row.cliente_id;
 }
 
+/**
+ * Devolve o id do cliente daquele nome dentro daquela conta, criando-o se ainda
+ * não existir.
+ *
+ * A ordem de busca não é estética. CNPJ é a chave REAL de uma empresa, então
+ * quando ele vem, decide sozinho — é o que faz "Acme S.A." e "Acme SA" caírem no
+ * mesmo cliente em vez de virarem duas empresas com evidência partida ao meio.
+ * Sem CNPJ, resta o nome, que é o que o produto sempre teve.
+ *
+ * A busca é SEMPRE dentro de `conta_id`. Duas consultorias podem atender
+ * empresas homônimas — e mesmo quando é a mesma empresa do mundo real, são
+ * clientes distintos aqui: cada consultoria enxerga só o seu, e fundi-los
+ * misturaria a evidência de duas carteiras.
+ */
+export async function resolveCliente(
+  db: D1Database,
+  contaId: string,
+  nome: string,
+  cnpj?: string | null
+): Promise<string> {
+  const limpo = (cnpj ?? '').replace(/\D/g, '');
+  if (limpo) {
+    const porCnpj = await db
+      .prepare('SELECT id FROM clientes WHERE conta_id = ? AND cnpj = ?')
+      .bind(contaId, limpo)
+      .first<{ id: string }>();
+    if (porCnpj) return porCnpj.id;
+  }
+  const porNome = await db
+    .prepare('SELECT id FROM clientes WHERE conta_id = ? AND nome = ?')
+    .bind(contaId, nome)
+    .first<{ id: string }>();
+  if (porNome) return porNome.id;
+
+  const id = genId();
+  await db
+    .prepare('INSERT INTO clientes (id, conta_id, nome, cnpj, status) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, contaId, nome, limpo || null, 'Active')
+    .run();
+  return id;
+}
+
+/**
+ * A conta que vai responder pelo projeto que está sendo criado.
+ *
+ * Staff carrega a própria conta. `platform_admin` não tem conta nenhuma — ele
+ * opera o SaaS — então precisa DIZER para qual conta está criando. Devolver
+ * `null` aqui é recusa: criar projeto sem conta produziria um órfão que ninguém
+ * alcança, e um 400 explícito é melhor que uma linha invisível no banco.
+ */
+export function contaCriadora(
+  user: AtorAutorizado | undefined,
+  contaDoCorpo?: string | null
+): string | null {
+  return user?.conta_id ?? contaDoCorpo ?? null;
+}
+
 const ALLOWED_TABLES = [
   'risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions',
   'compliance_controls', 'evidence', 'assets', 'stakeholders', 'dpia_assessments',
