@@ -836,8 +836,10 @@ describe('requireResourceAccess entre consultorias', () => {
   beforeAll(async () => {
     await applySchema();
     await seedMatrizMsp();
+    // `risks` não tem `title`/`status`: as colunas obrigatórias são `asset` e
+    // `threat`, e `risk_score` é GENERATED — não se insere nela.
     await env.DB.prepare(
-      `INSERT INTO risks (id, project_id, title, status) VALUES ('risco-a', 'proj-a1-27001', 'Risco da Acme', 'Open')`
+      `INSERT INTO risks (id, project_id, asset, threat) VALUES ('risco-a', 'proj-a1-27001', 'Servidor de aplicação', 'Acesso indevido')`
     ).run();
   });
 
