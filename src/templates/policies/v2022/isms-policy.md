@@ -1,37 +1,44 @@
-# [Organization Name] - Information Security Management System (ISMS) Policy
-**Document ID:** POL-ISMS-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Política do Sistema de Gestão de Segurança da Informação
+**Identificação:** POL-ISM-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Objective (ISO 27001 Cl. 5.2)
-This policy defines the high-level principles and objectives for protecting information assets at [Organization Name], ensuring compliance with ISO 27001:2022.
+## 1. Objetivo (ISO 27001 Cl. 5.2)
+Esta política estabelece os princípios que orientam a proteção da informação na [Organization Name], define as responsabilidades pela sua aplicação e formaliza o compromisso da direção com o sistema de gestão de segurança da informação, em conformidade com a ISO/IEC 27001:2022.
 
-## 2. Scope (ISO 27001 Cl. 4.3)
-This policy applies to all internal and external assets, processes, personnel, and third parties within the defined boundary of the ISMS.
+## 2. Escopo (ISO 27001 Cl. 4.3)
+Aplica-se a todos os ativos, processos, pessoas e terceiros dentro do perímetro definido no documento de escopo do SGSI, independentemente do vínculo contratual ou do local de trabalho.
 
-## 3. Policy Statements
-### 3.1 Commitment
-- Management is committed to establishing, implementing, maintaining, and continually improving the ISMS.
-- Information security objectives are aligned with the strategic direction of [Organization Name].
+## 3. Declarações de política
+### 3.1 Compromisso da direção
+- A direção estabelece, implementa, mantém e melhora continuamente o sistema de gestão, provendo os recursos necessários.
+- Os objetivos de segurança da informação são definidos de forma mensurável e alinhados à direção estratégica da [Organization Name].
 
-### 3.2 Compliance
-- All personnel must comply with applicable legal, regulatory, and contractual requirements.
+### 3.2 Princípios de proteção
+- A informação é protegida quanto à confidencialidade, integridade e disponibilidade, na proporção do risco que a organização aceita correr.
+- O acesso é concedido pelo mínimo privilégio necessário à função, formalmente aprovado, revisado periodicamente e revogado no desligamento.
+- Os incidentes são registrados, classificados, respondidos e analisados, com notificação às partes interessadas e às autoridades quando exigido.
+- Requisitos de segurança são considerados desde a concepção dos serviços e nas contratações de terceiros, não após a entrega.
 
-## 4. Roles and Responsibilities
-- **CISO / Policy Owner:** Responsibility for policy maintenance and review.
-- **Employees:** Responsibility for adhering to the security guidelines herein.
-- **Management:** Responsibility for providing resources and leadership.
+### 3.3 Conformidade
+- Todas as pessoas devem cumprir os requisitos legais, regulatórios e contratuais aplicáveis à informação que manipulam, incluindo a legislação de proteção de dados pessoais.
 
-## 5. Monitoring and Review (ISO 27001 Cl. 9.1)
-This policy shall be reviewed at least annually or when significant changes occur in the organization's risk landscape.
+## 4. Papéis e responsabilidades
+- **Responsável de segurança / dono da política:** mantém o sistema de gestão, coordena a avaliação de risco e responde pelas evidências.
+- **Gestores de área:** aplicam os controles nas suas equipes e aprovam acessos.
+- **Todas as pessoas:** cumprem esta política e comunicam incidentes e fragilidades assim que identificados.
+- **Direção:** prove recursos, exerce a liderança e conduz a análise crítica.
 
-## 6. Enforcement and Sanctions
-Failure to comply with this policy may result in disciplinary action up to and including termination of employment or contract.
+## 5. Monitoramento e revisão (ISO 27001 Cl. 9.1)
+Esta política é revisada ao menos uma vez por ano, ou antes disso quando houver mudança significativa no contexto, no escopo, na legislação aplicável ou no cenário de risco da organização.
 
-## 7. Document Control
-| Version | Revision Date | Description of Change | Author | Approved By |
-|---------|---------------|-----------------------|--------|-------------|
-| 1.0     | {{date_modified}} | Initial Release | nISO Agent | {{approver}} |
+## 6. Aplicação e sanções
+O descumprimento desta política é tratado conforme as normas internas de conduta e pode resultar em medida disciplinar, chegando ao desligamento ou à rescisão contratual, sem prejuízo das responsabilidades civis e criminais previstas em lei.
+
+## 7. ## Controle de versões
+| Versão | Data da revisão | Alteração | Autor | Aprovado por |
+|---------|-----------------|-----------|-------|--------------|
+| 1.0     | {{date_modified}} | Emissão inicial | n.iso | {{approver}} |
 
 ---
-**Status:** {{status}} | **Next Review:** {{next_review_date}}
+**Situação:** {{status}} | **Próxima revisão:** {{next_review_date}}

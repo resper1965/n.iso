@@ -1,23 +1,27 @@
-# [Organization Name] - Data Mapping & PII Processing Inventory (RoPA)
-**Document ID:** REG-PRIV-001 | **Classification:** Confidential | **Version:** 1.0
+# [Organization Name] — Inventário de Atividades de Tratamento de Dados Pessoais (ROPA)
+**Identificação:** REG-PRIV-001 | **Classificação:** Confidencial | **Versão:** 1.0
 
 ---
 
-## 1. Purpose (ISO 27701 Cl. B.1.2.9 / LGPD Art. 37)
-To maintain a record of processing activities (RoPA) involving personal data (PII) under the responsibility of [Organization Name].
+## 1. Objetivo (ISO/IEC 27701:2025 · LGPD art. 37)
+Manter o registro das operações de tratamento de dados pessoais sob responsabilidade da [Organization Name], como exige o art. 37 da LGPD.
 
-## 2. Processing Activities Log
-| Process ID | Activity Name | PII Categories | Purpose | Legal Basis | Data Subject | Retention |
+## 2. Atividades de tratamento
+| ID | Atividade | Categorias de dado | Finalidade | Base legal | Titulares | Retenção |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| P-01 | User Onboarding | Name, Email, Phone | Contract Perf. | Execution of Contract | Customers | 5 Years |
-| P-02 | Employee Payroll | CPF, Bank Details | Legal Oblig. | Legal Obligation | Employees | 10 Years |
-| P-03 | Marketing Newsletter| Email, Analytics | Growth | Consent | Prospects | Until Opt-out|
+| P-01 | Cadastro de cliente | Nome, e-mail, telefone | Prestação do serviço contratado | Execução de contrato | Clientes | [prazo] |
+| P-02 | Folha de pagamento | CPF, dados bancários | Cumprimento de obrigação trabalhista | Obrigação legal | Colaboradores | [prazo legal] |
+| P-03 | Registro de acesso | Identificador, endereço de rede | Segurança e apuração de incidente | Obrigação legal e legítimo interesse | Usuários | [prazo] |
+| P-04 | Contato comercial | Nome, e-mail corporativo | Responder e elaborar proposta | Legítimo interesse | Prospectos | Até a oposição |
 
-## 3. Data Transfers & Processors
-| Process ID | Third-Party Name | Role | Location | Security Safeguards |
+## 3. Compartilhamento e operadores
+| ID | Terceiro | Papel | Localidade | Salvaguardas |
 | :--- | :--- | :--- | :--- | :--- |
-| P-01 | Cloudflare Inc. | Processor | USA/Global | SCCs + ISO 27001 |
-| P-02 | [Bank Name] | Controller | Brazil | Local Regulation |
+| P-01 | [nome do operador] | Operador | [país] | Contrato com cláusula de segurança e cláusulas-padrão da ANPD |
+| P-02 | [instituição financeira] | Controlador independente | Brasil | Regulação setorial |
+
+## 4. Transferência internacional
+Registrar, por atividade, se há transferência para fora do Brasil e qual mecanismo do art. 33 da LGPD a sustenta.
 
 ---
-**DPO Approval:** {{approver}} | **Last Update:** {{date_modified}}
+**Aprovado pelo encarregado:** {{approver}} | **Última atualização:** {{date_modified}} | **Situação:** {{status}}

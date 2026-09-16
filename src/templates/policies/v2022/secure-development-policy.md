@@ -1,31 +1,30 @@
-# [Organization Name] - Secure Development Policy (SSDLC)
-**Document ID:** POL-DEV-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Política de Desenvolvimento Seguro
+**Identificação:** POL-DEV-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Objective (ISO 27001 Annex A.8.25)
-Establish rules and principles for the secure development of software and systems at [Organization Name].
+## 1. Objetivo (ISO 27001 Anexo A.8.25)
+Garantir que a segurança seja considerada em todo o ciclo de vida do desenvolvimento de sistemas da [Organization Name].
 
-## 2. Secure Development Life Cycle (SSDLC)
-- **Security by Design:** Threat modeling must be conducted during the design phase.
-- **Environment Separation:** Development, Testing, and Production environments must be physically or logically separated.
+## 2. Declarações de política
+- Requisitos de segurança são definidos antes do início do desenvolvimento, não depois da entrega.
+- O código passa por revisão por par e por análise automatizada antes de ir para produção.
+- Ambientes de desenvolvimento, teste e produção são segregados; dado real de cliente não é usado em teste sem descaracterização.
+- Credenciais e segredos não são versionados no repositório.
+- Vulnerabilidades identificadas são corrigidas conforme prazo definido por severidade.
 
-## 3. Secure Coding Standards
-- Development teams must follow OWASP Top 10 prevention guidelines.
-- Use of approved and patched libraries only.
+## 3. Gestão de mudança
+- Toda mudança em produção é registrada, aprovada e reversível.
+- Mudança emergencial é registrada em até um dia útil, com justificativa.
 
-## 4. Code Review and Testing
-- **Peer Review:** All code changes must be reviewed by a second developer before merge.
-- **Automated Scanning:** SAST/DAST tools must be integrated into the CI/CD pipeline.
+## 4. ## Papéis e responsabilidades
+- **Responsável pelo documento:** {{policy_owner}}
+- **Aprovação:** {{approver}}
 
-## 5. Change Management
-- Formal approval is required for all production releases.
-- Emergency changes must follow a documented "Hotfix" procedure.
-
-## 6. Document Control
-| Version | Revision Date | Description | Author | Approved By |
-|---------|---------------|-------------|--------|-------------|
-| 1.0     | {{date_modified}} | Initial Draft | nISO Agent | {{approver}} |
+## 5. ## Controle de versões
+| Versão | Data da revisão | Alteração | Autor | Aprovado por |
+|---------|-----------------|-----------|-------|--------------|
+| 1.0     | {{date_modified}} | Emissão inicial | n.iso | {{approver}} |
 
 ---
-**Status:** {{status}} | **Next Review:** {{next_review_date}}
+**Situação:** {{status}} | **Próxima revisão:** {{next_review_date}}

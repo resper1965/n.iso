@@ -1,34 +1,37 @@
-# [Organization Name] - ISMS Scope Statement
-**Document ID:** DOC-SCOPE-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Documento de Escopo do SGSI
+**Identificação:** DOC-SCOPE-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Introduction (ISO 27001 Cl. 4.3)
-This document defines the boundaries and applicability of the Information Security Management System (ISMS) at [Organization Name].
+## 1. Introdução (ISO 27001 Cl. 4.3)
+Este documento define as fronteiras e a aplicabilidade do Sistema de Gestão de Segurança da Informação da [Organization Name].
 
-## 2. Scope Definition
-### 2.1 Organizational Scope
-- All departments, business units, and personnel belonging to [Organization Name] located at [Physical/Remote Addresses].
+## 2. Definição do escopo
+### 2.1 Escopo organizacional
+- Áreas, unidades de negócio e pessoas pertencentes à [Organization Name], localizadas em [endereços físicos e trabalho remoto].
 
-### 2.2 Functional/Technical Scope
-- The ISMS covers the following core services and platforms:
-  - [Service 1: e.g., nISO SaaS Platform]
-  - [Service 2: e.g., Cloud Infrastructure on Cloudflare/AWS]
-  - [Service 3: e.g., Customer Data Management]
+### 2.2 Escopo funcional e técnico
+O SGSI cobre os seguintes serviços e plataformas:
+- [Serviço 1: ex. plataforma de serviço da organização]
+- [Serviço 2: ex. ambiente de nuvem que sustenta a operação]
+- [Serviço 3: ex. gestão da base de dados de clientes]
 
-### 2.3 Exclusions
-Any exclusions from the scope must be justified here:
-- *Exclusion 1: [e.g., On-premise legacy servers not connected to the main network].*
-- **Justification:** [e.g., Risk is mitigated by physical isolation and lack of internet access].
+### 2.3 Fronteiras e interfaces
+- Redes privadas de produção, escritório central, acesso remoto e integrações com fornecedores críticos.
 
-## 3. Interested Parties (ISO 27001 Cl. 4.2)
-The following stakeholders are considered within this scope:
-- Customers (Data Privacy & Service Availability)
-- Regulators (Compliance with LGPD/GDPR)
-- Shareholders (Business Continuity)
+### 2.4 Exclusões
+Toda exclusão precisa ser declarada e justificada aqui — exclusão sem justificativa é a primeira não conformidade que o auditor levanta.
+- *Exclusão 1: [ex. sistema legado sem interconexão com o ambiente de produção].*
+- **Justificativa:** [ex. risco mitigado por isolamento físico e ausência de acesso à internet].
 
-## 4. Approval
-This scope has been reviewed and approved by the Management Board.
+## 3. Partes interessadas (ISO 27001 Cl. 4.2)
+- Clientes — privacidade dos dados e disponibilidade do serviço.
+- Órgãos reguladores — conformidade com a legislação de proteção de dados.
+- Direção e sócios — continuidade do negócio.
+- Colaboradores — regras claras de uso e de acesso.
+
+## 4. Aprovação
+Este escopo foi analisado e aprovado pela direção. O documento só conta como registro auditável depois de assinado.
 
 ---
-**Approved By:** {{approver}} | **Date:** {{date_modified}}
+**Aprovado por:** {{approver}} | **Data:** {{date_modified}} | **Situação:** {{status}}

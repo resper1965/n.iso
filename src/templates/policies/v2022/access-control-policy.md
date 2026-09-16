@@ -1,31 +1,36 @@
-# [Organization Name] - Access Control Policy
-**Document ID:** POL-IAM-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Política de Controle de Acesso
+**Identificação:** POL-IAM-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Objective (ISO 27001 Annex A.5.15)
-To ensure authorized user access and prevent unauthorized access to information systems and services at [Organization Name].
+## 1. Objetivo (ISO 27001 Anexo A.5.15)
+Garantir o acesso autorizado e impedir o acesso indevido aos sistemas e serviços de informação da [Organization Name].
 
-## 2. Access Control Principles
-- **Need-to-know:** Access is restricted to the information required to perform a specific task.
-- **Least Privilege:** Users are granted the minimum level of access necessary.
+## 2. Princípios de controle de acesso
+- **Necessidade de conhecer:** o acesso é restrito à informação exigida para executar uma tarefa específica.
+- **Mínimo privilégio:** concede-se o menor nível de acesso necessário à função.
+- **Segregação de funções:** atividades incompatíveis não ficam sob o mesmo acesso.
 
-## 3. User Access Management
-- **Registration & De-registration:** Formal process for granting and revoking access (Joiners/Leavers).
-- **Access Review:** Privileged access reviewed quarterly; standard access reviewed annually.
+## 3. Gestão de acesso de usuários
+- **Concessão e revogação:** processo formal na admissão, na mudança de função e no desligamento, com revogação no mesmo dia.
+- **Revisão de acesso:** acesso privilegiado revisado trimestralmente; acesso comum, anualmente. A revisão é registrada.
+- **Contas de serviço:** inventariadas, com responsável nomeado e credencial rotacionada.
 
-## 4. Authentication Requirements
-- **MFA:** Multi-Factor Authentication is mandatory for all remote and privileged access.
-- **Password Policy:** Minimum 12 characters, complexity requirements, and no reuse.
+## 4. Requisitos de autenticação
+- **Verificação em duas etapas:** obrigatória para todo acesso remoto e privilegiado.
+- **Senha:** mínimo de 12 caracteres, sem reuso e sem compartilhamento.
+- **Exceções:** aprovadas formalmente pelo responsável de segurança, com prazo de validade.
 
-## 5. Roles and Responsibilities
-- **Asset Owners:** Responsibility for approving access to their specific assets.
-- **IT/Security Team:** Responsibility for technical implementation of access controls.
+## 5. Papéis e responsabilidades
+- **Donos de ativo:** aprovam o acesso aos seus próprios ativos.
+- **Equipe de TI e segurança:** implementa tecnicamente os controles de acesso.
+- **Responsável pelo documento:** {{policy_owner}}
+- **Aprovação:** {{approver}}
 
-## 6. Document Control
-| Version | Revision Date | Description | Author | Approved By |
-|---------|---------------|-------------|--------|-------------|
-| 1.0     | {{date_modified}} | Initial Draft | nISO Agent | {{approver}} |
+## 6. ## Controle de versões
+| Versão | Data da revisão | Alteração | Autor | Aprovado por |
+|---------|-----------------|-----------|-------|--------------|
+| 1.0     | {{date_modified}} | Emissão inicial | n.iso | {{approver}} |
 
 ---
-**Status:** {{status}} | **Next Review:** {{next_review_date}}
+**Situação:** {{status}} | **Próxima revisão:** {{next_review_date}}

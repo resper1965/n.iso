@@ -1,35 +1,35 @@
-# [Organization Name] - Management Review Meeting Minutes
-**Document ID:** DOC-MGMT-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Ata de Análise Crítica pela Direção
+**Identificação:** REG-ACD-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Meeting Overview (ISO 27001 Cl. 9.3)
-- **Date:** {{date_modified}}
-- **Attendees:** CEO, CISO, COO, [Other stakeholders]
-- **Objective:** Review the status and effectiveness of the ISMS/PIMS.
+## 1. Identificação da reunião (ISO 27001 Cl. 9.3)
+- **Data e hora:** [dd/mm/aaaa, hh:mm]
+- **Local:** [presencial ou remoto]
+- **Participantes:** [nome e papel de cada participante]
 
-## 2. Agenda Items
-### 2.1 Status of Actions from Previous Reviews
-- [Summary of pending actions].
+## 2. Pauta obrigatória (Cl. 9.3.2)
+Cada item exige registro. Ata com item em branco não serve como evidência.
 
-### 2.2 Changes in External and Internal Issues
-- [e.g., New regulatory requirements from ANPD].
+| Item | Referência | Registro da discussão | Situação |
+|------|------------|-----------------------|----------|
+| Situação das ações da análise crítica anterior | 9.3.2 a) | [registro] | |
+| Mudanças em questões internas e externas | 9.3.2 b) | [registro] | |
+| Desempenho do SGSI e tendências dos indicadores | 9.3.2 c) | [registro] | |
+| Retorno das partes interessadas | 9.3.2 d) | [registro] | |
+| Resultados de auditoria | 9.3.2 e) | [registro] | |
+| Situação dos riscos e do tratamento | 9.3.2 f) | [registro] | |
+| Oportunidades de melhoria contínua | 9.3.2 g) | [registro] | |
 
-### 2.3 Feedback on Information Security Performance
-- **Incident Statistics:** [Summary of security incidents].
-- **Audit Results:** [Summary of internal/external audits].
-- **Monitoring Results:** [KPIs/Metrics performance].
+## 3. Deliberações
+| Deliberação | Responsável | Prazo |
+|-------------|-------------|-------|
+| [decisão tomada] | [nome] | [dd/mm/aaaa] |
 
-### 2.4 Risk Assessment and Treatment Plan Status
-- [Summary of top risks and mitigation progress].
-
-## 3. Management Decisions
-- **Resource Allocation:** [e.g., Approval for new security tool/team member].
-- **Changes to ISMS:** [e.g., Decision to expand scope to new subsidiary].
-- **Improvement Opportunities:** [Specific actions for next period].
-
-## 4. Sign-off
-By signing this document, management confirms they have reviewed the ISMS status and approve the decisions herein.
+## 4. Aprovação
+- **Conduzida por:** {{approver}}
+- **Registrada por:** {{policy_owner}}
+- **Data do registro:** {{date_modified}}
 
 ---
-**Approved By (CEO):** ____________________ | **Date:** {{date_modified}}
+**Situação:** {{status}} | **Próxima análise crítica:** {{next_review_date}}

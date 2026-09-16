@@ -1,178 +1,148 @@
-# [Organization Name] — Declaração de Aplicabilidade (SoA)
-**Document ID:** POL-SOA-2022-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Declaração de Aplicabilidade
+**Identificação:** DOC-SOA-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Por que este documento existe (ISO 27001 Cl. 6.1.3 d)
+## 1. Objetivo (ISO/IEC 27001:2022, Cl. 6.1.3 d)
+Declarar, para cada um dos 93 controles do Anexo A da ISO/IEC 27001:2022, se ele é aplicável ao escopo do SGSI da [Organization Name], a sua situação de implementação e a justificativa da decisão.
 
-A Declaração de Aplicabilidade é o **único documento obrigatório que lista os 93
-controles do Anexo A um a um** e, para cada um, registra três coisas: se ele se
-aplica, por quê, e se já está implementado.
+Este é o primeiro documento que o auditor de certificação lê. Exclusão sem justificativa escrita é a não conformidade mais comum em auditoria inicial.
 
-Ela não é um resumo da política nem um relatório de status. É a ponte auditável
-entre a avaliação de riscos (Cl. 6.1.2), o plano de tratamento (Cl. 6.1.3) e o
-que de fato existe na organização. Auditor de certificação lê a SoA **antes** de
-qualquer outra coisa e usa as colunas de justificativa como roteiro do que vai
-pedir para ver.
+## 2. Como preencher
+- **Aplicável:** decidido a partir da avaliação de risco, dos requisitos legais e contratuais, e não por conveniência.
+- **Situação:** Implementado, Parcial, Planejado ou Não aplicável.
+- **Justificativa e evidência:** para controle aplicável, a referência da evidência que o comprova; para controle excluído, a razão da exclusão.
+- Controle sem responsável nomeado não é implementável — o dono de cada controle é mantido no registro do projeto.
 
-> **A exclusão é o ponto sensível.** Marcar um controle como Não aplicável é
-> legítimo e comum — o que não é aceito é excluir sem justificativa ligada ao
-> contexto (Cl. 4) ou ao risco avaliado. "Não temos orçamento" e "ninguém
-> faz isso no nosso setor" não são justificativas; "não desenvolvemos
-> software internamente" e "não operamos data center próprio" são.
+## 3. Controles do Anexo A:2022
 
-## 2. Escopo do SGSI (ISO 27001 Cl. 4.3)
+### A.5 — Controles organizacionais (37 controles)
 
-Esta SoA cobre o escopo declarado no documento de escopo do SGSI de
-[Organization Name]. Controle cuja aplicabilidade dependa de algo fora desse
-escopo deve dizê-lo na justificativa, e não simplesmente ser marcado N/A.
+| Controle | Nome | Aplicável | Situação | Justificativa e evidência |
+| :--- | :--- | :--- | :--- | :--- |
+| A.5.1 | Políticas de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.2 | Papéis e responsabilidades pela segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.3 | Segregação de funções | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.4 | Responsabilidades da direção | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.5 | Contato com autoridades | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.6 | Contato com grupos de interesse especial | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.7 | Inteligência de ameaças | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.8 | Segurança da informação no gerenciamento de projetos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.9 | Inventário de informações e outros ativos associados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.10 | Uso aceitável de informações e outros ativos associados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.11 | Devolução de ativos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.12 | Classificação das informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.13 | Rotulagem de informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.14 | Transferência de informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.15 | Controle de acesso | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.16 | Gestão de identidade | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.17 | Informação de autenticação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.18 | Direitos de acesso | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.19 | Segurança da informação nas relações com fornecedores | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.20 | Contemplar a segurança da informação nos acordos com fornecedores | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.21 | Gestão da segurança da informação na cadeia de fornecimento de TIC | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.22 | Monitoramento, análise crítica e gestão de mudanças dos serviços de fornecedores | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.23 | Segurança da informação para uso de serviços em nuvem | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.24 | Planejamento e preparação da gestão de incidentes de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.25 | Avaliação e decisão sobre eventos de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.26 | Resposta a incidentes de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.27 | Aprendizado com incidentes de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.28 | Coleta de evidências | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.29 | Segurança da informação durante a disrupção | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.30 | Prontidão de TIC para continuidade de negócios | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.31 | Requisitos legais, estatutários, regulamentares e contratuais | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.32 | Direitos de propriedade intelectual | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.33 | Proteção de registros | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.34 | Privacidade e proteção de dados pessoais | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.35 | Análise crítica independente da segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.36 | Conformidade com políticas, regras e normas de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.5.37 | Procedimentos operacionais documentados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
 
-## 3. Como preencher
+### A.6 — Controles de pessoas (8 controles)
 
-| Coluna | O que registrar |
+| Controle | Nome | Aplicável | Situação | Justificativa e evidência |
+| :--- | :--- | :--- | :--- | :--- |
+| A.6.1 | Seleção | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.2 | Termos e condições de contratação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.3 | Conscientização, educação e treinamento em segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.4 | Processo disciplinar | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.5 | Responsabilidades após encerramento ou mudança da contratação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.6 | Acordos de confidencialidade ou de não divulgação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.7 | Trabalho remoto | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.6.8 | Relato de eventos de segurança da informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+
+### A.7 — Controles físicos (14 controles)
+
+| Controle | Nome | Aplicável | Situação | Justificativa e evidência |
+| :--- | :--- | :--- | :--- | :--- |
+| A.7.1 | Perímetros de segurança física | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.2 | Entrada física | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.3 | Segurança de escritórios, salas e instalações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.4 | Monitoramento de segurança física | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.5 | Proteção contra ameaças físicas e ambientais | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.6 | Trabalho em áreas seguras | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.7 | Mesa limpa e tela limpa | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.8 | Localização e proteção de equipamentos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.9 | Segurança de ativos fora das instalações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.10 | Mídia de armazenamento | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.11 | Serviços de infraestrutura | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.12 | Segurança do cabeamento | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.13 | Manutenção de equipamentos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.7.14 | Descarte seguro ou reutilização de equipamentos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+
+### A.8 — Controles tecnológicos (34 controles)
+
+| Controle | Nome | Aplicável | Situação | Justificativa e evidência |
+| :--- | :--- | :--- | :--- | :--- |
+| A.8.1 | Dispositivos endpoint dos usuários | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.2 | Direitos de acesso privilegiado | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.3 | Restrição de acesso à informação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.4 | Acesso ao código-fonte | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.5 | Autenticação segura | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.6 | Gestão de capacidade | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.7 | Proteção contra código malicioso | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.8 | Gestão de vulnerabilidades técnicas | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.9 | Gestão de configuração | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.10 | Exclusão de informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.11 | Mascaramento de dados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.12 | Prevenção de vazamento de dados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.13 | Backup das informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.14 | Redundância dos recursos de tratamento de informações | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.15 | Registro de eventos | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.16 | Atividades de monitoramento | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.17 | Sincronização dos relógios | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.18 | Uso de programas utilitários privilegiados | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.19 | Instalação de software em sistemas operacionais | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.20 | Segurança de redes | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.21 | Segurança dos serviços de rede | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.22 | Segregação de redes | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.23 | Filtragem da web | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.24 | Uso de criptografia | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.25 | Ciclo de vida de desenvolvimento seguro | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.26 | Requisitos de segurança da aplicação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.27 | Princípios de arquitetura e engenharia de sistemas seguros | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.28 | Codificação segura | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.29 | Testes de segurança em desenvolvimento e aceitação | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.30 | Desenvolvimento terceirizado | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.31 | Separação dos ambientes de desenvolvimento, teste e produção | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.32 | Gestão de mudanças | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.33 | Informações de teste | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+| A.8.34 | Proteção de sistemas de informação durante os testes de auditoria | [Sim/Não] | [Implementado/Parcial/Planejado/Não aplicável] | [justificativa da exclusão ou referência da evidência] |
+
+## 4. Resumo
+| Situação | Quantidade |
 | :--- | :--- |
-| **Aplicável** | `Sim` ou `Não`. Sem terceira opção — controle "parcialmente aplicável" é aplicável. |
-| **Justificativa** | Por que se aplica ou por que não. Ligada a risco identificado, a requisito legal/contratual, ou ao contexto do Cl. 4. Uma frase basta; vazio, não. |
-| **Situação** | `Implementado` · `Parcial` · `Não implementado` · `N/A`. Reflete a realidade de hoje, não a intenção. |
-| **Evidência / referência** | Onde o auditor encontra a prova: política, procedimento, registro, configuração, tela. |
-| **Responsável** | Quem responde pelo controle. Cargo, não pessoa — cargo sobrevive à rotatividade. |
+| Implementados | [n] |
+| Parciais | [n] |
+| Planejados | [n] |
+| Não aplicáveis | [n] |
+| **Total** | **93** |
 
-> Situação `Parcial` ou `Não implementado` com Aplicável = `Sim` **precisa** de
-> item correspondente no Plano de Tratamento de Riscos, com prazo e dono. Uma
-> SoA cheia de lacunas sem plano é uma não conformidade maior.
+## 5. Controles de privacidade
+Quando o escopo incluir tratamento de dados pessoais, os controles da ISO/IEC 27701:2025 são declarados em documento complementar, com a mesma estrutura.
 
-## A.5 — Controles organizacionais (37 controles)
-
-| # | Controle | Aplicável | Justificativa | Situação | Evidência / referência | Responsável |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A.5.1 | Policies for information security | | | | | |
-| A.5.2 | Information security roles and responsibilities | | | | | |
-| A.5.3 | Segregation of duties | | | | | |
-| A.5.4 | Management responsibilities | | | | | |
-| A.5.5 | Contact with authorities | | | | | |
-| A.5.6 | Contact with special interest groups | | | | | |
-| A.5.7 | Threat intelligence ⭐NEW | | | | | |
-| A.5.8 | Information security in project management | | | | | |
-| A.5.9 | Inventory of information and other associated assets | | | | | |
-| A.5.10 | Acceptable use of information and other associated assets | | | | | |
-| A.5.11 | Return of assets | | | | | |
-| A.5.12 | Classification of information | | | | | |
-| A.5.13 | Labelling of information | | | | | |
-| A.5.14 | Information transfer | | | | | |
-| A.5.15 | Access control | | | | | |
-| A.5.16 | Identity management | | | | | |
-| A.5.17 | Authentication information | | | | | |
-| A.5.18 | Access rights | | | | | |
-| A.5.19 | Information security in supplier relationships | | | | | |
-| A.5.20 | Addressing information security within supplier agreements | | | | | |
-| A.5.21 | Managing information security in the ICT supply chain | | | | | |
-| A.5.22 | Monitoring, review and change management of supplier services | | | | | |
-| A.5.23 | Information security for use of cloud services ⭐NEW | | | | | |
-| A.5.24 | Information security incident management planning and preparation | | | | | |
-| A.5.25 | Assessment and decision on information security events | | | | | |
-| A.5.26 | Response to information security incidents | | | | | |
-| A.5.27 | Learning from information security incidents | | | | | |
-| A.5.28 | Collection of evidence | | | | | |
-| A.5.29 | Information security during disruption ⭐NEW | | | | | |
-| A.5.30 | ICT readiness for business continuity ⭐NEW | | | | | |
-| A.5.31 | Legal, statutory, regulatory and contractual requirements | | | | | |
-| A.5.32 | Intellectual property rights | | | | | |
-| A.5.33 | Protection of records | | | | | |
-| A.5.34 | Privacy and protection of PII | | | | | |
-| A.5.35 | Independent review of information security | | | | | |
-| A.5.36 | Compliance with policies, rules and standards | | | | | |
-| A.5.37 | Documented operating procedures | | | | | |
-
-## A.6 — Controles de pessoas (8 controles)
-
-| # | Controle | Aplicável | Justificativa | Situação | Evidência / referência | Responsável |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A.6.1 | Screening | | | | | |
-| A.6.2 | Terms and conditions of employment | | | | | |
-| A.6.3 | Information security awareness, education and training | | | | | |
-| A.6.4 | Disciplinary process | | | | | |
-| A.6.5 | Responsibilities after termination or change of employment | | | | | |
-| A.6.6 | Confidentiality or non-disclosure agreements | | | | | |
-| A.6.7 | Remote working | | | | | |
-| A.6.8 | Information security event reporting | | | | | |
-
-## A.7 — Controles físicos (14 controles)
-
-| # | Controle | Aplicável | Justificativa | Situação | Evidência / referência | Responsável |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A.7.1 | Physical security perimeters | | | | | |
-| A.7.2 | Physical entry | | | | | |
-| A.7.3 | Securing offices, rooms and facilities | | | | | |
-| A.7.4 | Physical security monitoring ⭐NEW | | | | | |
-| A.7.5 | Protecting against physical and environmental threats | | | | | |
-| A.7.6 | Working in secure areas | | | | | |
-| A.7.7 | Clear desk and clear screen | | | | | |
-| A.7.8 | Equipment siting and protection | | | | | |
-| A.7.9 | Security of assets off-premises | | | | | |
-| A.7.10 | Storage media | | | | | |
-| A.7.11 | Supporting utilities | | | | | |
-| A.7.12 | Cabling security | | | | | |
-| A.7.13 | Equipment maintenance | | | | | |
-| A.7.14 | Secure disposal or re-use of equipment | | | | | |
-
-## A.8 — Controles tecnológicos (34 controles)
-
-| # | Controle | Aplicável | Justificativa | Situação | Evidência / referência | Responsável |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A.8.1 | User end point devices | | | | | |
-| A.8.2 | Privileged access rights | | | | | |
-| A.8.3 | Information access restriction | | | | | |
-| A.8.4 | Access to source code | | | | | |
-| A.8.5 | Secure authentication | | | | | |
-| A.8.6 | Capacity management | | | | | |
-| A.8.7 | Protection against malware | | | | | |
-| A.8.8 | Management of technical vulnerabilities | | | | | |
-| A.8.9 | Configuration management ⭐NEW | | | | | |
-| A.8.10 | Information deletion ⭐NEW | | | | | |
-| A.8.11 | Data masking ⭐NEW | | | | | |
-| A.8.12 | Data leakage prevention ⭐NEW | | | | | |
-| A.8.13 | Information backup | | | | | |
-| A.8.14 | Redundancy of information processing facilities | | | | | |
-| A.8.15 | Logging | | | | | |
-| A.8.16 | Monitoring activities ⭐NEW | | | | | |
-| A.8.17 | Clock synchronisation | | | | | |
-| A.8.18 | Use of privileged utility programs | | | | | |
-| A.8.19 | Installation of software on operational systems | | | | | |
-| A.8.20 | Networks security | | | | | |
-| A.8.21 | Security of network services | | | | | |
-| A.8.22 | Segregation of networks | | | | | |
-| A.8.23 | Web filtering ⭐NEW | | | | | |
-| A.8.24 | Use of cryptography | | | | | |
-| A.8.25 | Secure development life cycle | | | | | |
-| A.8.26 | Application security requirements | | | | | |
-| A.8.27 | Secure system architecture and engineering principles | | | | | |
-| A.8.28 | Secure coding ⭐NEW | | | | | |
-| A.8.29 | Security testing in development and acceptance | | | | | |
-| A.8.30 | Outsourced development | | | | | |
-| A.8.31 | Separation of development, test and production environments | | | | | |
-| A.8.32 | Change management | | | | | |
-| A.8.33 | Test information | | | | | |
-| A.8.34 | Protection of information systems during audit testing | | | | | |
-
-## 4. Controles fora do Anexo A
-
-A Cl. 6.1.3 c) permite — e em muitos casos espera — controles que não estão no
-Anexo A, vindos da avaliação de riscos, de requisito regulatório (LGPD, setorial)
-ou de exigência de cliente. Registre-os aqui com a mesma disciplina.
-
-| Identificador | Controle | Origem | Situação | Evidência | Responsável |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| | | | | | |
-
-## 5. Aprovação e revisão
-
-A SoA é aprovada pela direção e revisada **sempre que a avaliação de riscos
-mudar** — não apenas no ciclo anual. Mudança de escopo, incidente relevante,
-novo fornecedor crítico ou nova obrigação legal disparam revisão.
-
-| Version | Revision Date | Description of Change | Author | Approved By |
-|---------|---------------|-----------------------|--------|-------------|
-| 1.0     | {{date_modified}} | Initial Release | nISO Agent | {{approver}} |
+## 6. Aprovação
+A declaração de aplicabilidade é aprovada pela direção junto com o plano de tratamento de risco.
 
 ---
-**Status:** {{status}} | **Next Review:** {{next_review_date}} | **Owner:** {{policy_owner}}
+**Responsável:** {{policy_owner}} | **Aprovado por:** {{approver}} | **Data:** {{date_modified}} | **Situação:** {{status}} | **Próxima revisão:** {{next_review_date}}
