@@ -1,33 +1,39 @@
-# [Organization Name] - Secure Software Development Life Cycle (SSDLC) Standard
-**Document ID:** STD-DEV-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Norma de Desenvolvimento Seguro de Software
+**Identificação:** STD-DEV-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Objective (ISO 27001 Annex A.8.25)
-Define the technical security standards and mandatory gates for software development at [Organization Name].
+## 1. Objetivo (ISO/IEC 27001:2022, Anexo A.8.25)
+Definir as exigências técnicas de segurança e os pontos de verificação obrigatórios no desenvolvimento de software da [Organization Name].
 
-## 2. Secure Development Phases
-### 2.1 Design & Planning
-- **Threat Modeling:** Mandatory for all new features impacting PII or Financial data.
-- **Risk Assessment:** Preliminary check of third-party libraries.
+## 2. Fases e exigências
+### 2.1 Concepção e planejamento
+- **Modelagem de ameaças:** obrigatória para toda funcionalidade que trate dado pessoal ou financeiro.
+- **Requisitos de segurança:** definidos antes do início do desenvolvimento.
+- **Avaliação de biblioteca de terceiro:** verificação de licença e de vulnerabilidade conhecida.
 
-### 2.2 Development (Secure Coding)
-- **Code Review:** Mandatory peer review for all Pull Requests.
-- **Static Analysis (SAST):** Automated scanning integrated into the pipeline.
-- **Secret Management:** No hardcoded credentials; use of Vault/KMS.
+### 2.2 Desenvolvimento
+- **Revisão de código:** revisão por par obrigatória em toda solicitação de integração.
+- **Análise estática:** executada automaticamente na esteira, bloqueando a integração em achado crítico.
+- **Gestão de segredo:** nenhuma credencial no código; uso de cofre de segredos.
 
-### 2.3 Testing & Quality Assurance
-- **Environment Isolation:** Dev/Test/Prod separation.
-- **Dynamic Analysis (DAST):** Automated vulnerability scanning in the staging environment.
+### 2.3 Teste e garantia da qualidade
+- **Segregação de ambientes:** desenvolvimento, teste e produção separados.
+- **Dado de teste:** dado real de cliente não é usado em teste sem descaracterização.
+- **Análise dinâmica:** varredura automatizada no ambiente de homologação.
 
-### 2.4 Deployment & Release
-- **Change Management:** Production deploys require CISO or Lead Engineer sign-off.
-- **Rollback Plan:** Mandatory for every release.
+### 2.4 Publicação
+- **Gestão de mudança:** publicação em produção exige aprovação registrada do responsável técnico.
+- **Plano de reversão:** obrigatório em toda publicação.
+- **Mudança emergencial:** registrada em até um dia útil, com justificativa.
 
-## 3. Version History
-| Version | Date | Description | Author |
-|---------|------|-------------|--------|
-| 1.0     | {{date_modified}} | Initial Standard Release | nISO Agent |
+## 3. Registros gerados
+Resultado das análises, aprovações de revisão de código e registro de cada publicação — são a evidência auditável desta norma.
+
+## 4. ## Controle de versões
+| Versão | Data da revisão | Alteração | Autor | Aprovado por |
+|---------|-----------------|-----------|-------|--------------|
+| 1.0     | {{date_modified}} | Emissão inicial | n.iso | {{approver}} |
 
 ---
-**Approved By:** {{approver}} | **Status:** {{status}}
+**Situação:** {{status}} | **Próxima revisão:** {{next_review_date}}

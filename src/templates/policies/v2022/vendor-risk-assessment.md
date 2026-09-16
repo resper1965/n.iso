@@ -1,28 +1,40 @@
-# [Organization Name] - Vendor Risk Assessment Report
-**Vendor:** {{vendor_name}} | **Report ID:** VRA-{{vendor_id}} | **Date:** {{date_modified}}
+# [Organization Name] — Avaliação de Risco de Fornecedor
+**Fornecedor:** {{vendor_name}} | **Identificação:** VRF-{{vendor_id}} | **Data:** {{date_modified}}
+**Classificação:** Interno | **Situação:** {{status}}
 
 ---
 
-## 1. Executive Summary (ISO 27001 A.5.19)
-This report evaluates the information security and privacy posture of **{{vendor_name}}** to determine its suitability as a business partner for [Organization Name].
+## 1. Resumo (ISO/IEC 27001:2022, Anexo A.5.19)
+Este relatório avalia a postura de segurança da informação e de privacidade de **{{vendor_name}}** para decidir sobre a sua contratação pela [Organization Name].
 
-## 2. Compliance Status
-- **ISO 27001 Certified:** {{has_iso_27001}}
-- **ISO 27701 Certified:** {{has_iso_27701}}
-- **SOC 2 Type II Available:** {{has_soc2}}
+## 2. Certificações declaradas
+- **ISO/IEC 27001 vigente:** {{has_iso_27001}}
+- **ISO/IEC 27701 vigente:** {{has_iso_27701}}
+- **Relatório de auditoria independente disponível:** {{has_soc2}}
 
-## 3. Risk Assessment
-| Category | Assessment | Score |
+## 3. Avaliação
+| Categoria | O que foi verificado | Resultado |
 | :--- | :--- | :--- |
-| Data Residency | Where is data stored? | [e.g., USA/Europe] |
-| Encryption | Is data encrypted at rest/transit? | [e.g., AES-256] |
-| Sub-processors | Does the vendor use 4th parties? | [e.g., AWS] |
-| **Overall Risk** | **Readiness Level** | **{{trust_score}}%** |
+| Localidade do dado | Onde o dado é armazenado e processado | [país] |
+| Criptografia | Proteção em trânsito e em repouso | [mecanismo] |
+| Controle de acesso | Mínimo privilégio e verificação em duas etapas | [situação] |
+| Subcontratação | O fornecedor usa subprocessadores? Quais? | [lista] |
+| Resposta a incidente | Prazo contratual de comunicação | [prazo] |
+| Continuidade | Plano testado e parâmetros de recuperação | [situação] |
+| **Risco geral** | **Nível de prontidão** | **{{trust_score}}%** |
 
-## 4. Auditor Recommendation
-- **[ ] Approved:** No significant risks identified.
-- **[ ] Approved with Remediation:** Approval pending [e.g., signing of SCCs].
-- **[ ] Rejected:** High risk to ISMS/PIMS objectives.
+## 4. Criticidade atribuída
+- **Nível 1 — crítico:** acesso a dado sensível ou ao ambiente de produção. Exige auditoria anual.
+- **Nível 2 — médio:** exige autoavaliação respondida e revisada.
+- **Nível 3 — baixo:** sem acesso a dado ou sistema.
+
+## 5. Recomendação
+- **[ ] Aprovado:** sem risco significativo identificado.
+- **[ ] Aprovado com ressalva:** aprovação condicionada a [ex. assinatura de acordo de tratamento de dados].
+- **[ ] Reprovado:** risco elevado aos objetivos de segurança e privacidade.
+
+## 6. Reavaliação
+Próxima avaliação em [prazo conforme criticidade]. Mudança relevante no serviço ou incidente no fornecedor antecipa a reavaliação.
 
 ---
-**Assessed By:** nISO Agent | **Final Approval:** {{approver}}
+**Avaliado por:** {{policy_owner}} | **Aprovação final:** {{approver}}

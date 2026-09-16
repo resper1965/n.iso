@@ -1,28 +1,32 @@
-# [Organization Name] - ISMS/PIMS Performance Dashboard
-**Report Period:** {{date_modified}} | **Classification:** Internal | **Status:** {{status}}
+# [Organization Name] — Painel de Desempenho do SGSI e do Sistema de Privacidade
+**Período de referência:** {{date_modified}} | **Classificação:** Interno | **Situação:** {{status}}
 
 ---
 
-## 1. Key Performance Indicators (KPIs) - ISO 27001 Cl. 9.1
-This dashboard summarizes the health of our security and privacy management systems.
-
-| KPI ID | Description | Target | Current Status | Trend |
+## 1. Indicadores de segurança (ISO/IEC 27001:2022, Cl. 9.1)
+| ID | Indicador | Meta | Atual | Situação |
 | :--- | :--- | :--- | :--- | :--- |
-| KPI-01 | Incident Resolution Time | < 24h | 18h | 🟢 |
-| KPI-02 | Training Completion Rate | 100% | 92% | 🟡 |
-| KPI-03 | Systems Uptime (DR Ready) | 99.9% | 99.99% | 🟢 |
-| KPI-04 | Critical Vulnerabilities (Open)| 0 | 2 | 🔴 |
+| IND-01 | Tempo de contenção de incidente | [meta] | [atual] | Dentro da meta |
+| IND-02 | Conclusão do treinamento obrigatório | 100% | [atual] | Abaixo da meta |
+| IND-03 | Controles do Anexo A implementados | [meta] | [atual] | Dentro da meta |
+| IND-04 | Vulnerabilidades críticas abertas | 0 | [atual] | Fora da meta |
+| IND-05 | Revisão de acesso privilegiado no prazo | 100% | [atual] | Dentro da meta |
+| IND-06 | Controles sem evidência anexada | 0 | [atual] | Fora da meta |
 
-## 2. Privacy Metrics - ISO 27701
-| Metric | Monthly Volume | Avg. Response Time | Status |
+## 2. Indicadores de privacidade (ISO/IEC 27701:2025)
+| Indicador | Volume no período | Tempo médio de resposta | Situação |
 | :--- | :--- | :--- | :--- |
-| DSAR Requests (Titulares) | 15 | 3 Days | 🟢 |
-| DPIA Assessments Done | 2 | N/A | 🟢 |
+| Requisições de titulares atendidas | [volume] | [dias] | Dentro do prazo do art. 19 |
+| Avaliações de impacto concluídas | [volume] | — | Dentro da meta |
+| Incidentes com dado pessoal | [volume] | [prazo de comunicação] | [situação] |
 
-## 3. Continuous Improvement Actions
-- **Issue:** Low training completion in the Sales department.
-- **Action:** Schedule targeted workshop for next week.
-- **Owner:** {{policy_owner}}
+## 3. Ações de melhoria
+| Achado | Ação | Responsável | Prazo |
+| :--- | :--- | :--- | :--- |
+| [indicador fora da meta] | [ação corretiva] | [nome] | [dd/mm/aaaa] |
+
+## 4. Encaminhamento
+Este painel é insumo obrigatório da análise crítica pela direção, item 9.3.2 c).
 
 ---
-**Prepared By:** nISO Agent | **Reviewed By:** {{approver}}
+**Preparado por:** {{policy_owner}} | **Analisado por:** {{approver}}

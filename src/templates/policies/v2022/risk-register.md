@@ -1,22 +1,27 @@
-# [Organization Name] - Information Security Risk Register
-**Document ID:** REG-RISK-001 | **Classification:** Internal | **Version:** 1.0
+# [Organization Name] — Registro de Riscos de Segurança da Informação
+**Identificação:** REG-RISK-001 | **Classificação:** Interno | **Versão:** 1.0
 
 ---
 
-## 1. Risk Identification and Assessment (ISO 27001 Cl. 6.1.2)
-This register tracks all identified security risks, their scores, and current status.
+## 1. Objetivo (ISO/IEC 27001:2022, Cl. 6.1.2)
+Registrar os riscos identificados, o nível avaliado, o tratamento decidido e a situação de cada um.
 
-## 2. Risk Log
-| Risk ID | Threat/Vulnerability | Impact | Likelihood | Total Score (1-25) | Treatment Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| R-01 | Unauthorized Access to D1 | 5 | 2 | 10 | Mitigated (MFA) |
-| R-02 | Key Personnel Departure | 4 | 3 | 12 | Monitored |
-| R-03 | Supply Chain Attack | 5 | 3 | 15 | Under Treatment |
+## 2. Registro
+| ID | Ameaça ou vulnerabilidade | Ativo afetado | Impacto | Probabilidade | Nível (1-25) | Dono | Tratamento | Situação |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| R-01 | [descrição] | [ativo] | [1-5] | [1-5] | [produto] | [nome] | Mitigar | Em curso |
+| R-02 | [descrição] | [ativo] | [1-5] | [1-5] | [produto] | [nome] | Aceitar | Aceite registrado |
+| R-03 | [descrição] | [ativo] | [1-5] | [1-5] | [produto] | [nome] | Transferir | Concluído |
 
-## 3. Score Legend
-- **1-5:** Low Risk (Acceptable)
-- **6-12:** Medium Risk (Requires action)
-- **13-25:** High Risk (Critical action required)
+## 3. Escala e apetite
+- **1 a 5 — baixo:** aceitável, com monitoramento.
+- **6 a 12 — médio:** exige ação com prazo definido.
+- **13 a 25 — alto:** exige ação imediata ou aceite formal da direção.
+
+O corte do apetite aprovado pela direção é [valor]. Acima dele, o risco precisa de tratamento com prazo e responsável, ou de aceite registrado com justificativa e data de reavaliação.
+
+## 4. Vínculo com controles
+Cada tratamento aponta o controle do Anexo A que o implementa, mantendo a coerência com a declaração de aplicabilidade.
 
 ---
-**Last Updated:** {{date_modified}} | **Next Review:** {{next_review_date}}
+**Última atualização:** {{date_modified}} | **Próxima revisão:** {{next_review_date}} | **Situação:** {{status}}
