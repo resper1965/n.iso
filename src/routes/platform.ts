@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteMsp } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -184,7 +184,7 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteMsp, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteStaff, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
