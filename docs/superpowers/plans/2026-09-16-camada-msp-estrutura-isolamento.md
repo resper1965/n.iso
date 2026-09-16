@@ -17,7 +17,7 @@
 - **Nada de remover coluna legada nesta entrega.** `users.client_project_id` e `projects.client_name` ficam preenchidas — é o que mantém o rollback barato.
 - **O papel de admin do cliente é `org_admin`.** `src/middleware/auth.ts:244` normaliza `client_admin` → `client` antes da autorização; usar `client_admin` como critério não funciona.
 - **Migration aditiva e sem efeito por si só**, no padrão de `migrations/0026_politica_seguranca_tenant.sql`: cabeçalho explicando o porquê e o que conferir antes de aplicar em produção.
-- **Código em inglês, comentários e commits em português.** Conventional commits.
+- **O repositório é bilíngue, com português no código de domínio.** `exportarProjeto`, `autoridadeDeAssinatura`, `expirouPorInatividade`, `anonimizarTitular` e `ehEquipeNess` convivem com `genId`, `escapeHtml` e `encryptSecret`. Nome novo de domínio segue o português; utilitário genérico pode seguir o inglês. Comentários, docs e commits em português. Conventional commits.
 
 ---
 
