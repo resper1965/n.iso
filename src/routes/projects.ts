@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -306,16 +306,25 @@ projectsApp.post('/', async (c) => {
       scope?: string;
       standards?: string;
       org_role?: string;
+      conta_id?: string;
+      cnpj?: string;
     }>();
 
     if (!body.client_name) {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
 
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = contaCriadora(c.get('user'), body.conta_id);
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    const clienteId = await resolveCliente(c.env.DB, contaId, body.client_name, body.cnpj);
+
     const id = genId();
     await c.env.DB.prepare(
-      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
+      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, cliente_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
     ).bind(
       id,
       body.project_name ?? '',
@@ -323,7 +332,8 @@ projectsApp.post('/', async (c) => {
       body.sector ?? '',
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
-      body.org_role ?? ''
+      body.org_role ?? '',
+      clienteId
     ).run();
 
     await seedPhases(c.env.DB, id);

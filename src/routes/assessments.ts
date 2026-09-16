@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -450,10 +450,19 @@ assessmentsApp.post('/:id/convert', async (c) => {
     const standards = answerMap.get('target_standard') ?? 'ISO 27001';
     const orgRole = answerMap.get('data_role') ?? '';
 
+    // A conta sai do registro de origem — o assessment nasceu numa venda
+    // conduzida por uma conta específica — com o usuário como segunda opção.
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = contaCriadora(c.get('user'), assessment.conta_id);
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    const clienteId = await resolveCliente(c.env.DB, contaId, assessment.client_name);
+
     await c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
-    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id).run();
+      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, datetime('now'))`
+    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id, clienteId).run();
 
     await seedPhases(c.env.DB, projectId);
 

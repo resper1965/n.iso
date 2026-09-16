@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, somenteNess, erro500, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
@@ -158,10 +158,20 @@ proposalsApp.post('/:id/sign', async (c) => {
     const projectId = genId();
     const leadData = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(proposal.lead_id).first<any>();
 
+    // A conta sai do registro de origem — a proposta nasceu numa venda
+    // conduzida por uma conta específica — com o usuário como segunda opção.
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = contaCriadora(c.get('user'), proposal.conta_id);
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    const clientName = leadData?.company_name || 'Cliente';
+    const clienteId = await resolveCliente(c.env.DB, contaId, clientName);
+
     await c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, '', '', 'ISO 27001:2022', 'Controlador', 'Active', ?, datetime('now'))`
-    ).bind(projectId, leadData?.company_name || 'Cliente', proposal.assessment_id || '').run();
+      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)
+       VALUES (?, ?, '', '', 'ISO 27001:2022', 'Controlador', 'Active', ?, ?, datetime('now'))`
+    ).bind(projectId, clientName, proposal.assessment_id || '', clienteId).run();
 
     for (let i = 0; i <= 40; i++) {
       const phaseId = genId();
