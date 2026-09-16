@@ -139,8 +139,38 @@ export async function createNotification(
  * devolveria o buraco pela porta dos fundos.
  */
 export interface AtorAutorizado {
+  id?: string;
   role?: string;
   client_project_id?: string | null;
+  /** Conta a que o staff pertence. Vazio para usuário de cliente e platform_admin. */
+  conta_id?: string | null;
+  /** Empresa a que o usuário de cliente pertence. Vazio para staff. */
+  cliente_id?: string | null;
+}
+
+/**
+ * Completa `conta_id`/`cliente_id` a partir do banco quando a sessão não os traz.
+ *
+ * A sessão é escrita no login com `{...user}` de um `SELECT *`, então normalmente
+ * já vem completa. Duas situações fogem disso e as duas são reais: sessão emitida
+ * ANTES desta mudança (vive até 24 h pelo teto de `SESSION_TTL_SEC`), e sessão
+ * criada por caminho que não é o login — SSO e SCIM montam usuário por conta
+ * própria.
+ *
+ * Sem isto, escopo ausente cairia no ramo escopado e a pessoa tomaria 403 em
+ * tudo. Fail-closed é a direção certa para papel DESCONHECIDO, mas trancar quem
+ * tem direito por causa do formato da sessão é o outro erro — e é o caro.
+ */
+export async function hidrataEscopo(db: D1Database, user: AtorAutorizado): Promise<void> {
+  if (user.conta_id !== undefined || user.cliente_id !== undefined) return;
+  if (!user.id) return;
+  const row = await db
+    .prepare('SELECT conta_id, cliente_id FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ conta_id: string | null; cliente_id: string | null }>();
+  if (!row) return;
+  user.conta_id = row.conta_id;
+  user.cliente_id = row.cliente_id;
 }
 
 const ALLOWED_TABLES = [
