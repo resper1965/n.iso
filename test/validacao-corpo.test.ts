@@ -382,6 +382,7 @@ describe('Catraca de `any` nos caminhos de autorização', () => {
     'requireResourceAccess',
     'requireProjectAccess',
     'somenteMsp',
+    'somenteStaff',
     'ehStaffDeConta',
     'resolveApiKeyUser',
     'authMiddleware',

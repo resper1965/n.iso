@@ -461,9 +461,11 @@ const PAPEIS_STAFF = new Set(['consultor', 'consultant', 'platform_admin']);
  *
  * Continua sendo ALLOWLIST DE STAFF, nunca allowlist de papel-cliente, e a razão
  * está registrada em `src/helpers.ts` desde o incidente do `ciso`: `users.role` é
- * TEXT livre, então a lista de papéis-cliente nunca é exaustiva, e um papel fora
- * dela caía no ramo de plataforma e enxergava a carteira de todos os tenants.
- * Invertida, o papel desconhecido cai no ramo escopado — o lado seguro de errar.
+ * TEXT livre e `createUserSchema.role` é `z.string()`, então a lista de
+ * papéis-cliente (`org_admin`/`org_user`/`client`) nunca é exaustiva — um papel
+ * fora dela, como `ciso`, caía no ramo de plataforma e enxergava a carteira de
+ * TODOS os tenants. Invertida, o papel desconhecido cai no ramo escopado — o
+ * lado seguro de errar.
  *
  * Perdeu o nome da ness porque a plataforma deixou de ser de uma consultoria só.
  */
@@ -501,10 +503,17 @@ export async function somenteStaff(
  * do tipo `msp`. Conta `direto` é o cliente final que assina sozinho — ele não
  * vende para ninguém, então pré-venda não existe para ele.
  *
- * O escopo por `conta_id` é o que falta para dois MSPs conviverem: estas tabelas
- * não têm `project_id`, então `requireResourceAccess` nunca as alcançou e o
- * isolamento era só por papel. Com duas consultorias na base, isso é pipeline
- * comercial de uma visível para a outra.
+ * O QUE ISTO NÃO FAZ, e é preciso dizer porque o nome convida ao engano: esta
+ * guarda decide quem ENTRA no roteador de leads/assessments/proposals, nunca
+ * QUAIS LINHAS voltam. `leads`, `assessments` e `proposals` não têm
+ * `project_id` — são o motivo de `requireResourceAccess` nunca as alcançar —,
+ * mas TAMBÉM não têm filtro de `conta_id` nas próprias consultas. Hoje
+ * `GET /api/v1/leads` devolve lead de qualquer conta, `GET
+ * /api/v1/proposals/:id` devolve preço e HTML de proposta alheia, e `DELETE`
+ * remove linha alheia — para QUALQUER staff de QUALQUER conta `msp` que passe
+ * por esta guarda. As colunas `conta_id` e os índices já existem (migration
+ * 0031); o `WHERE conta_id = ?` em cada consulta é trabalho separado, ainda
+ * não feito, e não fica pronto só por esta função existir.
  *
  * NÃO reuse isto como guarda genérica de staff em rota de configuração de
  * projeto (SCIM, SSO, política de segurança, trilha de auditoria) — foi
