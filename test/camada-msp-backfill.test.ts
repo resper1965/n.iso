@@ -14,6 +14,11 @@ describe('backfill da camada MSP', () => {
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-cli', 'c@acme.com', 'h', 'Cliente', 'org_user', 'p1')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-staff', 's@ness.com', 'h', 'Staff', 'consultor')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-adm', 'a@ness.com', 'h', 'Admin', 'platform_admin')`),
+      // Usuário travado num projeto que não existe mais (ex.: linha órfã de
+      // saneamento manual anterior à camada MSP). `acesso_projeto.project_id`
+      // é FK NOT NULL: sem a guarda no INSERT da concessão, este único
+      // usuário aborta a migration inteira no meio do deploy.
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-fantasma', 'f@acme.com', 'h', 'Fantasma', 'org_user', 'p-inexistente')`),
     ]);
     await execSql(backfillSql);
   });
@@ -56,5 +61,15 @@ describe('backfill da camada MSP', () => {
       `SELECT COUNT(*) n FROM projects WHERE cliente_id IS NULL`
     ).first<{ n: number }>();
     expect(row?.n).toBe(0);
+  });
+
+  it('GUARDA de FK: usuário preso a projeto inexistente não aborta a migration e não ganha concessão', async () => {
+    // Se chegamos até aqui, o `beforeAll` já rodou a migration sem lançar —
+    // é a primeira prova da guarda (sem ela, o INSERT da concessão viola a
+    // FK NOT NULL de acesso_projeto.project_id e a migration inteira aborta).
+    const { results } = await env.DB.prepare(
+      `SELECT project_id FROM acesso_projeto WHERE user_id = 'u-fantasma'`
+    ).all<{ project_id: string }>();
+    expect(results).toEqual([]);
   });
 });
