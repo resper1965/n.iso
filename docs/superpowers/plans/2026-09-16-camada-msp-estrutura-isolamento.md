@@ -810,7 +810,253 @@ git commit -m "feat(msp): escopa acesso a projeto pela conta da consultoria"
 
 ---
 
-### Task 6: `requireResourceAccess` escopada
+### Task 6: Criação de projeto resolve o cliente
+
+**Files:**
+- Modify: `src/helpers.ts` (nova função `resolveCliente`)
+- Modify: `src/routes/projects.ts:317` (POST /projects)
+- Modify: `src/routes/assessments.ts:454` (assessment convertido em projeto)
+- Modify: `src/routes/proposals.ts:162` (proposta aprovada vira projeto)
+- Test: `test/camada-msp-criacao-projeto.test.ts`
+
+**Interfaces:**
+- Consumes: `hidrataEscopo` (Task 4), `requireProjectAccess` (Task 5)
+- Produces: `resolveCliente(db: D1Database, contaId: string, nome: string, cnpj?: string | null): Promise<string>` — devolve o id do cliente, criando-o se não existir
+
+**Por que esta tarefa existe.** A Task 5 fez a autorização depender de `projects.cliente_id`. Mas os três caminhos que criam projeto continuam inserindo sem essa coluna, então **todo projeto criado depois da migration nasce órfão e é inalcançável por qualquer um exceto `platform_admin`**. Isso não é defeito de teste: é o produto parando de funcionar no primeiro projeto novo. A suíte completa em `ed5bf1a` acusou isso com ~100 testes vermelhos, que são o alarme funcionando.
+
+- [ ] **Step 1: Write the failing test**
+
+```typescript
+// test/camada-msp-criacao-projeto.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { env } from 'cloudflare:test';
+import worker from '../src/index';
+import { applySchema, seedMatrizMsp, sessionFor, pedir, resetData, resetSessions } from './helpers/d1';
+
+describe('criação de projeto pendura o cliente', () => {
+  beforeEach(async () => {
+    await applySchema();
+    await resetData();
+    await resetSessions();
+    await seedMatrizMsp();
+  });
+
+  it('projeto criado por staff nasce no cliente, e o criador o alcança', async () => {
+    const headers = await sessionFor({
+      id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor',
+      conta_id: 'conta-a', cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/projects', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Empresa Nova', standards: 'ISO 27001' }),
+    });
+    expect(res.status).toBeLessThan(300);
+
+    const proj = await env.DB.prepare(
+      `SELECT p.id, p.cliente_id, c.conta_id FROM projects p
+         JOIN clientes c ON c.id = p.cliente_id
+        WHERE p.client_name = 'Empresa Nova'`
+    ).first<{ id: string; cliente_id: string; conta_id: string }>();
+
+    expect(proj?.cliente_id).toBeTruthy();
+    expect(proj?.conta_id).toBe('conta-a');
+
+    // O ponto que importa: o projeto novo é ALCANÇÁVEL. Órfão daria 403.
+    const leitura = await pedir(worker, `/api/v1/projects/${proj!.id}/risks`, { headers });
+    expect(leitura.status).toBe(200);
+  });
+
+  it('segundo projeto do mesmo cliente reusa o cliente, não cria outro', async () => {
+    const headers = await sessionFor({
+      id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor',
+      conta_id: 'conta-a', cliente_id: null,
+    });
+    const corpo = (escopo: string) => ({
+      method: 'POST' as const,
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Repetida', standards: escopo }),
+    });
+    await pedir(worker, '/api/v1/projects', corpo('ISO 27001'));
+    await pedir(worker, '/api/v1/projects', corpo('ISO 27701'));
+
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) n FROM clientes WHERE nome = 'Repetida' AND conta_id = 'conta-a'`
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(1);
+  });
+
+  it('MESMO NOME EM CONSULTORIAS DIFERENTES SÃO CLIENTES DIFERENTES', async () => {
+    const criar = async (userId: string, contaId: string) => {
+      const headers = await sessionFor({
+        id: userId, email: `${userId}@x.com`, role: 'consultor',
+        conta_id: contaId, cliente_id: null,
+      });
+      return pedir(worker, '/api/v1/projects', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_name: 'Homônima', standards: 'ISO 27001' }),
+      });
+    };
+    await criar('u-a-consultor', 'conta-a');
+    await criar('u-b-consultor', 'conta-b');
+
+    const { results } = await env.DB.prepare(
+      `SELECT conta_id FROM clientes WHERE nome = 'Homônima' ORDER BY conta_id`
+    ).all<{ conta_id: string }>();
+    expect(results.map(r => r.conta_id)).toEqual(['conta-a', 'conta-b']);
+  });
+
+  it('deduplica por CNPJ mesmo com o nome escrito diferente', async () => {
+    const headers = await sessionFor({
+      id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor',
+      conta_id: 'conta-a', cliente_id: null,
+    });
+    const criar = (nome: string) => pedir(worker, '/api/v1/projects', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: nome, standards: 'ISO 27001', cnpj: '11222333000181' }),
+    });
+    await criar('Acme S.A.');
+    await criar('Acme SA');
+
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) n FROM clientes WHERE cnpj = '11222333000181'`
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(1);
+  });
+
+  it('criador sem conta e sem conta_id no corpo é recusado, não cria órfão', async () => {
+    const headers = await sessionFor({
+      id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin',
+      conta_id: null, cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/projects', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Sem Dono', standards: 'ISO 27001' }),
+    });
+    expect(res.status).toBe(400);
+
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) n FROM projects WHERE client_name = 'Sem Dono'`
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run --no-file-parallelism test/camada-msp-criacao-projeto.test.ts`
+Expected: FAIL — o projeto nasce com `cliente_id` nulo, o JOIN não devolve linha e a leitura dá 403
+
+- [ ] **Step 3: Add `resolveCliente` to `src/helpers.ts`**
+
+```typescript
+/**
+ * Devolve o id do cliente daquele nome dentro daquela conta, criando-o se ainda
+ * não existir.
+ *
+ * A ordem de busca não é estética. CNPJ é a chave REAL de uma empresa, então
+ * quando ele vem, decide sozinho — é o que faz "Acme S.A." e "Acme SA" caírem no
+ * mesmo cliente em vez de virarem duas empresas com evidência partida ao meio.
+ * Sem CNPJ, resta o nome, que é o que o produto sempre teve.
+ *
+ * A busca é SEMPRE dentro de `conta_id`. Duas consultorias podem atender
+ * empresas homônimas — e mesmo quando é a mesma empresa do mundo real, são
+ * clientes distintos aqui: cada consultoria enxerga só o seu, e fundi-los
+ * misturaria a evidência de duas carteiras.
+ */
+export async function resolveCliente(
+  db: D1Database,
+  contaId: string,
+  nome: string,
+  cnpj?: string | null
+): Promise<string> {
+  const limpo = (cnpj ?? '').replace(/\D/g, '');
+  if (limpo) {
+    const porCnpj = await db
+      .prepare('SELECT id FROM clientes WHERE conta_id = ? AND cnpj = ?')
+      .bind(contaId, limpo)
+      .first<{ id: string }>();
+    if (porCnpj) return porCnpj.id;
+  }
+  const porNome = await db
+    .prepare('SELECT id FROM clientes WHERE conta_id = ? AND nome = ?')
+    .bind(contaId, nome)
+    .first<{ id: string }>();
+  if (porNome) return porNome.id;
+
+  const id = genId();
+  await db
+    .prepare('INSERT INTO clientes (id, conta_id, nome, cnpj, status) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, contaId, nome, limpo || null, 'Active')
+    .run();
+  return id;
+}
+
+/**
+ * A conta que vai responder pelo projeto que está sendo criado.
+ *
+ * Staff carrega a própria conta. `platform_admin` não tem conta nenhuma — ele
+ * opera o SaaS — então precisa DIZER para qual conta está criando. Devolver
+ * `null` aqui é recusa: criar projeto sem conta produziria um órfão que ninguém
+ * alcança, e um 400 explícito é melhor que uma linha invisível no banco.
+ */
+export function contaCriadora(
+  user: AtorAutorizado | undefined,
+  contaDoCorpo?: string | null
+): string | null {
+  return user?.conta_id ?? contaDoCorpo ?? null;
+}
+```
+
+- [ ] **Step 4: Wire it into the three creation paths**
+
+Em `src/routes/projects.ts`, no handler `POST /`, antes do `INSERT INTO projects`:
+
+```typescript
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = contaCriadora(c.get('user'), body.conta_id);
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    const clienteId = await resolveCliente(c.env.DB, contaId, body.client_name, body.cnpj);
+```
+
+E acrescente `cliente_id` ao INSERT, mantendo `client_name` preenchido como está (coluna legada preservada de propósito):
+
+```typescript
+      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, cliente_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
+```
+
+Acrescente `conta_id?: string` e `cnpj?: string` ao tipo do `body`.
+
+Faça o equivalente em `src/routes/assessments.ts:454` e `src/routes/proposals.ts:162`. Nesses dois a conta sai do registro de origem (`assessments.conta_id` / `proposals.conta_id`, que a Task 2 preencheu) com o usuário como segunda opção — o projeto nasce na conta que conduziu a venda.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npx vitest run --no-file-parallelism test/camada-msp-criacao-projeto.test.ts`
+Expected: PASS (5 testes)
+
+- [ ] **Step 6: Confirm the blast radius shrank**
+
+Run: `npx vitest run --no-file-parallelism test/modulos-crud.test.ts test/api.test.ts`
+Expected: menos falhas que em `ed5bf1a`. Anote a contagem — ela alimenta a Task 10. O que sobrar são testes que criam projeto por `INSERT` direto, e esses são adaptação de fixture.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/helpers.ts src/routes/projects.ts src/routes/assessments.ts src/routes/proposals.ts test/camada-msp-criacao-projeto.test.ts
+git commit -m "feat(msp): projeto novo nasce pendurado no cliente"
+```
+
+---
+
+### Task 7: `requireResourceAccess` escopada
 
 **Files:**
 - Modify: `src/helpers.ts:153-164`
@@ -908,7 +1154,7 @@ git commit -m "feat(msp): escopa acesso a recurso pela conta da consultoria"
 
 ---
 
-### Task 7: `ehStaffDaConta` e `somenteMsp`
+### Task 8: `ehStaffDaConta` e `somenteMsp`
 
 **Files:**
 - Modify: `src/helpers.ts:267-310` (`PAPEIS_NESS`, `ehEquipeNess`, `somenteNess`)
@@ -1054,7 +1300,7 @@ git commit -m "feat(msp): restringe pre-venda a conta do tipo msp"
 
 ---
 
-### Task 8: Escopo das consultas do funil
+### Task 9: Escopo das consultas do funil
 
 **Files:**
 - Modify: `src/routes/leads.ts`, `src/routes/assessments.ts`, `src/routes/proposals.ts` (cláusula `WHERE conta_id` nas listagens e `conta_id` nos INSERTs)
@@ -1170,7 +1416,7 @@ git commit -m "feat(msp): isola dados do funil comercial por conta"
 
 ---
 
-### Task 9: Adaptar a suíte existente
+### Task 10: Adaptar a suíte existente
 
 **Files:**
 - Modify: `test/idor-tenant.test.ts`, `test/idor-tenant-project-scoped.test.ts`, `test/contrato-isolamento-topo.test.ts`, `test/helpers.test.ts` e todo arquivo que a suíte apontar
@@ -1180,10 +1426,33 @@ git commit -m "feat(msp): isola dados do funil comercial por conta"
 - Consumes: tudo das Tasks 1-8
 - Produces: suíte inteira verde
 
-- [ ] **Step 1: Run the full suite and inventory the damage**
+**Inventário medido em `ed5bf1a`** (logo após a Task 5, ANTES da Task 6). Não presuma que ainda vale: a Task 6 fez projeto novo nascer com `cliente_id`, então tudo que criava projeto pela API deve ter se resolvido sozinho. Este inventário é o teto, não a lista.
 
-Run: `npx vitest run 2>&1 | tail -60`
-Expected: falhas concentradas nos arquivos de isolamento. Anote cada arquivo e o motivo.
+```
+api.test.ts                       12    phase-questionnaire.test.ts   10
+modulos-crud.test.ts              27    phase-interpretation.test.ts   7
+control-adequacao.test.ts          7    idor-tenant-project-scoped.ts  7
+integration.test.ts                5    journey-dossier.test.ts        4
+mcp-integration.test.ts            4    assinatura-governanca.test.ts  3
+project-scope-phase-notes.test.ts  3    idor-tenant.test.ts            2
+control-owner-update.test.ts       2    politica-tenant.test.ts        1
+portabilidade.test.ts              1    revoke-approval.test.ts        1
+forbidden-error.test.ts            1    migration-0021.test.ts      erro no beforeAll
+```
+
+`contrato-isolamento-topo.test.ts` passou inteiro — a varredura dinâmica dele já cobre a estrutura nova.
+
+**A causa é uma só, e vale para quase todos:** o teste faz `INSERT INTO projects (id, client_name, standards, org_role, status)` sem `cliente_id` (veja `test/modulos-crud.test.ts:94`), então o projeto nasce órfão e a autorização nega — inclusive para o dono. Não é bug da autorização; é fixture escrita quando projeto não tinha cliente.
+
+- [ ] **Step 1: Re-measure, because the Task 6 changed the picture**
+
+Run: `npx vitest run --no-file-parallelism 2>&1 | grep -E "❯ test/|Test Files|Tests "`
+
+Compare com o inventário acima e trabalhe sobre o que SOBROU. Cada arquivo que ainda falha cai em um de dois casos, e eles têm correções diferentes:
+- **cria projeto por `INSERT` direto** → precisa da cadeia conta→cliente na fixture
+- **monta sessão com `client_project_id`** → precisa de `cliente_id` mais linha em `acesso_projeto`
+
+`migration-0021.test.ts` é caso próprio: o `beforeAll` dele estoura no `execSql`. Diagnostique antes de tratar como fixture — pode ser o mesmo defeito de statement vazio que já deixa `reconcile-prod` vermelho no baseline, e nesse caso não é seu.
 
 - [ ] **Step 2: Make `seedTwoProjects` produce a valid hierarchy**
 
