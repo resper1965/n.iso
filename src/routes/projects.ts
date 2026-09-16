@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteMsp, ehStaffDeConta, sha256Hex, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteStaff, ehStaffDeConta, sha256Hex, hidrataEscopo, contaCriadora, resolveCliente } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -27,7 +27,7 @@ export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }
  * `POST` e não `PUT`: emitir substitui o token anterior, e chamar duas vezes
  * gera dois tokens diferentes. Um `PUT` idempotente aqui esconderia isso.
  */
-projectsApp.post('/:projectId/scim-token', somenteMsp, async (c) => {
+projectsApp.post('/:projectId/scim-token', somenteStaff, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const projeto = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
@@ -73,7 +73,7 @@ projectsApp.post('/:projectId/scim-token', somenteMsp, async (c) => {
  * dígitos. Segredo de IdP não tem por que ser lido de volta por ninguém: quem
  * precisa dele é o Worker, que o decifra na hora do login.
  */
-projectsApp.get('/:projectId/sso', somenteMsp, async (c) => {
+projectsApp.get('/:projectId/sso', somenteStaff, async (c) => {
   try {
     const p = await c.env.DB.prepare(
       'SELECT project_id, issuer, client_id, dominios, papel_padrao, ativo, atualizado_em, atualizado_por FROM project_sso WHERE project_id = ?'
@@ -84,7 +84,7 @@ projectsApp.get('/:projectId/sso', somenteMsp, async (c) => {
   }
 });
 
-projectsApp.put('/:projectId/sso', somenteMsp, async (c) => {
+projectsApp.put('/:projectId/sso', somenteStaff, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const v = await validateBody(c, ssoConfigSchema);
@@ -170,7 +170,7 @@ projectsApp.get('/:projectId/security-policy', async (c) => {
   }
 });
 
-projectsApp.put('/:projectId/security-policy', somenteMsp, async (c) => {
+projectsApp.put('/:projectId/security-policy', somenteStaff, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const v = await validateBody(c, politicaTenantSchema);
@@ -239,7 +239,7 @@ projectsApp.put('/:projectId/security-policy', somenteMsp, async (c) => {
  * guarda própria no handler. Rota nova sob projeto que não tenha sufixo precisa
  * lembrar disso.
  *
- * `somenteMsp` NÃO é usado: o dado é do cliente, e o direito de levá-lo é dele.
+ * `somenteStaff` NÃO é usado: o dado é do cliente, e o direito de levá-lo é dele.
  * O papel read-only (`org_user`, `client`) alcança porque é GET.
  */
 projectsApp.get('/:projectId/export', async (c) => {
@@ -306,7 +306,7 @@ export async function getRepositoryToken(env: Bindings, projectId: string): Prom
  * própria conta), mas é poluição gravável que uma checagem de papel evita de
  * graça.
  *
- * `ehStaffDeConta`, não `somenteMsp`: conta `direto` também cria projeto — ela
+ * `ehStaffDeConta`, não `somenteStaff`: conta `direto` também cria projeto — ela
  * só não tem pré-venda, e criar projeto não é pré-venda.
  */
 projectsApp.post('/', async (c) => {

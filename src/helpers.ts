@@ -472,7 +472,30 @@ export function ehStaffDeConta(user: { role?: string } | undefined | null): bool
 }
 
 /**
- * Guarda do funil comercial (lead → assessment → proposta).
+ * Guarda de STAFF genérica — pergunta só "é staff desta conta?", nunca "esta
+ * conta vende para terceiros?".
+ *
+ * Serve para operação de PROJETO que o dono do projeto precisa alcançar
+ * independentemente de ter pré-venda: SCIM, SSO, política de segurança,
+ * verificação da trilha de auditoria. Conta `direto` é o cliente final que
+ * assina sozinho — ela não vende para ninguém, mas continua sendo dona do
+ * próprio projeto, então continua configurando o próprio SSO/SCIM/MFA.
+ *
+ * NÃO use isto no funil comercial (lead/assessment/proposta) — ali a
+ * pergunta certa é `somenteMsp`, logo abaixo.
+ */
+export async function somenteStaff(
+  c: { get: (k: 'user') => AtorAutorizado | undefined; json: (b: unknown, s: 403) => Response },
+  next: () => Promise<void>
+) {
+  if (!ehStaffDeConta(c.get('user'))) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  return next();
+}
+
+/**
+ * Guarda do funil comercial (lead → assessment → proposta) — E SÓ DELE.
  *
  * Duas condições, e a segunda é nova: ser staff NÃO basta, a conta precisa ser
  * do tipo `msp`. Conta `direto` é o cliente final que assina sozinho — ele não
@@ -482,6 +505,12 @@ export function ehStaffDeConta(user: { role?: string } | undefined | null): bool
  * não têm `project_id`, então `requireResourceAccess` nunca as alcançou e o
  * isolamento era só por papel. Com duas consultorias na base, isso é pipeline
  * comercial de uma visível para a outra.
+ *
+ * NÃO reuse isto como guarda genérica de staff em rota de configuração de
+ * projeto (SCIM, SSO, política de segurança, trilha de auditoria) — foi
+ * exatamente esse reuso, num rename mecânico da Task 8, que tirou de conta
+ * `direto` o direito de configurar o próprio SSO/SCIM/MFA. Regressão de
+ * produto corrigida na sequência: use `somenteStaff` para isso.
  */
 export async function somenteMsp(
   c: {
