@@ -281,8 +281,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   }
   try {
     await requireProjectAccess(db, user, row.project_id);
-  } catch {
-    throw new ForbiddenError('Forbidden: No access to this resource');
+  } catch (e) {
+    // Só recusa de autorização vira recusa de recurso. Qualquer outra exceção
+    // (falha de D1, por exemplo) segue subindo: mascará-la como 403 tiraria o
+    // erro do `registraErro` e entregaria ao cliente um "Forbidden" sem
+    // `request_id` para o suporte seguir.
+    if (e instanceof ForbiddenError) {
+      throw new ForbiddenError('Forbidden: No access to this resource');
+    }
+    throw e;
   }
   return true;
 }

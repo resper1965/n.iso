@@ -29,3 +29,31 @@ describe('requireResourceAccess entre consultorias', () => {
     await expect(requireResourceAccess(env.DB, 'users', 'u-a1-user', consultorA)).rejects.toThrow('Invalid table');
   });
 });
+
+describe('requireResourceAccess não mascara falha de banco como recusa', () => {
+  // Duble mínimo de D1Database: a primeira consulta (busca do `project_id` do
+  // recurso) responde normal, a segunda — a que `requireProjectAccess` faz —
+  // quebra com algo que não é `ForbiddenError`. Isso reproduz uma falha real de
+  // D1 (conexão, indisponibilidade, query malformada) no meio da delegação.
+  const dbQuebrado: any = {
+    prepare: (sql: string) => ({
+      bind: () => ({
+        first: async () => {
+          if (sql.includes('FROM risks')) return { project_id: 'proj-a1-27001' };
+          throw new Error('D1_ERROR: indisponível');
+        },
+      }),
+    }),
+  };
+
+  it('erro que não é de autorização sobe como está, não vira ForbiddenError', async () => {
+    await expect(requireResourceAccess(dbQuebrado, 'risks', 'risco-a', consultorA)).rejects.toThrow('D1_ERROR: indisponível');
+
+    try {
+      await requireResourceAccess(dbQuebrado, 'risks', 'risco-a', consultorA);
+      throw new Error('deveria ter lançado');
+    } catch (e) {
+      expect(e).not.toBeInstanceOf(ForbiddenError);
+    }
+  });
+});
