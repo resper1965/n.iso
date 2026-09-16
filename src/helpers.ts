@@ -227,12 +227,23 @@ export async function resolveCliente(
 }
 
 /**
- * A conta que vai responder pelo projeto que está sendo criado.
+ * A conta que vai responder pelo projeto criado DIRETO por staff
+ * (`POST /projects`). Só serve a esse caminho — user-first é a ordem CERTA
+ * aqui porque não existe "registro de origem": quem está na tela É a origem.
  *
  * Staff carrega a própria conta. `platform_admin` não tem conta nenhuma — ele
  * opera o SaaS — então precisa DIZER para qual conta está criando. Devolver
  * `null` aqui é recusa: criar projeto sem conta produziria um órfão que ninguém
  * alcança, e um 400 explícito é melhor que uma linha invisível no banco.
+ *
+ * NÃO USE isto em `assessments.ts:/:id/convert` ou `proposals.ts:/:id/sign`.
+ * Lá existe registro de origem (assessment/proposta) que já sabe qual conta
+ * conduziu a venda, e a ordem tem de ser INVERTIDA: origem primeiro, usuário
+ * como fallback só quando a origem não tem conta gravada. User-first nesses
+ * dois materializaria a venda de uma consultoria na carteira de quem meramente
+ * clicou em "converter"/"assinar" — que pode ser de OUTRA consultoria, porque
+ * nenhum dos dois roteadores garante que o operador pertence à conta de
+ * origem (isso é isolado, de propósito, para a Task 8/`somenteMsp`).
  */
 export function contaCriadora(
   user: AtorAutorizado | undefined,

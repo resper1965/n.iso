@@ -319,6 +319,14 @@ projectsApp.post('/', async (c) => {
     if (!contaId) {
       return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
     }
+    // `platform_admin` manda este id livre pelo corpo — não veio de sessão nem
+    // de registro de origem. A FK de `clientes.conta_id` pegaria um id
+    // inexistente, mas só se a checagem de FK estiver ativa, e o erro sairia
+    // como 500 genérico em vez de dizer o que há de errado com o PEDIDO.
+    const contaExiste = await c.env.DB.prepare('SELECT 1 FROM contas WHERE id = ?').bind(contaId).first();
+    if (!contaExiste) {
+      return c.json({ error: 'conta_id informado não existe' }, 400);
+    }
     const clienteId = await resolveCliente(c.env.DB, contaId, body.client_name, body.cnpj);
 
     const id = genId();
