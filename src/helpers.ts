@@ -259,14 +259,29 @@ const ALLOWED_TABLES = [
   'performance_metrics', 'webhooks', 'api_keys', 'auditor_notes'
 ];
 
+/**
+ * Mesma pergunta de `requireProjectAccess`, feita a partir de um RECURSO: a
+ * linha pertence a um projeto, e o projeto responde pelo resto.
+ *
+ * Antes, staff passava direto e cliente era comparado com `client_project_id`.
+ * As duas pontas mudaram: staff agora é staff DE UMA CONTA, e o usuário de
+ * cliente pode ter mais de um projeto. Delegar a `requireProjectAccess` mantém
+ * UMA definição de alcance — duas definições divergem, e a que diverge para o
+ * lado permissivo é a que vaza.
+ */
 export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: AtorAutorizado) {
   if (!ALLOWED_TABLES.includes(table)) {
     throw new Error('Invalid table');
   }
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
+  if (user.role === 'platform_admin') return true;
 
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
-  if (!row || row.project_id !== user.client_project_id) {
+  if (!row || !row.project_id) {
+    throw new ForbiddenError('Forbidden: No access to this resource');
+  }
+  try {
+    await requireProjectAccess(db, user, row.project_id);
+  } catch {
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
   return true;
