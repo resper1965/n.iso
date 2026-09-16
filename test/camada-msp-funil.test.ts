@@ -3,7 +3,11 @@ import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, seedMatrizMsp, sessionFor, pedir, resetSessions } from './helpers/d1';
 
-describe('funil comercial por conta', () => {
+// Mede acesso ao ROTEADOR (200/403 por tipo de conta), não isolamento de
+// LINHA: nenhum teste aqui compara um lead/proposta da conta-a com um da
+// conta-b. Esse escopo por `conta_id` dentro das consultas ainda não existe
+// (ver o aviso em `somenteMsp`, helpers.ts) — é trabalho de outra tarefa.
+describe('acesso à área comercial por tipo de conta', () => {
   beforeAll(async () => { await applySchema(); await seedMatrizMsp(); await resetSessions(); });
 
   it('staff de conta MSP alcança o funil', async () => {

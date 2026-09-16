@@ -415,10 +415,15 @@ platformApp.get('/portfolio', async (c) => {
     //    `users.role` é TEXT livre — um papel fora da lista, como `ciso`
     //    (que a própria suíte usa), enxergava a carteira de TODOS os tenants.
     //
-    // Agora quem decide é `ehStaffDeConta`: só staff vê a plataforma
-    // inteira, e todo o resto é escopado ao próprio projeto. Papel desconhecido
-    // cai no lado seguro. Com o escopo vazio, `WHERE id = ''` não casa com
-    // nada — escopo ausente significa NADA, nunca TUDO.
+    // Quem decide é `ehStaffDeConta`, e o lado CLIENTE cai no lado seguro
+    // (escopo ausente significa NADA, nunca TUDO — `WHERE id = ''` não casa
+    // com nada). O lado STAFF não é isolamento, e não deve ser lido como se
+    // fosse: `SELECT * FROM projects` sem `WHERE conta_id` devolve o
+    // portfólio de TODAS as consultorias para QUALQUER staff de QUALQUER
+    // conta — vazamento real entre tenants, não decisão de produto. Era
+    // verdade que "staff vê tudo" quando só havia uma consultoria; hoje é
+    // pendência conhecida (mesma lacuna em `/dashboard/stats`, logo abaixo),
+    // de escopo maior do que esta rota — não corrigida aqui.
     const stmt = ehStaffDeConta(user)
       ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
       : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');

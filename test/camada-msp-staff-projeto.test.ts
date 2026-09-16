@@ -20,6 +20,12 @@ import { applySchema, seedMatrizMsp, sessionFor, pedir, resetSessions } from './
 
 const PROJ = 'proj-c-27001'; // seedMatrizMsp: cli-c -> conta-c (tipo 'direto')
 
+// A ESCRITA de SSO cifra `client_secret` com `TOKEN_ENC_KEY` (ver sso.ts) —
+// sem a chave no ambiente, `PUT /sso` responde 503 antes de chegar à guarda
+// que este arquivo testa. `it.skipIf` deixa o CI ver a lacuna (teste "pulado",
+// não "verde"), em vez de a escrita desaparecer sem marca dentro de um `if`.
+const TEM_CHAVE_DE_CIFRA = !!(env as any).TOKEN_ENC_KEY;
+
 describe('somenteStaff x somenteMsp — divisão pós-regressão', () => {
   beforeAll(async () => { await applySchema(); await seedMatrizMsp(); await resetSessions(); });
 
@@ -36,17 +42,20 @@ describe('somenteStaff x somenteMsp — divisão pós-regressão', () => {
     expect(res.status, await res.clone().text()).toBe(200);
   });
 
-  it('staff de conta DIRETA volta a configurar o próprio SSO', async () => {
-    const chaveCripto = (env as any).TOKEN_ENC_KEY;
+  it('staff de conta DIRETA volta a LER o próprio SSO', async () => {
     const headers = await sessionFor({
       id: 'u-c-staff', email: 'staff@c.com', role: 'consultor',
       conta_id: 'conta-c', cliente_id: null,
     });
-
     const leitura = await pedir(worker, `/api/v1/projects/${PROJ}/sso`, { headers });
     expect(leitura.status, await leitura.clone().text()).toBe(200);
+  });
 
-    if (!chaveCripto) return; // sem TOKEN_ENC_KEY neste ambiente, só a leitura é verificável
+  it.skipIf(!TEM_CHAVE_DE_CIFRA)('staff de conta DIRETA volta a GRAVAR o próprio SSO', async () => {
+    const headers = await sessionFor({
+      id: 'u-c-staff', email: 'staff@c.com', role: 'consultor',
+      conta_id: 'conta-c', cliente_id: null,
+    });
     const escrita = await pedir(worker, `/api/v1/projects/${PROJ}/sso`, {
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/json' },
