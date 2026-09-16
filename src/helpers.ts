@@ -504,16 +504,13 @@ export async function somenteStaff(
  * vende para ninguém, então pré-venda não existe para ele.
  *
  * O QUE ISTO NÃO FAZ, e é preciso dizer porque o nome convida ao engano: esta
- * guarda decide quem ENTRA no roteador de leads/assessments/proposals, nunca
- * QUAIS LINHAS voltam. `leads`, `assessments` e `proposals` não têm
- * `project_id` — são o motivo de `requireResourceAccess` nunca as alcançar —,
- * mas TAMBÉM não têm filtro de `conta_id` nas próprias consultas. Hoje
- * `GET /api/v1/leads` devolve lead de qualquer conta, `GET
- * /api/v1/proposals/:id` devolve preço e HTML de proposta alheia, e `DELETE`
- * remove linha alheia — para QUALQUER staff de QUALQUER conta `msp` que passe
- * por esta guarda. As colunas `conta_id` e os índices já existem (migration
- * 0031); o `WHERE conta_id = ?` em cada consulta é trabalho separado, ainda
- * não feito, e não fica pronto só por esta função existir.
+ * guarda decide só quem ENTRA no roteador de leads/assessments/proposals —
+ * QUAIS LINHAS voltam é responsabilidade de cada consulta, não dela. `leads`,
+ * `assessments` e `proposals` não têm `project_id` — são o motivo de
+ * `requireResourceAccess` nunca as alcançar —, então o filtro por linha é o
+ * `WHERE conta_id = ?`/`linhaDoFunilDaConta` que cada rota aplica por conta
+ * própria (Task 9). Sem essa segunda camada, esta guarda sozinha garantiria
+ * só que o staff é de UMA conta `msp` — não que é a conta DONA da linha.
  *
  * NÃO reuse isto como guarda genérica de staff em rota de configuração de
  * projeto (SCIM, SSO, política de segurança, trilha de auditoria) — foi
@@ -547,6 +544,34 @@ export async function somenteMsp(
     return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
   }
   return next();
+}
+
+/**
+ * Carrega uma linha do funil comercial (lead/assessment/proposta) só se
+ * pertencer à conta de quem pede. `platform_admin` não filtra — é o único
+ * papel global (opera o SaaS).
+ *
+ * Devolve `null` tanto para linha inexistente quanto para linha de OUTRA
+ * conta: o chamador responde os dois casos com a MESMA mensagem de "não
+ * encontrado". Dizer 403 para o segundo caso confirmaria a existência do
+ * registro na consultoria alheia, que é metade do que um concorrente quer
+ * saber (decisão da Task 9).
+ *
+ * `conta_id` NULL na linha (dado anterior à migration 0031/backfill 0032, ou
+ * criado fora do fluxo normal) também não casa com a conta de nenhum staff —
+ * escopo ausente na linha não vira acesso liberado, pela mesma direção de
+ * falha do resto da camada MSP: ausência é NADA, nunca TUDO.
+ */
+export async function linhaDoFunilDaConta(
+  db: D1Database,
+  table: 'leads' | 'assessments' | 'proposals',
+  id: string,
+  user: AtorAutorizado | undefined
+): Promise<any | null> {
+  const row = await db.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first<any>();
+  if (!row) return null;
+  if (user?.role !== 'platform_admin' && row.conta_id !== (user?.conta_id ?? null)) return null;
+  return row;
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */

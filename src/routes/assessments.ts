@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, hidrataEscopo, resolveCliente, linhaDoFunilDaConta, AtorAutorizado } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -133,12 +133,19 @@ assessmentsApp.post('/', async (c) => {
 
     const id = genId();
     const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
-    // Melhor esforço: grava a conta de quem está criando agora, para que
-    // /convert e /generate-proposal mais adiante já tenham registro de
-    // origem. `hidrataEscopo` completa sessão velha sem `conta_id`; sem
-    // sessão de staff reconhecida, fica NULL — como sempre foi.
+    // A conta é a de quem é DONO DO LEAD, não a de quem abriu o assessment.
+    // Antes desta correção, um consultor de conta-b que criasse assessment
+    // sobre lead de conta-a fazia proposta, projeto e cliente inteiros
+    // nascerem em conta-b — a venda de A na carteira de B, o mesmo Critical
+    // que a Task 6 fechou em /convert e /sign, reaberto por este caminho no
+    // instante em que `leads.conta_id` passou a ser gravado na criação
+    // (Task 9). `hidrataEscopo` completa sessão velha sem `conta_id`; sem
+    // sessão de staff reconhecida nem lead com dono, fica NULL — como sempre foi.
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    const lead = body.lead_id
+      ? await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>()
+      : null;
+    const contaId = lead?.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     await c.env.DB.prepare(
       `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, conta_id, created_at)
        VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
@@ -203,9 +210,11 @@ assessmentsApp.post('/public/:token/answers', async (c) => {
 
 assessmentsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM assessments ORDER BY created_at DESC'
-    ).all();
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const contaId = user?.role === 'platform_admin' ? null : (user?.conta_id ?? null);
+    const { results } = contaId
+      ? await c.env.DB.prepare('SELECT * FROM assessments WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
+      : await c.env.DB.prepare('SELECT * FROM assessments ORDER BY created_at DESC').all();
     return c.json(results);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar assessments', e);
@@ -215,7 +224,7 @@ assessmentsApp.get('/', async (c) => {
 assessmentsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const progress = await c.env.DB.prepare(
@@ -235,6 +244,8 @@ assessmentsApp.get('/:id', async (c) => {
 assessmentsApp.get('/:id/answers', async (c) => {
   try {
     const id = c.req.param('id');
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
+    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     const { results } = await c.env.DB.prepare(
       'SELECT block, question_key, answer, notes FROM assessment_answers WHERE assessment_id = ? ORDER BY block ASC'
     ).bind(id).all();
@@ -248,7 +259,7 @@ assessmentsApp.get('/:id/block/:num', async (c) => {
   try {
     const id = c.req.param('id');
     const num = parseInt(c.req.param('num'), 10);
-    const assessment = await c.env.DB.prepare('SELECT id FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (num < 1 || num > 10) return c.json({ error: 'Bloco deve ser entre 1 e 10' }, 400);
 
@@ -275,7 +286,7 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
   try {
     const id = c.req.param('id');
     const num = parseInt(c.req.param('num'), 10);
-    const assessment = await c.env.DB.prepare('SELECT id, status FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (num < 1 || num > 10) return c.json({ error: 'Bloco deve ser entre 1 e 10' }, 400);
 
@@ -318,6 +329,8 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
 assessmentsApp.get('/:id/pricing', async (c) => {
   try {
     const id = c.req.param('id');
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
+    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     const { results: answers } = await c.env.DB.prepare(
       'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
     ).bind(id).all<{ question_key: string; answer: string }>();
@@ -348,8 +361,11 @@ assessmentsApp.put('/:id', async (c) => {
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
     if (body.client_name) { updates.push('client_name = ?'); values.push(body.client_name); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+    const user = c.get('user') as AtorAutorizado | undefined;
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    let sql = `UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`;
+    if (user?.role !== 'platform_admin') { sql += ' AND conta_id = ?'; values.push(user?.conta_id ?? null); }
+    await c.env.DB.prepare(sql).bind(...values).run();
     await logAudit(c.env.DB, 'assessment.updated', c.get('user')?.email ?? 'system', `Assessment ${id} atualizado: ${updates.join(', ')}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -367,8 +383,11 @@ assessmentsApp.put('/:id/pricing', async (c) => {
     if (body.desconto !== undefined) { updates.push('pricing_desconto = ?'); values.push(body.desconto || null); }
     if (body.notas !== undefined) { updates.push('pricing_notas = ?'); values.push(body.notas || null); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+    const user = c.get('user') as AtorAutorizado | undefined;
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    let sql = `UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`;
+    if (user?.role !== 'platform_admin') { sql += ' AND conta_id = ?'; values.push(user?.conta_id ?? null); }
+    await c.env.DB.prepare(sql).bind(...values).run();
     await logAudit(c.env.DB, 'assessment.pricing_override', c.get('user')?.email ?? 'system', `Pricing ajustado no assessment ${id}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -381,6 +400,15 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
     const id = c.req.param('id');
     const user = c.get('user');
 
+    // SEM checagem de dono aqui, de propósito: `/convert` (abaixo) e `/sign`
+    // (proposals.ts) já documentam o mesmo gap em
+    // `camada-msp-criacao-projeto.test.ts` — `somenteMsp` garante papel de
+    // staff e conta `msp`, mas não que o operador seja da MESMA conta que
+    // vendeu. Fechar isso bloquearia o clique de qualquer staff que não seja
+    // o vendedor original, o que este arquivo nunca pediu; a segurança do
+    // dado está na ATRIBUIÇÃO (linha abaixo: `assessment.conta_id` antes do
+    // operador), não no bloqueio de acesso — gap conhecido, fora do escopo
+    // desta tarefa.
     const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
@@ -445,6 +473,12 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 assessmentsApp.post('/:id/convert', async (c) => {
   try {
     const id = c.req.param('id');
+    // SEM checagem de dono aqui, de propósito — mesma nota de
+    // `/generate-proposal` acima: `camada-msp-criacao-projeto.test.ts` prova
+    // que staff de OUTRA conta consegue converter, e que a segurança está na
+    // ATRIBUIÇÃO (a conta que nasce no projeto é a de quem vendeu, logo
+    // abaixo), não no bloqueio do clique. Gap conhecido, fora do escopo desta
+    // tarefa.
     const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (assessment.converted_project_id) return c.json({ error: 'Assessment já foi convertido', project_id: assessment.converted_project_id }, 409);
