@@ -101,6 +101,60 @@ export async function seedTwoProjects(): Promise<void> {
 }
 
 /**
+ * Matriz de tenants da camada MSP. `seedTwoProjects` prova isolamento entre dois
+ * projetos; esta prova isolamento entre duas CONSULTORIAS, que é o vazamento que
+ * a camada MSP existe para fechar e que nenhuma fixture de dois projetos alcança.
+ *
+ *   conta-a (msp)   ├─ cli-a1 ─┬─ proj-a1-27001   (concedido a u-a1-user)
+ *                   │          └─ proj-a1-27701   (NÃO concedido)
+ *                   └─ cli-a2 ─── proj-a2-27001
+ *   conta-b (msp)   └─ cli-b1 ─── proj-b1-27001
+ *   conta-c (direto)└─ cli-c  ─── proj-c-27001
+ */
+export async function seedMatrizMsp(): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-a', 'msp', 'Consultoria A', 'Active')`),
+    env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-b', 'msp', 'Consultoria B', 'Active')`),
+    env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-c', 'direto', 'Gama', 'Active')`),
+  ]);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-a1', 'conta-a', 'Acme', 'Active')`),
+    env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-a2', 'conta-a', 'Beta', 'Active')`),
+    env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-b1', 'conta-b', 'Delta', 'Active')`),
+    env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-c', 'conta-c', 'Gama', 'Active')`),
+  ]);
+  const projeto = (id: string, cliente: string, nome: string, norma: string) =>
+    env.DB.prepare(
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?, ?, ?, 'controller', 'Active', ?)`
+    ).bind(id, nome, norma, cliente);
+  await env.DB.batch([
+    projeto('proj-a1-27001', 'cli-a1', 'Acme', 'ISO 27001'),
+    projeto('proj-a1-27701', 'cli-a1', 'Acme', 'ISO 27701'),
+    projeto('proj-a2-27001', 'cli-a2', 'Beta', 'ISO 27001'),
+    projeto('proj-b1-27001', 'cli-b1', 'Delta', 'ISO 27001'),
+    projeto('proj-c-27001', 'cli-c', 'Gama', 'ISO 27001'),
+  ]);
+  const usuario = (id: string, email: string, role: string, conta: string | null, cliente: string | null) =>
+    env.DB.prepare(
+      `INSERT INTO users (id, email, password_hash, name, role, conta_id, cliente_id) VALUES (?, ?, 'h', ?, ?, ?, ?)`
+    ).bind(id, email, id, role, conta, cliente);
+  await env.DB.batch([
+    usuario('u-a-consultor', 'consultor@a.com', 'consultor', 'conta-a', null),
+    usuario('u-b-consultor', 'consultor@b.com', 'consultor', 'conta-b', null),
+    usuario('u-c-staff', 'staff@c.com', 'consultor', 'conta-c', null),
+    usuario('u-a1-admin', 'admin@acme.com', 'org_admin', null, 'cli-a1'),
+    usuario('u-a1-user', 'user@acme.com', 'org_user', null, 'cli-a1'),
+    usuario('u-plataforma', 'adm@ness.com', 'platform_admin', null, null),
+  ]);
+  // O usuário comum recebe UM dos dois projetos do cliente dele. É esse par —
+  // concedido e não concedido dentro da MESMA empresa — que distingue "vê o
+  // cliente" de "vê o que lhe deram".
+  await env.DB.prepare(
+    `INSERT INTO acesso_projeto (user_id, project_id) VALUES ('u-a1-user', 'proj-a1-27001')`
+  ).run();
+}
+
+/**
  * `env` do worker com o binding de IA trocado por stub.
  *
  * Oito arquivos de teste declaravam esta mesma função local. Ela vive aqui para
