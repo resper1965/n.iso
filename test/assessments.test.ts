@@ -37,8 +37,10 @@ describe('Funil de assessment', () => {
       // Camada MSP (Task 6): o funil comercial agora resolve `conta_id` na
       // criação de assessment/proposta e o pendura no projeto. Sem uma conta
       // para `u-c`, /convert recusaria com 400 (é exatamente o bug que a
-      // Task 6 fecha) em vez de criar o projeto — daí a conta aqui.
-      env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-x', 'direto', 'Ness Direto', 'Active')`),
+      // Task 6 fecha) em vez de criar o projeto — daí a conta aqui. Tipo `msp`
+      // (Task 8): `staff` é quem entra no funil comercial (leads/assessments/
+      // proposals via `somenteMsp`), e conta `direto` não tem pré-venda.
+      env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-x', 'msp', 'Ness Direto', 'Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
         .bind('proj-x', 'Cliente X', 'ISO 27001', 'controller', 'Active'),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, conta_id) VALUES (?,?,?,?,?,?)`)
@@ -279,7 +281,7 @@ describe('Funil de assessment', () => {
     });
 
     it('o link público NÃO lista assessments nem alcança rota autenticada', async () => {
-      // O prefixo `/public/` é isento do `somenteNess`. A isenção precisa valer
+      // O prefixo `/public/` é isento do `somenteMsp`. A isenção precisa valer
       // só para ele: se vazasse para o resto, o token viraria chave da área
       // comercial inteira.
       expect((await pedir(worker, '/api/v1/assessments')).status).toBe(401);

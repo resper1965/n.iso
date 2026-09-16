@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, hidrataEscopo, resolveCliente, AtorAutorizado } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -15,7 +15,7 @@ export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variable
 // e o handler valida o `access_token` por conta própria.
 assessmentsApp.use('*', async (c, next) => {
   if (c.req.path.startsWith('/api/v1/assessments/public/')) return next();
-  return somenteNess(c, next);
+  return somenteMsp(c, next);
 });
 
 /** Traduz respostas do assessment para as chaves esperadas pelo SCORE_MAP */
@@ -462,10 +462,11 @@ assessmentsApp.post('/:id/convert', async (c) => {
 
     // A conta é a de quem CONDUZIU A VENDA, não a de quem clicou em converter:
     // este roteador não garante que o operador pertence à conta de origem
-    // (`somenteNess` é allowlist de PAPEL, não de conta), então usuário
-    // primeiro materializaria a venda de uma consultoria na carteira de
-    // outra. Origem primeiro; usuário só entra quando a origem não tem conta
-    // gravada (assessment anterior à Task 6 / migration 0031).
+    // (`somenteMsp` exige papel de staff e conta tipo `msp`, mas não que seja
+    // A MESMA conta da origem), então usuário primeiro materializaria a venda
+    // de uma consultoria na carteira de outra. Origem primeiro; usuário só
+    // entra quando a origem não tem conta gravada (assessment anterior à
+    // Task 6 / migration 0031).
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
     const contaId = assessment.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     if (!contaId) {

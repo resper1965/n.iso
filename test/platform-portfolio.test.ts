@@ -139,8 +139,8 @@ describe('Portfólio e portal do cliente', () => {
       expect(stats.projects, 'escopo ausente virou contagem global').toBe(0);
     });
 
-    it('cliente não conta o funil comercial da ness.', async () => {
-      // `somenteNess` mantém o cliente fora de lead/proposta/assessment. A
+    it('cliente não conta o funil comercial', async () => {
+      // `somenteMsp` mantém o cliente fora de lead/proposta/assessment. A
       // contagem de leads escapava dessa política: era global para todos.
       const res = await req('/api/v1/dashboard/stats', { headers: admA });
       expect((await res.json() as any).leads, 'cliente vê o tamanho do funil').toBe(0);

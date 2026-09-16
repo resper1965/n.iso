@@ -51,6 +51,16 @@ describe('isolamento entre consultorias', () => {
     await expect(requireProjectAccess(env.DB, ciso, 'proj-a1-27001')).rejects.toThrow(ForbiddenError);
   });
 
+  it('PAPEL FORA DE PAPEIS_STAFF COM conta_id PREENCHIDO NÃO HERDA A CARTEIRA DA CONTA', async () => {
+    // O ramo de staff também é allowlist agora, simétrico ao ramo de cliente
+    // (que já era). Antes desta guarda, qualquer papel com `users.conta_id`
+    // preenchido recebia a carteira inteira da conta — mesmo um papel que
+    // nunca deveria (auditor inclusive, de propósito: ele fica fora de
+    // `PAPEIS_STAFF` porque audita, não vende nem administra a conta).
+    const foraDaLista = { id: 'u-auditor-fantasma', role: 'auditor', conta_id: 'conta-a', cliente_id: null };
+    await expect(requireProjectAccess(env.DB, foraDaLista, 'proj-a1-27001')).rejects.toThrow(ForbiddenError);
+  });
+
   it('projeto inexistente é recusa, não vazamento de existência', async () => {
     await expect(requireProjectAccess(env.DB, consultorA, 'nao-existe')).rejects.toThrow(ForbiddenError);
   });

@@ -381,8 +381,8 @@ describe('Catraca de `any` nos caminhos de autorização', () => {
   const FUNCOES = [
     'requireResourceAccess',
     'requireProjectAccess',
-    'somenteNess',
-    'ehEquipeNess',
+    'somenteMsp',
+    'ehStaffDeConta',
     'resolveApiKeyUser',
     'authMiddleware',
   ];
