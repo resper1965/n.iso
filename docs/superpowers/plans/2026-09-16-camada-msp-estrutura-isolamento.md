@@ -1307,8 +1307,34 @@ git commit -m "feat(msp): restringe pre-venda a conta do tipo msp"
 - Test: `test/camada-msp-funil-dados.test.ts`
 
 **Interfaces:**
-- Consumes: `somenteMsp` (Task 7)
+- Consumes: `somenteMsp` (Task 8)
 - Produces: nenhuma função nova — as rotas passam a filtrar por `conta_id`
+
+> **REQUISITO QUE NÃO PODE FICAR DE FORA, e a razão dele.**
+>
+> Esta tarefa manda gravar `conta_id` nos INSERTs do funil. No instante em que
+> `leads.conta_id` passar a ser gravado na criação, **ela reabre por outro caminho
+> o Critical que a Task 6 fechou** — e por isso a correção abaixo é parte desta
+> tarefa, não sugestão.
+>
+> `src/routes/assessments.ts` grava a conta do **operador** ao criar o assessment,
+> ignorando o `lead_id` do corpo. Hoje isso é inofensivo só porque lead novo nasce
+> com `conta_id` NULL, então o fallback cairia no operador de qualquer forma. Com
+> o lead passando a ter dono, um consultor de `conta-b` que crie assessment sobre
+> lead de `conta-a` faz proposta, projeto e cliente inteiros nascerem em
+> `conta-b`: a venda de A na carteira de B, que é exatamente o vazamento que a
+> Task 6 corrigiu em `/convert` e `/sign`.
+>
+> A correção é a mesma cadeia de uma linha, aplicada um salto antes:
+>
+> ```typescript
+> // A conta é a de quem é dono do LEAD, não a de quem abriu o assessment.
+> const contaId = lead?.conta_id ?? c.get('user')?.conta_id ?? null;
+> ```
+>
+> E escreva o teste que prova: operador de `conta-b`, lead de `conta-a`, assessment
+> tem de nascer em `conta-a`. Sem esse teste a regressão volta em silêncio, porque
+> foi assim que ela passou a primeira vez.
 
 - [ ] **Step 1: Write the failing test**
 
