@@ -193,14 +193,50 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   return true;
 }
 
+/** Papéis do lado do cliente que enxergam a empresa INTEIRA, não só o concedido. */
+const PAPEIS_ADMIN_CLIENTE = new Set(['org_admin']);
+
 /**
- * Garante que o usuário tem acesso ao projeto. Papéis de staff (consultor/
- * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
- * seu client_project_id. Lança em caso de negação (fail-closed).
+ * Garante que o usuário alcança o projeto.
+ *
+ * Deixou de ser comparação em memória porque a resposta agora depende da cadeia
+ * `projeto → cliente → conta`, que só o banco conhece. Desnormalizar `conta_id`
+ * em `projects` manteria isto síncrono e foi descartado: na saída do cliente
+ * `clientes.conta_id` muda, e cópia que não acompanhe em transação deixa a
+ * consultoria antiga enxergando os projetos. Divergência aqui é vazamento.
+ *
+ * `platform_admin` é o ÚNICO papel global: ele opera o SaaS. Consultor é staff de
+ * UMA conta e não enxerga a carteira das outras — foi essa distinção que faltava
+ * para a plataforma poder ser vendida a mais de uma consultoria.
+ *
+ * Projeto inexistente recusa com a mesma mensagem de projeto alheio: responder
+ * diferente diria a quem sonda quais ids existem.
  */
-export function requireProjectAccess(user: AtorAutorizado, projectId: string): true {
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  if (user.client_project_id === projectId) return true;
+export async function requireProjectAccess(
+  db: D1Database,
+  user: AtorAutorizado,
+  projectId: string
+): Promise<true> {
+  if (user.role === 'platform_admin') return true;
+
+  const alvo = await db
+    .prepare('SELECT p.cliente_id, c.conta_id FROM projects p LEFT JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?')
+    .bind(projectId)
+    .first<{ cliente_id: string | null; conta_id: string | null }>();
+
+  if (!alvo) throw new ForbiddenError('Forbidden: No access to this project');
+
+  if (user.conta_id && alvo.conta_id && alvo.conta_id === user.conta_id) return true;
+
+  if (user.cliente_id && alvo.cliente_id && alvo.cliente_id === user.cliente_id) {
+    if (PAPEIS_ADMIN_CLIENTE.has(user.role ?? '')) return true;
+    const concedido = await db
+      .prepare('SELECT 1 FROM acesso_projeto WHERE user_id = ? AND project_id = ?')
+      .bind(user.id ?? '', projectId)
+      .first();
+    if (concedido) return true;
+  }
+
   throw new ForbiddenError('Forbidden: No access to this project');
 }
 
