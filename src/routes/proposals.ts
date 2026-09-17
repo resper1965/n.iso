@@ -99,7 +99,11 @@ proposalsApp.get('/:id', async (c) => {
     // Mesma resposta para inexistente e para alheia: 403 aqui confirmaria a
     // existência da proposta na consultoria concorrente.
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
-    return c.json(proposal);
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // resposta para não virar algo que o front passa a depender como se
+    // fosse público.
+    const { conta_id, ...propostaSemConta } = proposal;
+    return c.json(propostaSemConta);
   } catch (e: any) {
     return erro500(c, 'Falha ao buscar proposta', e);
   }
@@ -150,16 +154,16 @@ proposalsApp.delete('/:id', async (c) => {
 proposalsApp.post('/:id/sign', async (c) => {
   try {
     const id = c.req.param('id');
-    // SEM checagem de dono aqui, de propósito: `camada-msp-criacao-projeto.
-    // test.ts` ("convert/sign: a conta é a de quem vendeu, não a de quem
-    // opera o botão") prova que staff de OUTRA conta consegue assinar —
-    // `somenteMsp` garante papel de staff e conta `msp`, mas não que o
-    // operador seja da MESMA conta que vendeu, e fechar isso aqui bloquearia
-    // exatamente o caso que aquele teste exige que funcione. A segurança do
-    // dado está na ATRIBUIÇÃO (contaId abaixo: `proposal.conta_id` antes do
-    // operador), não no bloqueio do clique — gap conhecido, fora do escopo
-    // desta tarefa.
-    const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first<any>();
+    // O operador tem de ser da MESMA conta que vendeu (ou `platform_admin`).
+    // `/sign` é a mutação mais grave do funil: marca `Signed`, cria contrato e
+    // põe o lead em `Won` — e a recusa de reassinatura logo abaixo torna isso
+    // IRREVERSÍVEL. A atribuição da Task 6 garante que o projeto resultante
+    // nasce na conta que vendeu, mas isso nunca consertou a escrita em si:
+    // sem este gate, staff de outra consultoria assinava (e destruía a
+    // chance de assinatura legítima) uma proposta que não é dele. Alheio
+    // responde 404, não 403 — 403 confirmaria a existência da venda na
+    // consultoria concorrente.
+    const proposal = await linhaDoFunilDaConta(c.env.DB, 'proposals', id, c.get('user') as AtorAutorizado | undefined);
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     if (proposal.status === 'Signed') return c.json({ error: 'Proposta já assinada' }, 400);
 

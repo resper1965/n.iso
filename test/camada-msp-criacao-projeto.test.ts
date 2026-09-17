@@ -167,7 +167,7 @@ describe('criação de projeto pendura o cliente', () => {
   });
 });
 
-describe('convert/sign: a conta é a de quem vendeu, não a de quem opera o botão', () => {
+describe('convert/sign: a conta é a de quem vendeu, e só quem vendeu (ou platform_admin) aperta o botão', () => {
   beforeEach(async () => {
     await applySchema();
     await resetData();
@@ -175,29 +175,100 @@ describe('convert/sign: a conta é a de quem vendeu, não a de quem opera o bot�
     await seedMatrizMsp();
   });
 
-  it('assessment vendido pela conta-a não migra para conta-b só porque conta-b converteu', async () => {
+  it('assessment vendido pela conta-a nasce na conta-a quando quem converte é o DONO da venda', async () => {
     await env.DB.prepare(
       `INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-x', 'Cliente Vendido Por A', 'in_progress', 'conta-a')`
     ).run();
 
-    // consultor de OUTRA consultoria aperta converter — somenteMsp exige papel
-    // de staff e conta tipo msp, mas não que o operador pertença à MESMA conta
-    // da origem da venda (gap que fica para outra tarefa fechar).
-    const headersB = await sessionFor({
-      id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor',
-      conta_id: 'conta-b', cliente_id: null,
+    const headersA = await sessionFor({
+      id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor',
+      conta_id: 'conta-a', cliente_id: null,
     });
-    const res = await pedir(worker, '/api/v1/assessments/assm-x/convert', { method: 'POST', headers: headersB });
+    const res = await pedir(worker, '/api/v1/assessments/assm-x/convert', { method: 'POST', headers: headersA });
     expect(res.status, await res.clone().text()).toBe(201);
     const { project_id } = await res.json<any>();
 
     const row = await env.DB.prepare(
       `SELECT c.conta_id FROM projects p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`
     ).bind(project_id).first<{ conta_id: string }>();
-    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU, não na de quem converteu').toBe('conta-a');
+    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU').toBe('conta-a');
   });
 
-  it('proposta vendida pela conta-a não migra para conta-b só porque conta-b assinou', async () => {
+  it('CONSULTOR DE OUTRA CONSULTORIA NÃO CONVERTE assessment alheio (404, não 403)', async () => {
+    // `/convert` MUTA o assessment (`status = 'converted'`) e materializa
+    // cliente e projeto — a atribuição correta (teste acima) não bastava:
+    // sem o gate, staff de conta-b disparava essa mutação irreversível sobre
+    // o funil que conta-a vendeu. 404, não 403: 403 confirmaria a existência
+    // da venda na consultoria concorrente.
+    await env.DB.prepare(
+      `INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-x', 'Cliente Vendido Por A', 'in_progress', 'conta-a')`
+    ).run();
+
+    const headersB = await sessionFor({
+      id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor',
+      conta_id: 'conta-b', cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/assessments/assm-x/convert', { method: 'POST', headers: headersB });
+    expect(res.status, await res.clone().text()).toBe(404);
+
+    const assessment = await env.DB.prepare('SELECT status, converted_project_id FROM assessments WHERE id = ?')
+      .bind('assm-x').first<{ status: string; converted_project_id: string | null }>();
+    expect(assessment?.status, 'a tentativa alheia mutou o assessment vendido por outra conta').toBe('in_progress');
+    expect(assessment?.converted_project_id).toBeNull();
+
+    const projetos = await env.DB.prepare(`SELECT COUNT(*) n FROM projects WHERE assessment_id = 'assm-x'`).first<{ n: number }>();
+    expect(projetos?.n, 'nasceu projeto de uma conversão que deveria ter sido recusada').toBe(0);
+  });
+
+  it('platform_admin converte assessment de qualquer conta, e o projeto nasce na conta que vendeu', async () => {
+    // A regra de atribuição não desaparece com o gate — só deixa de ser
+    // exercida por operador alheio. `platform_admin` é o único papel global
+    // (Task 9) e continua alcançando qualquer assessment.
+    await env.DB.prepare(
+      `INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-x', 'Cliente Vendido Por A', 'in_progress', 'conta-a')`
+    ).run();
+
+    const headersPlataforma = await sessionFor({
+      id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin',
+      conta_id: null, cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/assessments/assm-x/convert', { method: 'POST', headers: headersPlataforma });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { project_id } = await res.json<any>();
+
+    const row = await env.DB.prepare(
+      `SELECT c.conta_id FROM projects p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`
+    ).bind(project_id).first<{ conta_id: string }>();
+    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU, não ficar órfão do platform_admin').toBe('conta-a');
+  });
+
+  it('proposta vendida pela conta-a nasce na conta-a quando quem assina é o DONO da venda', async () => {
+    await env.DB.prepare(
+      `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-x', 'Empresa Vendida Por A', 'Proposal', 'conta-a')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO proposals (id, lead_id, status, conta_id) VALUES ('prop-x', 'lead-x', 'Draft', 'conta-a')`
+    ).run();
+
+    const headersA = await sessionFor({
+      id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor',
+      conta_id: 'conta-a', cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/proposals/prop-x/sign', { method: 'POST', headers: headersA });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const { project_id } = await res.json<any>();
+
+    const row = await env.DB.prepare(
+      `SELECT c.conta_id FROM projects p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`
+    ).bind(project_id).first<{ conta_id: string }>();
+    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU').toBe('conta-a');
+  });
+
+  it('CONSULTOR DE OUTRA CONSULTORIA NÃO ASSINA proposta alheia (404, não 403)', async () => {
+    // `/sign` é a mutação mais grave do funil: marca `Signed`, cria contrato e
+    // põe o lead em `Won` — e a recusa de reassinatura torna isso
+    // IRREVERSÍVEL. Sem o gate, staff de conta-b assinava (e queimava a
+    // chance de assinatura legítima) uma venda que não é dele.
     await env.DB.prepare(
       `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-x', 'Empresa Vendida Por A', 'Proposal', 'conta-a')`
     ).run();
@@ -210,13 +281,38 @@ describe('convert/sign: a conta é a de quem vendeu, não a de quem opera o bot�
       conta_id: 'conta-b', cliente_id: null,
     });
     const res = await pedir(worker, '/api/v1/proposals/prop-x/sign', { method: 'POST', headers: headersB });
+    expect(res.status, await res.clone().text()).toBe(404);
+
+    const proposta = await env.DB.prepare('SELECT status FROM proposals WHERE id = ?').bind('prop-x').first<{ status: string }>();
+    expect(proposta?.status, 'a tentativa alheia assinou uma proposta vendida por outra conta').toBe('Draft');
+
+    const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-x').first<{ status: string }>();
+    expect(lead?.status, 'o lead alheio avançou no funil por uma assinatura que deveria ter sido recusada').toBe('Proposal');
+
+    const contratos = await env.DB.prepare(`SELECT COUNT(*) n FROM contracts WHERE proposal_id = 'prop-x'`).first<{ n: number }>();
+    expect(contratos?.n, 'nasceu contrato de uma assinatura que deveria ter sido recusada').toBe(0);
+  });
+
+  it('platform_admin assina proposta de qualquer conta, e o projeto nasce na conta que vendeu', async () => {
+    await env.DB.prepare(
+      `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-x', 'Empresa Vendida Por A', 'Proposal', 'conta-a')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO proposals (id, lead_id, status, conta_id) VALUES ('prop-x', 'lead-x', 'Draft', 'conta-a')`
+    ).run();
+
+    const headersPlataforma = await sessionFor({
+      id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin',
+      conta_id: null, cliente_id: null,
+    });
+    const res = await pedir(worker, '/api/v1/proposals/prop-x/sign', { method: 'POST', headers: headersPlataforma });
     expect(res.status, await res.clone().text()).toBe(200);
     const { project_id } = await res.json<any>();
 
     const row = await env.DB.prepare(
       `SELECT c.conta_id FROM projects p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`
     ).bind(project_id).first<{ conta_id: string }>();
-    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU, não na de quem assinou').toBe('conta-a');
+    expect(row?.conta_id, 'o projeto tem de nascer na conta que VENDEU, não ficar órfão do platform_admin').toBe('conta-a');
   });
 
   it('proposta sem lead usa o nome do assessment de origem, não um "Cliente" genérico compartilhado', async () => {

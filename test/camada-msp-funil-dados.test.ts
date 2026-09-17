@@ -17,6 +17,7 @@ describe('dados do funil isolados por conta', () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO leads (id, company_name, contact_email, status, conta_id) VALUES ('lead-a', 'Prospect da A', 'a@x.com', 'New', 'conta-a')`),
       env.DB.prepare(`INSERT INTO leads (id, company_name, contact_email, status, conta_id) VALUES ('lead-b', 'Prospect da B', 'b@x.com', 'New', 'conta-b')`),
+      env.DB.prepare(`INSERT INTO proposals (id, lead_id, status, total_price, conta_id) VALUES ('prop-a', 'lead-a', 'Draft', 50000, 'conta-a')`),
     ]);
   });
 
@@ -52,6 +53,22 @@ describe('dados do funil isolados por conta', () => {
     await pedir(worker, '/api/v1/leads/lead-b', { method: 'DELETE', headers });
     const ainda = await env.DB.prepare(`SELECT id FROM leads WHERE id = 'lead-b'`).first();
     expect(ainda, 'consultor de conta-a apagou lead da conta-b').toBeTruthy();
+  });
+
+  it('conta_id não sai no JSON de GET /leads/:id — é escopo interno, não campo de produto', async () => {
+    const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+    const res = await pedir(worker, '/api/v1/leads/lead-a', { headers });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const body = await res.json<any>();
+    expect(body).not.toHaveProperty('conta_id');
+  });
+
+  it('conta_id não sai no JSON de GET /proposals/:id — mesma razão', async () => {
+    const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+    const res = await pedir(worker, '/api/v1/proposals/prop-a', { headers });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const body = await res.json<any>();
+    expect(body).not.toHaveProperty('conta_id');
   });
 
   /**
@@ -118,6 +135,28 @@ describe('dados do funil isolados por conta', () => {
       const res = await pedir(worker, '/api/v1/dashboard/stats', { headers });
       const stats = await res.json<any>();
       expect(stats.projects).toBe(3); // proj-a1-27001, proj-a1-27701 e proj-a2-27001 (seedMatrizMsp)
+    });
+
+    /**
+     * `GET /dashboard` (sem `/stats`) tinha o MESMO defeito: contagens sem
+     * `WHERE` para qualquer staff que passasse do guard de papel-cliente no
+     * topo da rota. Mesma correção de `/dashboard/stats`, mesmo teste.
+     */
+    it('GET /dashboard também escopa por conta, não só /dashboard/stats', async () => {
+      const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+      const res = await pedir(worker, '/api/v1/dashboard', { headers });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const stats = await res.json<any>();
+      expect(stats.leads, 'GET /dashboard conta o funil de outra consultoria').toBe(1);
+      expect(stats.projects, 'GET /dashboard conta o projeto de outra consultoria').toBe(3);
+    });
+
+    it('GET /dashboard continua global para platform_admin', async () => {
+      const headers = await sessionFor({ id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin', conta_id: null, cliente_id: null });
+      const res = await pedir(worker, '/api/v1/dashboard', { headers });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const stats = await res.json<any>();
+      expect(stats.projects).toBe(5); // as 5 linhas de seedMatrizMsp
     });
   });
 });
