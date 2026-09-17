@@ -152,7 +152,24 @@ assessmentsApp.post('/', async (c) => {
     ).bind(id, body.lead_id || null, body.client_name, accessToken, contaId).run();
 
     if (body.lead_id) {
-      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
+      // Avança o STATUS do lead só quando o operador tem autoridade sobre
+      // ele — mesma conta do lead, ou lead sem dono que a atribuição acima
+      // acabou de entregar ao operador (os dois casos são exatamente
+      // `contaId === conta do operador`, pela mesma fórmula usada para
+      // atribuir o assessment). Achado da varredura: a atribuição de CIMA
+      // protege ONDE o assessment nasce, mas esta é uma escrita SEPARADA na
+      // tabela `leads` — sem este gate, qualquer staff de qualquer conta
+      // `msp` avançava (`'New'` → `'Assessment'`) o funil de OUTRA
+      // consultoria só por referenciar o `lead_id` alheio no corpo. Não
+      // bloqueia a criação do assessment em si (que continua permitida e
+      // corretamente atribuída — é o comportamento pedido explicitamente
+      // para este roteador): só deixa de tocar em lead que não é do
+      // operador.
+      const operador = c.get('user') as AtorAutorizado | undefined;
+      const podeAvancarLead = operador?.role === 'platform_admin' || contaId === (operador?.conta_id ?? null);
+      if (podeAvancarLead) {
+        await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
+      }
     }
 
     await logAudit(c.env.DB, 'assessment.created', c.get('user')?.email ?? 'system', `Assessment ${id} criado para ${body.client_name}`);
@@ -215,7 +232,9 @@ assessmentsApp.get('/', async (c) => {
     const { results } = contaId
       ? await c.env.DB.prepare('SELECT * FROM assessments WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
       : await c.env.DB.prepare('SELECT * FROM assessments ORDER BY created_at DESC').all();
-    return c.json(results);
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // listagem pela mesma razão de `GET /:id`.
+    return c.json((results as any[]).map(({ conta_id, ...assessment }) => assessment));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar assessments', e);
   }
@@ -231,8 +250,11 @@ assessmentsApp.get('/:id', async (c) => {
       'SELECT COUNT(DISTINCT block) as answered_blocks FROM assessment_answers WHERE assessment_id = ?'
     ).bind(id).first<{ answered_blocks: number }>();
 
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // resposta pela mesma razão de `GET /leads/:id` e `GET /proposals/:id`.
+    const { conta_id, ...assessmentSemConta } = assessment;
     return c.json({
-      ...assessment,
+      ...assessmentSemConta,
       answered_blocks: progress?.answered_blocks ?? 0,
       total_blocks: 10,
     });

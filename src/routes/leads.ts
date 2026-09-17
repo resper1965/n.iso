@@ -55,7 +55,9 @@ leadsApp.get('/', async (c) => {
     const { results } = contaId
       ? await c.env.DB.prepare('SELECT * FROM leads WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
       : await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
-    return c.json(results);
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // listagem pela mesma razão de `GET /:id`.
+    return c.json((results as any[]).map(({ conta_id, ...lead }) => lead));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar leads', e);
   }
@@ -229,9 +231,10 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
       d.razao_social || d.nome_fantasia || '', id
     ).run();
 
-    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first<any>();
     await logAudit(c.env.DB, 'lead.cnpj_enriched', c.get('user')?.email ?? 'system', `Lead ${id} enriquecido via CNPJ ${cleanCnpj}`);
-    return c.json({ ok: true, lead: updated });
+    const { conta_id, ...leadSemConta } = updated ?? {};
+    return c.json({ ok: true, lead: leadSemConta });
   } catch (e: any) {
     return erro500(c, 'Falha ao enriquecer CNPJ', e);
   }
