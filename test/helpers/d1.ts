@@ -88,15 +88,26 @@ export async function sessionFor(user: Record<string, unknown>): Promise<Record<
 /**
  * Fixture mínima compartilhada: dois projetos de clientes diferentes, para que
  * qualquer teste de isolamento tenha o "outro tenant" disponível.
+ *
+ * A camada MSP tornou `cliente_id` o caminho de TODA autorização de projeto.
+ * Esta fixture ganhou uma conta e dois clientes para continuar significando o
+ * que sempre significou: dois tenants distintos, um sendo o "outro" do outro.
  */
 export async function seedTwoProjects(): Promise<void> {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO contas (id, tipo, nome, status) VALUES ('conta-legada', 'msp', 'Legada', 'Active')`
+  ).run();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO clientes (id, conta_id, nome, status) VALUES ('cli-a', 'conta-legada', 'Cliente A', 'Active')`),
+    env.DB.prepare(`INSERT OR IGNORE INTO clientes (id, conta_id, nome, status) VALUES ('cli-b', 'conta-legada', 'Cliente B', 'Active')`),
+  ]);
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?, ?, ?, ?, ?)`
-    ).bind('proj-a', 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind('proj-a', 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-a'),
     env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?, ?, ?, ?, ?)`
-    ).bind('proj-b', 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind('proj-b', 'Cliente B', 'ISO 27001', 'controller', 'Active', 'cli-b'),
   ]);
 }
 

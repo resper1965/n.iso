@@ -31,12 +31,20 @@ describe('Assinatura eletrônica (D1 real)', () => {
     await resetData();
     await resetSessions();
     const hash = await hashPassword('password123');
+    // Cadeia conta→cliente: sem ela `proj-1` nasce órfão e nem o consultor da
+    // própria conta alcança o projeto.
+    await env.DB.prepare(
+      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-sig', 'msp', 'Conta Sig', 'Active')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-sig', 'conta-sig', 'Cliente Um', 'Active')`
+    ).run();
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('proj-1','Cliente Um','ISO 27001','controller','Active')`
+        `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('proj-1','Cliente Um','ISO 27001','controller','Active','cli-sig')`
       ),
       env.DB.prepare(
-        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','resper@bekaa.eu',?,'Ricardo Esper','consultor','proj-1')`
+        `INSERT INTO users (id, email, password_hash, name, role, conta_id) VALUES ('usr-1','resper@bekaa.eu',?,'Ricardo Esper','consultor','conta-sig')`
       ).bind(hash),
       env.DB.prepare(
         `INSERT INTO compliance_controls (id, project_id, standard, title, description, status) VALUES ('ctrl-a51','proj-1','ISO 27001:2022','Política','Requisito universal','Missing')`
@@ -49,7 +57,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       // Direção Executiva do projeto: pessoa DIFERENTE do Líder SGSI. É o que
       // torna a dupla aprovação uma dupla aprovação.
       env.DB.prepare(
-        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-ceo','direcao@cliente.com',?,'Direcao Executiva','org_admin','proj-1')`
+        `INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES ('usr-ceo','direcao@cliente.com',?,'Direcao Executiva','org_admin','cli-sig')`
       ).bind(hash),
 
       // A matriz de governança deste projeto. Quem assina o quê sai daqui — o
@@ -68,11 +76,11 @@ describe('Assinatura eletrônica (D1 real)', () => {
       // Consultor: entrega serviço ao cliente e assina o papel que a matriz do
       // projeto lhe der. NÃO é `platform_admin` — esse opera a plataforma e,
       // por isso mesmo, não assina conformidade nela.
-      ...(await sessionFor({ id: 'usr-1', email: 'resper@bekaa.eu', name: 'Ricardo Esper', role: 'consultor' })),
+      ...(await sessionFor({ id: 'usr-1', email: 'resper@bekaa.eu', name: 'Ricardo Esper', role: 'consultor', conta_id: 'conta-sig', cliente_id: null })),
       'Content-Type': 'application/json',
     };
     headersDirecao = {
-      ...(await sessionFor({ id: 'usr-ceo', email: 'direcao@cliente.com', name: 'Direcao Executiva', role: 'org_admin', client_project_id: 'proj-1' })),
+      ...(await sessionFor({ id: 'usr-ceo', email: 'direcao@cliente.com', name: 'Direcao Executiva', role: 'org_admin', conta_id: null, cliente_id: 'cli-sig' })),
       'Content-Type': 'application/json',
     };
   });
@@ -140,8 +148,23 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(res.status).toBe(401);
     });
 
-    it('404 para evidência inexistente', async () => {
+    // Reescrito para a camada MSP: `requireResourceAccess` deriva o projeto DO
+    // PRÓPRIO recurso, então id inexistente e recurso alheio ficam
+    // indistinguíveis de propósito (recusar diferente diria a quem sonda quais
+    // ids existem) — 403, não 404, para quem não é `platform_admin`.
+    // `platform_admin` PULA essa checagem (é staff da plataforma, não de um
+    // tenant) e chega ao 404 de verdade do handler.
+    it('403 para evidência inexistente (ator de tenant não distingue de recurso alheio)', async () => {
       const res = await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' });
+      expect(res.status).toBe(403);
+    });
+
+    it('404 para evidência inexistente quando o ator é platform_admin', async () => {
+      const admin = {
+        ...(await sessionFor({ id: 'usr-admin-plat', email: 'admin@ness.io', name: 'Admin', role: 'platform_admin' })),
+        'Content-Type': 'application/json',
+      };
+      const res = await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' }, admin);
       expect(res.status).toBe(404);
     });
 
