@@ -244,12 +244,22 @@ export async function resolveCliente(
  * clicou em "converter"/"assinar" — que pode ser de OUTRA consultoria, porque
  * nenhum dos dois roteadores garante que o operador pertence à conta de
  * origem (isso é isolado, de propósito, para a Task 8/`somenteMsp`).
+ *
+ * O FALLBACK DO CORPO VALE SÓ PARA `platform_admin`, e a checagem de papel é o
+ * que faz a função cumprir o que este docstring sempre prometeu. Antes era
+ * `user?.conta_id ?? contaDoCorpo`: qualquer staff com `conta_id` NULO — que é
+ * o estado de todo consultor criado por `POST /users`, `SCIM` ou `SSO` enquanto
+ * nada em `src/` escrevia a coluna — podia mandar no corpo a `conta_id` da
+ * concorrente e materializar cliente e projeto na carteira DELA. A validação de
+ * `POST /projects` confirma que a conta EXISTE, nunca que é sua, então ela não
+ * fechava isso.
  */
 export function contaCriadora(
   user: AtorAutorizado | undefined,
   contaDoCorpo?: string | null
 ): string | null {
-  return user?.conta_id ?? contaDoCorpo ?? null;
+  if (user?.conta_id) return user.conta_id;
+  return user?.role === 'platform_admin' ? (contaDoCorpo ?? null) : null;
 }
 
 const ALLOWED_TABLES = [
@@ -354,6 +364,63 @@ export async function requireProjectAccess(
   throw new ForbiddenError('Forbidden: No access to this project');
 }
 
+/**
+ * Os projetos que o ator ALCANÇA — a versão em LISTA de `requireProjectAccess`.
+ *
+ * Existia em duas cópias, e é assim que uma delas fica para trás: `/portfolio`
+ * (`routes/platform.ts`) tinha os três ramos escopados e `GET /api/v1/projects`
+ * (`routes/projects.ts`) fazia `SELECT * FROM projects` sem `WHERE` nenhum para
+ * todo papel não-cliente — a carteira de TODAS as consultorias, por uma rota que
+ * devolve a mesma coisa que a outra. As duas rotas continuam existindo porque o
+ * envelope da resposta é diferente (array cru × `{ok, portfolio, projects}`) e
+ * o frontend lê os dois; o que passa a ter UMA definição é o escopo.
+ *
+ * Três ramos, na mesma ordem e com a mesma direção de falha do resto da camada:
+ *
+ * 1. `platform_admin` — o único papel global, opera o SaaS.
+ * 2. Staff de UMA conta — a cadeia `projects.cliente_id → clientes.conta_id`,
+ *    lida ao vivo (nada de `conta_id` desnormalizado em `projects`: cliente que
+ *    troca de consultoria move `clientes.conta_id`, e cópia que não acompanhe
+ *    deixaria a consultoria antiga enxergando o projeto).
+ * 3. Qualquer outro papel — inclusive um fora da lista conhecida, como `ciso` —
+ *    é escopado ao próprio `client_project_id`, que pode ser string VAZIA:
+ *    `WHERE id = ''` não casa com nada, então escopo ausente é NADA.
+ *
+ * `client_project_id` (coluna legada, preservada de propósito) segue sendo o
+ * critério do ramo 3 para não divergir de `/portfolio`, de `/client/dashboard`
+ * e das telas que ainda leem dela. Usuário de cliente criado pelos caminhos
+ * novos recebe `cliente_id` + `acesso_projeto` E `client_project_id`.
+ */
+/**
+ * Subconsulta dos projetos de uma conta, para escopar recurso que tem
+ * `project_id` mas não `conta_id`. Um `?`, que é a conta.
+ *
+ * Constante e não string literal repetida porque já vive em três consultas
+ * (`/dashboard`, `/dashboard/stats`, `GET /api/v1/controls`) e a cadeia
+ * `projects.cliente_id → clientes.conta_id` é a MESMA de `requireProjectAccess`.
+ */
+export const SQL_PROJETOS_DA_CONTA =
+  'SELECT p.id FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id WHERE cl.conta_id = ?';
+
+export async function projetosDoAtor(db: D1Database, user: AtorAutorizado | undefined): Promise<any[]> {
+  let stmt;
+  if (user?.role === 'platform_admin') {
+    stmt = db.prepare('SELECT * FROM projects ORDER BY created_at DESC');
+  } else if (ehStaffDeConta(user)) {
+    await hidrataEscopo(db, user!);
+    stmt = db
+      .prepare(
+        `SELECT p.* FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id
+         WHERE cl.conta_id = ? ORDER BY p.created_at DESC`
+      )
+      .bind(user!.conta_id ?? '');
+  } else {
+    stmt = db.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+  }
+  const { results } = await stmt.all();
+  return results ?? [];
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  AUTORIDADE DE ASSINATURA — sai de project_governance, e só de lá
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -381,6 +448,20 @@ export type PapelAssinatura = 'ciso' | 'ceo';
 
 /** Papéis que ADMINISTRAM a plataforma. Operar não é aprovar. */
 const PAPEIS_DE_PLATAFORMA = new Set(['platform_admin', 'admin']);
+
+/**
+ * O papel administra a PLATAFORMA (e não uma conta)?
+ *
+ * Exposto para que `POST/PUT /users` recuse ATRIBUIR papel de plataforma a quem
+ * não é `platform_admin`. Sem isso, qualquer `consultor` se auto-promovia:
+ * `PUT /users/<próprio id>` com `role: 'platform_admin'`, nova sessão, e a
+ * plataforma inteira. `admin` entra na lista porque o próprio `GET /users` o
+ * normaliza para `platform_admin` — bloquear só um dos dois nomes seria
+ * bloquear a grafia, não o poder.
+ */
+export function ehPapelDePlataforma(role: string | null | undefined): boolean {
+  return PAPEIS_DE_PLATAFORMA.has(role ?? '');
+}
 
 export interface AutoridadeAssinatura {
   /** A pessoa está designada na matriz DESTE projeto. */

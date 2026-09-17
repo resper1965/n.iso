@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff, hidrataEscopo, AtorAutorizado } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff, hidrataEscopo, projetosDoAtor, SQL_PROJETOS_DA_CONTA, AtorAutorizado } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -252,7 +252,7 @@ async function escopoContagensPlataforma(c: { env: { DB: D1Database }; get: (k: 
   } else if (ehStaffDeConta(user)) {
     await hidrataEscopo(c.env.DB, user as AtorAutorizado);
     const contaId = (user as AtorAutorizado)?.conta_id ?? '';
-    const projetosDaConta = 'SELECT p.id FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id WHERE cl.conta_id = ?';
+    const projetosDaConta = SQL_PROJETOS_DA_CONTA;
     leadsStmt = c.env.DB.prepare('SELECT count(*) as count FROM leads WHERE conta_id = ?').bind(contaId);
     projectsStmt = c.env.DB.prepare(`SELECT count(*) as count FROM (${projetosDaConta})`).bind(contaId);
     resourceWhere = `project_id IN (${projetosDaConta})`;
@@ -466,21 +466,13 @@ platformApp.get('/portfolio', async (c) => {
     // que troca de consultoria move `clientes.conta_id`, e uma cópia que não
     // acompanhe em transação deixaria a consultoria antiga enxergando o
     // projeto depois da troca.
-    let stmt;
-    if (user?.role === 'platform_admin') {
-      stmt = c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
-    } else if (ehStaffDeConta(user)) {
-      await hidrataEscopo(c.env.DB, user as AtorAutorizado);
-      const contaId = (user as AtorAutorizado)?.conta_id ?? '';
-      stmt = c.env.DB.prepare(
-        `SELECT p.* FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id
-         WHERE cl.conta_id = ? ORDER BY p.created_at DESC`
-      ).bind(contaId);
-    } else {
-      stmt = c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
-    }
-    const { results } = await stmt.all();
-    return c.json({ ok: true, portfolio: results || [], projects: results || [] });
+    //
+    // Os três ramos MUDARAM DE CASA (sem mudar de comportamento): viraram
+    // `projetosDoAtor` em `helpers.ts`, porque `GET /api/v1/projects` devolve a
+    // mesma coisa por outro caminho e estava com a versão SEM `WHERE`. Duas
+    // cópias do mesmo escopo é como uma delas fica para trás.
+    const results = await projetosDoAtor(c.env.DB, user as AtorAutorizado);
+    return c.json({ ok: true, portfolio: results, projects: results });
   } catch (e: any) {
     return erro500(c, 'Erro ao buscar portfólio', e);
   }

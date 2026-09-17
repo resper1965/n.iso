@@ -43,13 +43,23 @@ readinessApp.get('/', async (c) => {
 
     const achados: Achado[] = [];
 
+    /*
+     * As três regras que perguntam "o controle TEM evidência?" comparam
+     * `e.control_id = c.id` E `e.project_id = c.project_id`. Sem a segunda
+     * igualdade, uma evidência plantada em OUTRO projeto apontando para um
+     * controle daqui satisfaz o `NOT EXISTS` e APAGA o achado — inclusive o
+     * crítico "assinatura sem lastro". Não é vazamento de leitura: é adulteração
+     * do relatório de conformidade de outra consultoria, pelo caminho de escrita
+     * de `evidence.control_id` (que vinha cru do multipart no upload).
+     */
+
     // R2 (CRÍTICO): controle aprovado/assinado SEM evidência anexada.
     // Assinar conformidade sem lastro é o pior caso — some se a evidência sumir.
     const aprovadoSemEvid = await c.env.DB.prepare(
       `SELECT c.id, c.title FROM compliance_controls c
        WHERE c.project_id = ?
          AND (c.ciso_approved_by IS NOT NULL OR c.ceo_approved_by IS NOT NULL)
-         AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.control_id = c.id)`
+         AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.control_id = c.id AND e.project_id = c.project_id)`
     ).bind(projectId).all();
     for (const r of (aprovadoSemEvid.results ?? []) as any[]) {
       achados.push({
@@ -64,7 +74,7 @@ readinessApp.get('/', async (c) => {
       `SELECT c.id, c.title, c.status FROM compliance_controls c
        WHERE c.project_id = ?
          AND c.status IN ('Implemented','Compliant')
-         AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.control_id = c.id)`
+         AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.control_id = c.id AND e.project_id = c.project_id)`
     ).bind(projectId).all();
     for (const r of (implSemEvid.results ?? []) as any[]) {
       achados.push({
@@ -129,7 +139,7 @@ readinessApp.get('/', async (c) => {
       try {
         const controles = await c.env.DB.prepare(
           `SELECT c.id, c.title, c.status, c.maturity,
-                  (SELECT COUNT(*) FROM evidence e WHERE e.control_id = c.id) AS n_evid
+                  (SELECT COUNT(*) FROM evidence e WHERE e.control_id = c.id AND e.project_id = c.project_id) AS n_evid
            FROM compliance_controls c WHERE c.project_id = ? LIMIT 200`
         ).bind(projectId).all();
         const ropa = await c.env.DB.prepare(
