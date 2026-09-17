@@ -23,6 +23,11 @@ describe('Questionário da jornada por fase (D1 real)', () => {
     await env.DB.prepare(
       `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-pq', 'conta-pq', 'Cliente', 'Active')`
     ).run();
+    // Segundo cliente: dá ao "outro tenant" da suíte um `cliente_id` real,
+    // para que o 403 meça a DESIGUALDADE de cliente, não a ausência de um.
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-pq-outro', 'conta-pq', 'Outro Cliente', 'Active')`
+    ).run();
     await env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('p1','Cliente','ISO 27001','controller','Active','cli-pq')`
     ).run();
@@ -130,7 +135,7 @@ describe('Questionário da jornada por fase (D1 real)', () => {
   });
 
   it('projeto de outro tenant é barrado por escopo (403)', async () => {
-    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', client_project_id: 'p-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', conta_id: null, cliente_id: 'cli-pq-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
     const res = await req('GET', '/api/v1/projects/p1/phase-answers', undefined, h);
     expect(res.status).toBe(403);
   });

@@ -67,12 +67,15 @@ describe('nISO API (D1 e KV reais)', () => {
 
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('usr-admin', 'admin@ness.io', senha, 'Admin', 'platform_admin', null),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
-        .bind('usr-orgadmin', 'orgadmin@cliente.com', senha, 'Org Admin', 'org_admin', PROJ),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
-        .bind('usr-orguser', 'orguser@cliente.com', senha, 'Org User', 'org_user', PROJ),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
-        .bind('usr-client', 'client@cliente.com', senha, 'Cliente', 'client', PROJ),
+      // `cliente_id` a par de `client_project_id`: a sessão carrega os dois
+      // (ver comentário abaixo), e a linha de `users` deve modelar o mesmo
+      // estado — senão a fixture descreve um usuário que o login nunca emite.
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
+        .bind('usr-orgadmin', 'orgadmin@cliente.com', senha, 'Org Admin', 'org_admin', PROJ, 'cli-api-um'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
+        .bind('usr-orguser', 'orguser@cliente.com', senha, 'Org User', 'org_user', PROJ, 'cli-api-um'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
+        .bind('usr-client', 'client@cliente.com', senha, 'Cliente', 'client', PROJ, 'cli-api-um'),
       // Alvo das operações de PUT/DELETE em /users/:id.
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('usr-alvo', 'alvo@cliente.com', senha, 'Alvo', 'org_user', PROJ),
