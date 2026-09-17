@@ -66,8 +66,17 @@ const SENHA_DO_USUARIO = 'password123';
 
 type Rota = { metodo: string; caminho: string; origem: string };
 
-/** Descobre as rotas de topo com parâmetro, compondo mount + caminho declarado. */
-function rotasDeTopo(): Rota[] {
+/**
+ * Descobre as rotas de topo, compondo mount + caminho declarado.
+ *
+ * `semParametro` inverte o filtro de parâmetro e devolve o outro lado da porta:
+ * as rotas de LISTAGEM (`GET /api/v1/projects`, `GET /api/v1/users`). Elas eram
+ * invisíveis às duas varreduras — não há id a forjar numa rota sem parâmetro —,
+ * e eram justamente onde estavam os dois piores buracos do branch: `SELECT *`
+ * sem `WHERE` nenhum. O que se afirma sobre elas não é status, é o CORPO: uma
+ * listagem escopada não menciona o tenant alheio.
+ */
+function rotasDeTopo(opcoes: { semParametro?: boolean } = {}): Rota[] {
   // `app.route('<mount>', <var>)` no composition root.
   const mount: Record<string, string> = {};
   for (const m of indexSrc.matchAll(/app\.route\(\s*'([^']*)'\s*,\s*(\w+)\s*\)/g)) {
@@ -96,7 +105,14 @@ function rotasDeTopo(): Rota[] {
       const m = linha.match(/^\s*(\w+)\.(get|post|put|patch|delete)\(\s*'([^']*)'/);
       if (!m || m[1] !== routerVar) return;
       const caminho = (mount[routerVar] + m[3]).replace(/\/$/, '') || '/';
-      if (!/:\w/.test(caminho)) return;                          // sem parâmetro: nada a forjar
+      const temParametro = /:\w/.test(caminho);
+      if (opcoes.semParametro) {
+        // Só GET: varrer POST/PUT/DELETE sem parâmetro CRIARIA linha em vez de
+        // ler uma, e a asserção aqui é sobre o que a resposta devolve.
+        if (temParametro || m[2].toLowerCase() !== 'get') return;
+      } else {
+        if (!temParametro) return;                                // nada a forjar
+      }
       if (/^\/api\/v1\/projects\/:\w+\//.test(caminho)) return;   // coberto pelo middleware
       rotas.push({
         metodo: m[2].toUpperCase(),
@@ -233,6 +249,11 @@ const CORPOS: Record<string, unknown> = {
   // propósito: o que precisa recusar o pedido é a guarda de tenant, não a senha.
   'POST /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
   'PUT /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
+  // `cnpjSchema` recusa corpo vazio ANTES de `linhaDoFunilDaConta`, e um CNPJ
+  // válido leva o pedido até a guarda de conta — que responde 404 sem chegar a
+  // consultar a Receita (o `fetch` externo vem depois dela). Só a varredura 3
+  // chegava a este 400: nas outras, `somenteMsp` recusa o ator antes.
+  'POST /api/v1/leads/:id/enrich-cnpj': { cnpj: '11222333000181' },
 };
 
 /**
@@ -386,5 +407,167 @@ describe('Contrato de isolamento — recurso REAL do outro tenant', () => {
     const linha = await env.DB.prepare('SELECT project_id FROM evidence WHERE id = ?').bind(ID_ALHEIO).first<any>();
     expect(linha, 'a semeadura do tenant alheio não gravou').not.toBeNull();
     expect(linha.project_id).toBe(PROJ_ALHEIO);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  VARREDURA 3 — o ator é STAFF DE OUTRA CONSULTORIA
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * As duas varreduras acima usam SEMPRE `org_admin` com `client_project_id`, e é
+ * por isso que ficaram verdes por dez tarefas sobre dois buracos abertos.
+ *
+ * Toda guarda que é allowlist de papel-CLIENTE (`org_admin`/`org_user`/`client`
+ * comparados com `client_project_id`) recusa aquele ator pelo RAMO DE CLIENTE —
+ * então o ramo de STAFF, que é o outro lado do mesmo `if`, nunca era exercitado.
+ * `GET /api/v1/projects/:id` e `PUT /api/v1/projects/:id` respondiam 403 ao
+ * `org_admin` e 200 ao `consultor` de outra conta, com o mesmo código. A
+ * varredura não distinguia as duas coisas porque só conhecia um ator.
+ *
+ * Aqui o ator é `consultor` da conta B — staff legítimo de uma consultoria que
+ * não é dona de nada do que se pede. Ele passa por `ehStaffDeConta`, por
+ * `somenteStaff` e por `somenteMsp`, e mesmo assim não pode alcançar linha
+ * alguma: é essa combinação que nenhum ator anterior tinha.
+ *
+ * `PROJ_ALHEIO` ganha cliente e conta REAIS aqui (a varredura 2 o deixa sem
+ * cadeia de propósito, ver o comentário de lá). Sem isso, um projeto sem
+ * `cliente_id` é recusado a qualquer staff por AUSÊNCIA de escopo, e a igualdade
+ * `clientes.conta_id = user.conta_id` — que é o que a camada MSP existe para
+ * checar — nunca seria exercitada.
+ */
+const CONTA_DONA = 'conta-dona-do-alheio';
+const CONTA_OUTRA = 'conta-da-outra-consultoria';
+
+/**
+ * Rotas que a varredura 3 não pode julgar PELO STATUS — cada uma com o motivo.
+ *
+ * Duas formas, e nenhuma é vazamento:
+ *
+ * 1. **Escrita escopada que responde 2xx sem tocar a linha.** O `WHERE` traz
+ *    `AND conta_id = ?`, então zero linha casa — mas o handler devolve
+ *    `{ok:true}` de qualquer jeito. O status aqui não prova nada, nem no sentido
+ *    bom nem no ruim; o que prova é a linha SOBREVIVER, e isso está afirmado com
+ *    linha real em `camada-msp-funil-dados.test.ts` (lead) e em
+ *    `camada-msp-vazamentos-finais.test.ts` (lead, assessment e proposta).
+ *    Nenhuma delas aparece nas varreduras 1 e 2 porque `somenteMsp` recusa o ator
+ *    `org_admin` antes do handler — só staff de conta `msp` chega até aqui.
+ *
+ * 2. **Parâmetro que não é id de linha.** `:cnpj` é um número da Receita, não uma
+ *    chave desta base: não existe "CNPJ de outro tenant" a entregar, e a guarda
+ *    que a rota precisa (`somenteMsp`, para não virar proxy de consulta) ela já
+ *    tem.
+ *
+ * Lista SEPARADA de `CATALOGO_GLOBAL` de propósito: lá o 2xx devolve DADO que
+ * pode ser devolvido; aqui o 2xx não devolve dado de tenant nenhum.
+ */
+const FORA_DA_VARREDURA_3: Record<string, string> = {
+  'DELETE /api/v1/leads/:id': 'escrita escopada por conta_id, responde 200 sem apagar; a linha sobrevive',
+  'DELETE /api/v1/proposals/:id': 'idem',
+  'PUT /api/v1/leads/:id/status': 'idem',
+  'PUT /api/v1/assessments/:id': 'idem',
+  'PUT /api/v1/assessments/:id/pricing': 'idem',
+  'GET /api/v1/leads/consulta-cnpj/:cnpj': ':cnpj não é id de linha desta base — proxy de consulta, guardado por somenteMsp',
+};
+
+/**
+ * Listagens sem parâmetro cujo corpo cita o id semeado de forma LEGÍTIMA.
+ *
+ * `semearTenantAlheio` grava uma linha com o id alheio em toda tabela que tem
+ * coluna `id` — inclusive nas que não têm tenant. Sem esta lista, a varredura de
+ * listagem acusaria catálogo global e notificação de broadcast.
+ */
+const LISTAGEM_SEM_TENANT: Record<string, string> = {
+  'GET /api/v1/policy-templates': 'catálogo global, `policy_templates` não tem project_id (mesma razão da entrada em CATALOGO_GLOBAL)',
+  'GET /api/v1/marketplace/templates': 'mesma tabela `policy_templates`, mesmo catálogo global',
+  'GET /api/v1/notifications': 'a semeadura deixa `user_id` NULL, e NULL é broadcast por desenho — o escopo é o DONO, não o projeto',
+};
+
+describe('Contrato de isolamento — o ator é staff de OUTRA consultoria', () => {
+  let headers: Record<string, string>;
+
+  beforeAll(async () => {
+    await applySchema();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO contas (id, tipo, nome, status) VALUES (?, 'msp', 'Dona', 'Active')`).bind(CONTA_DONA),
+      env.DB.prepare(`INSERT OR IGNORE INTO contas (id, tipo, nome, status) VALUES (?, 'msp', 'Outra', 'Active')`).bind(CONTA_OUTRA),
+    ]);
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO clientes (id, conta_id, nome, status) VALUES ('cli-dona', ?, 'Cliente B', 'Active')`).bind(CONTA_DONA),
+      env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(PROJ_ALHEIO, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+    ]);
+    await env.DB.prepare('UPDATE projects SET cliente_id = ? WHERE id = ?').bind('cli-dona', PROJ_ALHEIO).run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO users (id, email, password_hash, name, role, conta_id) VALUES ('u-outra', 'consultor@outra.com', 'h', 'Consultor da outra', 'consultor', ?)`
+    ).bind(CONTA_OUTRA).run();
+    // A semeadura genérica só corre se a varredura 2 não tiver corrido antes
+    // neste mesmo arquivo; `INSERT OR IGNORE` acima já cobre o caso de ter.
+    const jaSemeado = await env.DB.prepare('SELECT 1 FROM evidence WHERE id = ?').bind(ID_ALHEIO).first();
+    if (!jaSemeado) await semearTenantAlheio(ID_ALHEIO, PROJ_ALHEIO);
+
+    const sessao = await sessionFor({
+      id: 'u-outra', email: 'consultor@outra.com', role: 'consultor', conta_id: CONTA_OUTRA, cliente_id: null,
+    });
+    headers = { ...sessao, 'Content-Type': 'application/json' };
+  });
+
+  it('o projeto alheio tem cadeia conta→cliente de verdade (senão o ramo de staff não é exercitado)', async () => {
+    const linha = await env.DB.prepare(
+      'SELECT cl.conta_id FROM projects p JOIN clientes cl ON cl.id = p.cliente_id WHERE p.id = ?'
+    ).bind(PROJ_ALHEIO).first<any>();
+    expect(linha?.conta_id, 'projeto alheio sem conta: a recusa viria por ausência de escopo, não pela comparação').toBe(CONTA_DONA);
+  });
+
+  it('nenhuma rota entrega recurso de outro tenant a staff de outra consultoria', async () => {
+    const rotas = rotasDeTopo().filter((r) => {
+      const chave = `${r.metodo} ${r.caminho}`;
+      return !(chave in EXCECOES) && !(chave in CATALOGO_GLOBAL) && !(chave in FORA_DA_VARREDURA_3);
+    });
+    const entregou: string[] = [];
+    const naoChegou: string[] = [];
+
+    for (const r of rotas) {
+      const chave = `${r.metodo} ${r.caminho}`;
+      const corpo = chave in CORPOS ? JSON.stringify(CORPOS[chave]) : '{}';
+      const res = await pedir(worker, forjarCaminhoAlheio(r.caminho), {
+        method: r.metodo,
+        headers,
+        body: r.metodo === 'GET' ? undefined : corpo,
+      });
+      if (res.status < 400 || res.status >= 500) entregou.push(`${res.status} ${chave}  (${r.origem})`);
+      else if (res.status === 400) naoChegou.push(`${chave}  (${r.origem})`);
+    }
+
+    expect(entregou, `rotas que entregaram recurso alheio a staff de outra consultoria:\n  ${entregou.join('\n  ')}`).toEqual([]);
+    expect(naoChegou, `rotas que pararam no 400 e nunca chegaram à guarda:\n  ${naoChegou.join('\n  ')}`).toEqual([]);
+  });
+
+  it('toda entrada de FORA_DA_VARREDURA_3 corresponde a uma rota que ainda existe', () => {
+    const existentes = new Set(rotasDeTopo().map((r) => `${r.metodo} ${r.caminho}`));
+    for (const chave of Object.keys(FORA_DA_VARREDURA_3)) {
+      expect(existentes.has(chave), `entrada órfã em FORA_DA_VARREDURA_3: "${chave}"`).toBe(true);
+    }
+  });
+
+  it('nenhuma LISTAGEM sem parâmetro menciona o tenant alheio', async () => {
+    // O outro lado da porta. `GET /api/v1/projects` e `GET /api/v1/users` não
+    // têm parâmetro e por isso escapavam das duas varreduras — e faziam
+    // `SELECT *` sem `WHERE` para todo papel não-cliente. Aqui o que se afirma
+    // é o corpo: listagem escopada não cita o id nem o projeto do outro tenant.
+    const rotas = rotasDeTopo({ semParametro: true }).filter(
+      (r) => !(`${r.metodo} ${r.caminho}` in LISTAGEM_SEM_TENANT)
+    );
+    expect(rotas.length, 'o filtro de rota sem parâmetro parou de casar').toBeGreaterThanOrEqual(10);
+
+    const vazou: string[] = [];
+    for (const r of rotas) {
+      const res = await pedir(worker, r.caminho, { headers });
+      const texto = await res.text();
+      if (texto.includes(ID_ALHEIO) || texto.includes(PROJ_ALHEIO)) {
+        vazou.push(`${res.status} ${r.metodo} ${r.caminho}  (${r.origem})`);
+      }
+    }
+    expect(vazou, `listagens que mencionaram o tenant alheio:\n  ${vazou.join('\n  ')}`).toEqual([]);
   });
 });

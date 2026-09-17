@@ -80,6 +80,12 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "conta_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -194,6 +200,12 @@
                     "minLength": 1
                   },
                   "client_project_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "conta_id": {
                     "type": [
                       "string",
                       "null"
