@@ -26,18 +26,28 @@ proposalsApp.post('/', async (c) => {
     const body = v.data as any;
     if (!body.lead_id || !body.assessment_id) return c.json({ error: 'lead_id e assessment_id obrigatórios' }, 400);
 
+    const operador = c.get('user') as AtorAutorizado | undefined;
+
     // O operador tem de ser dono do ASSESSMENT de origem, ou `platform_admin`
     // — mesmo gate de `/generate-proposal` (que é o caminho AUTOMÁTICO desta
-    // mesma ação; esta rota é o caminho MANUAL). Achado da varredura: sem
-    // isso, staff de outra consultoria criava proposta — e avançava o LEAD
-    // alheio para 'Proposal', logo abaixo — a partir de uma venda que não é
-    // dele. Alheio responde 404, nunca 403 (403 confirmaria a existência da
-    // venda na consultoria concorrente).
-    const assessmentOrigem = await linhaDoFunilDaConta(c.env.DB, 'assessments', body.assessment_id, c.get('user') as AtorAutorizado | undefined);
+    // mesma ação; esta rota é o caminho MANUAL). Alheio responde 404, nunca
+    // 403 (403 confirmaria a existência da venda na consultoria concorrente).
+    const assessmentOrigem = await linhaDoFunilDaConta(c.env.DB, 'assessments', body.assessment_id, operador);
     if (!assessmentOrigem) return c.json({ error: 'Assessment de origem não encontrado' }, 404);
 
+    // `lead_id` e `assessment_id` chegam INDEPENDENTES um do outro no corpo —
+    // nada aqui garante que apontam para a mesma venda, e ter verificado o
+    // assessment não verifica o que está gravado dentro dele (achado da
+    // revisão: validar uma linha não valida um id GRAVADO dentro dela — "id
+    // lavado"). Sem checar o `lead_id` por si só, ele era gravado cru na
+    // proposta e reaparecia sem checagem em toda leitura que faz `JOIN
+    // leads` (a listagem, `GET /:id`) e em `/sign`, que chegava a marcar o
+    // lead alheio como `'Won'`. Mesmo gate do assessment, mesma mensagem.
+    const leadDaProposta = await linhaDoFunilDaConta(c.env.DB, 'leads', body.lead_id, operador);
+    if (!leadDaProposta) return c.json({ error: 'Lead não encontrado' }, 404);
+
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = assessmentOrigem.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    const contaId = assessmentOrigem.conta_id ?? (operador?.conta_id ?? null);
 
     const id = genId();
     await c.env.DB.prepare(
@@ -45,20 +55,7 @@ proposalsApp.post('/', async (c) => {
        VALUES (?, ?, ?, 'Draft', ?, ?, ?, datetime('now'))`
     ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html, contaId).run();
 
-    // `lead_id` e `assessment_id` chegam INDEPENDENTES um do outro no corpo —
-    // nada aqui garante que apontam para a mesma venda. O gate acima só
-    // confere o assessment; antes de avançar o STATUS do lead, confere o
-    // dono dele também. Lead sem dono (`conta_id` NULL, legado) é tratado
-    // como a mesma conta desta proposta — mesma regra de fallback usada na
-    // atribuição acima. Se o lead for de OUTRA conta, a proposta ainda nasce
-    // (o assessment de origem já foi verificado), mas este lead não é tocado.
-    const leadDaProposta = await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>();
-    const leadContaId = leadDaProposta?.conta_id ?? null;
-    const operador = c.get('user') as AtorAutorizado | undefined;
-    const podeAvancarLead = operador?.role === 'platform_admin' || leadContaId === null || leadContaId === contaId;
-    if (podeAvancarLead) {
-      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
-    }
+    await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
 
     return c.json({ id, status: 'Draft' }, 201);
   } catch (e: any) {
@@ -194,8 +191,18 @@ proposalsApp.post('/:id/sign', async (c) => {
     // desta ordem, uma recusa aqui deixava a proposta 'Signed', o contrato
     // criado e o lead 'Won' — sem projeto e sem chance de tentar de novo (a
     // linha 140 acima recusa reassinatura). Ver Important 4 da revisão.
+    //
+    // `proposal.lead_id` é um id GRAVADO dentro de uma linha já verificada —
+    // isso não o valida por conta própria (achado da revisão: "lavagem de
+    // id"). Uma proposta LEGADA pode carregar `lead_id` de outra consultoria
+    // de antes de `POST /proposals` ganhar o próprio gate; sem revalidar
+    // aqui, `leadData.razao_social`/`.cnpj` vazariam para `resolveCliente` e
+    // o lead alheio seria marcado 'Won' logo abaixo. `linhaDoFunilDaConta`
+    // devolve `null` tanto para lead inexistente quanto para lead de outra
+    // conta — os dois casos caem no mesmo fallback (nome do assessment) já
+    // escrito abaixo, sem precisar de um `if` a mais aqui.
     const leadData = proposal.lead_id
-      ? await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(proposal.lead_id).first<any>()
+      ? await linhaDoFunilDaConta(c.env.DB, 'leads', proposal.lead_id, c.get('user') as AtorAutorizado | undefined)
       : null;
     const assessmentDaProposta = proposal.assessment_id
       ? await c.env.DB.prepare('SELECT client_name FROM assessments WHERE id = ?').bind(proposal.assessment_id).first<{ client_name: string }>()
@@ -232,7 +239,11 @@ proposalsApp.post('/:id/sign', async (c) => {
        VALUES (?, ?, ?, 'Signed', datetime('now'), datetime('now'))`
     ).bind(contractId, id, proposal.lead_id).run();
 
-    if (proposal.lead_id) {
+    // Gated por `leadData`, não por `proposal.lead_id` cru: um `lead_id`
+    // legado que não passou pela verificação acima (inexistente ou de outra
+    // conta) não pode ser empurrado para 'Won' — a mesma mutação irreversível
+    // que este handler inteiro existe para proteger.
+    if (leadData) {
       await c.env.DB.prepare("UPDATE leads SET status = 'Won', updated_at = datetime('now') WHERE id = ?").bind(proposal.lead_id).run();
     }
 
