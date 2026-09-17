@@ -322,20 +322,28 @@ describe('Rotas de SSO', () => {
     await resetData();
     await resetSessions();
     const senha = await hashPassword('password123');
+    // Cadeia conta→cliente: `PUT/GET /api/v1/projects/:projectId/sso` passa
+    // pelo `projectAccessMiddleware` ANTES do gate de papel (`somenteStaff`) do
+    // handler. Sem `cliente_id` real, "cliente não configura o próprio SSO"
+    // tomaria 403 por FALTA de escopo, não pelo gate de papel que afirma provar.
+    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-sso', 'msp', 'Conta SSO', 'Active')`).run();
+    await env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-sso', 'conta-sso', 'Cliente A', 'Active')`).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-sso'),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
         .bind('u-s', 's@ness.io', senha, 'Staff', 'platform_admin'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-a', 'a@cliente.com', senha, 'A', 'org_admin', A),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
+        .bind('u-a', 'a@cliente.com', senha, 'A', 'org_admin', A, 'cli-sso'),
     ]);
     staff = {
       ...(await sessionFor({ id: 'u-s', email: 's@ness.io', role: 'platform_admin', iat: Date.now() })),
       'Content-Type': 'application/json',
     };
+    // `org_admin` está em `PAPEIS_ADMIN_CLIENTE`: alcança o próprio projeto sem
+    // precisar de linha em `acesso_projeto`.
     cliente = {
-      ...(await sessionFor({ id: 'u-a', email: 'a@cliente.com', role: 'org_admin', client_project_id: A, iat: Date.now() })),
+      ...(await sessionFor({ id: 'u-a', email: 'a@cliente.com', role: 'org_admin', client_project_id: A, conta_id: null, cliente_id: 'cli-sso', iat: Date.now() })),
       'Content-Type': 'application/json',
     };
   });

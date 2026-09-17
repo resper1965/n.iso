@@ -62,7 +62,10 @@ describe('ForbiddenError', () => {
   });
 
   it('negação que escapa sem try/catch vira 403 pelo handler global, não 500', async () => {
-    const headers = await sessionFor({ id: 'u-a', email: 'a@a.com', role: 'org_admin', client_project_id: 'proj-a' });
+    // `seedTwoProjects` já dá a proj-a um `cliente_id` real (`cli-a`), distinto
+    // do de proj-b (`cli-b`) — sem `cliente_id` na sessão, o 403 abaixo mediria
+    // ausência de escopo, não a desigualdade de cliente que o teste afirma.
+    const headers = await sessionFor({ id: 'u-a', email: 'a@a.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-a' });
 
     // Rota de projeto alheio: a negação sai do middleware de tenant.
     const res = await app.fetch(
