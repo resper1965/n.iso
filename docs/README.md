@@ -45,6 +45,7 @@ entrada é o [`README.md`](../README.md) da raiz.
 | [`backlog-plan.md`](backlog-plan.md) | Gaps e débitos técnicos com causa, correção, arquivos, esforço e risco — em ordem de execução. |
 | [`api-triage-2026-08.md`](api-triage-2026-08.md) | Defeitos reportados no uso real da API v1, triados contra o código: corrigido, backlog, ou por design. |
 | [`READINESS.md`](READINESS.md) | O estado de prontidão para produção, controle a controle. |
+| [`avaliacao-tprm.md`](avaliacao-tprm.md) | Se dá para entregar TPRM reusando os motores que já existem, em vez de um módulo paralelo: inventário do que existe, lacunas G1–G8 e mapa de reuso. |
 
 ## Especificações de produto
 
