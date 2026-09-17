@@ -471,16 +471,25 @@ const FORA_DA_VARREDURA_3: Record<string, string> = {
 };
 
 /**
- * Listagens sem parâmetro cujo corpo cita o id semeado de forma LEGÍTIMA.
+ * Rotas sem parâmetro que a varredura de listagem não julga — e por quê.
  *
- * `semearTenantAlheio` grava uma linha com o id alheio em toda tabela que tem
- * coluna `id` — inclusive nas que não têm tenant. Sem esta lista, a varredura de
- * listagem acusaria catálogo global e notificação de broadcast.
+ * Dois motivos, ambos explícitos na entrada:
+ *
+ * 1. O corpo cita o id semeado de forma LEGÍTIMA. `semearTenantAlheio` grava uma
+ *    linha com o id alheio em toda tabela que tem coluna `id` — inclusive nas que
+ *    não têm tenant —, então sem esta lista a varredura acusaria catálogo global
+ *    e notificação de broadcast.
+ * 2. A rota não é listagem de tenant e responde 5xx neste ambiente. Desde que a
+ *    varredura passou a REPROVAR 5xx (antes afirmava só sobre o texto, e uma
+ *    listagem que estourasse saía da medição em silêncio), estas duas precisam
+ *    ficar nomeadas aqui em vez de passar por acidente.
  */
 const LISTAGEM_SEM_TENANT: Record<string, string> = {
   'GET /api/v1/policy-templates': 'catálogo global, `policy_templates` não tem project_id (mesma razão da entrada em CATALOGO_GLOBAL)',
   'GET /api/v1/marketplace/templates': 'mesma tabela `policy_templates`, mesmo catálogo global',
   'GET /api/v1/notifications': 'a semeadura deixa `user_id` NULL, e NULL é broadcast por desenho — o escopo é o DONO, não o projeto',
+  'GET /api/v1/public/export-public-key': 'rota PÚBLICA de chave de verificação, não listagem; o 503 é a resposta DESENHADA para instalação sem chave de assinatura, e é o estado do ambiente de teste',
+  'GET /api/v1/admin/trilha/verificar': 'verificação da cadeia da trilha — operação da PLATAFORMA, não de tenant; estoura 500 sem o bucket de arquivo, que o ambiente de teste não tem',
 };
 
 describe('Contrato de isolamento — o ator é staff de OUTRA consultoria', () => {
@@ -564,7 +573,12 @@ describe('Contrato de isolamento — o ator é staff de OUTRA consultoria', () =
     for (const r of rotas) {
       const res = await pedir(worker, r.caminho, { headers });
       const texto = await res.text();
-      if (texto.includes(ID_ALHEIO) || texto.includes(PROJ_ALHEIO)) {
+      // 5xx junto do corpo: a afirmação era só sobre o TEXTO, então uma listagem
+      // que passasse a estourar 500 saía silenciosamente da varredura — corpo de
+      // erro não cita id alheio, e a rota deixava de ser medida sem ninguém ver.
+      if (res.status >= 500) {
+        vazou.push(`${res.status} ${r.metodo} ${r.caminho}  (${r.origem}) — erro, listagem não medida`);
+      } else if (texto.includes(ID_ALHEIO) || texto.includes(PROJ_ALHEIO)) {
         vazou.push(`${res.status} ${r.metodo} ${r.caminho}  (${r.origem})`);
       }
     }

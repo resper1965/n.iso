@@ -29,7 +29,15 @@ const COLUNAS_LISTA = 'id, email, name, role, client_project_id, conta_id, clien
  * escopo é NADA, nunca TUDO, e é a mesma direção de falha do resto da camada.
  *
  * `platform_admin` alcança todo mundo (opera o SaaS). `org_admin` continua preso
- * ao próprio `client_project_id`, que é o que ele sempre teve.
+ * ao próprio `client_project_id`, que é o que ele sempre teve — e ADMIN SEM
+ * PROJETO NÃO ALCANÇA NINGUÉM. O ramo era `alvo.client_project_id ===
+ * admin.client_project_id`, e a sessão carrega `client_project_id: null`
+ * verbatim (`routes/auth.ts` faz `{...user}` de um `SELECT *`): `null === null`
+ * dava a um `org_admin` sem projeto TODO usuário sem projeto — o que inclui
+ * todo `consultor` e todo `platform_admin`, com troca de e-mail e senha. E o
+ * bootstrap era de um passo: `POST /users {role:'org_admin'}` sem
+ * `client_project_id` passa em todas as checagens (papel de cliente, projeto
+ * nenhum a recusar), então qualquer consultor fabricava esse admin.
  */
 async function alcancaUsuario(
   db: D1Database,
@@ -37,7 +45,9 @@ async function alcancaUsuario(
   alvo: { conta_id?: string | null; cliente_id?: string | null; client_project_id?: string | null }
 ): Promise<boolean> {
   if (admin.role === 'platform_admin') return true;
-  if (admin.role === 'org_admin') return alvo.client_project_id === admin.client_project_id;
+  if (admin.role === 'org_admin') {
+    return !!admin.client_project_id && alvo.client_project_id === admin.client_project_id;
+  }
 
   await hidrataEscopo(db, admin);
   if (!admin.conta_id) return false;
@@ -319,6 +329,16 @@ usersApp.put('/:id', async (c) => {
     if (client_project_id !== undefined || role !== undefined) {
       const papel = role ?? user.role;
       const projeto = (client_project_id !== undefined ? alvoProjeto : user.client_project_id) ?? null;
+      // Lavagem de id: quando só o `role` muda, `projeto` cai no
+      // `client_project_id` ARMAZENADO no alvo, que a guarda acima nunca
+      // inspecionou — ela julgou `alvoProjeto`, que aqui é `undefined`. Um
+      // staff da conta A apontado para projeto da conta B (criável por
+      // `platform_admin`, que passa tudo) bastava: `PUT {role:'client',
+      // password:'x'}` re-ancorava o alvo ao cliente de B, emitia concessão
+      // real em `acesso_projeto` e, na MESMA requisição, definia a senha.
+      // Alcançar o CONTAINER (o usuário) nunca validou o CONTEÚDO (o projeto).
+      const recusaDoProjetoDoAlvo = await recusaDeProjetoAlheio(c.env.DB, admin, projeto);
+      if (recusaDoProjetoDoAlvo) return c.json({ error: recusaDoProjetoDoAlvo }, 403);
       const escopo = await escopoDoPapel(c.env.DB, admin, papel, projeto, conta_id, user.conta_id);
       if (escopo.erro) return c.json({ error: escopo.erro }, 400);
       updates.push('conta_id = ?', 'cliente_id = ?');

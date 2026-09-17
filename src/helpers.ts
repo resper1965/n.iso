@@ -304,6 +304,31 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   return true;
 }
 
+/**
+ * O controle é DAQUELE projeto?
+ *
+ * `control_id` é a lavagem de id mais repetida da base: chega cru do corpo (ou
+ * do multipart), é gravado numa linha que o operador legitimamente possui, e
+ * depois é desreferenciado a partir dela por um `JOIN` que filtra só o dono da
+ * linha — nunca o dono do controle. `PUT /api/v1/evidence/:id` e o upload de
+ * evidência já enunciavam esta invariante em cópia local; `risks` e
+ * `auditor_notes` não. Aqui ela tem UMA definição.
+ *
+ * Uma consulta só, e recusa é recusa: controle inexistente e controle alheio
+ * respondem igual, para não dizer a quem sonda quais ids existem.
+ */
+export async function controleEhDoProjeto(
+  db: D1Database,
+  controlId: string,
+  projectId: string
+): Promise<boolean> {
+  const ctrl = await db
+    .prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?')
+    .bind(controlId, projectId)
+    .first();
+  return !!ctrl;
+}
+
 /** Papéis do lado do cliente que enxergam a empresa INTEIRA, não só o concedido. */
 const PAPEIS_ADMIN_CLIENTE = new Set(['org_admin']);
 

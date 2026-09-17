@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, controleEhDoProjeto } from '../helpers';
 import { validateBody, auditorNoteSchema, auditorResponseSchema } from '../schemas';
 
 export const auditorApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -14,7 +14,7 @@ auditorApp.get('/auditor/:token/notes', async (c) => {
     const notes = await c.env.DB.prepare(`
       SELECT n.*, cc.standard as control_standard, cc.title as control_title 
       FROM auditor_notes n
-      LEFT JOIN compliance_controls cc ON n.control_id = cc.id
+      LEFT JOIN compliance_controls cc ON n.control_id = cc.id AND cc.project_id = n.project_id
       WHERE n.project_id = ? 
       ORDER BY n.created_at DESC
     `).bind(t.project_id).all();
@@ -34,7 +34,14 @@ auditorApp.post('/auditor/:token/notes', async (c) => {
     if (!v.success) return v.response;
     const { control_id, note_type, content } = v.data as any;
     if (!content) return c.json({ error: 'content is required' }, 400);
-    
+
+    // O token escopa a NOTA ao projeto dele; `control_id` vinha cru do corpo e
+    // era desreferenciado depois pelos dois `JOIN` de leitura. Mesma conferência
+    // do upload de evidência: o controle tem de ser do projeto.
+    if (control_id && !(await controleEhDoProjeto(c.env.DB, control_id, t.project_id))) {
+      return c.json({ error: 'Forbidden: controle pertence a outro projeto' }, 403);
+    }
+
     const id = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
     await c.env.DB.prepare(`
       INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content)
@@ -82,7 +89,7 @@ auditorApp.get('/projects/:id/auditor-notes', async (c) => {
     const notes = await c.env.DB.prepare(`
       SELECT n.*, cc.standard as control_standard, cc.title as control_title 
       FROM auditor_notes n
-      LEFT JOIN compliance_controls cc ON n.control_id = cc.id
+      LEFT JOIN compliance_controls cc ON n.control_id = cc.id AND cc.project_id = n.project_id
       WHERE n.project_id = ? 
       ORDER BY n.created_at DESC
     `).bind(projectId).all();
