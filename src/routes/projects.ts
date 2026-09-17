@@ -953,9 +953,15 @@ projectsApp.get('/:id/traceability', async (c) => {
 
   const placeholders = controlIds.map(() => '?').join(',');
 
+  // Mesmo `project_id = ?` da consulta de evidência logo abaixo, e pelo mesmo
+  // motivo — a perna de `risks` ficou de fora da onda anterior. `risks.control_id`
+  // é gravado cru do corpo, então staff de outra consultoria planta um risco no
+  // PRÓPRIO projeto apontando para um controle DAQUI, e ele entra na matriz de
+  // rastreabilidade que esta consultoria entrega ao cliente dela. Adulteração:
+  // o `IN` filtra o controle, nunca o dono do risco.
   const risksResult = await db.prepare(
-    `SELECT id, asset, threat, risk_level, control_id FROM risks WHERE control_id IN (${placeholders})`
-  ).bind(...controlIds).all();
+    `SELECT id, asset, threat, risk_level, control_id FROM risks WHERE project_id = ? AND control_id IN (${placeholders})`
+  ).bind(projectId, ...controlIds).all();
 
   // `project_id = ?` junto do `control_id IN (...)`: os ids de controle são
   // deste projeto, mas `evidence.control_id` é gravado a partir do multipart e
