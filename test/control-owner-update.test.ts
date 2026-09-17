@@ -23,6 +23,11 @@ describe('PUT /controls/:id — owner gravável', () => {
     await env.DB.prepare(
       `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou', 'conta-cou', 'C', 'Active')`
     ).run();
+    // Segundo cliente: dá ao "outro tenant" da suíte um `cliente_id` real,
+    // para que o 403 meça a DESIGUALDADE de cliente, não a ausência de um.
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou-outro', 'conta-cou', 'Outro Cliente', 'Active')`
+    ).run();
     await env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','cli-cou')`
     ).run();
@@ -64,7 +69,7 @@ describe('PUT /controls/:id — owner gravável', () => {
   });
 
   it('mantém o isolamento por tenant: org_admin de outro projeto não grava', async () => {
-    const alienHeaders = { ...(await sessionFor({ id: 'u2', email: 'org@cliente.io', role: 'org_admin', client_project_id: 'pr-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const alienHeaders = { ...(await sessionFor({ id: 'u2', email: 'org@cliente.io', role: 'org_admin', conta_id: null, cliente_id: 'cli-cou-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
     const res = await app.fetch(new Request('http://localhost/api/v1/controls/c1', { method: 'PUT', headers: alienHeaders, body: JSON.stringify({ owner: 'Invasor' }) }), env as any);
     expect(res.status).toBe(403);
     const ctrl = await env.DB.prepare("SELECT owner FROM compliance_controls WHERE id='c1'").first<any>();
