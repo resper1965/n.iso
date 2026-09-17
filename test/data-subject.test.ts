@@ -44,11 +44,19 @@ describe('Requisição de titular', () => {
   beforeAll(async () => {
     await applySchema();
     const hash = await hashPassword('password123');
+    // Cadeia conta→cliente: a rota é `/api/v1/projects/:projectId/data-subject`,
+    // então passa pelo `projectAccessMiddleware` ANTES do próprio gate de papel
+    // do handler (`PAPEIS_AUTORIZADOS`). Sem `cliente_id` real + concessão em
+    // `acesso_projeto`, o `org_user` abaixo tomaria 403 por FALTA de escopo, e o
+    // teste de papel read-only não estaria provando o gate que afirma provar.
+    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-ds', 'msp', 'Conta DS', 'Active')`).run();
+    await env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-ds', 'conta-ds', 'Cliente Um', 'Active')`).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','Cliente Um','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('p1','Cliente Um','ISO 27001','controller','Active','cli-ds')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p2','Cliente Dois','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u1','dpo@ness.io',?,'DPO','platform_admin')`).bind(hash),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u2','leitor@c.com',?,'Leitor','org_user','p1')`).bind(hash),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES ('u2','leitor@c.com',?,'Leitor','org_user','p1','cli-ds')`).bind(hash),
+      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('u2', 'p1')`),
 
       // A mesma pessoa aparece em três tabelas do projeto p1...
       env.DB.prepare(`INSERT INTO training_records (id, project_id, employee_name, training_name, status) VALUES ('t1','p1',?,'Conscientização','Completed')`).bind(IDENT),
@@ -64,7 +72,7 @@ describe('Requisição de titular', () => {
     ]);
 
     dpo = { ...(await sessionFor({ id: 'u1', email: 'dpo@ness.io', role: 'platform_admin', iat: Date.now() })), 'Content-Type': 'application/json' };
-    leitor = { ...(await sessionFor({ id: 'u2', email: 'leitor@c.com', role: 'org_user', client_project_id: 'p1', iat: Date.now() })), 'Content-Type': 'application/json' };
+    leitor = { ...(await sessionFor({ id: 'u2', email: 'leitor@c.com', role: 'org_user', client_project_id: 'p1', conta_id: null, cliente_id: 'cli-ds', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   async function req(path: string, init: RequestInit = {}, h = dpo) {
