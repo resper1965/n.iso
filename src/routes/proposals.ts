@@ -26,11 +26,18 @@ proposalsApp.post('/', async (c) => {
     const body = v.data as any;
     if (!body.lead_id || !body.assessment_id) return c.json({ error: 'lead_id e assessment_id obrigatórios' }, 400);
 
-    // A conta é a do assessment que originou esta proposta (quem vendeu),
-    // com o usuário como segunda opção — mesma regra de /sign e /convert.
-    const assessmentOrigem = await c.env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(body.assessment_id).first<{ conta_id: string | null }>();
+    // O operador tem de ser dono do ASSESSMENT de origem, ou `platform_admin`
+    // — mesmo gate de `/generate-proposal` (que é o caminho AUTOMÁTICO desta
+    // mesma ação; esta rota é o caminho MANUAL). Achado da varredura: sem
+    // isso, staff de outra consultoria criava proposta — e avançava o LEAD
+    // alheio para 'Proposal', logo abaixo — a partir de uma venda que não é
+    // dele. Alheio responde 404, nunca 403 (403 confirmaria a existência da
+    // venda na consultoria concorrente).
+    const assessmentOrigem = await linhaDoFunilDaConta(c.env.DB, 'assessments', body.assessment_id, c.get('user') as AtorAutorizado | undefined);
+    if (!assessmentOrigem) return c.json({ error: 'Assessment de origem não encontrado' }, 404);
+
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = assessmentOrigem?.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    const contaId = assessmentOrigem.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
 
     const id = genId();
     await c.env.DB.prepare(
@@ -38,7 +45,20 @@ proposalsApp.post('/', async (c) => {
        VALUES (?, ?, ?, 'Draft', ?, ?, ?, datetime('now'))`
     ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html, contaId).run();
 
-    await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
+    // `lead_id` e `assessment_id` chegam INDEPENDENTES um do outro no corpo —
+    // nada aqui garante que apontam para a mesma venda. O gate acima só
+    // confere o assessment; antes de avançar o STATUS do lead, confere o
+    // dono dele também. Lead sem dono (`conta_id` NULL, legado) é tratado
+    // como a mesma conta desta proposta — mesma regra de fallback usada na
+    // atribuição acima. Se o lead for de OUTRA conta, a proposta ainda nasce
+    // (o assessment de origem já foi verificado), mas este lead não é tocado.
+    const leadDaProposta = await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>();
+    const leadContaId = leadDaProposta?.conta_id ?? null;
+    const operador = c.get('user') as AtorAutorizado | undefined;
+    const podeAvancarLead = operador?.role === 'platform_admin' || leadContaId === null || leadContaId === contaId;
+    if (podeAvancarLead) {
+      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
+    }
 
     return c.json({ id, status: 'Draft' }, 201);
   } catch (e: any) {
@@ -127,9 +147,12 @@ proposalsApp.put('/:id', async (c) => {
     vals.push(id);
     await c.env.DB.prepare(`UPDATE proposals SET ${updates.join(', ')} WHERE id = ?`).bind(...vals).run();
 
-    const updated = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first();
+    const updated = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first<any>();
     await logAudit(c.env.DB, 'proposal.updated', c.get('user')?.email ?? 'system', `Proposta ${id} atualizada`);
-    return c.json(updated);
+    // `conta_id` é escopo de tenancy interno, não campo de produto — mesma
+    // razão de `GET /:id` acima.
+    const { conta_id, ...propostaAtualizadaSemConta } = updated ?? {};
+    return c.json(propostaAtualizadaSemConta);
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar proposta', e);
   }

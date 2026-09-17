@@ -94,6 +94,14 @@ describe('dados do funil isolados por conta', () => {
     const { id } = await res.json<any>();
     const row = await env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(id).first<{ conta_id: string }>();
     expect(row?.conta_id, 'a venda da conta-a nasceu na carteira da conta-b').toBe('conta-a');
+
+    // Achado da varredura (segunda rodada de correção): a atribuição acima
+    // protege ONDE o assessment nasce, mas é uma escrita SEPARADA na tabela
+    // `leads` que avança o funil do lead alheio — sem gate, qualquer staff de
+    // qualquer conta `msp` empurrava ('New' → 'Assessment') um lead que não é
+    // dele só por referenciá-lo no corpo.
+    const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a').first<{ status: string }>();
+    expect(lead?.status, 'operador de outra conta avançou o status do lead alheio').toBe('New');
   });
 
   /**
@@ -157,6 +165,85 @@ describe('dados do funil isolados por conta', () => {
       expect(res.status, await res.clone().text()).toBe(200);
       const stats = await res.json<any>();
       expect(stats.projects).toBe(5); // as 5 linhas de seedMatrizMsp
+    });
+  });
+
+  /**
+   * Varredura de escritas do funil (segunda rodada de correção): toda
+   * escrita em `leads`/`assessments`/`proposals` que localiza a linha por um
+   * id do corpo ou do path precisa conferir a conta antes de escrever.
+   * `POST /proposals` (criação manual) tinha DOIS problemas: nenhum gate no
+   * `assessment_id` de origem, e nenhuma relação conferida entre `lead_id` e
+   * `assessment_id` — os dois vêm independentes no corpo. Fica depois das
+   * contagens de carteira/dashboard acima de propósito: os leads que cria
+   * aqui alterariam aquelas contagens se viessem antes.
+   */
+  describe('POST /proposals — escritas por id do corpo', () => {
+    beforeAll(async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-a', 'Venda da A', 'in_progress', 'conta-a')`),
+      ]);
+    });
+
+    it('assessment de origem de outra conta é recusado (404): não cria proposta nem toca o lead', async () => {
+      const headers = {
+        ...(await sessionFor({ id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor', conta_id: 'conta-b', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/proposals', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ lead_id: 'lead-a', assessment_id: 'assm-a', total_price: 1000, content_html: '<p>x</p>' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(404);
+
+      const semProposta = await env.DB.prepare(`SELECT COUNT(*) n FROM proposals WHERE assessment_id = 'assm-a'`).first<{ n: number }>();
+      expect(semProposta?.n, 'proposta nasceu a partir de assessment de outra consultoria').toBe(0);
+      const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a').first<{ status: string }>();
+      expect(lead?.status, 'lead alheio avançou mesmo com a criação recusada').toBe('New');
+    });
+
+    it('lead_id de OUTRA conta, no corpo de uma proposta legítima, não é avançado (proposta nasce, lead alheio fica intacto)', async () => {
+      // `assm-a` é da conta-a e o operador é da conta-a: a proposta É
+      // legítima. Mas o `lead_id` do corpo aponta para `lead-b` (conta-b) —
+      // as duas chaves vêm independentes no corpo, sem relação nenhuma
+      // conferida no banco. A proposta nasce (o assessment de origem já foi
+      // verificado), mas o lead que não é da mesma conta não é tocado.
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/proposals', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ lead_id: 'lead-b', assessment_id: 'assm-a', total_price: 2000, content_html: '<p>y</p>' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+      const { id } = await res.json<any>();
+
+      const proposta = await env.DB.prepare('SELECT conta_id FROM proposals WHERE id = ?').bind(id).first<{ conta_id: string }>();
+      expect(proposta?.conta_id).toBe('conta-a');
+      const leadB = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-b').first<{ status: string }>();
+      expect(leadB?.status, 'lead de outra conta foi avançado por um lead_id sem relação com o assessment').toBe('New');
+    });
+
+    it('caminho legítimo: assessment e lead da MESMA conta do operador — a proposta nasce e o lead avança', async () => {
+      await env.DB.prepare(
+        `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-a2', 'Segundo prospect da A', 'New', 'conta-a')`
+      ).run();
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/proposals', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ lead_id: 'lead-a2', assessment_id: 'assm-a', total_price: 3000, content_html: '<p>z</p>' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+
+      const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a2').first<{ status: string }>();
+      expect(lead?.status, 'fluxo legítimo deveria avançar o próprio lead').toBe('Proposal');
     });
   });
 });
