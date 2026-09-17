@@ -131,45 +131,44 @@ assessmentsApp.post('/', async (c) => {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
 
-    const id = genId();
-    const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
-    // A conta é a de quem é DONO DO LEAD, não a de quem abriu o assessment.
-    // Antes desta correção, um consultor de conta-b que criasse assessment
-    // sobre lead de conta-a fazia proposta, projeto e cliente inteiros
-    // nascerem em conta-b — a venda de A na carteira de B, o mesmo Critical
-    // que a Task 6 fechou em /convert e /sign, reaberto por este caminho no
-    // instante em que `leads.conta_id` passou a ser gravado na criação
-    // (Task 9). `hidrataEscopo` completa sessão velha sem `conta_id`; sem
-    // sessão de staff reconhecida nem lead com dono, fica NULL — como sempre foi.
+    const operador = c.get('user') as AtorAutorizado | undefined;
     await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+
+    // Você só opera o funil da SUA conta. Antes desta correção, a criação em
+    // si era permissiva de propósito (atribuía certo, mas deixava passar) —
+    // e isso produzia um registro que o próprio criador não conseguia depois
+    // operar: `/convert` e `/sign` já recusam (404) quem não é da conta de
+    // origem, então um assessment criado sobre lead alheio nascia poluindo a
+    // carteira do concorrente com o próximo passo travado. Fechado: lead de
+    // OUTRA conta responde 404 (não 403 — confirmaria a existência do lead na
+    // consultoria concorrente), com as MESMAS duas exceções que sempre
+    // valeram para a regra de atribuição (Ruling 14, que continua viva, só
+    // deixa de ser exercida por operador alheio):
+    //   - `platform_admin`, o único papel global;
+    //   - lead SEM DONO (`conta_id` nulo) — cai no operador, que é o
+    //     fallback da própria fórmula de atribuição logo abaixo.
     const lead = body.lead_id
       ? await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>()
       : null;
-    const contaId = lead?.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    if (
+      body.lead_id && lead &&
+      operador?.role !== 'platform_admin' &&
+      lead.conta_id !== null &&
+      lead.conta_id !== (operador?.conta_id ?? null)
+    ) {
+      return c.json({ error: 'Lead não encontrado' }, 404);
+    }
+
+    const id = genId();
+    const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
+    const contaId = lead?.conta_id ?? (operador?.conta_id ?? null);
     await c.env.DB.prepare(
       `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, conta_id, created_at)
        VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
     ).bind(id, body.lead_id || null, body.client_name, accessToken, contaId).run();
 
     if (body.lead_id) {
-      // Avança o STATUS do lead só quando o operador tem autoridade sobre
-      // ele — mesma conta do lead, ou lead sem dono que a atribuição acima
-      // acabou de entregar ao operador (os dois casos são exatamente
-      // `contaId === conta do operador`, pela mesma fórmula usada para
-      // atribuir o assessment). Achado da varredura: a atribuição de CIMA
-      // protege ONDE o assessment nasce, mas esta é uma escrita SEPARADA na
-      // tabela `leads` — sem este gate, qualquer staff de qualquer conta
-      // `msp` avançava (`'New'` → `'Assessment'`) o funil de OUTRA
-      // consultoria só por referenciar o `lead_id` alheio no corpo. Não
-      // bloqueia a criação do assessment em si (que continua permitida e
-      // corretamente atribuída — é o comportamento pedido explicitamente
-      // para este roteador): só deixa de tocar em lead que não é do
-      // operador.
-      const operador = c.get('user') as AtorAutorizado | undefined;
-      const podeAvancarLead = operador?.role === 'platform_admin' || contaId === (operador?.conta_id ?? null);
-      if (podeAvancarLead) {
-        await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
-      }
+      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
     }
 
     await logAudit(c.env.DB, 'assessment.created', c.get('user')?.email ?? 'system', `Assessment ${id} criado para ${body.client_name}`);

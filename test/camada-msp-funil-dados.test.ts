@@ -72,39 +72,6 @@ describe('dados do funil isolados por conta', () => {
   });
 
   /**
-   * REQUISITO QUE NÃO PODE FICAR DE FORA (revisão do brief da Task 9): o
-   * assessment grava a conta de quem CONDUZIU A VENDA — o dono do lead —,
-   * nunca a de quem meramente operou a criação. Sem isso, um consultor de
-   * conta-b que abra assessment sobre lead de conta-a materializa a venda de
-   * A inteira (assessment → proposta → projeto → cliente) na carteira de B,
-   * reabrindo por outro caminho o Critical que a Task 6 fechou em
-   * /convert e /sign.
-   */
-  it('assessment de lead alheio nasce na conta do LEAD, não na de quem operou', async () => {
-    const headers = {
-      ...(await sessionFor({ id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor', conta_id: 'conta-b', cliente_id: null })),
-      'Content-Type': 'application/json',
-    };
-    const res = await pedir(worker, '/api/v1/assessments', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ client_name: 'Prospect da A', lead_id: 'lead-a' }),
-    });
-    expect(res.status, await res.clone().text()).toBe(201);
-    const { id } = await res.json<any>();
-    const row = await env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(id).first<{ conta_id: string }>();
-    expect(row?.conta_id, 'a venda da conta-a nasceu na carteira da conta-b').toBe('conta-a');
-
-    // Achado da varredura (segunda rodada de correção): a atribuição acima
-    // protege ONDE o assessment nasce, mas é uma escrita SEPARADA na tabela
-    // `leads` que avança o funil do lead alheio — sem gate, qualquer staff de
-    // qualquer conta `msp` empurrava ('New' → 'Assessment') um lead que não é
-    // dele só por referenciá-lo no corpo.
-    const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a').first<{ status: string }>();
-    expect(lead?.status, 'operador de outra conta avançou o status do lead alheio').toBe('New');
-  });
-
-  /**
    * ESCOPO AMPLIADO (revisão do brief da Task 9): `/portfolio` e as contagens
    * de `/dashboard/stats` vazavam a carteira inteira para qualquer staff,
    * pela mesma cadeia `projects.cliente_id → clientes.conta_id` que
@@ -165,6 +132,93 @@ describe('dados do funil isolados por conta', () => {
       expect(res.status, await res.clone().text()).toBe(200);
       const stats = await res.json<any>();
       expect(stats.projects).toBe(5); // as 5 linhas de seedMatrizMsp
+    });
+  });
+
+  /**
+   * REQUISITO QUE NÃO PODE FICAR DE FORA (revisão do brief da Task 9), depois
+   * fechado de vez (terceira revisão): "atribuição correta não conserta
+   * escrita de terceiro no funil de quem vendeu" — o mesmo argumento que
+   * fechou `/convert` e `/sign` vale para a CRIAÇÃO do assessment. A versão
+   * antiga desta regra deixava a criação passar (201) e só corrigia a conta
+   * gravada; isso produzia um assessment que o próprio criador não conseguia
+   * operar depois (`/convert`/`/sign` já recusam quem não é da conta de
+   * origem) — poluição na carteira do concorrente com o próximo passo
+   * travado. Você só opera o funil da SUA conta: lead de OUTRA consultoria
+   * responde 404 na criação, não 403 (confirmaria a existência do lead na
+   * consultoria concorrente).
+   *
+   * A regra de atribuição (Ruling 14: o assessment nasce na conta do LEAD,
+   * não do operador) continua viva — só deixa de ser exercida por operador
+   * alheio. Os dois caminhos legítimos que restam, cobertos abaixo:
+   * `platform_admin` (papel global) e lead SEM DONO (`conta_id` nulo, cai no
+   * operador — fallback da própria fórmula de atribuição).
+   *
+   * Fica depois das contagens de carteira/dashboard acima de propósito: os
+   * leads que cria aqui (conta-a) alterariam aquelas contagens se viessem
+   * antes.
+   */
+  describe('POST /assessments — a criação em si é escopada', () => {
+    it('CONSULTOR DE OUTRA CONSULTORIA NÃO CRIA assessment sobre lead alheio (404, não 403)', async () => {
+      const headers = {
+        ...(await sessionFor({ id: 'u-b-consultor', email: 'consultor@b.com', role: 'consultor', conta_id: 'conta-b', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ client_name: 'Prospect da A', lead_id: 'lead-a' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(404);
+
+      const semAssessment = await env.DB.prepare(`SELECT COUNT(*) n FROM assessments WHERE lead_id = 'lead-a'`).first<{ n: number }>();
+      expect(semAssessment?.n, 'assessment nasceu sobre lead de outra consultoria mesmo com a criação recusada').toBe(0);
+
+      // Redundante com o 404 acima de propósito (decisão explícita): antes
+      // esta era a asserção PRINCIPAL, provando que a atribuição corrigia a
+      // conta mesmo com a criação passando. Hoje a criação nem passa — mas
+      // manter a checagem de que o status do lead alheio não se move não
+      // custa nada e sustenta a regra por dois lados.
+      const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a').first<{ status: string }>();
+      expect(lead?.status, 'operador de outra conta avançou o status do lead alheio').toBe('New');
+    });
+
+    it('platform_admin cria assessment sobre lead de qualquer conta, e ele nasce na conta do LEAD (Ruling 14 continua valendo)', async () => {
+      await env.DB.prepare(
+        `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-a-plataforma', 'Prospect da A via plataforma', 'New', 'conta-a')`
+      ).run();
+      const headers = {
+        ...(await sessionFor({ id: 'u-plataforma', email: 'adm@ness.com', role: 'platform_admin', conta_id: null, cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ client_name: 'Prospect da A via plataforma', lead_id: 'lead-a-plataforma' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+      const { id } = await res.json<any>();
+      const row = await env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(id).first<{ conta_id: string }>();
+      expect(row?.conta_id, 'o assessment tem de nascer na conta do LEAD, não órfão do platform_admin').toBe('conta-a');
+    });
+
+    it('lead sem dono (conta_id nulo) cai no operador — segundo caminho legítimo da atribuição', async () => {
+      await env.DB.prepare(`INSERT INTO leads (id, company_name, status) VALUES ('lead-sem-dono', 'Prospect sem dono', 'New')`).run();
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ client_name: 'Prospect assumido pela A', lead_id: 'lead-sem-dono' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+      const { id } = await res.json<any>();
+      const row = await env.DB.prepare('SELECT conta_id FROM assessments WHERE id = ?').bind(id).first<{ conta_id: string }>();
+      expect(row?.conta_id, 'lead sem dono deveria ser assumido pelo operador').toBe('conta-a');
+      const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-sem-dono').first<{ status: string }>();
+      expect(lead?.status, 'lead assumido deveria avançar no funil').toBe('Assessment');
     });
   });
 
