@@ -147,15 +147,20 @@ assessmentsApp.post('/', async (c) => {
     //   - `platform_admin`, o único papel global;
     //   - lead SEM DONO (`conta_id` nulo) — cai no operador, que é o
     //     fallback da própria fórmula de atribuição logo abaixo.
+    //
+    // `lead_id` INEXISTENTE também responde 404, no mesmo `if` — não um `if`
+    // separado que deixaria passar (201) exatamente quando o id não resolve
+    // linha nenhuma. Deixar essas duas respostas diferentes (404 para
+    // alheio, 201 para inexistente) é um oráculo de existência: a diferença
+    // sozinha responde "esse id existe em outra consultoria?", que é
+    // precisamente o que a decisão de 404 existe para negar.
     const lead = body.lead_id
       ? await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>()
       : null;
-    if (
-      body.lead_id && lead &&
-      operador?.role !== 'platform_admin' &&
-      lead.conta_id !== null &&
-      lead.conta_id !== (operador?.conta_id ?? null)
-    ) {
+    if (body.lead_id && (
+      !lead ||
+      (operador?.role !== 'platform_admin' && lead.conta_id !== null && lead.conta_id !== (operador?.conta_id ?? null))
+    )) {
       return c.json({ error: 'Lead não encontrado' }, 404);
     }
 
@@ -475,10 +480,21 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
     // isso, /sign teria só o operador de então como fonte de conta.
     await hidrataEscopo(c.env.DB, user ?? {});
     const contaId = assessment.conta_id ?? (user as AtorAutorizado | undefined)?.conta_id ?? null;
+    // `assessment.lead_id` é um id GRAVADO dentro da linha já verificada
+    // acima — não validado por si só ("id lavado", achado da revisão). O
+    // gate de `POST /assessments` garante isso para assessment criado daqui
+    // pra frente, mas não para um assessment de ANTES desse gate existir.
+    // Gravar um `lead_id` alheio aqui plantaria o MESMO vazamento na
+    // proposta recém-criada: a listagem (`GET /proposals`, que faz `LEFT
+    // JOIN leads`) devolveria nome e CNPJ do prospect alheio dentro de uma
+    // listagem corretamente escopada por `conta_id`.
+    const leadDoAssessment = assessment.lead_id
+      ? await linhaDoFunilDaConta(c.env.DB, 'leads', assessment.lead_id, user as AtorAutorizado | undefined)
+      : null;
     await c.env.DB.prepare(
       `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, conta_id, created_at)
        VALUES (?, ?, ?, ?, ?, 'Draft', ?, datetime('now'))`
-    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal, contaId).run();
+    ).bind(proposalId, leadDoAssessment ? assessment.lead_id : null, id, contentHtml, pricing.precoFinal, contaId).run();
 
     await logAudit(c.env.DB, 'proposal.generated', user?.email ?? 'system', `Proposta ${proposalId} gerada automaticamente do assessment ${id}.`);
     await createNotification(c.env.DB, 'proposal_ready', `Proposta gerada: ${clientName}`, `Tier ${pricing.tier.name}`, user?.id, `/proposals/${proposalId}`);
@@ -527,8 +543,18 @@ assessmentsApp.post('/:id/convert', async (c) => {
       return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
     }
     // CNPJ mora no lead (a um join de distância), não no assessment.
+    // `assessment.lead_id` é um id GRAVADO dentro de uma linha já verificada
+    // — a verificação de cima não valida o que está gravado dentro dela
+    // ("id lavado", achado da revisão). O gate de `POST /assessments`
+    // garante isso para assessment CRIADO daqui pra frente, mas não limpa o
+    // passado: um assessment de antes desse gate existir pode carregar
+    // `lead_id` de outra consultoria. Sem revalidar, o CNPJ alheio vazaria
+    // para `resolveCliente` e passaria a existir como cliente na carteira de
+    // quem converteu — dado real de uma empresa que nem é prospect desta
+    // conta. `linhaDoFunilDaConta` devolve `null` para lead inexistente ou de
+    // outra conta; o `cnpj` cai fora e `resolveCliente` casa por nome.
     const leadDoAssessment = assessment.lead_id
-      ? await c.env.DB.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(assessment.lead_id).first<{ cnpj: string | null }>()
+      ? await linhaDoFunilDaConta(c.env.DB, 'leads', assessment.lead_id, c.get('user') as AtorAutorizado | undefined)
       : null;
     const clienteId = await resolveCliente(c.env.DB, contaId, assessment.client_name, leadDoAssessment?.cnpj);
 

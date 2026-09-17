@@ -183,6 +183,28 @@ describe('dados do funil isolados por conta', () => {
       expect(lead?.status, 'operador de outra conta avançou o status do lead alheio').toBe('New');
     });
 
+    /**
+     * Achado da revisão (4ª rodada): o gate só disparava com `lead` truthy —
+     * `lead_id` de outra conta dava 404, `lead_id` INEXISTENTE dava 201. A
+     * diferença sozinha respondia "esse id existe em outra consultoria?",
+     * que é exatamente o que a decisão de 404 existe para negar. As duas
+     * respostas agora são idênticas.
+     */
+    it('lead_id INEXISTENTE também é 404 — não um oráculo que diferencia "alheio" de "não existe"', async () => {
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ client_name: 'Prospect fantasma', lead_id: 'lead-nao-existe' }),
+      });
+      expect(res.status, await res.clone().text()).toBe(404);
+      const semAssessment = await env.DB.prepare(`SELECT COUNT(*) n FROM assessments WHERE lead_id = 'lead-nao-existe'`).first<{ n: number }>();
+      expect(semAssessment?.n, 'assessment nasceu com lead_id pendurado no vazio').toBe(0);
+    });
+
     it('platform_admin cria assessment sobre lead de qualquer conta, e ele nasce na conta do LEAD (Ruling 14 continua valendo)', async () => {
       await env.DB.prepare(
         `INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-a-plataforma', 'Prospect da A via plataforma', 'New', 'conta-a')`
@@ -257,12 +279,17 @@ describe('dados do funil isolados por conta', () => {
       expect(lead?.status, 'lead alheio avançou mesmo com a criação recusada').toBe('New');
     });
 
-    it('lead_id de OUTRA conta, no corpo de uma proposta legítima, não é avançado (proposta nasce, lead alheio fica intacto)', async () => {
-      // `assm-a` é da conta-a e o operador é da conta-a: a proposta É
-      // legítima. Mas o `lead_id` do corpo aponta para `lead-b` (conta-b) —
-      // as duas chaves vêm independentes no corpo, sem relação nenhuma
-      // conferida no banco. A proposta nasce (o assessment de origem já foi
-      // verificado), mas o lead que não é da mesma conta não é tocado.
+    /**
+     * Achado da revisão (4ª rodada): esta rotina, na versão anterior, media
+     * o estado VULNERÁVEL como esperado — esperava 201 e só conferia que o
+     * `status` do lead alheio não avançava. Isso não bastava: o `lead_id` de
+     * `lead-b` era gravado CRU na proposta mesmo assim ("lavagem de id" —
+     * validar o assessment não valida o que veio junto no corpo), e reaparecia
+     * sem checagem em toda leitura que faz `JOIN leads` (a listagem, `GET
+     * /:id`) e em `/sign`, que chegava a marcar o lead alheio como `'Won'`.
+     * Invertido: `lead_id` de outra conta agora recusa a criação inteira.
+     */
+    it('lead_id de OUTRA conta no corpo é recusado (404) mesmo com assessment_id legítimo — não fica gravado cru na proposta', async () => {
       const headers = {
         ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
         'Content-Type': 'application/json',
@@ -272,13 +299,12 @@ describe('dados do funil isolados por conta', () => {
         headers,
         body: JSON.stringify({ lead_id: 'lead-b', assessment_id: 'assm-a', total_price: 2000, content_html: '<p>y</p>' }),
       });
-      expect(res.status, await res.clone().text()).toBe(201);
-      const { id } = await res.json<any>();
+      expect(res.status, await res.clone().text()).toBe(404);
 
-      const proposta = await env.DB.prepare('SELECT conta_id FROM proposals WHERE id = ?').bind(id).first<{ conta_id: string }>();
-      expect(proposta?.conta_id).toBe('conta-a');
+      const semProposta = await env.DB.prepare(`SELECT COUNT(*) n FROM proposals WHERE lead_id = 'lead-b'`).first<{ n: number }>();
+      expect(semProposta?.n, 'proposta nasceu com lead_id de outra consultoria gravado cru').toBe(0);
       const leadB = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-b').first<{ status: string }>();
-      expect(leadB?.status, 'lead de outra conta foi avançado por um lead_id sem relação com o assessment').toBe('New');
+      expect(leadB?.status, 'lead de outra conta foi avançado').toBe('New');
     });
 
     it('caminho legítimo: assessment e lead da MESMA conta do operador — a proposta nasce e o lead avança', async () => {
@@ -298,6 +324,75 @@ describe('dados do funil isolados por conta', () => {
 
       const lead = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-a2').first<{ status: string }>();
       expect(lead?.status, 'fluxo legítimo deveria avançar o próprio lead').toBe('Proposal');
+    });
+  });
+
+  /**
+   * "Lavagem de id" (achado da revisão, 4ª rodada): um id do corpo, gravado
+   * cru DENTRO de uma linha que passou pelo gate, sai do outro lado parecendo
+   * confiável — porque a checagem foi na linha que o carrega, não no id em
+   * si. Os gates de criação (acima) fecham o vazamento para DAQUI PRA FRENTE;
+   * estes três testes provam a defesa em profundidade para dado LEGADO — uma
+   * proposta/assessment que já carregava um `lead_id` alheio de antes de os
+   * gates existirem. Os fixtures abaixo simulam esse legado com `INSERT`
+   * direto (o gate na criação impede reproduzir isso pela própria API).
+   */
+  describe('defesa em profundidade contra lead_id alheio em dado legado', () => {
+    it('/sign não usa dado do lead alheio nem o marca como Won, mesmo com lead_id legado gravado na proposta', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO leads (id, company_name, razao_social, cnpj, status, conta_id) VALUES ('lead-b-legado', 'Empresa Legado B', 'Legado B Razão Social', '11222333000199', 'Proposal', 'conta-b')`),
+        env.DB.prepare(`INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-legado-sign', 'Cliente Legado A', 'in_progress', 'conta-a')`),
+        env.DB.prepare(`INSERT INTO proposals (id, lead_id, assessment_id, status, conta_id) VALUES ('prop-legado-sign', 'lead-b-legado', 'assm-legado-sign', 'Draft', 'conta-a')`),
+      ]);
+      const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+      const res = await pedir(worker, '/api/v1/proposals/prop-legado-sign/sign', { method: 'POST', headers });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const { project_id } = await res.json<any>();
+
+      // O nome que vira projeto/cliente é o do assessment (fallback seguro),
+      // nunca o da empresa alheia gravada no lead legado.
+      const projeto = await env.DB.prepare('SELECT client_name FROM projects WHERE id = ?').bind(project_id).first<{ client_name: string }>();
+      expect(projeto?.client_name, 'nome da empresa alheia vazou para o projeto').toBe('Cliente Legado A');
+
+      // O lead alheio não é marcado como Won — essa é a mutação irreversível
+      // que este handler existe para proteger.
+      const leadAlheio = await env.DB.prepare('SELECT status FROM leads WHERE id = ?').bind('lead-b-legado').first<{ status: string }>();
+      expect(leadAlheio?.status, 'lead de outra consultoria foi marcado Won por uma proposta que não é dela').not.toBe('Won');
+    });
+
+    it('/convert não usa o CNPJ do lead alheio para materializar cliente, mesmo com lead_id legado gravado no assessment', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO leads (id, company_name, cnpj, status, conta_id) VALUES ('lead-b-cnpj', 'Empresa CNPJ B', '99888777000166', 'New', 'conta-b')`),
+        env.DB.prepare(`INSERT INTO assessments (id, lead_id, client_name, status, conta_id) VALUES ('assm-legado-convert', 'lead-b-cnpj', 'Cliente Convert Legado', 'in_progress', 'conta-a')`),
+      ]);
+      const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+      const res = await pedir(worker, '/api/v1/assessments/assm-legado-convert/convert', { method: 'POST', headers });
+      expect(res.status, await res.clone().text()).toBe(201);
+      const { project_id } = await res.json<any>();
+
+      const cliente = await env.DB.prepare(
+        `SELECT c.cnpj FROM projects p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`
+      ).bind(project_id).first<{ cnpj: string | null }>();
+      expect(cliente?.cnpj, 'CNPJ do lead de outra consultoria vazou para o cliente de quem converteu').not.toBe('99888777000166');
+    });
+
+    it('/generate-proposal não grava o lead_id alheio na proposta gerada, mesmo com lead_id legado no assessment', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-b-genprop', 'Empresa GenProp B', 'New', 'conta-b')`),
+        env.DB.prepare(`INSERT INTO assessments (id, lead_id, client_name, status, conta_id) VALUES ('assm-legado-genprop', 'lead-b-genprop', 'Cliente GenProp Legado', 'in_progress', 'conta-a')`),
+      ]);
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments/assm-legado-genprop/generate-proposal', {
+        method: 'POST', headers, body: JSON.stringify({}),
+      });
+      expect(res.status, await res.clone().text()).toBeLessThan(300);
+      const { proposal_id } = await res.json<any>();
+
+      const proposta = await env.DB.prepare('SELECT lead_id FROM proposals WHERE id = ?').bind(proposal_id).first<{ lead_id: string | null }>();
+      expect(proposta?.lead_id, 'lead_id de outra consultoria vazou para a proposta gerada automaticamente').toBeNull();
     });
   });
 });
