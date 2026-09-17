@@ -14,7 +14,13 @@ export async function execSql(sql: string): Promise<void> {
   let buf = '';
   let inTrigger = false;
   for (const rawLine of sql.split('\n')) {
-    const line = rawLine.replace(/--.*$/, '');
+    // O `\r` sai ANTES do strip de comentário, e a ordem é o ponto. Em checkout
+    // com `core.autocrlf` (todo Windows), a linha termina em `\r\n`; `.` não casa
+    // `\r` em JS e `$` sem a flag `m` é fim de string, então `/--.*$/` não casava
+    // nada e o comentário sobrevivia inteiro. Um comentário terminando em `;` —
+    // como as consultas de conferência no cabeçalho das migrations — virava
+    // "statement" e o D1 recusava com "SQL code did not contain a statement".
+    const line = rawLine.replace(/\r/g, '').replace(/--.*$/, '');
     if (!line.trim()) continue;
     if (/CREATE\s+TRIGGER/i.test(line)) inTrigger = true;
     buf += line + '\n';
