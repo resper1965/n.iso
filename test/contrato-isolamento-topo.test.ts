@@ -127,6 +127,29 @@ describe('Contrato de isolamento das rotas de topo', () => {
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('u-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', 'proj-a'),
     ]);
+    // De propósito SEM `cliente_id`/`conta_id`: esta sessão nunca alcança o
+    // ramo de comparação de tenant de `requireProjectAccess` (`cliente_id` do
+    // ator falsy encerra aquele `if` antes de chegar à igualdade). Isso é
+    // aceitável PORQUE a varredura abaixo é NEGATIVA — nunca afirma "meu
+    // acesso ao próprio projeto funciona", só "id inexistente não responde
+    // 2xx/5xx". Rota sem guarda nenhuma entregaria sucesso com QUALQUER ator,
+    // órfão ou não, então este ator ainda pega esse defeito.
+    //
+    // A lacuna que isso ACEITA: uma mutação especificamente NA COMPARAÇÃO de
+    // igualdade de `cliente_id` dentro de `requireProjectAccess` (ex.: trocar
+    // `&&` por `||`, ou inverter o `===`) não seria pega aqui, porque o ramo
+    // inteiro já está inalcançável para um ator sem escopo, com ou sem a
+    // mutação. Essa comparação específica é coberta em outro lugar
+    // (`idor-tenant.test.ts`, `idor-tenant-project-scoped.test.ts`), com
+    // clientes reais e distintos dos dois lados.
+    //
+    // Dar cadeia real a este ator exigiria entender `semearTenantAlheio` (mais
+    // abaixo neste arquivo) a fundo: ela semeia uma linha em TODA tabela do
+    // schema via `sqlite_master`/`PRAGMA foreign_key_list`, inclusive em
+    // `contas`/`clientes`, com heurística própria para achar e preencher FK —
+    // mudar o formato de `projects`/`users` aqui arrisca quebrar essa
+    // semeadura genérica para um ganho estreito. Decisão registrada na Task 10
+    // (varredura de `sessionFor` com `client_project_id` sem `cliente_id`).
     const sessao = await sessionFor({
       id: 'u-a', email: 'adm@a.com', role: 'org_admin', client_project_id: 'proj-a',
     });
@@ -297,6 +320,18 @@ describe('Contrato de isolamento — recurso REAL do outro tenant', () => {
         .bind('u-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', 'proj-a'),
     ]);
     await semearTenantAlheio(ID_ALHEIO, PROJ_ALHEIO);
+    // De propósito SEM `cliente_id`/`conta_id`, mesma decisão do describe
+    // acima ("Contrato de isolamento das rotas de topo"): a varredura 2
+    // também é NEGATIVA — só afirma "nenhuma rota entrega o recurso REAL do
+    // outro tenant" —, e rota sem guarda entregaria o dado alheio (2xx) para
+    // QUALQUER ator, órfão ou não. A lacuna aceita é a mesma: uma mutação
+    // especificamente na comparação de igualdade de `cliente_id` dentro de
+    // `requireProjectAccess` não seria pega por este ator, porque o ramo de
+    // cliente já está inalcançável sem `cliente_id` — essa comparação
+    // específica é coberta com clientes reais em `idor-tenant.test.ts`. Dar
+    // cadeia real aqui esbarraria em `semearTenantAlheio` acima, que semeia
+    // TODA tabela do schema (inclusive `contas`/`clientes`) por heurística de
+    // FK — risco desproporcional ao ganho. Decisão da Task 10.
     const sessao = await sessionFor({
       id: 'u-a', email: 'adm@a.com', role: 'org_admin', client_project_id: 'proj-a',
     });
