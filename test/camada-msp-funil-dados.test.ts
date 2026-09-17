@@ -394,5 +394,76 @@ describe('dados do funil isolados por conta', () => {
       const proposta = await env.DB.prepare('SELECT lead_id FROM proposals WHERE id = ?').bind(proposal_id).first<{ lead_id: string | null }>();
       expect(proposta?.lead_id, 'lead_id de outra consultoria vazou para a proposta gerada automaticamente').toBeNull();
     });
+
+    /**
+     * Caminho feliz sem cobertura (achado da re-revisão): o único teste de
+     * `/generate-proposal` até aqui afirmava `lead_id === null` (caso
+     * alheio). Uma regressão que passasse a anular o `lead_id` SEMPRE
+     * (mesma conta inclusive) ficaria verde sem este teste — e o sintoma é
+     * silencioso: proposta sem lead, listagem sem `company_name`, `/sign`
+     * caindo no nome do assessment em vez de travar em nada visível.
+     */
+    it('/generate-proposal PRESERVA o lead_id quando o lead é da MESMA conta do assessment', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO leads (id, company_name, status, conta_id) VALUES ('lead-a-genprop', 'Prospect A GenProp', 'New', 'conta-a')`),
+        env.DB.prepare(`INSERT INTO assessments (id, lead_id, client_name, status, conta_id) VALUES ('assm-a-genprop', 'lead-a-genprop', 'Cliente A GenProp', 'in_progress', 'conta-a')`),
+      ]);
+      const headers = {
+        ...(await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null })),
+        'Content-Type': 'application/json',
+      };
+      const res = await pedir(worker, '/api/v1/assessments/assm-a-genprop/generate-proposal', {
+        method: 'POST', headers, body: JSON.stringify({}),
+      });
+      expect(res.status, await res.clone().text()).toBeLessThan(300);
+      const { proposal_id } = await res.json<any>();
+
+      const proposta = await env.DB.prepare('SELECT lead_id FROM proposals WHERE id = ?').bind(proposal_id).first<{ lead_id: string | null }>();
+      expect(proposta?.lead_id, 'fluxo legítimo perdeu o lead_id que deveria preservar').toBe('lead-a-genprop');
+    });
+  });
+
+  /**
+   * O gêmeo do Critical anterior (re-revisão, 6ª rodada): `proposal.assessment_id`
+   * é o MESMO padrão de `proposal.lead_id` — um id gravado dentro da proposta
+   * já verificada, nunca checado por si só. Sem revalidar em `/sign`,
+   * `assessmentDaProposta.client_name` fazia `clientName` cair no nome do
+   * cliente de uma assessment ALHEIA, materializando esse nome como cliente
+   * na carteira de quem assina; e `projects.assessment_id` gravava o id cru,
+   * que É lido de volta em `platform.ts` (`GET /client/assessment`, `GET
+   * /client/proposal`) — ao contrário de `contracts.lead_id`, a exceção
+   * registrada sem caminho de leitura.
+   */
+  describe('proposals.ts /:id/sign — assessment_id é o gêmeo do lead_id', () => {
+    it('/sign não usa o nome do assessment alheio nem grava assessment_id alheio no projeto', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-b-sign-gemeo', 'Empresa Gêmeo B', 'in_progress', 'conta-b')`),
+        env.DB.prepare(`INSERT INTO proposals (id, assessment_id, status, conta_id) VALUES ('prop-gemeo-sign', 'assm-b-sign-gemeo', 'Draft', 'conta-a')`),
+      ]);
+      const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+      const res = await pedir(worker, '/api/v1/proposals/prop-gemeo-sign/sign', { method: 'POST', headers });
+      // Sem lead e com o assessment alheio recusado por revalidação, não
+      // sobra nome nenhum para determinar o cliente — recusa em vez de
+      // inventar (mesma regra do "balde" já documentada no handler).
+      expect(res.status, await res.clone().text()).toBe(400);
+
+      const semProjeto = await env.DB.prepare(`SELECT COUNT(*) n FROM projects WHERE assessment_id = 'assm-b-sign-gemeo'`).first<{ n: number }>();
+      expect(semProjeto?.n, 'projeto nasceu com assessment_id de outra consultoria gravado cru').toBe(0);
+    });
+
+    it('caminho legítimo: assessment da MESMA conta preserva o nome e o assessment_id do projeto', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO assessments (id, client_name, status, conta_id) VALUES ('assm-a-sign-gemeo', 'Cliente Gêmeo A', 'in_progress', 'conta-a')`),
+        env.DB.prepare(`INSERT INTO proposals (id, assessment_id, status, conta_id) VALUES ('prop-gemeo-sign-legitimo', 'assm-a-sign-gemeo', 'Draft', 'conta-a')`),
+      ]);
+      const headers = await sessionFor({ id: 'u-a-consultor', email: 'consultor@a.com', role: 'consultor', conta_id: 'conta-a', cliente_id: null });
+      const res = await pedir(worker, '/api/v1/proposals/prop-gemeo-sign-legitimo/sign', { method: 'POST', headers });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const { project_id } = await res.json<any>();
+
+      const projeto = await env.DB.prepare('SELECT client_name, assessment_id FROM projects WHERE id = ?').bind(project_id).first<{ client_name: string; assessment_id: string }>();
+      expect(projeto?.client_name, 'fluxo legítimo deveria usar o nome do próprio assessment').toBe('Cliente Gêmeo A');
+      expect(projeto?.assessment_id, 'fluxo legítimo deveria preservar o assessment_id').toBe('assm-a-sign-gemeo');
+    });
   });
 });

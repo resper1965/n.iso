@@ -204,8 +204,15 @@ proposalsApp.post('/:id/sign', async (c) => {
     const leadData = proposal.lead_id
       ? await linhaDoFunilDaConta(c.env.DB, 'leads', proposal.lead_id, c.get('user') as AtorAutorizado | undefined)
       : null;
+    // `proposal.assessment_id` é o gêmeo de `proposal.lead_id` acima — o
+    // mesmo id GRAVADO dentro de uma linha já verificada, sem checagem
+    // própria. Sem revalidar, `assessmentDaProposta.client_name` fazia
+    // `clientName` cair no nome do cliente de uma assessment ALHEIA, e
+    // `resolveCliente` materializava esse nome como cliente na carteira de
+    // quem assina — a mesma classe de vazamento que motivou revalidar
+    // `lead_id`, só que pela porta do assessment.
     const assessmentDaProposta = proposal.assessment_id
-      ? await c.env.DB.prepare('SELECT client_name FROM assessments WHERE id = ?').bind(proposal.assessment_id).first<{ client_name: string }>()
+      ? await linhaDoFunilDaConta(c.env.DB, 'assessments', proposal.assessment_id, c.get('user') as AtorAutorizado | undefined)
       : null;
 
     // A conta é a de quem CONDUZIU A VENDA, não a de quem clicou em assinar:
@@ -251,10 +258,17 @@ proposalsApp.post('/:id/sign', async (c) => {
 
     const projectId = genId();
 
+    // `projects.assessment_id` grava o id VALIDADO acima (`assessmentDaProposta`),
+    // não `proposal.assessment_id` cru — esse campo É lido de volta
+    // (`platform.ts`: `GET /client/assessment` e `GET /client/proposal`, que
+    // junta `proposals` por `assessment_id` sem filtro de conta), diferente
+    // de `contracts.lead_id`, que registrei como exceção por não ter rota
+    // nenhuma que o leia hoje. Gravar o id alheio aqui reabriria a mesma
+    // classe de vazamento por essa porta de leitura.
     await c.env.DB.prepare(
       `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)
        VALUES (?, ?, '', '', 'ISO 27001:2022', 'Controlador', 'Active', ?, ?, datetime('now'))`
-    ).bind(projectId, clientName, proposal.assessment_id || '', clienteId).run();
+    ).bind(projectId, clientName, assessmentDaProposta ? proposal.assessment_id : '', clienteId).run();
 
     for (let i = 0; i <= 40; i++) {
       const phaseId = genId();
