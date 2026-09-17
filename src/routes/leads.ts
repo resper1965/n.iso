@@ -116,7 +116,11 @@ leadsApp.get('/:id', async (c) => {
     const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ?').bind(id).all();
     const { results: proposals } = await c.env.DB.prepare('SELECT id, status, total_price, created_at FROM proposals WHERE lead_id = ?').bind(id).all();
 
-    return c.json({ ...lead, assessments, proposals });
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // resposta para não virar algo que o front passa a depender como se
+    // fosse público.
+    const { conta_id, ...leadSemConta } = lead;
+    return c.json({ ...leadSemConta, assessments, proposals });
   } catch (e: any) {
     return erro500(c, 'Falha ao buscar lead', e);
   }

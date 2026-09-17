@@ -400,16 +400,14 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
     const id = c.req.param('id');
     const user = c.get('user');
 
-    // SEM checagem de dono aqui, de propósito: `/convert` (abaixo) e `/sign`
-    // (proposals.ts) já documentam o mesmo gap em
-    // `camada-msp-criacao-projeto.test.ts` — `somenteMsp` garante papel de
-    // staff e conta `msp`, mas não que o operador seja da MESMA conta que
-    // vendeu. Fechar isso bloquearia o clique de qualquer staff que não seja
-    // o vendedor original, o que este arquivo nunca pediu; a segurança do
-    // dado está na ATRIBUIÇÃO (linha abaixo: `assessment.conta_id` antes do
-    // operador), não no bloqueio de acesso — gap conhecido, fora do escopo
-    // desta tarefa.
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
+    // O operador tem de ser da MESMA conta que vendeu (ou `platform_admin`).
+    // A Task 6 acertou a ATRIBUIÇÃO — a proposta gerada nasce na conta que
+    // vendeu o assessment, nunca na do operador —, mas atribuição correta não
+    // consertava a MUTAÇÃO em si: sem este gate, staff de outra consultoria
+    // gerava proposta (preço, HTML) a partir do questionário alheio. Alheio
+    // responde como inexistente, não 403: dizer 403 confirmaria a existência
+    // do assessment na consultoria concorrente.
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, user as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const { results: answers } = await c.env.DB.prepare(
@@ -473,13 +471,14 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 assessmentsApp.post('/:id/convert', async (c) => {
   try {
     const id = c.req.param('id');
-    // SEM checagem de dono aqui, de propósito — mesma nota de
-    // `/generate-proposal` acima: `camada-msp-criacao-projeto.test.ts` prova
-    // que staff de OUTRA conta consegue converter, e que a segurança está na
-    // ATRIBUIÇÃO (a conta que nasce no projeto é a de quem vendeu, logo
-    // abaixo), não no bloqueio do clique. Gap conhecido, fora do escopo desta
-    // tarefa.
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
+    // Mesmo gate de `/generate-proposal` acima, e pela mesma razão: `/convert`
+    // MUTA o assessment (`status = 'converted'`) e materializa cliente e
+    // projeto — a atribuição da Task 6 garante que o projeto nasce na conta
+    // que vendeu, mas não impedia um staff de OUTRA consultoria de disparar
+    // essa mutação irreversível sobre o funil alheio. Alheio responde 404,
+    // não 403 (mesma razão de sempre: 403 confirmaria a existência do
+    // registro na consultoria concorrente).
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (assessment.converted_project_id) return c.json({ error: 'Assessment já foi convertido', project_id: assessment.converted_project_id }, 409);
 
