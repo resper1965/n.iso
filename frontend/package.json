@@ -13,7 +13,7 @@
     "design:detect": "npx --yes impeccable detect src login.html"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^30.0.1",
     "vite": "^8.2.2",
