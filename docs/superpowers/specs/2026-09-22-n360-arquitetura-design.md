@@ -2,7 +2,13 @@
 
 **Data:** 2026-09-22
 **Estado:** rascunho de design; aguarda revisão do autor
-**Repositório destino:** `resper1965/n360` (privado)
+**Repositório:** [`resper1965/n.360`](https://github.com/resper1965/n.360)
+
+> **A cópia canônica desta spec vive no n.360**, junto do restante do cânone
+> (`CONSTITUTION.md`, `CLAUDE.md`, `GLOSSARIO.md`, `contrato-de-modulo.md`,
+> `design-tokens.md`, `ux-padroes.md` e os ADRs). Esta cópia existe para que
+> quem chegar pelo n.ISO encontre o contexto da decisão que o congelou — ela
+> não é mantida em paralelo.
 
 ---
 
@@ -162,7 +168,7 @@ reescreva o passado.
 | Módulo | Origem | Papel |
 |---|---|---|
 | **n.core** | ambos | tenancy, identidade, trilha, catálogo SCF/STRM, registros comuns, design system. Sem UI própria. |
-| **n.grc** | novo sobre a espinha | visão única, SoA multi-norma, gaps, acompanhamento contínuo |
+| **n.posture** | novo sobre a espinha | visão única, SoA multi-norma, gaps, acompanhamento contínuo |
 | **n.iso** | nISO | jornada de certificação 27001/27701 |
 | **n.privacy** | nISO (embrião) | regulatórios de privacidade, ROPA, DPIA, direitos do titular |
 | **n.tprm** | nISO (embrião) | terceiros, questionários, risco de cadeia |
@@ -172,7 +178,7 @@ reescreva o passado.
 | **n.audit** | extraído do nISO | programa de auditoria, achados, CAPA, portal do auditor |
 | **n.cirt** | greenfield | resposta a incidente |
 | **n.bcm** | greenfield | BIA, planos de continuidade, exercícios (ISO 22301, A.5.29–5.30) |
-| **n.ai** | greenfield | inventário de sistemas de IA, ISO 42001 |
+| **n.aigov** | greenfield | inventário de sistemas de IA, ISO 42001 |
 | **n.console** | greenfield | cockpit do MSP: carteira, postura comparada, SLA, consumo |
 
 `n.access` (revisão e recertificação de acesso, A.5.15–5.18) fica no backlog do
@@ -210,11 +216,11 @@ Cada linha é um ciclo spec → plano → implementação próprio.
 | 4 | **n.policies + n.training** | Juntos: política sem ciência de aceite não fecha, e a ciência é uma campanha de treinamento. Separá-los duplica o cadastro de pessoas. |
 | 5 | **n.tprm** | Depende dos registros comuns (1) e envia risco para o n.risk. |
 | 6 | **n.cirt** | Greenfield puro — o teste honesto de se o contrato de módulo do n.core serve a quem não herdou nada. |
-| 7 | **n.bcm · n.ai** | Consomem tudo que já está de pé. Baratos nesta ordem, caros em qualquer outra. |
+| 7 | **n.bcm · n.aigov** | Consomem tudo que já está de pé. Baratos nesta ordem, caros em qualquer outra. |
 | 8 | **n.console** | Precisa de vários módulos vivos para ter o que comparar. |
 
-O `n.iso`, o `n.grc`, o `n.risk` e o `n.audit` não aparecem como sub-projetos
-separados: o n.grc é o produto dos itens 1 e 2, e os outros três são portes
+O `n.iso`, o `n.posture`, o `n.risk` e o `n.audit` não aparecem como sub-projetos
+separados: o n.posture é o produto dos itens 1 e 2, e os outros três são portes
 que acompanham os sub-projetos de que dependem.
 
 ## 9. Decisões revogadas durante o desenho
@@ -288,7 +294,7 @@ que o n.ISO acabou com o mesmo fornecedor cadastrado em lugares diferentes.
 - esta spec;
 - `design.md` (identidade visual ness.) e `AGENTS.md` deste repositório;
 - o embrião do módulo no n.ISO, quando houver (tabelas e rotas listadas em §6);
-- para o n.grc e qualquer coisa que toque catálogo: `packages/scf-core/` e
+- para o n.posture e qualquer coisa que toque catálogo: `packages/scf-core/` e
   `packages/schemas/src/db/scf.schema.ts` do `standard-api`.
 
 ## Próximo passo
