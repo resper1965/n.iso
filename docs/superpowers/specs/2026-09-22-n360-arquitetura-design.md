@@ -182,20 +182,20 @@ Cada módulo é montado condicionalmente pelo `entitlement` da organização.
 
 ## 7. Migração do n.ISO em produção
 
-O n.ISO continua servindo `n-iso.ness.com.br` durante toda a transição. Ele
-entra em **manutenção** — correção de bug e de segurança, sem feature nova — e
-cada cliente é migrado para o n.360 por ferramenta de importação quando o n.360
-alcançar paridade para aquele cliente. Desligado quando o último sair.
+**Decidido: o n.ISO congela.** Ele continua servindo `n-iso.ness.com.br` e os
+clientes existentes, em **manutenção** — correção de bug e de segurança, sem
+feature nova. Cada cliente é migrado para o n.360 por ferramenta de importação
+quando o n.360 alcançar paridade para aquele cliente. Desligado quando o último
+sair.
+
+Consequência operacional: **toda demanda de funcionalidade nova, a partir de
+agora, é do n.360.** Aceitar feature no n.ISO move o alvo de paridade e faz o
+trabalho nascer para ser portado de novo.
 
 Isto não é uma escolha entre opções: é consequência de o n.360 nascer em
 Postgres, numa base nova. Uma camada de compatibilidade sobre o D1 existente
 deixou de ser possível no momento em que o banco mudou.
 
-> **Pendente de confirmação do autor.** O que está acima é a consequência
-> técnica, não uma decisão tomada. O que o autor precisa confirmar é a postura
-> de produto: o n.ISO entra em manutenção (sem feature nova) durante a
-> transição, ou segue evoluindo em paralelo? Seguir evoluindo move o alvo de
-> paridade e faz toda feature nova nascer para ser portada de novo.
 
 ## 8. Decomposição em sub-projetos
 
@@ -240,11 +240,59 @@ Cada uma precisa estar fechada antes do sub-projeto que depende dela.
 | **Disponibilidade da planilha licenciada do SCF** no processo de seed. | n.core §2 (espinha) | autor |
 | **PT-BR apenas, ou i18n?** O nISO removeu a camada de tradução por decisão explícita. MSP fora do Brasil reabriria a questão. | n.core | autor |
 | **Modelo de faturamento por entitlement** (por módulo, por org, por assento). | n.console | autor |
-| **Postura do n.ISO durante a transição** — manutenção ou evolução em paralelo (§7). | n.core | autor |
 
 ---
+
+## 11. Como abrir o chat de um módulo
+
+Cada módulo é desenhado e construído numa sessão própria. Para que uma sessão
+nova não redecida o que já está decidido — nem contrarie outra em paralelo —
+ela começa lendo **este arquivo** e tratando as seções 2 a 9 como dadas.
+
+### O que está fechado e não se reabre numa sessão de módulo
+
+| | |
+|---|---|
+| Banco | PostgreSQL (Neon), base única, Drizzle |
+| Runtime | Cloudflare Workers |
+| Tenant | a **organização**; `engagement` é recorte de escopo, não dono do dado |
+| Autorização | `memberships (user_id, scope_type, scope_id, role)` — §4.1 |
+| Assinatura | matriz de governança, separada do papel de plataforma |
+| Conformidade | espinha SCF/STRM — §5. Nenhum módulo cria mapeamento próprio para norma |
+| Trilha | append-only, carimbada por organização |
+| n.ISO | congelado (§7). Feature nova é sempre do n.360 |
+
+Reabrir qualquer uma destas exige voltar a esta spec e alterá-la — não decidir
+localmente. Uma decisão de módulo que contradiz esta lista é dívida que só
+aparece quando o segundo módulo esbarra nela.
+
+### O que cada sessão de módulo decide sozinha
+
+O modelo de dados do próprio domínio, as telas, as regras de negócio, os
+agentes de IA que use, e como o módulo **publica e consome** eventos dos
+outros (fornecedor gera risco, incidente gera risco, gap gera ação).
+
+### Ordem e dependências
+
+Nenhum módulo começa antes do **sub-projeto 0 (n.core: tenancy e identidade)**:
+até ele existir, não há `organization_id` para pendurar dado nem `memberships`
+para autorizar. Os itens 1 e 2 do §8 (registros comuns e espinha SCF/STRM) são
+pré-requisito de todos os módulos de domínio.
+
+Uma sessão de módulo que precise de algo do n.core que ainda não existe **para
+e registra a dependência** em vez de improvisar uma versão local — foi assim
+que o n.ISO acabou com o mesmo fornecedor cadastrado em lugares diferentes.
+
+### Contexto mínimo para colar numa sessão nova
+
+- esta spec;
+- `design.md` (identidade visual ness.) e `AGENTS.md` deste repositório;
+- o embrião do módulo no n.ISO, quando houver (tabelas e rotas listadas em §6);
+- para o n.grc e qualquer coisa que toque catálogo: `packages/scf-core/` e
+  `packages/schemas/src/db/scf.schema.ts` do `standard-api`.
 
 ## Próximo passo
 
 Revisar esta spec. Aprovada, o próximo passo é a skill `writing-plans` sobre o
-**sub-projeto 0 (n.core: tenancy e identidade)** — não sobre o n.360 inteiro.
+**sub-projeto 0 (n.core: tenancy e identidade)** — não sobre o n.360 inteiro, e
+antes de qualquer sessão de módulo.
