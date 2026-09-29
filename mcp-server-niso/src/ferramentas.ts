@@ -436,17 +436,21 @@ export async function executarFerramenta(
     }
   };
 
+  // `return await`, e não `return t.x(...)`: quando o transporte recusa ANTES
+  // de qualquer await (caminho suspeito no MCP remoto), a promessa já nasce
+  // rejeitada; sem o await o tratador só entra microtasks depois, e o workerd
+  // conta isso como rejeição não tratada (derrubou o CI do #213).
   async function despachar(): Promise<unknown> {
     switch (nome) {
 
       case "niso_list_projects": {
-        return t.get(`/api/v1/portfolio`);
+        return await t.get(`/api/v1/portfolio`);
       }
 
       case "niso_get_project": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}`);
       }
 
       case "niso_create_risk": {
@@ -460,49 +464,49 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.contrato("POST /api/v1/projects/{projectId}/risks", { projectId: validated.projectId }, validated);
+        return await t.contrato("POST /api/v1/projects/{projectId}/risks", { projectId: validated.projectId }, validated);
       }
 
       case "niso_list_controls": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/controls`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/controls`);
       }
 
       case "niso_list_risks": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/risks`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/risks`);
       }
 
       case "niso_gap_analysis": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/gap-analysis`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/gap-analysis`);
       }
 
       case "niso_traceability": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/traceability`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/traceability`);
       }
 
       case "niso_list_evidence": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/evidence`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/evidence`);
       }
 
       case "niso_coherence_check": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/coherence`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/coherence`);
       }
 
       case "niso_audit_pack": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${enc(projectId)}/audit-pack`);
+        return await t.get(`/api/v1/projects/${enc(projectId)}/audit-pack`);
       }
 
       case "niso_generate_policy": {
@@ -510,7 +514,7 @@ export async function executarFerramenta(
           .object({ projectId: z.string(), controlId: z.string().optional() })
           .parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policy`, {
+        return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policy`, {
           control_id: controlId,
         });
       }
@@ -518,14 +522,14 @@ export async function executarFerramenta(
       case "niso_generate_soa": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-soa`);
+        return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-soa`);
       }
 
       case "niso_evaluate_evidence": {
         const { evidenceId, text } = z
           .object({ evidenceId: z.string(), text: z.string() })
           .parse(args);
-        return t.enviar(`/api/v1/evidence/${enc(evidenceId)}/evaluate`, { text });
+        return await t.enviar(`/api/v1/evidence/${enc(evidenceId)}/evaluate`, { text });
       }
 
       case "niso_create_evidence": {
@@ -550,7 +554,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.uploadTexto(
+        return await t.uploadTexto(
           `/api/v1/projects/${enc(validated.projectId)}/evidence/upload`,
           {
             contentType: validated.contentType || "text/markdown",
@@ -566,7 +570,7 @@ export async function executarFerramenta(
           .object({ projectId: z.string(), controlIds: z.array(z.string()).optional() })
           .parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policies-bulk`, {
+        return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policies-bulk`, {
           control_ids: controlIds,
         });
       }
@@ -574,7 +578,7 @@ export async function executarFerramenta(
       case "niso_migrate_27701": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${enc(projectId)}/migrate-27701`);
+        return await t.enviar(`/api/v1/projects/${enc(projectId)}/migrate-27701`);
       }
 
       case "niso_import_training": {
@@ -592,7 +596,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.contrato(
+        return await t.contrato(
           "POST /api/v1/projects/{projectId}/training/import-external",
           { projectId: validated.projectId },
           { records: validated.records }
@@ -610,7 +614,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.enviar(`/api/v1/projects/${enc(validated.projectId)}/assets`, validated);
+        return await t.enviar(`/api/v1/projects/${enc(validated.projectId)}/assets`, validated);
       }
 
       case "niso_update_policy": {
@@ -621,7 +625,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.enviar(
+        return await t.enviar(
           `/api/v1/projects/${enc(validated.projectId)}/controls/${enc(validated.controlId)}/policy`,
           { text: validated.text }
         );
@@ -641,7 +645,7 @@ export async function executarFerramenta(
           });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.contrato(
+        return await t.contrato(
           "PUT /api/v1/controls/{id}",
           { id: validated.controlId },
           {
@@ -664,7 +668,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.contrato(
+        return await t.contrato(
           "POST /api/v1/audits/{auditId}/findings",
           { auditId: validated.auditId },
           {
@@ -686,7 +690,7 @@ export async function executarFerramenta(
           content: z.string(),
         });
         const validated = schema.parse(args);
-        return t.contrato(
+        return await t.contrato(
           "POST /api/v1/auditor/{token}/notes",
           { token: validated.token },
           {
@@ -707,7 +711,7 @@ export async function executarFerramenta(
         // rota é PUT (`routes/auditor.ts`), então a ferramenta respondia 404 e
         // nenhum teste via isso: o MCP não tinha contrato para conferir contra.
         // O tipo agora não deixa: não existe chave "POST .../respond" em ROTAS.
-        return t.contrato(
+        return await t.contrato(
           "PUT /api/v1/auditor-notes/{id}/respond",
           { id: validated.noteId },
           { response: validated.response }
