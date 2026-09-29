@@ -9,7 +9,8 @@
          à tela de entrada tomava um 404, visível no console de quem abrisse o
          DevTools — e a aba ficava sem ícone. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#00ade8">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
     <!-- marked v15.0.12, servido pelo nosso domínio (frontend/public/marked.min.js).
          Antes vinha de cdn.jsdelivr.net/npm/marked/ — URL sem versão e sem SRI, o que
@@ -22,7 +23,17 @@
 <body>
     <a href="#content" class="skip-link">Pular para o conteudo</a>
 
+    <!-- A tela de entrada É a landing (spec 2026-09-29-landing-login-design):
+         login na primeira dobra, seções institucionais abaixo, tudo dentro do
+         overlay — que some ao entrar e leva as seções junto. -->
     <div id="login-overlay">
+        <div class="entry-fold">
+        <div class="entry-brand">
+            <div class="entry-mark">n<span>.</span>iso</div>
+            <h1 class="entry-title">Conformidade ISO conduzida, do diagnóstico à certificação.</h1>
+            <p class="entry-lede">O ambiente onde sua organização e a ness<span class="entry-dot">.</span> trabalham juntas: controles, evidências, riscos e políticas em um só lugar.</p>
+            <a class="entry-more" href="#conheca">conheça o n<span class="entry-dot">.</span>iso</a>
+        </div>
         <div class="login-form-side">
             <!-- Entrada com senha (conta local) -->
             <div class="login-box" id="standard-login-box">
@@ -195,6 +206,40 @@
                 </div>
             </div>
         </div>
+        </div>
+
+        <section class="entry-section" id="conheca" aria-labelledby="pilares-titulo">
+            <h2 class="entry-h2" id="pilares-titulo">O que o n<span class="entry-dot">.</span>iso organiza</h2>
+            <div class="entry-pillars">
+                <div class="entry-pillar">
+                    <h3>Conformidade</h3>
+                    <p>Declaração de aplicabilidade e controles do Anexo A da ISO 27001:2022, acompanhados em tempo real.</p>
+                </div>
+                <div class="entry-pillar">
+                    <h3>Evidência e auditoria</h3>
+                    <p>Cada evidência com registro de integridade e trilha de auditoria, pronta para o auditor.</p>
+                </div>
+                <div class="entry-pillar">
+                    <h3>Privacidade</h3>
+                    <p>ISO 27701 e registro das operações de tratamento, alinhados à LGPD.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="entry-section" aria-labelledby="passos-titulo">
+            <h2 class="entry-h2" id="passos-titulo">Como a ness<span class="entry-dot">.</span> conduz</h2>
+            <ol class="entry-steps">
+                <li><span class="entry-step-n">01</span><h3>Diagnóstico</h3><p>Maturidade atual, escopo e esforço até a certificação.</p></li>
+                <li><span class="entry-step-n">02</span><h3>Plano e aplicabilidade</h3><p>Controles aplicáveis, responsáveis e cronograma.</p></li>
+                <li><span class="entry-step-n">03</span><h3>Implementação e evidências</h3><p>Políticas, riscos e evidências reunidos no mesmo lugar.</p></li>
+                <li><span class="entry-step-n">04</span><h3>Auditoria e certificação</h3><p>Pendências tratadas e dossiê pronto para o auditor.</p></li>
+            </ol>
+        </section>
+
+        <footer class="entry-foot">
+            <span class="login-sign-house">ness<span>.</span></span>
+            <span class="login-sign-links"><a href="/politicas">privacidade</a> · <a href="/politicas">termos</a></span>
+        </footer>
     </div>
 
     <nav class="sidebar" id="sidebar" aria-label="Navegação principal">
