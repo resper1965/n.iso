@@ -44,7 +44,8 @@ describe('consulta de CNPJ para preview', () => {
     await applySchema();
     await resetData();
     await resetSessions();
-    ness = await sessionFor({ id: 'u-ness', email: 'c@ness.lat', role: 'consultor' });
+    // Consulta de CNPJ serve ao cadastro de lead: área do comercial (somenteComercial).
+    ness = await sessionFor({ id: 'u-ness', email: 'c@ness.lat', role: 'comercial' });
     cliente = await sessionFor({
       id: 'u-cli', email: 'a@cliente.com', role: 'org_admin', client_project_id: 'p1',
     });

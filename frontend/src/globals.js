@@ -792,6 +792,13 @@ window.updateHeaderUser = function updateHeaderUser() {
         const groupSales = document.getElementById('group-sales');
         if (labelSales) labelSales.style.display = isClient ? 'none' : '';
         if (groupSales) groupSales.style.display = isClient ? 'none' : '';
+        // Leads e propostas são do comercial (somenteComercial no servidor); o
+        // consultor segue com Assessments e o resto do grupo.
+        const comercial = window.ehComercial();
+        ['nav-leads', 'nav-proposals'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = comercial ? '' : 'none';
+        });
 
         // Configurações do grupo de sistema
         const labelSystem = document.getElementById('label-group-system');
@@ -828,7 +835,8 @@ window.updateHeaderUser = function updateHeaderUser() {
                 groupSystem.style.maxHeight = '';
             }
             if (navAuditTrail) navAuditTrail.style.display = '';
-            if (navSettings) navSettings.style.display = '';
+            // Configurações é a tabela de preços (custo interno, margem): comercial.
+            if (navSettings) navSettings.style.display = window.ehComercial() ? '' : 'none';
             // API Keys: exclusivo do Platform Admin (nem consultor vê).
             if (navApiKeys) navApiKeys.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
             if (navUsers) {
@@ -1104,6 +1112,10 @@ window.doInviteClient = async function doInviteClient(projectId) {
             btn.textContent = 'Tentar novamente';
         }
     }
+
+// Espelho de `ehComercial` (src/helpers.ts). Só decide o que MOSTRAR; quem
+// barra de verdade é o servidor.
+window.ehComercial = function ehComercial() { return !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'comercial')); }
 
 window.loadLeads = async function loadLeads() { try { S.leads = await api('GET', '/api/v1/leads'); } catch(e) { S.leads = []; } }
 
