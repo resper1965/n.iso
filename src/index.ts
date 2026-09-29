@@ -43,10 +43,17 @@ import risks from './routes/risks';
 import policies from './routes/policies';
 import integrations from './routes/integrations';
 import { manutencaoDiaria } from './manutencao';
+import { oauthAutorizacao } from './routes/oauth-autorizacao';
+import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
+import { handlerMcp } from './mcp/servidor';
 
 export type Bindings = {
   DB: D1Database;
   SESSIONS: KVNamespace;
+  /** Grants, códigos e tokens do OAuth do MCP remoto (workers-oauth-provider). */
+  OAUTH_KV: KVNamespace;
+  /** Injetado pelo OAuthProvider nas rotas /oauth/*. */
+  OAUTH_PROVIDER?: import('@cloudflare/workers-oauth-provider').OAuthHelpers;
   VECTOR_INDEX: VectorizeIndex;
   STORAGE: R2Bucket;
   AI: Ai;
@@ -294,6 +301,10 @@ app.route('/api/v1/public', publicApp);
  */
 app.route('/scim/v2', scimApp);
 
+// Tela de autorização do MCP remoto. Pública (o login é a própria tela) e fora
+// de /api/v1: chega aqui só pelo OAuthProvider, que injeta `OAUTH_PROVIDER`.
+app.route('/oauth', oauthAutorizacao);
+
 // 5. Auth Middleware para demais rotas /api/v1
 app.use('/api/v1/*', authMiddleware);
 
@@ -450,7 +461,35 @@ app.onError((err, c) => {
  * `triggers` do `wrangler.jsonc`). O `waitUntil` mantém a invocação viva até a
  * rotina terminar — sem ele o runtime pode encerrá-la no meio do DELETE.
  */
+const fetchHono = app.fetch.bind(app);
+
+/*
+ * OAuth 2.1 do MCP remoto (spec 2026-09-29-receita-agentes-mcp-remoto). O
+ * provider serve /oauth/token, /oauth/register e os metadados em
+ * /.well-known/oauth-*; /oauth/authorize é nosso (routes/oauth-autorizacao.ts).
+ * `resourceMetadata` é obrigatório na versão 1.x da biblioteca: o endereço
+ * canônico do recurso é o domínio oficial.
+ */
+export const provider = new OAuthProvider({
+  apiRoute: '/mcp',
+  apiHandler: { fetch: (req: Request, env: any, ctx: any) => handlerMcp(req, env, ctx, fetchHono) },
+  defaultHandler: { fetch: fetchHono as any },
+  authorizeEndpoint: '/oauth/authorize',
+  tokenEndpoint: '/oauth/token',
+  clientRegistrationEndpoint: '/oauth/register',
+  scopesSupported: ['niso:consultor'],
+  accessTokenTTL: 3600,
+  refreshTokenTTL: 30 * 86400,
+  resourceMetadata: { resource: 'https://niso.ness.com.br/mcp', resource_name: 'n.iso' },
+});
+
+/** Só estes caminhos passam pelo OAuthProvider; o resto segue direto para o Hono. */
+export const ROTAS_OAUTH = (p: string) =>
+  p === '/mcp' || p.startsWith('/mcp/') || p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-');
+
 export default Object.assign(app, {
+  fetch: (req: Request, env: Bindings, ctx: ExecutionContext) =>
+    ROTAS_OAUTH(new URL(req.url).pathname) ? provider.fetch(req, env as any, ctx) : fetchHono(req, env, ctx),
   scheduled: (_evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(manutencaoDiaria(env));
   },

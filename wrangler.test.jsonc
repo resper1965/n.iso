@@ -27,6 +27,9 @@
 		{
 			"binding": "SESSIONS",
 			"id": "f9cb3bf811374cfe9f9ad5780e1740c7"
+		},
+		{
+			"binding": "OAUTH_KV"
 		}
 	],
 	"r2_buckets": [
