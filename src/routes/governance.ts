@@ -66,6 +66,29 @@ governanceApp.get('/projects/:id/governance', async (c) => {
   return c.json(rows.results || []);
 });
 
+/*
+ * Designar o consultor de um projeto é ato de quem contrata (o `org_admin`
+ * daquele cliente) ou de quem opera a plataforma (`platform_admin`) — nunca do
+ * próprio consultor. A governança é a fonte de "em quais clientes este
+ * consultor atua" (escopo da chave de agente); se ele pudesse se incluir, o
+ * escopo seria decorativo, porque o consultor alcança todos os projetos.
+ *
+ * Vale para criar, alterar (inclusive trocar o e-mail, que é designar outra
+ * pessoa, e rebaixar o papel) e remover. Os demais papéis seguem livres.
+ * O isolamento entre projetos já vem do `projectAccessMiddleware`.
+ */
+const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin']);
+
+async function mexeEmConsultor(db: D1Database, projectId: string, memberId: string | undefined, novoPapel?: string): Promise<boolean> {
+  if (novoPapel === 'consultor') return true;
+  if (!memberId) return false;
+  const atual = await db.prepare('SELECT role_category FROM project_governance WHERE id = ? AND project_id = ?')
+    .bind(memberId, projectId).first<{ role_category: string }>();
+  return atual?.role_category === 'consultor';
+}
+
+const recusaDesignacao = { error: 'Forbidden: designar consultor é do platform_admin ou do administrador do cliente' };
+
 governanceApp.post('/projects/:id/governance', async (c) => {
   try {
     const projectId = c.req.param('id');
@@ -75,6 +98,10 @@ governanceApp.post('/projects/:id/governance', async (c) => {
     if (!name) return c.json({ error: 'name is required' }, 400);
     if (!role_category) return c.json({ error: 'role_category is required' }, 400);
     if (!job_title) return c.json({ error: 'job_title is required' }, 400);
+
+    if (!PODE_DESIGNAR_CONSULTOR.has(c.get('user')?.role ?? '') && await mexeEmConsultor(c.env.DB, projectId, id, role_category)) {
+      return c.json(recusaDesignacao, 403);
+    }
 
     if (id) {
       await c.env.DB.prepare(`
@@ -100,6 +127,9 @@ governanceApp.delete('/projects/:id/governance/:memberId', async (c) => {
   try {
     const projectId = c.req.param('id');
     const memberId = c.req.param('memberId');
+    if (!PODE_DESIGNAR_CONSULTOR.has(c.get('user')?.role ?? '') && await mexeEmConsultor(c.env.DB, projectId, memberId)) {
+      return c.json(recusaDesignacao, 403);
+    }
     await c.env.DB.prepare('DELETE FROM project_governance WHERE id = ? AND project_id = ?').bind(memberId, projectId).run();
     await logAudit(c.env.DB, 'governance.deleted', c.get('user')?.email || 'system', `Membro da governança id ${memberId} deletado do projeto ${projectId}`);
     return c.json({ ok: true });
