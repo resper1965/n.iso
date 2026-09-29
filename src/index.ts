@@ -372,10 +372,10 @@ app.route('', policies);
 app.route('', integrations);
 
 // 7. Static Files Fallback (catch-all — deve ser a última rota).
-// `dist/index.html` é a landing pública; `dist/login.html` é o shell do app
-// (login + SPA). Rota desconhecida cai na landing (fallback abaixo), não no
-// login — mostrar a home pública para link quebrado é mais correto que
-// derrubar em uma tela de autenticação sem contexto.
+// Não há `dist/index.html`: a tela de entrada É a landing (login na primeira
+// dobra, seções institucionais abaixo — spec 2026-09-29-landing-login-design).
+// `/` e rota desconhecida não casam com asset e caem no fallback abaixo, que
+// entrega `dist/login.html` pelo caminho `/login` (html_handling do Assets).
 app.get('/*', async (c) => {
   const path = new URL(c.req.url).pathname;
   if (path.startsWith('/api/')) {
@@ -390,7 +390,7 @@ app.get('/*', async (c) => {
   if (c.env.ASSETS) {
     const res = await c.env.ASSETS.fetch(c.req.raw);
     if (res.status === 404) {
-      const fallbackRequest = new Request(new URL('/', c.req.url).toString());
+      const fallbackRequest = new Request(new URL('/login', c.req.url).toString());
       return await c.env.ASSETS.fetch(fallbackRequest);
     }
     return res;
