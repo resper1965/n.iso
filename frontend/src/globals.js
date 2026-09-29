@@ -840,6 +840,8 @@ window.updateHeaderUser = function updateHeaderUser() {
             if (navSettings) navSettings.style.display = window.ehComercial() ? '' : 'none';
             // API Keys: exclusivo do Platform Admin (nem consultor vê).
             if (navApiKeys) navApiKeys.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
+            const navConectar = document.getElementById('nav-conectar-agente');
+            if (navConectar) navConectar.style.display = (S.user && (S.user.role === 'consultor' || S.user.role === 'consultant')) ? '' : 'none';
             if (navUsers) {
                 const canSeeUsers = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
                 navUsers.style.display = canSeeUsers ? '' : 'none';
