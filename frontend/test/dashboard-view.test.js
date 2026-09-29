@@ -73,7 +73,7 @@ describe('renderDashboard — onboarding do cliente', () => {
 describe('renderDashboard — visão do consultor', () => {
   it('agrega os contadores e calcula a taxa de conformidade', async () => {
     const { c, h, a } = montaDom();
-    S.user = { role: 'admin' }; // fora da lista de cliente → caminho consultor
+    S.user = { role: 'comercial' }; // comercial vê o funil → 4 chamadas
     // 4 chamadas na ordem: leads, assessments, projects, controls.
     apiMock
       .mockResolvedValueOnce([{ id: 'l1' }, { id: 'l2' }]) // leads
@@ -100,11 +100,25 @@ describe('renderDashboard — visão do consultor', () => {
     expect(c.textContent).toContain('Proj');
   });
 
+  it('consultor não busca nem vê o funil de leads (área do comercial)', async () => {
+    const { c, h, a } = montaDom();
+    S.user = { role: 'consultor' };
+    // 3 chamadas: assessments, projects, controls — leads não é pedido.
+    apiMock
+      .mockResolvedValueOnce([{ id: 'a1', client_name: 'ACME', status: 'completed' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await window.renderDashboard(c, h, a);
+    expect(apiMock).toHaveBeenCalledTimes(3);
+    expect(apiMock.mock.calls.map((ch) => ch[1])).not.toContain('/api/v1/leads');
+    expect(c.textContent).not.toContain('Leads Ativos');
+    expect(c.textContent).toContain('ACME');
+  });
+
   it('assume 93 controles quando a lista vem vazia (0% de conformidade)', async () => {
     const { c, h, a } = montaDom();
-    S.user = { role: 'admin' };
+    S.user = { role: 'consultor' };
     apiMock
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -15,6 +15,9 @@ export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variable
 // e o handler valida o `access_token` por conta própria.
 assessmentsApp.use('*', async (c, next) => {
   if (c.req.path.startsWith('/api/v1/assessments/public/')) return next();
+  // O comercial precisa do assessment para precificar e gerar a proposta —
+  // e só disso: por isso entra aqui, e não em `somenteNess` (SSO, SCIM, política).
+  if (ehComercial(c.get('user'))) return next();
   return somenteNess(c, next);
 });
 
@@ -309,7 +312,8 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
   }
 });
 
-assessmentsApp.get('/:id/pricing', async (c) => {
+// Preço do assessment é ato comercial, como gerar a proposta abaixo.
+assessmentsApp.get('/:id/pricing', somenteComercial, async (c) => {
   try {
     const id = c.req.param('id');
     const { results: answers } = await c.env.DB.prepare(
@@ -351,7 +355,7 @@ assessmentsApp.put('/:id', async (c) => {
   }
 });
 
-assessmentsApp.put('/:id/pricing', async (c) => {
+assessmentsApp.put('/:id/pricing', somenteComercial, async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json<{ precoFinal?: number; desconto?: number; notas?: string }>();
@@ -370,7 +374,9 @@ assessmentsApp.put('/:id/pricing', async (c) => {
   }
 });
 
-assessmentsApp.post('/:id/generate-proposal', async (c) => {
+// Gerar proposta põe preço: é ato comercial, não do consultor que conduziu o
+// diagnóstico. O resto do assessment segue em `somenteNess`.
+assessmentsApp.post('/:id/generate-proposal', somenteComercial, async (c) => {
   try {
     const id = c.req.param('id');
     const user = c.get('user');
