@@ -4,6 +4,7 @@ import worker from '../src/index';
 import { applySchema, workerEnv } from './helpers/d1';
 import { hashPassword } from '../src/helpers';
 import { gerarCodigoTotp } from '../src/services/totp';
+import { oauthAutorizacao } from '../src/routes/oauth-autorizacao';
 
 const BASE = 'https://niso.ness.com.br';
 const REDIRECT = 'http://127.0.0.1:33418/callback';
@@ -27,16 +28,21 @@ async function registrarCliente(): Promise<string> {
 }
 
 const campo = (html: string, nome: string) => html.match(new RegExp(`name="${nome}" value="([^"]+)"`))![1];
-const form = (o: Record<string, string>) => ({
-  method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(o).toString(),
+// `ip` separa o balde de tentativas por IP (20/5 min) entre testes que erram a senha de propósito.
+const form = (o: Record<string, string>, ip?: string) => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(ip ? { 'CF-Connecting-IP': ip } : {}) },
+  body: new URLSearchParams(o).toString(),
 });
+const loginApi = (email: string, password: string, ip: string) =>
+  f('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ email, password }) });
 
-async function iniciar(clientId: string, challenge: string) {
+async function iniciar(clientId: string, challenge: string, extra: Record<string, string> = {}, prefixo = '/oauth') {
   const q = new URLSearchParams({
     response_type: 'code', client_id: clientId, redirect_uri: REDIRECT,
-    code_challenge: challenge, code_challenge_method: 'S256', state: 'st', resource: `${BASE}/mcp`,
+    code_challenge: challenge, code_challenge_method: 'S256', state: 'st', resource: `${BASE}/mcp`, ...extra,
   });
-  const r = await f(`/oauth/authorize?${q}`);
+  const r = await f(`${prefixo}/authorize?${q}`);
   expect(r.status).toBe(200);
   return campo(await r.text(), 'pedido');
 }
@@ -54,6 +60,14 @@ describe('Autorização OAuth do agente', () => {
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, totp_enabled, totp_secret) VALUES ('u-mfa','mfa@ness.lat',?,'Mfa','consultor',1,'JBSWY3DPEHPK3PXP')`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Mfa','mfa@ness.lat','consultor','Consultor')`),
+      ...['lock1', 'lock2'].flatMap((k) => [
+        env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, 'consultor')`).bind(`u-${k}`, `${k}@ness.lat`, senha, k),
+        env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a', ?, ?, 'consultor', 'Consultor')`).bind(k, `${k}@ness.lat`),
+      ]),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, ativo) VALUES ('u-ina','ina@ness.lat',?,'Ina','consultor',0)`).bind(senha),
+      env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Ina','ina@ness.lat','consultor','Consultor')`),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, requires_password_change) VALUES ('u-nova','nova@ness.lat',?,'Nova','consultor',1)`).bind(senha),
+      env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Nova','nova@ness.lat','consultor','Consultor')`),
     ]);
   });
 
@@ -99,10 +113,69 @@ describe('Autorização OAuth do agente', () => {
     expect(r.status).toBe(401);
   });
 
-  it('só consultor conecta agente nesta versão', async () => {
+  // Revisão final, achado 3: resposta diferente para senha certa de não
+  // consultor era oráculo de senha para qualquer conta, inclusive platform_admin.
+  it('não consultor e conta inativa com a senha certa recebem a MESMA resposta da senha errada', async () => {
+    const tentar = async (email: string, senha: string) => {
+      const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+      const r = await f('/oauth/authorize/entrar', form({ pedido, email, senha, codigo: '' }, '10.0.0.3'));
+      return { status: r.status, corpo: await r.text() };
+    };
+    const errada = await tentar('cli@twyn.com', 'errada-errada');
+    expect(errada.status).toBe(401);
+    expect(await tentar('cli@twyn.com', 'senha-forte-123')).toEqual(errada);
+    expect(await tentar('ina@ness.lat', 'senha-forte-123')).toEqual(errada);
+  });
+
+  it('falha de senha consome o pedido', async () => {
     const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
-    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'cli@twyn.com', senha: 'senha-forte-123', codigo: '' }));
+    await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'errada-errada', codigo: '' }, '10.0.0.4'));
+    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }, '10.0.0.4'));
+    expect(r.status).toBe(400);
+  });
+
+  it('falhas na tela OAuth bloqueiam a conta, lá e no login do app', async () => {
+    const ip = '10.0.0.1';
+    const entrar = async (senha: string) => {
+      const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+      return f('/oauth/authorize/entrar', form({ pedido, email: 'lock1@ness.lat', senha, codigo: '' }, ip));
+    };
+    for (let i = 0; i < 5; i++) await entrar('errada-errada');
+    const certa = await entrar('senha-forte-123');
+    expect(certa.status).toBe(429);
+    expect(await certa.text()).not.toContain('Em qual cliente');
+    expect((await loginApi('lock1@ness.lat', 'senha-forte-123', ip)).status).toBe(429);
+  });
+
+  it('conta bloqueada pelo login do app também é recusada na tela OAuth', async () => {
+    const ip = '10.0.0.2';
+    for (let i = 0; i < 5; i++) await loginApi('lock2@ness.lat', 'errada-errada', ip);
+    const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'lock2@ness.lat', senha: 'senha-forte-123', codigo: '' }, ip));
+    expect(r.status).toBe(429);
+    expect(await r.text()).not.toContain('Em qual cliente');
+  });
+
+  it('senha provisória (requires_password_change) não conecta agente', async () => {
+    const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'nova@ness.lat', senha: 'senha-forte-123', codigo: '' }, '10.0.0.5'));
     expect(r.status).toBe(403);
+    expect(await r.text()).toContain('Defina sua senha definitiva no n.iso antes de conectar um agente.');
+  });
+
+  it('escopo do token é sempre niso:consultor, peça o cliente o que pedir', async () => {
+    const clientId = await registrarCliente();
+    const { verifier, challenge } = await pkce();
+    const pedido = await iniciar(clientId, challenge, { scope: 'admin' });
+    await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }, '10.0.0.6'));
+    const html = await (await f('/oauth/authorize/confirmar', form({ pedido, projeto: 'p-a' }))).text();
+    const code = new URL(html.match(/url=([^"]+)"/)![1].replace(/&amp;/g, '&')).searchParams.get('code')!;
+    const tok = await f('/oauth/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier, resource: `${BASE}/mcp` }).toString(),
+    });
+    expect(tok.status, await tok.clone().text()).toBe(200);
+    expect((await tok.json<any>()).scope).toBe('niso:consultor');
   });
 
   // Review Focus 5
@@ -140,14 +213,22 @@ describe('Autorização OAuth do agente', () => {
     expect((await f('/oauth/authorize')).status).toBe(400);
   });
 
-  // Review fix 1: caminho percent-encoded não pode furar o OAuthProvider.
-  it('caminho percent-encoded não alcança a tela sem o OAuthProvider', async () => {
-    expect((await f('/%6Fauth/authorize?response_type=code')).status).toBe(404);
+  // Review fix 1 + revisão final, item 8: o despacho decide pelo caminho
+  // DECODIFICADO, então `/%6Fauth/...` passa pelo OAuthProvider como `/oauth/...`.
+  it('caminho percent-encoded passa pelo OAuthProvider como o normal', async () => {
+    const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge, {}, '/%6Fauth');
+    expect(pedido).toBeTruthy();
+  });
+
+  // Defesa em profundidade: o router sem OAUTH_PROVIDER no env é 404 e não
+  // grava concessão nem trilha.
+  it('router de autorização sem o OAuthProvider é 404, sem efeito colateral', async () => {
     const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
-    await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }));
+    await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }, '10.0.0.7'));
     const antes = await env.DB.prepare(`SELECT COUNT(*) AS n FROM agente_concessoes`).first<any>();
     const auditAntes = await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'agente.autorizado'`).first<any>();
-    const r = await f('/%6Fauth/authorize/confirmar', form({ pedido, projeto: 'p-a' }));
+    const { OAUTH_PROVIDER: _p, ...semProvedor } = workerEnv();
+    const r = await oauthAutorizacao.request('/authorize/confirmar', form({ pedido, projeto: 'p-a' }), semProvedor);
     expect(r.status).toBe(404);
     expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM agente_concessoes`).first<any>()).n).toBe(antes.n);
     expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'agente.autorizado'`).first<any>()).n).toBe(auditAntes.n);

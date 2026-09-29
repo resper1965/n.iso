@@ -16,12 +16,47 @@ export interface PropsAgente {
 
 const REFACA = 'Acesso do agente revogado, expirado ou sem designação no projeto: refaça o login no cliente MCP.';
 
+/**
+ * A concessão vale agora? Não revogada, não expirada, consultor ativo e AINDA
+ * designado na governança do projeto. Única fonte da regra: o handler /mcp a
+ * consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
+ * o resolverAgente a cada chamada interna.
+ */
+export async function concessaoValida(
+  db: D1Database,
+  p: PropsAgente
+): Promise<{ email: string; client_name: string } | null> {
+  const row = await db.prepare(
+    `SELECT u.email, u.role, u.ativo, p.client_name
+       FROM agente_concessoes ac
+       JOIN users u ON u.id = ac.user_id
+       JOIN projects p ON p.id = ac.project_id
+      WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
+        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')`
+  ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string }>();
+  if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) return null;
+
+  // Tirar o consultor da governança derruba o agente na próxima requisição,
+  // sem esperar o token expirar.
+  const designado = await db.prepare(
+    `SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor'`
+  ).bind(p.projectId, row.email).first();
+  return designado ? { email: row.email, client_name: row.client_name } : null;
+}
+
 export async function resolverAgente(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
   p: PropsAgente
 ): Promise<Variables['user'] | Response> {
   const method = c.req.method.toUpperCase();
-  const path = new URL(c.req.url).pathname;
+  // Caminho DECODIFICADO, o mesmo que o Hono usa para rotear: testar o cru
+  // deixava `%67enerate-policies-bulk` passar pela recusa e chegar à rota.
+  const path = c.req.path;
+  // `%2F` o Hono não decodifica; `.`/`..` e `\` só aparecem aqui por
+  // codificação. Nenhum caminho legítimo do agente tem isso.
+  if (/%2f/i.test(path) || path.includes('\\') || path.split('/').some((s) => s === '.' || s === '..')) {
+    return c.json({ error: 'Forbidden: caminho inválido' }, 403);
+  }
 
   // Proporcionalidade: o agente escreve adequação, não destrói nem opera em lote.
   if (method === 'DELETE') return c.json({ error: 'Forbidden: o agente não apaga registros — faça pela interface' }, 403);
@@ -30,25 +65,8 @@ export async function resolverAgente(
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
 
-  const row = await c.env.DB.prepare(
-    `SELECT u.email, u.role, u.ativo, p.client_name
-       FROM agente_concessoes ac
-       JOIN users u ON u.id = ac.user_id
-       JOIN projects p ON p.id = ac.project_id
-      WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
-        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')`
-  ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string }>();
-
-  if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) {
-    return c.json({ error: REFACA }, 401);
-  }
-
-  // Revalida a designação a CADA chamada: tirar o consultor da governança
-  // derruba o agente na próxima requisição, sem esperar o token expirar.
-  const designado = await c.env.DB.prepare(
-    `SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor'`
-  ).bind(p.projectId, row.email).first();
-  if (!designado) return c.json({ error: REFACA }, 401);
+  const row = await concessaoValida(c.env.DB, p);
+  if (!row) return c.json({ error: REFACA }, 401);
 
   await c.env.DB.prepare(`UPDATE agente_concessoes SET ultimo_uso_em = datetime('now') WHERE id = ?`)
     .bind(p.concessaoId).run().catch(() => {});

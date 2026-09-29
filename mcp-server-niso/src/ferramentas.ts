@@ -408,6 +408,14 @@ export const TOOLS: Ferramenta[] = [
 
 const projectIdSchema = z.object({ projectId: z.string() });
 
+/**
+ * Todo id que entra num caminho passa por aqui. Sem isso, `evidenceId =
+ * "../projects/X/%67enerate-policies-bulk#"` virava outra rota: `new Request`
+ * resolve `..` e descarta `#`, e o Hono decodifica `%67` antes de rotear.
+ * Codificado, o id é um segmento só; o transporte recusa o que sobrar.
+ */
+const enc = encodeURIComponent;
+
 export async function executarFerramenta(
   nome: string,
   args: unknown,
@@ -438,7 +446,7 @@ export async function executarFerramenta(
       case "niso_get_project": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}`);
+        return t.get(`/api/v1/projects/${enc(projectId)}`);
       }
 
       case "niso_create_risk": {
@@ -458,43 +466,43 @@ export async function executarFerramenta(
       case "niso_list_controls": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/controls`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/controls`);
       }
 
       case "niso_list_risks": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/risks`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/risks`);
       }
 
       case "niso_gap_analysis": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/gap-analysis`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/gap-analysis`);
       }
 
       case "niso_traceability": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/traceability`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/traceability`);
       }
 
       case "niso_list_evidence": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/evidence`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/evidence`);
       }
 
       case "niso_coherence_check": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/coherence`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/coherence`);
       }
 
       case "niso_audit_pack": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.get(`/api/v1/projects/${projectId}/audit-pack`);
+        return t.get(`/api/v1/projects/${enc(projectId)}/audit-pack`);
       }
 
       case "niso_generate_policy": {
@@ -502,7 +510,7 @@ export async function executarFerramenta(
           .object({ projectId: z.string(), controlId: z.string().optional() })
           .parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${projectId}/generate-policy`, {
+        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policy`, {
           control_id: controlId,
         });
       }
@@ -510,14 +518,14 @@ export async function executarFerramenta(
       case "niso_generate_soa": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${projectId}/generate-soa`);
+        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-soa`);
       }
 
       case "niso_evaluate_evidence": {
         const { evidenceId, text } = z
           .object({ evidenceId: z.string(), text: z.string() })
           .parse(args);
-        return t.enviar(`/api/v1/evidence/${evidenceId}/evaluate`, { text });
+        return t.enviar(`/api/v1/evidence/${enc(evidenceId)}/evaluate`, { text });
       }
 
       case "niso_create_evidence": {
@@ -543,7 +551,7 @@ export async function executarFerramenta(
         const validated = schema.parse(args);
         fora(validated.projectId);
         return t.uploadTexto(
-          `/api/v1/projects/${validated.projectId}/evidence/upload`,
+          `/api/v1/projects/${enc(validated.projectId)}/evidence/upload`,
           {
             contentType: validated.contentType || "text/markdown",
             ...(validated.controlId ? { control_id: validated.controlId } : {}),
@@ -558,7 +566,7 @@ export async function executarFerramenta(
           .object({ projectId: z.string(), controlIds: z.array(z.string()).optional() })
           .parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${projectId}/generate-policies-bulk`, {
+        return t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policies-bulk`, {
           control_ids: controlIds,
         });
       }
@@ -566,7 +574,7 @@ export async function executarFerramenta(
       case "niso_migrate_27701": {
         const { projectId } = projectIdSchema.parse(args);
         fora(projectId);
-        return t.enviar(`/api/v1/projects/${projectId}/migrate-27701`);
+        return t.enviar(`/api/v1/projects/${enc(projectId)}/migrate-27701`);
       }
 
       case "niso_import_training": {
@@ -602,7 +610,7 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         fora(validated.projectId);
-        return t.enviar(`/api/v1/projects/${validated.projectId}/assets`, validated);
+        return t.enviar(`/api/v1/projects/${enc(validated.projectId)}/assets`, validated);
       }
 
       case "niso_update_policy": {
@@ -614,7 +622,7 @@ export async function executarFerramenta(
         const validated = schema.parse(args);
         fora(validated.projectId);
         return t.enviar(
-          `/api/v1/projects/${validated.projectId}/controls/${validated.controlId}/policy`,
+          `/api/v1/projects/${enc(validated.projectId)}/controls/${enc(validated.controlId)}/policy`,
           { text: validated.text }
         );
       }

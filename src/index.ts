@@ -485,9 +485,31 @@ export const provider = new OAuthProvider({
   resourceMetadata: { resource: 'https://niso.ness.com.br/mcp', resource_name: 'n.iso' },
 });
 
-/** Só estes caminhos passam pelo OAuthProvider; o resto segue direto para o Hono. */
-export const ROTAS_OAUTH = (p: string) =>
-  p === '/mcp' || p.startsWith('/mcp/') || p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-');
+/**
+ * Decodifica cada trecho `%XX` que for decodificável e deixa o resto como está
+ * — nunca lança. Cobre tudo o que o Hono decodifica para rotear (ele usa
+ * `decodeURI` trecho a trecho), e um pouco mais (`%2F`), o que só manda ao
+ * provider caminhos que ele devolve ao Hono sem efeito.
+ */
+const decodificarCaminho = (p: string) =>
+  p.replace(/(?:%[0-9A-Fa-f]{2})+/g, (m) => {
+    try {
+      return decodeURIComponent(m);
+    } catch {
+      return m;
+    }
+  });
+
+/**
+ * Só estes caminhos passam pelo OAuthProvider; o resto segue direto para o
+ * Hono. Decide pelo caminho DECODIFICADO: o Hono roteia `/%6Fauth/...` como
+ * `/oauth/...`, e esse caminho não pode chegar à tela de autorização por fora
+ * do provider.
+ */
+export const ROTAS_OAUTH = (cru: string) => {
+  const p = decodificarCaminho(cru);
+  return p === '/mcp' || p.startsWith('/mcp/') || p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-');
+};
 
 export default Object.assign(app, {
   fetch: (req: Request, env: Bindings, ctx: ExecutionContext) =>

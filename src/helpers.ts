@@ -549,6 +549,18 @@ export async function invalidateUserSessions(kv: KVNamespace, userId: string | n
   await kv.put(`sessions_invalid_before:${userId}`, String(Date.now()), { expirationTtl: SESSION_TTL_SEC });
 }
 
+/**
+ * Troca ou redefinição de senha revoga também os agentes conectados pelo MCP
+ * remoto: o token OAuth sobrevive à sessão, e "minha conta foi comprometida"
+ * vale para ele igual. O /mcp devolve 401 na chamada seguinte.
+ */
+export async function revogarAgentesPorTrocaDeSenha(db: D1Database, userId: string | number): Promise<void> {
+  if (!userId) return;
+  await db.prepare(
+    `UPDATE agente_concessoes SET revogado_em = datetime('now'), revogado_por = 'troca de senha' WHERE user_id = ? AND revogado_em IS NULL`
+  ).bind(String(userId)).run();
+}
+
 /** True se a sessão (emitida em `iat`) foi invalidada depois de emitida. */
 export async function sessionRevoked(kv: KVNamespace, userId: string | number | undefined, iat: number | undefined): Promise<boolean> {
   if (!userId) return false;

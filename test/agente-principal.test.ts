@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
-import { applySchema, workerEnv } from './helpers/d1';
+import { applySchema, workerEnv, sessionFor, pedir } from './helpers/d1';
+import { hashPassword } from '../src/helpers';
 
 /**
  * Principal "agente": requisição interna criada pelo /mcp com `env.AGENTE`.
@@ -42,6 +43,28 @@ describe('Principal agente', () => {
     expect(res.status).toBe(403);
   });
 
+  // Revisão final, achado 1: o Hono decodifica %XX antes de rotear; a recusa
+  // tem de olhar o caminho decodificado, não o cru.
+  it('não gera em lote nem por caminho percent-encoded', async () => {
+    for (const caminho of [
+      '/api/v1/projects/p-a/%67enerate-policies-bulk',
+      '/api/v1/projects/p-a/generate-policies-bul%6B',
+    ]) {
+      const res = await comoAgente(caminho, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      expect(res.status, caminho).toBe(403);
+    }
+  });
+
+  it('não gere o próprio acesso por caminho percent-encoded', async () => {
+    expect((await comoAgente('/api/v1/projects/p-a/%61gentes')).status).toBe(403);
+  });
+
+  it('caminho com travessia codificada é recusado', async () => {
+    for (const caminho of ['/api/v1/projects/p-a/%2E%2E/p-b/risks', '/api/v1/projects/p-a%2Frisks']) {
+      expect((await comoAgente(caminho)).status, caminho).toBe(403);
+    }
+  });
+
   it('não registra achado de auditoria', async () => {
     const res = await comoAgente('/api/v1/audits/x/findings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     expect(res.status).toBe(403);
@@ -77,5 +100,25 @@ describe('Principal agente', () => {
     const res = await comoAgente('/api/v1/projects/p-a/risks');
     expect(res.status).toBe(401);
     expect((await res.json<any>()).error).toContain('refaça');
+  });
+
+  // Revisão final, item 4: trocar a senha revoga o agente, como revoga a sessão.
+  it('troca de senha derruba o agente', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-senha','senha@ness.lat',?,'Senha','consultor')`).bind(await hashPassword('senha-antiga-123')),
+      env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Senha','senha@ness.lat','consultor','Consultor')`),
+      env.DB.prepare(`INSERT INTO agente_concessoes (id, user_id, project_id, expira_em) VALUES ('c-senha','u-senha','p-a', datetime('now','+30 days'))`),
+    ]);
+    const Ps = { userId: 'u-senha', email: 'senha@ness.lat', projectId: 'p-a', concessaoId: 'c-senha' };
+    expect((await comoAgente('/api/v1/projects/p-a/risks', {}, Ps)).status).toBe(200);
+    const s = await sessionFor({ id: 'u-senha', email: 'senha@ness.lat', role: 'consultor' });
+    const troca = await pedir(worker, '/api/v1/auth/change-password', {
+      method: 'POST', headers: { ...s, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPassword: 'senha-antiga-123', newPassword: 'Senha-Nova-Forte-2026!' }),
+    });
+    expect(troca.status, await troca.clone().text()).toBe(200);
+    expect((await comoAgente('/api/v1/projects/p-a/risks', {}, Ps)).status).toBe(401);
+    const conc = await env.DB.prepare(`SELECT revogado_por FROM agente_concessoes WHERE id = 'c-senha'`).first<any>();
+    expect(conc.revogado_por).toBe('troca de senha');
   });
 });

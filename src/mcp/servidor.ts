@@ -1,7 +1,7 @@
 import { createMcpHandler } from 'agents/mcp/server';
 import { Server, type CallToolResult } from '@modelcontextprotocol/server';
 import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte, type Ferramenta } from '../../mcp-server-niso/src/ferramentas';
-import type { PropsAgente } from '../middleware/agente';
+import { concessaoValida, type PropsAgente } from '../middleware/agente';
 import { INSTRUCOES, montarContexto } from './contexto';
 
 type FetchHono = (r: Request, e: any, c?: any) => Response | Promise<Response>;
@@ -22,6 +22,21 @@ const DISPONIVEIS: Ferramenta[] = [
 const NOMES = new Set(DISPONIVEIS.map((f) => f.name));
 
 /**
+ * O caminho que chega ao Worker tem de ser exatamente o que a ferramenta montou.
+ * Recusa `%` (o Hono decodificaria `%67` em `g` antes de rotear), `#` (o
+ * `new Request` o descarta), `\`, segmento `.`/`..` (o `new Request` os
+ * resolve) e qualquer caminho que o parser de URL reescreva. Id com caractere
+ * que precise de codificação é recusado junto: os ids do n.iso não têm.
+ */
+function caminhoSeguro(base: string, path: string): boolean {
+  const q = path.indexOf('?');
+  const rota = q === -1 ? path : path.slice(0, q);
+  if (!rota.startsWith('/api/v1/') || /[%#\\]/.test(rota) || path.includes('#')) return false;
+  if (rota.split('/').some((s) => s === '.' || s === '..')) return false;
+  return new URL(base + rota).pathname === rota;
+}
+
+/**
  * Chama as rotas /api/v1 do próprio Worker como o agente — sem rede, sem
  * cabeçalho forjável. A identidade vai SÓ em `env.AGENTE`; o Authorization do
  * /mcp (token OAuth) não é repassado.
@@ -34,6 +49,7 @@ function transporteInterno(origem: Request, env: any, ctx: any, props: PropsAgen
   // Allowlist de IP do tenant avalia o IP real do cliente MCP.
   const ip = origem.headers.get('CF-Connecting-IP');
   const chamar = async (path: string, init: RequestInit) => {
+    if (!caminhoSeguro(base, path)) throw new Error('caminho de API recusado (id com caractere inválido)');
     const headers = new Headers(init.headers);
     if (ip) headers.set('CF-Connecting-IP', ip);
     const r = await fetchHono(new Request(base + path, { ...init, headers }), envAgente, ctx);
@@ -74,7 +90,19 @@ function transporteInterno(origem: Request, env: any, ctx: any, props: PropsAgen
 }
 
 export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: FetchHono): Promise<Response> {
-  const props = ctx.props as PropsAgente;
+  const props = ctx.props as PropsAgente | undefined;
+  // Token OAuth válido não basta: a concessão pode ter sido revogada, expirada
+  // ou perdido a designação. 401 (e não isError num 200) é o que faz o cliente
+  // MCP descartar o token e reabrir o fluxo OAuth.
+  if (!props || !(await concessaoValida(env.DB, props))) {
+    return new Response(JSON.stringify({ error: 'Acesso do agente revogado ou expirado: conecte de novo.' }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer error="invalid_token", error_description="acesso do agente revogado ou expirado"',
+      },
+    });
+  }
   const t = transporteInterno(req, env, ctx, props, fetchHono);
 
   const criar = () => {

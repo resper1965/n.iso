@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { verifyPassword, rateLimit, rateLimitD1, genId, genToken, logAudit, escapeHtml } from '../helpers';
+import { clientIp, chavesTentativa, registrarFalhaLogin } from './auth';
+import { mensagemBloqueio } from '../auth-policy';
 import { verificarCodigoTotp } from '../services/totp';
 import type { PropsAgente } from '../middleware/agente';
 
@@ -12,9 +14,12 @@ import type { PropsAgente } from '../middleware/agente';
  */
 export const oauthAutorizacao = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Só existe atrás do OAuthProvider, que injeta OAUTH_PROVIDER. Caminho que chega
-// aqui sem ele (ex.: `/%6Fauth/...`, que o despacho de src/index.ts não
-// reconhece e o Hono decodifica) é 404 — nunca uma concessão sem grant.
+// Só existe atrás do OAuthProvider, que injeta OAUTH_PROVIDER. O despacho de
+// src/index.ts decide pelo caminho DECODIFICADO (ROTAS_OAUTH), então
+// `/%6Fauth/...` também passa pelo provider. Esta guarda é defesa em
+// profundidade e NÃO basta sozinha: o provider grava o helper no próprio objeto
+// `env`, que o runtime reaproveita entre requisições — depois da primeira
+// requisição OAuth, um caminho que escapasse do despacho já o encontraria aqui.
 oauthAutorizacao.use('*', async (c, next) => (c.env.OAUTH_PROVIDER ? next() : c.notFound()));
 
 const TTL_PEDIDO = 600;
@@ -84,22 +89,37 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   const pedido = await lerPedido(c, token);
   if (!pedido) return pagina('Pedido expirado', '<h1>Pedido expirado</h1><p>Volte ao seu cliente MCP e conecte de novo.</p>', 400);
 
-  const ip = c.req.header('CF-Connecting-IP') || '';
+  // Mesma contagem de falhas e mesmo bloqueio do login do app (routes/auth.ts):
+  // errar aqui bloqueia lá e vice-versa. O desafio Turnstile fica de fora — o
+  // widget exige script de terceiro e esta tela não roda JavaScript (CSP).
+  const ip = clientIp(c);
   const email = String(f.email || '').trim().toLowerCase();
-  if (!(await rateLimit(c.env.SESSIONS, `oauth-login:${ip}`, 20, 300))
-    || !(await rateLimitD1(c.env.DB, `login:acct:${email}`, 10, 300))) {
+  const chaves = chavesTentativa(email, ip);
+  const bloqueio = () => pagina('Muitas tentativas', `<h1>Muitas tentativas</h1><p class="erro">${escapeHtml(mensagemBloqueio())}</p>`, 429);
+  if (!(await rateLimit(c.env.SESSIONS, `oauth-login:${ip}`, 20, 300))) {
     return pagina('Muitas tentativas', '<h1>Muitas tentativas</h1><p>Tente de novo em alguns minutos.</p>', 429);
   }
+  if (await c.env.SESSIONS.get(chaves.bloqueio)) return bloqueio();
+  if (!(await rateLimitD1(c.env.DB, `login:acct:${email}`, 10, 300))) {
+    return pagina('Muitas tentativas', '<h1>Muitas tentativas</h1><p>Tente de novo em alguns minutos.</p>', 429);
+  }
+  const falhas = parseInt((await c.env.SESSIONS.get(chaves.falhas)) || '0', 10) || 0;
 
   const u = await c.env.DB.prepare(
-    'SELECT id, email, role, password_hash, ativo, totp_enabled, totp_secret, totp_last_window FROM users WHERE lower(email) = ?'
+    'SELECT id, email, role, password_hash, ativo, requires_password_change, totp_enabled, totp_secret, totp_last_window FROM users WHERE lower(email) = ?'
   ).bind(email).first<any>();
-  if (!u || u.ativo === 0 || !(await verifyPassword(String(f.senha || ''), u.password_hash))) {
+  // A senha é conferida sempre que a conta existe, e senha errada, conta
+  // inativa e papel sem acesso dão a MESMA resposta e contam como falha: a
+  // tela é pública, e responder diferente à senha certa de quem não é
+  // consultor viraria oráculo de senha de qualquer conta, platform_admin inclusive.
+  const senhaOk = u ? await verifyPassword(String(f.senha || ''), u.password_hash) : false;
+  if (!senhaOk || u.ativo === 0 || (u.role !== 'consultor' && u.role !== 'consultant')) {
+    await c.env.SESSIONS.delete(chave(token)); // falha consome o pedido
+    const depois = await registrarFalhaLogin(c, chaves, falhas, false, ip);
+    if (depois.bloqueado) return bloqueio();
     return pagina('Entrar', '<h1>Não foi possível entrar</h1><p class="erro">E-mail ou senha incorretos.</p>', 401);
   }
-  if (u.role !== 'consultor' && u.role !== 'consultant') {
-    return pagina('Entrar', '<h1>Acesso não disponível</h1><p>Nesta versão, só consultores da ness. conectam agentes.</p>', 403);
-  }
+  await c.env.SESSIONS.delete(chaves.falhas);
   if (u.totp_enabled === 1) {
     const janela = await verificarCodigoTotp(u.totp_secret, String(f.codigo || ''));
     const avanco = janela === null ? null : await c.env.DB.prepare(
@@ -108,6 +128,13 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
     if (!avanco || avanco.meta?.changes !== 1) {
       return pagina('Entrar', '<h1>Código inválido</h1><p class="erro">Informe o código atual do autenticador.</p>', 401);
     }
+  }
+
+  // Só depois de senha e segundo fator conferidos: aqui a mensagem já não
+  // revela nada a quem não tem a credencial.
+  if (u.requires_password_change === 1) {
+    await c.env.SESSIONS.delete(chave(token));
+    return pagina('Senha provisória', '<h1>Senha provisória</h1><p>Defina sua senha definitiva no n.iso antes de conectar um agente.</p>', 403);
   }
 
   const { results } = await c.env.DB.prepare(
@@ -157,7 +184,10 @@ oauthAutorizacao.post('/authorize/confirmar', async (c) => {
   if (!provedor) return c.notFound(); // o use('*') já barra; aqui só estreita o tipo
   const { redirectTo } = await provedor.completeAuthorization({
     request: pedido.oauth as any, userId: pedido.userId,
-    metadata: { clientName: pedido.clientName, projectId }, scope: (pedido.oauth as any).scope ?? [],
+    metadata: { clientName: pedido.clientName, projectId },
+    // Escopo fixo: o que o agente pode é decidido aqui (papel consultor), não
+    // pelo que o cliente MCP pediu na URL.
+    scope: ['niso:consultor'],
     props, revokeExistingGrants: false,
   });
 
