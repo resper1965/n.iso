@@ -114,6 +114,27 @@ describe('Rotas de /api/v1/auth que exigem sessão', () => {
     expect(linha.requires_password_change, 'a marca de primeiro acesso não foi limpa').toBe(0);
   });
 
+  it('a sessão que troca a senha do primeiro acesso continua valendo', async () => {
+    // `globals.js` chama `initApp()` com o MESMO token logo após a troca. Se a
+    // revogação derrubar também esta sessão, a pessoa volta ao login e acha que
+    // a senha nova "não pegou". `iat` no passado: é o login que precedeu a troca.
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO users (id, email, password_hash, name, role, requires_password_change) VALUES (?,?,?,?,?,1)`
+    ).bind('u-novo2', 'novo2@x.com', await hashPassword('provisoria-123'), 'Novo', 'org_user').run();
+    const s = {
+      ...(await sessionFor({ id: 'u-novo2', email: 'novo2@x.com', role: 'org_user', iat: Date.now() - 1000 })),
+      'Content-Type': 'application/json',
+    };
+
+    const res = await req('/api/v1/auth/reset-password-first', {
+      method: 'POST', headers: s, body: JSON.stringify({ newPassword: 'definitiva-boa' }),
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+
+    const me = await req('/api/v1/auth/me', { headers: s });
+    expect(me.status, await me.clone().text()).toBe(200);
+  });
+
   it('POST /reset-password-first sem sessão é 401', async () => {
     const res = await req('/api/v1/auth/reset-password-first', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

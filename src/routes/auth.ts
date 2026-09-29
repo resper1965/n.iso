@@ -261,6 +261,17 @@ authApp.post('/reset-password-first', async (c) => {
     ).bind(newHash, user.id).run();
 
     await invalidateUserSessions(c.env.SESSIONS, user.id);
+    // A revogação derruba também ESTA sessão, e o `globals.js` segue com o mesmo
+    // token para dentro do app: a pessoa voltava ao login achando que a senha
+    // nova não pegou. Recarimbar `iat` mantém só ela viva — quem acabou de
+    // provar a senha nova equivale a um login novo, daí o TTL cheio.
+    const sessionId = c.get('sessionId');
+    if (sessionId) {
+      const agora = Date.now();
+      const renovada = JSON.stringify({ ...user, iat: agora, seen: agora });
+      await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
+      await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
+    }
 
     await logAudit(c.env.DB, 'auth.password_changed_first', user.email, `Senha do primeiro acesso redefinida com sucesso`);
     return c.json({ ok: true, message: 'Senha redefinida com sucesso' });
