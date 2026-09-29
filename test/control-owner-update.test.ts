@@ -15,15 +15,28 @@ describe('PUT /controls/:id — owner gravável', () => {
     await applySchema();
     await resetData();
     await resetSessions();
+    // Cadeia conta→cliente: sem ela `pr1` nasce órfão e nem o consultor da
+    // própria conta alcança o projeto.
     await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr1','C','ISO 27001:2022','Controller','Active')`
+      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-cou', 'msp', 'Conta COU', 'Active')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou', 'conta-cou', 'C', 'Active')`
+    ).run();
+    // Segundo cliente: dá ao "outro tenant" da suíte um `cliente_id` real,
+    // para que o 403 meça a DESIGUALDADE de cliente, não a ausência de um.
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou-outro', 'conta-cou', 'Outro Cliente', 'Active')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','cli-cou')`
     ).run();
     // Controle já aprovado, para provar que gravar owner NÃO derruba o sign-off.
     await env.DB.prepare(
       `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, ciso_approved_by, ceo_approved_by)
        VALUES ('c1','pr1','ISO 27001:2022','A.5.1 Políticas','Texto vigente','In Progress',3,'DPO Fulano','CEO Beltrano')`
     ).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', conta_id: 'conta-cou', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const req = (method: string, path: string, body?: unknown) =>
@@ -56,7 +69,7 @@ describe('PUT /controls/:id — owner gravável', () => {
   });
 
   it('mantém o isolamento por tenant: org_admin de outro projeto não grava', async () => {
-    const alienHeaders = { ...(await sessionFor({ id: 'u2', email: 'org@cliente.io', role: 'org_admin', client_project_id: 'pr-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const alienHeaders = { ...(await sessionFor({ id: 'u2', email: 'org@cliente.io', role: 'org_admin', conta_id: null, cliente_id: 'cli-cou-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
     const res = await app.fetch(new Request('http://localhost/api/v1/controls/c1', { method: 'PUT', headers: alienHeaders, body: JSON.stringify({ owner: 'Invasor' }) }), env as any);
     expect(res.status).toBe(403);
     const ctrl = await env.DB.prepare("SELECT owner FROM compliance_controls WHERE id='c1'").first<any>();
@@ -71,14 +84,23 @@ describe('PATCH /projects/:id/controls — reatribuição de owner em lote', () 
     await applySchema();
     await resetData();
     await resetSessions();
-    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr1','C','ISO 27001:2022','Controller','Active')`).run();
-    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr2','C2','ISO 27001:2022','Controller','Active')`).run();
+    // Cadeia conta→cliente: os dois projetos ficam sob a MESMA conta, para que
+    // o consultor (staff dessa conta) alcance os dois.
+    await env.DB.prepare(
+      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-cou2', 'msp', 'Conta COU2', 'Active')`
+    ).run();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou2-1', 'conta-cou2', 'C', 'Active')`),
+      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-cou2-2', 'conta-cou2', 'C2', 'Active')`),
+    ]);
+    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','cli-cou2-1')`).run();
+    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr2','C2','ISO 27001:2022','Controller','Active','cli-cou2-2')`).run();
     // Dois controles do João no pr1, um da Ana no pr1, e um do João no pr2 (tenant à parte).
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c1','pr1','ISO 27001:2022','A.5.1','João')`).run();
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c2','pr1','ISO 27001:2022','A.5.2','João')`).run();
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c3','pr1','ISO 27001:2022','A.5.3','Ana')`).run();
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c4','pr2','ISO 27001:2022','A.5.1','João')`).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', conta_id: 'conta-cou2', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const req = (method: string, path: string, body?: unknown) =>

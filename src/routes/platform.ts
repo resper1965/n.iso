@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehStaffDeConta, somenteStaff, hidrataEscopo, projetosDoAtor, SQL_PROJETOS_DA_CONTA, AtorAutorizado } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -184,7 +184,7 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteStaff, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
@@ -220,18 +220,73 @@ platformApp.get('/marketplace/templates', async (c) => {
   return c.json({ ok: true, total: marketplace.length, templates: marketplace });
 });
 
+/**
+ * Três ramos de escopo, compartilhados por `/dashboard` e `/dashboard/stats`
+ * (as duas rotas de contagem da plataforma):
+ *
+ * 1. `platform_admin` conta a plataforma inteira — sem WHERE nenhum.
+ * 2. Staff de UMA conta (consultor/consultant) conta só a PRÓPRIA carteira.
+ *    `leads` já carrega `conta_id` (Task 9) e filtra direto; os demais
+ *    recursos não têm `conta_id` próprio e alcançam a conta via `project_id
+ *    IN (projetos da conta)` — a mesma cadeia `projects.cliente_id →
+ *    clientes.conta_id` do `/portfolio`.
+ * 3. Qualquer outro papel — inclusive um fora da lista conhecida, e inclusive
+ *    sem projeto — é escopado ao próprio `client_project_id` (que pode ser
+ *    string VAZIA: `WHERE id = ''` não casa com nada, então cliente sem
+ *    projeto conta zero em vez de contar a plataforma inteira). O funil
+ *    comercial não é dele (`somenteMsp`), e a contagem de leads fica em 0 por
+ *    construção, sem depender de mais uma checagem de papel.
+ */
+async function escopoContagensPlataforma(c: { env: { DB: D1Database }; get: (k: 'user') => any }) {
+  const user = c.get('user');
+  let leadsStmt: any;
+  let projectsStmt: any;
+  let resourceWhere: string;
+  let resourceParams: unknown[];
+
+  if (user?.role === 'platform_admin') {
+    leadsStmt = c.env.DB.prepare('SELECT count(*) as count FROM leads');
+    projectsStmt = c.env.DB.prepare('SELECT count(*) as count FROM projects');
+    resourceWhere = '';
+    resourceParams = [];
+  } else if (ehStaffDeConta(user)) {
+    await hidrataEscopo(c.env.DB, user as AtorAutorizado);
+    const contaId = (user as AtorAutorizado)?.conta_id ?? '';
+    const projetosDaConta = SQL_PROJETOS_DA_CONTA;
+    leadsStmt = c.env.DB.prepare('SELECT count(*) as count FROM leads WHERE conta_id = ?').bind(contaId);
+    projectsStmt = c.env.DB.prepare(`SELECT count(*) as count FROM (${projetosDaConta})`).bind(contaId);
+    resourceWhere = `project_id IN (${projetosDaConta})`;
+    resourceParams = [contaId];
+  } else {
+    const projectId = user?.client_project_id ?? '';
+    leadsStmt = c.env.DB.prepare('SELECT 0 as count');
+    projectsStmt = c.env.DB.prepare('SELECT count(*) as count FROM projects WHERE id = ?').bind(projectId);
+    resourceWhere = 'project_id = ?';
+    resourceParams = [projectId];
+  }
+
+  const comEscopo = (condicao: string) => (resourceWhere ? `${resourceWhere} AND ${condicao}` : condicao);
+  return { leadsStmt, projectsStmt, comEscopo, resourceParams };
+}
+
 // Dashboard
 platformApp.get('/dashboard', async (c) => {
   const user = c.get('user');
   if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
     return c.json({ error: 'Forbidden: Client role cannot access global platform dashboard' }, 403);
   }
+  // Mesmo escopo de três ramos de `/dashboard/stats`, abaixo — esta rota
+  // tinha a MESMA lacuna (contagens sem `WHERE` para todo staff que passasse
+  // do guard acima, inclusive staff de uma única conta ou papel fora da
+  // lista conhecida como `ciso`), só que fora das linhas que o brief da
+  // Task 9 citou. Mesmo defeito, mesma correção.
+  const { leadsStmt, projectsStmt, comEscopo, resourceParams } = await escopoContagensPlataforma(c);
   const [projects, leads, controls, evidence, risks] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM projects').first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM leads').first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed'").first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending'").first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15').first() as Promise<any>
+    projectsStmt.first() as Promise<any>,
+    leadsStmt.first() as Promise<any>,
+    c.env.DB.prepare(`SELECT COUNT(*) as count FROM compliance_controls WHERE ${comEscopo("status = 'Completed'")}`).bind(...resourceParams).first() as Promise<any>,
+    c.env.DB.prepare(`SELECT COUNT(*) as count FROM evidence WHERE ${comEscopo("evaluation_status = 'pending'")}`).bind(...resourceParams).first() as Promise<any>,
+    c.env.DB.prepare(`SELECT COUNT(*) as count FROM risks WHERE ${comEscopo('impact * probability >= 15')}`).bind(...resourceParams).first() as Promise<any>,
   ]);
   return c.json({
     projects: projects?.count || 0,
@@ -244,34 +299,14 @@ platformApp.get('/dashboard', async (c) => {
 
 platformApp.get('/dashboard/stats', async (c) => {
   try {
-    const user = c.get('user');
-
-    // Mesma inversão do `/portfolio` acima, pelos mesmos dois motivos: só a
-    // equipe ness. conta a plataforma inteira; qualquer outro papel — inclusive
-    // um fora da lista conhecida, e inclusive sem projeto — é escopado.
-    //
-    // UMA variável decide tudo: `null` é o ramo da ness. (sem WHERE), string é
-    // o escopo do cliente. A string pode ser VAZIA, e é esse o ponto —
-    // `WHERE id = ''` não casa com nada, então cliente sem projeto conta zero
-    // em vez de contar a plataforma inteira.
-    const escopo: string | null = ehEquipeNess(user) ? null : (user?.client_project_id ?? '');
-
-    const whereResource = escopo === null ? '' : 'WHERE project_id = ?';
-    const whereProject = escopo === null ? '' : 'WHERE id = ?';
-    const params = escopo === null ? [] : [escopo];
+    const { leadsStmt, projectsStmt, comEscopo, resourceParams } = await escopoContagensPlataforma(c);
 
     const stats = await c.env.DB.batch<{ count: number }>([
-      // O funil comercial é da ness. (ver `somenteNess` em helpers.ts): cliente
-      // não vê lead — nem o conteúdo, nem quantos existem. A contagem era
-      // global para todo mundo. O `SELECT 0` mantém o alinhamento posicional do
-      // batch, para os índices abaixo não dependerem do papel de quem pergunta.
-      escopo === null
-        ? c.env.DB.prepare('SELECT count(*) as count FROM leads')
-        : c.env.DB.prepare('SELECT 0 as count'),
-      c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM evidence ${whereResource} ${whereResource ? "AND" : "WHERE"} evaluation_status = 'pending'`).bind(...params),
-      c.env.DB.prepare(`SELECT count(*) as count FROM risks ${whereResource} ${whereResource ? "AND" : "WHERE"} impact * probability >= 15`).bind(...params)
+      leadsStmt,
+      projectsStmt,
+      c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls WHERE ${comEscopo("status = 'Completed'")}`).bind(...resourceParams),
+      c.env.DB.prepare(`SELECT count(*) as count FROM evidence WHERE ${comEscopo("evaluation_status = 'pending'")}`).bind(...resourceParams),
+      c.env.DB.prepare(`SELECT count(*) as count FROM risks WHERE ${comEscopo('impact * probability >= 15')}`).bind(...resourceParams),
     ]);
 
     return c.json({
@@ -415,15 +450,29 @@ platformApp.get('/portfolio', async (c) => {
     //    `users.role` é TEXT livre — um papel fora da lista, como `ciso`
     //    (que a própria suíte usa), enxergava a carteira de TODOS os tenants.
     //
-    // Agora quem decide é `ehEquipeNess`: só a equipe ness. vê a plataforma
-    // inteira, e todo o resto é escopado ao próprio projeto. Papel desconhecido
-    // cai no lado seguro. Com o escopo vazio, `WHERE id = ''` não casa com
-    // nada — escopo ausente significa NADA, nunca TUDO.
-    const stmt = ehEquipeNess(user)
-      ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
-      : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
-    const { results } = await stmt.all();
-    return c.json({ ok: true, portfolio: results || [], projects: results || [] });
+    // Quem decide é `ehStaffDeConta`, e o lado CLIENTE cai no lado seguro
+    // (escopo ausente significa NADA, nunca TUDO — `WHERE id = ''` não casa
+    // com nada). Isso resolvia quem entra no ramo de STAFF, mas não fechava o
+    // ramo em si: `SELECT * FROM projects` sem `WHERE conta_id` devolvia o
+    // portfólio de TODAS as consultorias para QUALQUER staff de QUALQUER
+    // conta `msp` — vazamento real entre tenants, não decisão de produto (Task
+    // 9 fecha isto, junto com a mesma lacuna em `/dashboard/stats`, abaixo).
+    //
+    // `platform_admin` é o ÚNICO papel global — ele opera o SaaS. Os demais
+    // papéis de `PAPEIS_STAFF` (consultor/consultant) são staff de UMA conta e
+    // veem só a própria carteira, pela cadeia que `requireProjectAccess` já
+    // usa (Task 5): `projects.cliente_id → clientes.conta_id`. Não
+    // desnormaliza `conta_id` em `projects` pelo mesmo motivo de lá — cliente
+    // que troca de consultoria move `clientes.conta_id`, e uma cópia que não
+    // acompanhe em transação deixaria a consultoria antiga enxergando o
+    // projeto depois da troca.
+    //
+    // Os três ramos MUDARAM DE CASA (sem mudar de comportamento): viraram
+    // `projetosDoAtor` em `helpers.ts`, porque `GET /api/v1/projects` devolve a
+    // mesma coisa por outro caminho e estava com a versão SEM `WHERE`. Duas
+    // cópias do mesmo escopo é como uma delas fica para trás.
+    const results = await projetosDoAtor(c.env.DB, user as AtorAutorizado);
+    return c.json({ ok: true, portfolio: results, projects: results });
   } catch (e: any) {
     return erro500(c, 'Erro ao buscar portfólio', e);
   }

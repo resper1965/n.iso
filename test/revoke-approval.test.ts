@@ -15,11 +15,20 @@ describe('revogar aprovação de controle (D3)', () => {
     await applySchema();
     await resetData();
     await resetSessions();
+    // Cadeia conta→cliente: os dois projetos ficam sob a MESMA conta, para que
+    // o consultor (staff dessa conta) alcance os dois.
     await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr1','C','ISO 27001:2022','Controller','Active')`
+      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-ra', 'msp', 'Conta RA', 'Active')`
+    ).run();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-ra-1', 'conta-ra', 'C', 'Active')`),
+      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-ra-2', 'conta-ra', 'C2', 'Active')`),
+    ]);
+    await env.DB.prepare(
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','cli-ra-1')`
     ).run();
     await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr2','C2','ISO 27001:2022','Controller','Active')`
+      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr2','C2','ISO 27001:2022','Controller','Active','cli-ra-2')`
     ).run();
     // Controles aprovados por um "automator" (sem lastro humano) — o caso real.
     for (const id of ['c1', 'c2']) {
@@ -33,7 +42,7 @@ describe('revogar aprovação de controle (D3)', () => {
       `INSERT INTO compliance_controls (id, project_id, standard, title, status, ciso_approved_by) VALUES ('c-outro','pr2','ISO 27001:2022','A.5.1 Z','Approved','Ricardo Esper')`
     ).run();
     // Chave de ESCRITA do consultor (sem senha de aprovador).
-    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', conta_id: 'conta-ra', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const req = (method: string, path: string, body?: unknown) =>
