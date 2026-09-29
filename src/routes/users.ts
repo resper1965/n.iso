@@ -31,6 +31,20 @@ usersApp.get('/', async (c) => {
   }
 });
 
+/*
+ * Contas da ness. (consultor, platform_admin, comercial — e as grafias legadas)
+ * só o `platform_admin` cria, edita ou apaga. Os demais gestores (consultor,
+ * org_admin) cuidam só de usuário de CLIENTE.
+ *
+ * Sem isto o consultor atribuía qualquer papel: criava um `platform_admin` com
+ * senha escolhida por ele, promovia a si mesmo, ou trocava a senha de um admin
+ * (ou de um colega) e entrava na conta. Três portas para a mesma escalada.
+ */
+const PAPEIS_CLIENTE_GERIVEIS = new Set(['org_admin', 'org_user', 'client']);
+const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefined) =>
+  quem.role !== 'platform_admin' && !PAPEIS_CLIENTE_GERIVEIS.has(papel ?? '');
+const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
+
 usersApp.post('/', async (c) => {
   const admin = c.get('user');
   if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
@@ -41,6 +55,8 @@ usersApp.post('/', async (c) => {
     const valid = await validateBody(c, createUserSchema);
     if (!valid.success) return valid.response;
     const { email, password, name, role, client_project_id } = valid.data;
+
+    if (soPlatformAdmin(admin, role)) return c.json(recusaPapelInterno, 403);
 
     let targetProject = client_project_id;
     let targetRole = role;
@@ -100,6 +116,12 @@ usersApp.put('/:id', async (c) => {
     const user = await c.env.DB.prepare('SELECT id, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+
+    // O ALVO precisa ser de cliente (senão é tomada de conta: trocar a senha de
+    // um admin ou colega) E o papel novo também (senão é promoção).
+    if (soPlatformAdmin(admin, user.role) || (role !== undefined && soPlatformAdmin(admin, role))) {
+      return c.json(recusaPapelInterno, 403);
     }
 
     if (admin.role === 'org_admin') {
@@ -165,10 +187,12 @@ usersApp.delete('/:id', async (c) => {
 
   const id = c.req.param('id');
   try {
-    const user = await c.env.DB.prepare('SELECT id, email, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
+    const user = await c.env.DB.prepare('SELECT id, email, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
+
+    if (soPlatformAdmin(admin, user.role)) return c.json(recusaPapelInterno, 403);
 
     if (admin.role === 'org_admin' && user.client_project_id !== admin.client_project_id) {
       return c.json({ error: 'Forbidden: Access denied to this user' }, 403);

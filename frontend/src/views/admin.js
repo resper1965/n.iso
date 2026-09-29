@@ -148,6 +148,7 @@ window.__adminCopiarApiKey = () => {
                     const projectName = u.client_project_id ? (projMap[u.client_project_id] || u.client_project_id) : '—';
                     const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
                                       u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
+                                      u.role === 'comercial' ? 'Comercial' :
                                       u.role === 'org_admin' ? 'Gestor Cliente' : 
                                       u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
                     return [
@@ -242,14 +243,17 @@ window.__adminCopiarApiKey = () => {
             </option>
         `).join('');
 
-        const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
-        
+        // Contas da ness. (admin, consultor, comercial) só o platform_admin
+        // atribui — o servidor recusa o resto (users.ts, soPlatformAdmin).
+        const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin');
+
         let roleOptions = '';
         if (isSystemAdmin) {
             roleOptions = `
                 <option value="">Selecione um papel</option>
                 <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma</option>
                 <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor</option>
+                <option value="comercial" ${user && user.role === 'comercial' ? 'selected' : ''}>Comercial</option>
                 <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente</option>
                 <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
             `;
