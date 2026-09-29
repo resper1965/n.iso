@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ROTAS } from '../mcp-server-niso/src/contrato-gerado';
 import spec from '../docs/openapi.json';
-import mcpSrc from '../mcp-server-niso/src/index.ts?raw';
+import mcpSrc from '../mcp-server-niso/src/ferramentas.ts?raw';
+import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte } from '../mcp-server-niso/src/ferramentas';
 
 /**
  * O MCP consome o contrato, não strings (item 3.2 do `enterprise-grade-plan.md`).
@@ -51,7 +52,7 @@ describe('Contrato do mcp-server-niso', () => {
     // e o que precisa ser vigiado é justamente quem NÃO usa.
     const emString: string[] = [];
     mcpSrc.split('\n').forEach((linha, i) => {
-      const m = linha.match(/nisoPost\(\s*`([^`]+)`/);
+      const m = linha.match(/\bt\.enviar\(\s*`([^`]+)`/);
       if (!m) return;
       // `${x}` no molde vira `{param}` para comparar com a chave do contrato.
       const molde = m[1].replace(/\$\{[^}]+\}/g, '{p}');
@@ -59,12 +60,12 @@ describe('Contrato do mcp-server-niso', () => {
         const [, caminho] = k.split(' ');
         return caminho.replace(/\{\w+\}/g, '{p}') === molde;
       });
-      if (noContrato) emString.push(`mcp-server-niso/src/index.ts:${i + 1}  ${molde}`);
+      if (noContrato) emString.push(`mcp-server-niso/src/ferramentas.ts:${i + 1}  ${molde}`);
     });
 
     expect(
       emString,
-      `estas escritas têm entrada no contrato e deviam usar \`nisoContrato\`:\n  ${emString.join('\n  ')}`
+      `estas escritas têm entrada no contrato e deviam usar \`t.contrato\`:\n  ${emString.join('\n  ')}`
     ).toEqual([]);
   });
 
@@ -72,7 +73,26 @@ describe('Contrato do mcp-server-niso', () => {
     // Piso: se `ROTAS` viesse vazio, os dois testes acima passariam sem provar
     // nada — nenhuma divergência e nenhuma string a reclamar.
     expect(Object.keys(ROTAS).length).toBeGreaterThan(40);
-    expect(mcpSrc).toContain('nisoContrato(');
-    expect((mcpSrc.match(/nisoContrato\(/g) ?? []).length, 'as chamadas migradas sumiram').toBeGreaterThanOrEqual(6);
+    expect(mcpSrc).toContain('t.contrato(');
+    expect((mcpSrc.match(/\bt\.contrato\(/g) ?? []).length, 'as chamadas migradas sumiram').toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe('ferramentas.ts é a fonte única das ferramentas MCP', () => {
+  it('exporta as 23 ferramentas, todas com prefixo niso_', () => {
+    expect(TOOLS).toHaveLength(23);
+    expect(TOOLS.every((t) => t.name.startsWith('niso_'))).toBe(true);
+  });
+  it('auditor não vê escrita de implementação; consultor não vê achado', () => {
+    expect(ferramentaPermitida('niso_generate_policy', 'auditor')).toBe(false);
+    expect(ferramentaPermitida('niso_create_audit_finding', 'consultant')).toBe(false);
+    expect(ferramentaPermitida('niso_get_project', 'readonly')).toBe(true);
+  });
+  it('executarFerramenta impõe o papel sozinha, sem tocar o transporte', async () => {
+    const explode = () => { throw new Error('transporte não devia ser chamado'); };
+    const t = { get: explode, enviar: explode, contrato: explode, uploadTexto: explode } as unknown as Transporte;
+    const r = await executarFerramenta('niso_generate_policy', { projectId: 'p1' }, t, { papel: 'auditor' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('indisponível para o papel');
   });
 });

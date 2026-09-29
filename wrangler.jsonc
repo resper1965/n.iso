@@ -60,6 +60,11 @@
 		{
 			"binding": "SESSIONS",
 			"id": "f9cb3bf811374cfe9f9ad5780e1740c7"
+		},
+		{
+			// id real: npx wrangler kv namespace create OAUTH_KV (controller cria antes do merge)
+			"binding": "OAUTH_KV",
+			"id": "CRIAR-ANTES-DO-DEPLOY"
 		}
 	],
 	"r2_buckets": [
@@ -144,6 +149,11 @@
 				{
 					"binding": "SESSIONS",
 					"id": "65176c8eef4140f7a64cb366a66311b4"
+				},
+				{
+					// id real: npx wrangler kv namespace create OAUTH_KV (controller cria antes do merge)
+					"binding": "OAUTH_KV",
+					"id": "CRIAR-ANTES-DO-DEPLOY"
 				}
 			],
 			"r2_buckets": [

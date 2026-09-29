@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, erro500 } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500 } from '../helpers';
 import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -168,6 +168,7 @@ usersApp.put('/:id', async (c) => {
       if (role !== undefined || password !== undefined || client_project_id !== undefined) {
         await invalidateUserSessions(c.env.SESSIONS, id);
       }
+      if (password !== undefined && password !== '') await revogarAgentesPorTrocaDeSenha(c.env.DB, id);
 
       await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${id} atualizado`);
     }
