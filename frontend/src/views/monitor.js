@@ -462,6 +462,13 @@ import { navigate } from '../router.js';
         forceCloseModal(); render();
     }
 
+    // Quem designa consultor na governança (mesma regra do servidor, #210):
+    // platform_admin ou o administrador do cliente. Só decide o que MOSTRAR.
+    const podeDesignarConsultor = () => !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin'));
+    // Quem edita a governança pela tela. O org_admin entra desde o #210: é ele
+    // quem designa o consultor do próprio cliente.
+    const podeEditarGovernanca = () => !!(S.user && ['platform_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
+
     async function renderGovernance(c, h, a) {
         h.textContent = 'Governança & Equipe';
         a.innerHTML = '';
@@ -474,22 +481,17 @@ import { navigate } from '../router.js';
         try {
             const members = await api('GET', `/api/v1/projects/${p.id}/governance`);
             S.currentGovernance = members || [];
-            
-            c.innerHTML = `
-                <div class="card fade-in">
-                    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:1.5rem">Organize e gerencie os papéis da equipe do SGSI do seu projeto.</div>
-                    ${window.renderProjectGovernance(S.currentGovernance, p.id)}
-                </div>
-            `;
+            c.innerHTML = `<div class="fade-in">${window.renderProjectGovernance(S.currentGovernance, p.id)}<div id="gov-agentes"></div></div>`;
+            window.carregarAgentesDoProjeto(p.id);
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar governança: ${escapeHTML(e.message)}</div>`;
         }
     }
 
     window.renderProjectGovernance = function(members, projectId) {
-        // Organograma (D6): o DPO/Líder do SGSI é a ÂNCORA no topo; abaixo, um
-        // tronco desce para as ramificações por área. A âncora não se repete nas
-        // colunas. Ordem das áreas de cima p/ baixo na hierarquia de segurança.
+        // Organograma (D6): o Líder do SGSI (is_primary, um por projeto) é a
+        // ÂNCORA no topo; abaixo, um tronco desce para uma coluna por área.
+        // A âncora não se repete nas colunas.
         const categories = {
             executivo: { label: 'Liderança Executiva', list: [] },
             tech: { label: 'Tecnologia & Produto', list: [] },
@@ -504,29 +506,20 @@ import { navigate } from '../router.js';
             return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
         };
 
-        // A âncora é o primeiro membro marcado como is_primary (DPO/Líder).
         const anchor = members.find(m => m.is_primary) || null;
         members.forEach(m => {
-            if (anchor && m.id === anchor.id) return; // âncora não duplica nas colunas
+            if (anchor && m.id === anchor.id) return;
             if (categories[m.role_category]) categories[m.role_category].list.push(m);
         });
 
-        const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        const manageBtn = canCrud ? `
-            <button class="btn" style="padding:0.25rem 0.75rem; font-size:0.7rem; font-weight:600; height:28px" data-action="openGovernanceModal" data-args='["${projectId}"]'>
-                Gerenciar Governança
-            </button>
-        ` : '';
+        const manageBtn = podeEditarGovernanca() ? `
+            <button class="btn btn-secondary" data-action="openGovernanceModal" data-args='["${projectId}"]'>Gerenciar governança</button>` : '';
 
-        const badge = `<span class="org-badge">DPO / Líder</span>`;
         const memberCard = (m) => `
             <div class="gov-member-item">
-                <div class="gov-avatar">${escapeHTML(getInitials(m.name))}</div>
+                <div class="gov-avatar" aria-hidden="true">${escapeHTML(getInitials(m.name))}</div>
                 <div class="gov-member-info">
-                    <div class="gov-member-name">
-                        <span>${escapeHTML(m.name)}</span>
-                        ${m.is_primary ? badge : ''}
-                    </div>
+                    <div class="gov-member-name">${escapeHTML(m.name)}</div>
                     <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
                     ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
                 </div>
@@ -534,42 +527,81 @@ import { navigate } from '../router.js';
 
         const anchorHtml = anchor ? `
             <div class="org-anchor">
-                <div class="gov-avatar org-anchor-avatar">${escapeHTML(getInitials(anchor.name))}</div>
+                <div class="gov-avatar org-anchor-avatar" aria-hidden="true">${escapeHTML(getInitials(anchor.name))}</div>
                 <div class="org-anchor-info">
-                    <div class="org-anchor-name"><span>${escapeHTML(anchor.name)}</span>${badge}</div>
+                    <div class="org-anchor-name"><span>${escapeHTML(anchor.name)}</span><span class="org-badge">Líder do SGSI</span></div>
                     <div class="org-anchor-title">${escapeHTML(anchor.job_title)}</div>
                     ${anchor.email ? `<div class="gov-member-email org-anchor-email" title="${escapeHTML(anchor.email)}">${escapeHTML(anchor.email)}</div>` : ''}
                 </div>
             </div>` : `
             <div class="org-anchor org-anchor-empty">
-                <div class="org-anchor-name">DPO / Líder do SGSI não designado</div>
-                <div class="org-anchor-title">Defina o responsável máximo em “Gerenciar Governança”.</div>
+                <div class="org-anchor-name">Líder do SGSI não designado</div>
+                <div class="org-anchor-title">Marque o responsável em “Gerenciar governança”.</div>
             </div>`;
 
         let branchesHtml = '';
         for (const key in categories) {
             const cat = categories[key];
-            const membersHtml = cat.list.map(memberCard).join('') || `<div class="gov-empty-list">Nenhum cadastrado</div>`;
+            const membersHtml = cat.list.map(memberCard).join('') || `<div class="gov-empty-list">Ninguém nesta área.</div>`;
             branchesHtml += `
                 <div class="org-branch">
-                    <div class="gov-section-card">
-                        <div class="gov-section-title">${cat.label}</div>
-                        <div style="display:flex; flex-direction:column; gap:8px">${membersHtml}</div>
-                    </div>
+                    <section class="gov-section-card" aria-label="${escapeHTML(cat.label)}">
+                        <h3 class="gov-section-title">${cat.label}</h3>
+                        ${membersHtml}
+                    </section>
                 </div>`;
         }
 
         return `
-            <!-- Organograma de Governança do SGSI (D6) -->
             <div class="org-chart">
                 <div class="org-header">
-                    <div class="org-header-title">Governança & Organograma do SGSI</div>
+                    <p class="org-header-intro">Quem responde pelo SGSI deste cliente, por área. O líder é um só; consultores são designados pelo administrador do cliente.</p>
                     ${manageBtn}
                 </div>
                 ${anchorHtml}
                 <div class="org-trunk" aria-hidden="true"></div>
                 <div class="org-branches">${branchesHtml}</div>
             </div>`;
+    };
+
+    // Agentes de IA (MCP remoto) com acesso a este projeto. Sem a rota (404) ou
+    // sem permissão (403), o bloco simplesmente não aparece.
+    window.carregarAgentesDoProjeto = async function(projectId) {
+        const alvo = document.getElementById('gov-agentes');
+        if (!alvo) return;
+        let lista;
+        try { lista = await api('GET', `/api/v1/projects/${projectId}/agentes`); } catch (e) { alvo.innerHTML = ''; return; }
+        if (!Array.isArray(lista)) { alvo.innerHTML = ''; return; }
+        const podeRevogar = (ag) => S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin' || ((S.user.role === 'consultor' || S.user.role === 'consultant') && ag.consultor === S.user.email));
+        const data = (v) => v ? escapeHTML(String(v).slice(0, 16).replace('T', ' ')) : '—';
+        const linhas = lista.map(ag => {
+            const revogado = !!ag.revogado_em;
+            return `
+            <div class="gov-agente ${revogado ? 'gov-agente-revogado' : ''}">
+                <div>
+                    <div class="gov-member-name">${escapeHTML(ag.consultor)} · ${escapeHTML(ag.cliente_mcp || 'cliente MCP')}</div>
+                    <div class="gov-agente-meta">desde ${data(ag.criado_em)} · último uso ${data(ag.ultimo_uso_em)} · ${revogado ? `revogado em ${data(ag.revogado_em)}` : `válido até ${data(ag.expira_em)}`}</div>
+                </div>
+                ${!revogado && podeRevogar(ag) ? `<button class="btn btn-secondary" data-action="revogarAgente" data-args='["${escapeHTML(projectId)}","${escapeHTML(ag.id)}"]'>Revogar</button>` : ''}
+            </div>`;
+        }).join('');
+        alvo.innerHTML = `
+            <section class="gov-agentes" aria-labelledby="gov-agentes-titulo">
+                <div class="gov-agentes-head">
+                    <h3 class="gov-section-title gov-agentes-titulo" id="gov-agentes-titulo">Agentes com acesso</h3>
+                    <p class="gov-agentes-nota">Agentes de IA que consultores conectaram a este cliente. Revogar corta o acesso na próxima chamada.</p>
+                </div>
+                ${linhas || '<div class="gov-empty-list">Nenhum agente conectado a este cliente.</div>'}
+            </section>`;
+    };
+
+    window.revogarAgente = async function(projectId, id) {
+        if (!confirm('Revogar o acesso deste agente? Ele perde o acesso na próxima chamada.')) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/agentes/${id}/revogar`);
+            showToast('Acesso do agente revogado');
+            window.carregarAgentesDoProjeto(projectId);
+        } catch (e) { showToast(e.message || 'Falha ao revogar', 'error'); }
     };
 
     window.renderGovernanceSelectOptions = function(members, selectedValue) {
@@ -630,7 +662,7 @@ import { navigate } from '../router.js';
                     <span style="font-size:0.7rem; color:var(--accent)">- ${escapeHTML(m.job_title)} (${escapeHTML(m.role_category)})</span>
                     ${m.email ? `<div style="font-size:0.75rem; color:var(--text-dim)">${escapeHTML(m.email)}</div>` : ''}
                 </div>
-                <div style="display:flex; gap:8px">
+                <div style="display:flex; gap:8px; ${m.role_category === 'consultor' && !podeDesignarConsultor() ? 'visibility:hidden' : ''}">
                     <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:var(--accent); border-color:rgba(0,173,232,0.2)" data-action="editGovernanceMember" data-args='["${m.id}"]'>
                         Editar
                     </button>
@@ -656,11 +688,12 @@ import { navigate } from '../router.js';
                     <div class="form-group">
                         <label class="form-label">Categoria de Papel</label>
                         <select class="form-input" id="gov-role" required>
-                            <option value="consultor">Consultoria / Apoio</option>
                             <option value="executivo">Liderança Executiva</option>
                             <option value="tech">Tecnologia & Produto</option>
                             <option value="operacoes">Operações & Segurança</option>
+                            ${podeDesignarConsultor() ? '<option value="consultor">Consultoria / Apoio</option>' : ''}
                         </select>
+                        ${podeDesignarConsultor() ? '' : '<p class="gov-empty-list" style="padding:4px 0 0">Designar consultor é feito pelo administrador do cliente.</p>'}
                     </div>
                     <div class="form-group">
                         <label class="form-label">Cargo / Função</label>
@@ -668,7 +701,7 @@ import { navigate } from '../router.js';
                     </div>
                     <div class="form-group" style="grid-column: span 2; display:flex; align-items:center; gap:8px">
                         <input type="checkbox" id="gov-primary" style="cursor:pointer">
-                        <label for="gov-primary" class="form-label" style="margin-bottom:0; cursor:pointer">Contato Principal / DPO Líder</label>
+                        <label for="gov-primary" class="form-label" style="margin-bottom:0; cursor:pointer">Líder do SGSI (um por projeto; substitui o atual)</label>
                     </div>
                     <div style="grid-column: span 2; display:flex; justify-content:flex-end; gap:8px; margin-top:8px">
                         <button class="btn btn-secondary" type="button" id="btn-cancel-gov-edit" style="display:none" data-action="cancelGovernanceEdit">Cancelar</button>
@@ -699,7 +732,7 @@ import { navigate } from '../router.js';
         
         document.getElementById('gov-name').value = member.name || '';
         document.getElementById('gov-email').value = member.email || '';
-        document.getElementById('gov-role').value = member.role_category || 'consultor';
+        document.getElementById('gov-role').value = member.role_category || 'executivo';
         document.getElementById('gov-title').value = member.job_title || '';
         document.getElementById('gov-primary').checked = member.is_primary === 1;
 
