@@ -11,6 +11,16 @@
 		"nodejs_compat",
 		"global_fetch_strictly_public"
 	],
+	// Domínios. `niso.ness.com.br` é o oficial (links, e-mails, MCP, monitor).
+	// `n-iso.ness.com.br` nasceu pelo painel e segue respondendo: declarado aqui
+	// para o deploy não o tratar como sobra. `workers_dev` explícito porque
+	// integrações e e-mails antigos apontam para `niso.ness.workers.dev`.
+	// `routes` não é herdado por `env.staging` — staging fica só no workers.dev.
+	"workers_dev": true,
+	"routes": [
+		{ "pattern": "niso.ness.com.br", "custom_domain": true },
+		{ "pattern": "n-iso.ness.com.br", "custom_domain": true }
+	],
 	"assets": {
 		"directory": "frontend/dist",
 		"binding": "ASSETS"

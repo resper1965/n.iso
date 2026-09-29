@@ -107,7 +107,7 @@ await esbuild.build({
 });
 
 const { documentoOpenApi } = await import(pathToFileURL(saida).href);
-const doc = documentoOpenApi('https://niso.ness.workers.dev');
+const doc = documentoOpenApi('https://niso.ness.com.br');
 rmSync(saida, { force: true });
 
 writeFileSync(new URL('../docs/openapi.json', import.meta.url), JSON.stringify(doc, null, 2) + '\n');

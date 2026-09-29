@@ -11,8 +11,8 @@ Aplicabilidade, matriz de risco, cofre de evidências e trilha de auditoria. É 
 evolução do sistema de adequação da **ness.**, reescrito numa arquitetura
 agêntica e serverless sobre a stack da Cloudflare.
 
-> **Produção:** [`n-iso.ness.com.br`](https://n-iso.ness.com.br) — também
-> respondendo em [`niso.ness.workers.dev`](https://niso.ness.workers.dev).
+> **Produção:** [`niso.ness.com.br`](https://niso.ness.com.br) — também
+> respondendo em `n-iso.ness.com.br` e `niso.ness.workers.dev`.
 > `GET /health` devolve o SHA do commit publicado, e é assim que se confere o
 > que está no ar.
 

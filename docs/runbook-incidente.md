@@ -11,11 +11,11 @@
 
 ```bash
 # O worker responde?
-curl -s -o /dev/null -w "%{http_code}\n" https://niso.ness.workers.dev/health
+curl -s -o /dev/null -w "%{http_code}\n" https://niso.ness.com.br/health
 
 # O código no ar é o esperado? (a sonda distingue versão; /health não)
 curl -s -X POST -H "Content-Type: application/json" -d '{}' \
-  https://niso.ness.workers.dev/api/v1/auth/login
+  https://niso.ness.com.br/api/v1/auth/login
 ```
 
 O login com corpo vazio deve devolver `{"error":"Payload inválido","details":[…]}`
@@ -186,7 +186,7 @@ npx wrangler d1 execute niso-db --remote --command \
 > ```bash
 > # Durante um incidente ou uma auditoria, a pergunta é esta:
 > curl -H "Authorization: Bearer <sessao-platform-admin>" \
->   https://niso.ness.workers.dev/api/v1/admin/trilha/verificar
+>   https://niso.ness.com.br/api/v1/admin/trilha/verificar
 > # 200 = cadeia íntegra · 409 = quebra, com o dia e o motivo no corpo
 > ```
 >

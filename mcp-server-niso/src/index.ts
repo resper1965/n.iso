@@ -8,7 +8,7 @@ import {
 import { z } from "zod";
 import type { Rota, Obrigatorios } from "./contrato-gerado.js";
 
-const NISO_BASE_URL = process.env.NISO_BASE_URL || "https://niso.ness.workers.dev";
+const NISO_BASE_URL = process.env.NISO_BASE_URL || "https://niso.ness.com.br";
 const NISO_API_KEY = process.env.NISO_API_KEY;
 
 // Papel do agente: "consultant" | "auditor" | "" (todos). Cada papel só enxerga e
