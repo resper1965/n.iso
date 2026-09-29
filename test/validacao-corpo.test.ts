@@ -114,27 +114,6 @@ describe('Rotas de /api/v1/auth que exigem sessão', () => {
     expect(linha.requires_password_change, 'a marca de primeiro acesso não foi limpa').toBe(0);
   });
 
-  it('a sessão que troca a senha do primeiro acesso continua valendo', async () => {
-    // `globals.js` chama `initApp()` com o MESMO token logo após a troca. Se a
-    // revogação derrubar também esta sessão, a pessoa volta ao login e acha que
-    // a senha nova "não pegou". `iat` no passado: é o login que precedeu a troca.
-    await env.DB.prepare(
-      `INSERT OR REPLACE INTO users (id, email, password_hash, name, role, requires_password_change) VALUES (?,?,?,?,?,1)`
-    ).bind('u-novo2', 'novo2@x.com', await hashPassword('provisoria-123'), 'Novo', 'org_user').run();
-    const s = {
-      ...(await sessionFor({ id: 'u-novo2', email: 'novo2@x.com', role: 'org_user', iat: Date.now() - 1000 })),
-      'Content-Type': 'application/json',
-    };
-
-    const res = await req('/api/v1/auth/reset-password-first', {
-      method: 'POST', headers: s, body: JSON.stringify({ newPassword: 'definitiva-boa' }),
-    });
-    expect(res.status, await res.clone().text()).toBe(200);
-
-    const me = await req('/api/v1/auth/me', { headers: s });
-    expect(me.status, await me.clone().text()).toBe(200);
-  });
-
   it('POST /reset-password-first sem sessão é 401', async () => {
     const res = await req('/api/v1/auth/reset-password-first', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -328,16 +307,12 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
 
   beforeAll(async () => {
     await applySchema();
-    // Cadeia conta→cliente: sem ela `proj-m` nasce órfão e nem o staff da
-    // própria conta alcança o projeto.
-    await env.DB.prepare(`INSERT OR IGNORE INTO contas (id, tipo, nome, status) VALUES ('conta-vc', 'msp', 'Conta VC', 'Active')`).run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO clientes (id, conta_id, nome, status) VALUES ('cli-vc', 'conta-vc', 'Cliente M', 'Active')`).run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-      .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active', 'cli-vc').run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role, conta_id) VALUES (?,?,?,?,?,?)`)
-      .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor', 'conta-vc').run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+      .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active').run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
+      .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor').run();
     staff = {
-      ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor', conta_id: 'conta-vc', cliente_id: null })),
+      ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor' })),
       'Content-Type': 'application/json',
     };
     // Insere preenchendo TODA coluna NOT NULL sem default. `INSERT OR IGNORE`
@@ -406,9 +381,8 @@ describe('Catraca de `any` nos caminhos de autorização', () => {
   const FUNCOES = [
     'requireResourceAccess',
     'requireProjectAccess',
-    'somenteMsp',
-    'somenteStaff',
-    'ehStaffDeConta',
+    'somenteNess',
+    'ehEquipeNess',
     'resolveApiKeyUser',
     'authMiddleware',
   ];

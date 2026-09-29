@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteStaff, ehStaffDeConta, sha256Hex, hidrataEscopo, contaCriadora, resolveCliente, requireProjectAccess, projetosDoAtor } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -27,7 +27,7 @@ export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }
  * `POST` e não `PUT`: emitir substitui o token anterior, e chamar duas vezes
  * gera dois tokens diferentes. Um `PUT` idempotente aqui esconderia isso.
  */
-projectsApp.post('/:projectId/scim-token', somenteStaff, async (c) => {
+projectsApp.post('/:projectId/scim-token', somenteNess, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const projeto = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
@@ -73,7 +73,7 @@ projectsApp.post('/:projectId/scim-token', somenteStaff, async (c) => {
  * dígitos. Segredo de IdP não tem por que ser lido de volta por ninguém: quem
  * precisa dele é o Worker, que o decifra na hora do login.
  */
-projectsApp.get('/:projectId/sso', somenteStaff, async (c) => {
+projectsApp.get('/:projectId/sso', somenteNess, async (c) => {
   try {
     const p = await c.env.DB.prepare(
       'SELECT project_id, issuer, client_id, dominios, papel_padrao, ativo, atualizado_em, atualizado_por FROM project_sso WHERE project_id = ?'
@@ -84,7 +84,7 @@ projectsApp.get('/:projectId/sso', somenteStaff, async (c) => {
   }
 });
 
-projectsApp.put('/:projectId/sso', somenteStaff, async (c) => {
+projectsApp.put('/:projectId/sso', somenteNess, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const v = await validateBody(c, ssoConfigSchema);
@@ -170,7 +170,7 @@ projectsApp.get('/:projectId/security-policy', async (c) => {
   }
 });
 
-projectsApp.put('/:projectId/security-policy', somenteStaff, async (c) => {
+projectsApp.put('/:projectId/security-policy', somenteNess, async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const v = await validateBody(c, politicaTenantSchema);
@@ -233,25 +233,13 @@ projectsApp.put('/:projectId/security-policy', somenteStaff, async (c) => {
  * parâmetro para `:id` mantém o 403 ao vizinho. (Uma versão anterior deste
  * comentário afirmava o contrário; a mutação desmentiu.)
  *
- * O que o nome faz é ficar coerente com o que o middleware lê.
+ * O que o nome faz é ficar coerente com o que o middleware lê. E o detalhe que
+ * importa de verdade: o `/*` exige um segmento DEPOIS do id, então
+ * `GET /api/v1/projects/:id` — sem sufixo — NÃO passa pelo middleware e tem
+ * guarda própria no handler. Rota nova sob projeto que não tenha sufixo precisa
+ * lembrar disso.
  *
- * CORREÇÃO (revisão final do branch): este comentário AFIRMAVA que o `/*` exige
- * um segmento depois do id, e que portanto `GET /api/v1/projects/:id` não passa
- * pelo middleware. É FALSO, e foi medido: com o middleware no lugar e o handler
- * SEM guarda própria, `GET`/`PUT /api/v1/projects/<id de outra consultoria>`
- * respondem 403 com a mensagem DO MIDDLEWARE ("Forbidden: No access to this
- * project"), não a do handler ("Cannot edit this project"), e
- * `GET /api/v1/projects/<id inexistente>` responde 403 em vez do 404 do handler.
- * O `*` do Hono casa também o resto VAZIO do caminho.
- *
- * As três rotas de `/:id` ganharam guarda própria ainda assim, mais abaixo: uma
- * mudança de semântica de `*` numa atualização do Hono passaria a descobrir
- * aquelas rotas em silêncio, e o custo de depender de uma consulta indexada duas
- * vezes por request é menor que o de descobrir isso em produção. O que NÃO passa
- * pelo middleware — e por isso é o vazamento real — é a rota SEM parâmetro:
- * `GET /api/v1/projects`.
- *
- * `somenteStaff` NÃO é usado: o dado é do cliente, e o direito de levá-lo é dele.
+ * `somenteNess` NÃO é usado: o dado é do cliente, e o direito de levá-lo é dele.
  * O papel read-only (`org_user`, `client`) alcança porque é GET.
  */
 projectsApp.get('/:projectId/export', async (c) => {
@@ -309,23 +297,8 @@ export async function getRepositoryToken(env: Bindings, projectId: string): Prom
 
 // ─── Projects CRUD ──────────────────────────────────────────────────────────
 
-/**
- * Criar projeto sempre gravou em `clientes` (desde a Task 6): quem cria decide
- * o `client_name`/`cnpj` que vira linha na tabela de clientes da consultoria.
- * Sem guarda de papel, qualquer usuário autenticado com `conta_id` — inclusive
- * um de cliente, se algum dia tiver um preenchido — escrevia lá. Não há
- * escalada de acesso nisso (o resultado é só um cliente/projeto seu, na
- * própria conta), mas é poluição gravável que uma checagem de papel evita de
- * graça.
- *
- * `ehStaffDeConta`, não `somenteStaff`: conta `direto` também cria projeto — ela
- * só não tem pré-venda, e criar projeto não é pré-venda.
- */
 projectsApp.post('/', async (c) => {
   try {
-    if (!ehStaffDeConta(c.get('user'))) {
-      return c.json({ error: 'Forbidden: apenas staff cria projeto' }, 403);
-    }
     const body = await c.req.json<{
       project_name?: string;
       client_name: string;
@@ -333,33 +306,16 @@ projectsApp.post('/', async (c) => {
       scope?: string;
       standards?: string;
       org_role?: string;
-      conta_id?: string;
-      cnpj?: string;
     }>();
 
     if (!body.client_name) {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
 
-    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
-    const contaId = contaCriadora(c.get('user'), body.conta_id);
-    if (!contaId) {
-      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
-    }
-    // `platform_admin` manda este id livre pelo corpo — não veio de sessão nem
-    // de registro de origem. A FK de `clientes.conta_id` pegaria um id
-    // inexistente, mas só se a checagem de FK estiver ativa, e o erro sairia
-    // como 500 genérico em vez de dizer o que há de errado com o PEDIDO.
-    const contaExiste = await c.env.DB.prepare('SELECT 1 FROM contas WHERE id = ?').bind(contaId).first();
-    if (!contaExiste) {
-      return c.json({ error: 'conta_id informado não existe' }, 400);
-    }
-    const clienteId = await resolveCliente(c.env.DB, contaId, body.client_name, body.cnpj);
-
     const id = genId();
     await c.env.DB.prepare(
-      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, cliente_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
+      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
     ).bind(
       id,
       body.project_name ?? '',
@@ -367,8 +323,7 @@ projectsApp.post('/', async (c) => {
       body.sector ?? '',
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
-      body.org_role ?? '',
-      clienteId
+      body.org_role ?? ''
     ).run();
 
     await seedPhases(c.env.DB, id);
@@ -380,34 +335,21 @@ projectsApp.post('/', async (c) => {
   }
 });
 
-/*
- * As três rotas abaixo tinham guarda PRÓPRIA, e a guarda era o modelo VELHO:
- * allowlist de papel-cliente (`org_admin`/`org_user`/`client`) comparada com
- * `client_project_id`. Qualquer outro papel caía fora do `if` e passava direto —
- * `consultor` da conta B, ou um papel livre como `ciso`.
- *
- * `GET /` é a que VAZAVA de fato: `SELECT * FROM projects` sem `WHERE` nenhum
- * para todo papel não-cliente, a carteira de TODAS as consultorias numa
- * requisição. Ela não passa pelo `projectAccessMiddleware` porque não tem
- * parâmetro — não há projeto a autorizar —, e é exatamente por isso que escapava
- * também das varreduras de contrato, que só sabiam forjar id.
- *
- * `GET /:id` e `PUT /:id` JÁ estavam cobertas pelo middleware (medido; ver a
- * correção no comentário de `/:projectId/export`, acima). A guarda própria abaixo
- * é defesa em profundidade: sem ela, o isolamento dessas duas depende da
- * semântica do `*` do Hono casar o resto vazio do caminho.
- *
- * As três passam a usar a MESMA definição de alcance do resto da camada:
- * `requireProjectAccess` nas de item, `projetosDoAtor` na listagem. 403 é
- * mantido (a semântica que estas rotas já tinham para projeto alheio), e
- * `requireProjectAccess` responde igual para projeto inexistente e projeto
- * alheio de propósito — responder diferente diria a quem sonda quais ids
- * existem.
- */
 projectsApp.get('/', async (c) => {
   try {
-    const projetos = await projetosDoAtor(c.env.DB, c.get('user'));
-    return c.json(projetos.map(redactProject));
+    const user = c.get('user');
+    if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
+      if (!user.client_project_id) {
+        return c.json([]);
+      }
+      const project = await c.env.DB.prepare(
+        'SELECT * FROM projects WHERE id = ?'
+      ).bind(user.client_project_id).first();
+      return c.json(project ? [redactProject(project)] : []);
+    }
+
+    const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    return c.json((results ?? []).map(redactProject));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar projetos', e);
   }
@@ -415,12 +357,11 @@ projectsApp.get('/', async (c) => {
 
 projectsApp.get('/:id', async (c) => {
   const id = c.req.param('id');
-  const user = c.get('user') ?? {};
-  try {
-    await hidrataEscopo(c.env.DB, user);
-    await requireProjectAccess(c.env.DB, user, id);
-  } catch {
-    return c.json({ error: 'Forbidden: No access to this project' }, 403);
+  const user = c.get('user');
+  if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
+    if (user.client_project_id && user.client_project_id !== id) {
+      return c.json({ error: 'Forbidden: No access to this project' }, 403);
+    }
   }
   const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
   if (!project) return c.json({ error: 'Project not found' }, 404);
@@ -431,17 +372,10 @@ projectsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const user = c.get('user');
-    try {
-      await hidrataEscopo(c.env.DB, user ?? {});
-      await requireProjectAccess(c.env.DB, user ?? {}, id);
-    } catch {
-      return c.json({ error: 'Forbidden: Cannot edit this project' }, 403);
-    }
-    // `org_user` alcança o projeto para LER, nunca para editar: a concessão em
-    // `acesso_projeto` dá alcance, não caneta. Checagem de papel SEPARADA da de
-    // escopo, para que as duas não se confundam numa só condição.
-    if (user?.role === 'org_user') {
-      return c.json({ error: 'Forbidden: Cannot edit this project' }, 403);
+    if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
+      if (user.role === 'org_user' || (user.client_project_id && user.client_project_id !== id)) {
+        return c.json({ error: 'Forbidden: Cannot edit this project' }, 403);
+      }
     }
     const body = await c.req.json<{
       status?: string;
@@ -953,24 +887,13 @@ projectsApp.get('/:id/traceability', async (c) => {
 
   const placeholders = controlIds.map(() => '?').join(',');
 
-  // Mesmo `project_id = ?` da consulta de evidência logo abaixo, e pelo mesmo
-  // motivo — a perna de `risks` ficou de fora da onda anterior. `risks.control_id`
-  // é gravado cru do corpo, então staff de outra consultoria planta um risco no
-  // PRÓPRIO projeto apontando para um controle DAQUI, e ele entra na matriz de
-  // rastreabilidade que esta consultoria entrega ao cliente dela. Adulteração:
-  // o `IN` filtra o controle, nunca o dono do risco.
   const risksResult = await db.prepare(
-    `SELECT id, asset, threat, risk_level, control_id FROM risks WHERE project_id = ? AND control_id IN (${placeholders})`
-  ).bind(projectId, ...controlIds).all();
+    `SELECT id, asset, threat, risk_level, control_id FROM risks WHERE control_id IN (${placeholders})`
+  ).bind(...controlIds).all();
 
-  // `project_id = ?` junto do `control_id IN (...)`: os ids de controle são
-  // deste projeto, mas `evidence.control_id` é gravado a partir do multipart e
-  // uma evidência de OUTRO projeto apontando para um controle daqui entrava na
-  // matriz de rastreabilidade como se fosse do cliente. O `IN` filtra o
-  // controle, nunca o dono da evidência.
   const evidenceResult = await db.prepare(
-    `SELECT id, file_name, created_at, control_id FROM evidence WHERE project_id = ? AND control_id IN (${placeholders})`
-  ).bind(projectId, ...controlIds).all();
+    `SELECT id, file_name, created_at, control_id FROM evidence WHERE control_id IN (${placeholders})`
+  ).bind(...controlIds).all();
 
   const risksMap: Record<string, any[]> = {};
   for (const r of (risksResult.results || []) as any[]) {

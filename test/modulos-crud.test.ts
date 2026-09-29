@@ -90,26 +90,15 @@ describe('CRUD dos módulos de projeto', () => {
   beforeAll(async () => {
     await applySchema();
     const senha = await hashPassword('password123');
-    // Cadeia conta→cliente: sem `cliente_id`, o projeto nasce órfão e a
-    // autorização nega — inclusive para o dono.
-    await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-mc', 'msp', 'Conta MC', 'Active')`
-    ).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-mc-a', 'conta-mc', 'Cliente A', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-mc-b', 'conta-mc', 'Cliente B', 'Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-adm-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', A),
     ]);
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-mc-a'),
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active', 'cli-mc-b'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-adm-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', 'cli-mc-a'),
-    ]);
-    // `org_admin` enxerga a empresa inteira (PAPEIS_ADMIN_CLIENTE): não precisa
-    // de concessão em `acesso_projeto`, só de `cliente_id` batendo com o projeto.
-    headers = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-mc-a' });
+    headers = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A });
     json = { ...headers, 'Content-Type': 'application/json' };
   });
 
@@ -184,14 +173,13 @@ describe('CRUD dos módulos de projeto', () => {
 
     beforeAll(async () => {
       const senha = await hashPassword('password123');
-      await env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-mc-t', 'conta-mc', 'Cliente T', 'Active')`).run();
       await env.DB.batch([
-        env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-          .bind(T, 'Cliente T', 'ISO 27001', 'controller', 'Active', 'cli-mc-t'),
-        env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-          .bind('u-adm-t', 'adm@t.com', senha, 'Admin do T', 'org_admin', 'cli-mc-t'),
+        env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+          .bind(T, 'Cliente T', 'ISO 27001', 'controller', 'Active'),
+        env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+          .bind('u-adm-t', 'adm@t.com', senha, 'Admin do T', 'org_admin', T),
       ]);
-      headersT = await sessionFor({ id: 'u-adm-t', email: 'adm@t.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-mc-t' });
+      headersT = await sessionFor({ id: 'u-adm-t', email: 'adm@t.com', role: 'org_admin', client_project_id: T });
       jsonT = { ...headersT, 'Content-Type': 'application/json' };
     });
     it('importa em lote com o project_id do caminho', async () => {

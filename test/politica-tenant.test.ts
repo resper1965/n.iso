@@ -195,21 +195,16 @@ describe('PUT /api/v1/projects/:projectId/security-policy', () => {
     await resetData();
     await resetSessions();
     const senha = await hashPassword('password123');
-    // Cadeia conta→cliente: sem ela `A` nasce órfão e nem o org_admin da
-    // própria conta alcança o projeto (esta rota passa pelo
-    // `projectAccessMiddleware`, ao contrário de `/api/v1/portfolio` acima).
-    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-pt', 'msp', 'Conta PT', 'Active')`).run();
-    await env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-pt', 'conta-pt', 'Cliente A', 'Active')`).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-pt'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-a', 'a@x.com', senha, 'A', 'org_admin', 'cli-pt'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-a', 'a@x.com', senha, 'A', 'org_admin', A),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
         .bind('u-s', 's@ness.io', senha, 'Staff', 'platform_admin'),
     ]);
     cliente = {
-      ...(await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-pt', iat: Date.now() })),
+      ...(await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', client_project_id: A, iat: Date.now() })),
       'Content-Type': 'application/json',
     };
     staff = {

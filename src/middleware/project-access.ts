@@ -1,6 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { requireProjectAccess, hidrataEscopo } from '../helpers';
+import { requireProjectAccess } from '../helpers';
 
 // Segmentos literais sob /api/v1/projects/<seg>/... que NÃO são IDs de projeto
 // e portanto não devem passar pela checagem de tenant. Se uma rota literal for
@@ -22,8 +22,7 @@ export const projectAccessMiddleware = createMiddleware<{ Bindings: Bindings; Va
 
   if (user && projectId && !RESERVED_SEGMENTS.has(projectId)) {
     try {
-      await hidrataEscopo(c.env.DB, user);
-      await requireProjectAccess(c.env.DB, user, projectId);
+      requireProjectAccess(user, projectId);
     } catch {
       return c.json({ error: 'Forbidden: No access to this project' }, 403);
     }

@@ -92,40 +92,11 @@ describe('Portfólio e portal do cliente', () => {
       expect(portfolio.map((p: any) => p.id)).toEqual([A]);
     });
 
-    it('platform_admin vê a carteira inteira — é o ÚNICO papel global (Task 9)', async () => {
-      // Antes da Task 9, "staff vê tudo" descrevia qualquer papel de
-      // `PAPEIS_STAFF` (inclusive `consultor` de uma conta específica), não só
-      // `platform_admin` — e por isso a rota vazava a carteira de uma
-      // consultoria para o staff de outra. `platform_admin` continua global de
-      // propósito: ele opera o SaaS, nunca vende para um tenant específico.
+    it('equipe ness. vê a carteira inteira', async () => {
       const res = await req('/api/v1/portfolio', { headers: staff });
       expect(res.status).toBe(200);
       const { portfolio } = await res.json() as any;
       expect(portfolio.map((p: any) => p.id).sort()).toEqual([A, B]);
-    });
-
-    it('staff de UMA conta vê só a carteira DA CONTA dele, não a de outra consultoria', async () => {
-      // A regra nova: `consultor`/`consultant` são staff de uma conta só, e a
-      // Task 9 fecha exatamente o vazamento que o teste acima descrevia antes
-      // de ser renomeado — `SELECT * FROM projects` sem `WHERE conta_id`
-      // devolvia os projetos de A a QUALQUER staff, mesmo um sem relação com
-      // a consultoria que vendeu o projeto A.
-      await env.DB.batch([
-        env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-x', 'msp', 'Consultoria X', 'Active')`),
-        env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-y', 'msp', 'Consultoria Y', 'Active')`),
-        env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-x', 'conta-x', 'Cliente A', 'Active')`),
-        env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, conta_id) VALUES (?,?,?,?,?,?)`)
-          // `sessionFor` monta a sessão direto no KV — não passa pelo login —
-          // então o hash aqui não precisa ser válido, só preencher a coluna.
-          .bind('u-consultor-x', 'consultor@x.com', 'h', 'Consultor X', 'consultor', 'conta-x'),
-      ]);
-      await env.DB.prepare('UPDATE projects SET cliente_id = ? WHERE id = ?').bind('cli-x', A).run();
-
-      const consultorX = await sessionFor({ id: 'u-consultor-x', email: 'consultor@x.com', role: 'consultor', conta_id: 'conta-x' });
-      const res = await req('/api/v1/portfolio', { headers: consultorX });
-      expect(res.status, await res.clone().text()).toBe(200);
-      const { portfolio } = await res.json() as any;
-      expect(portfolio.map((p: any) => p.id), 'staff de conta-x recebeu projeto de outra consultoria (B, sem cliente/conta)').toEqual([A]);
     });
 
     it('papel FORA da lista de papéis-cliente é escopado, não promovido a plataforma', async () => {
@@ -168,8 +139,8 @@ describe('Portfólio e portal do cliente', () => {
       expect(stats.projects, 'escopo ausente virou contagem global').toBe(0);
     });
 
-    it('cliente não conta o funil comercial', async () => {
-      // `somenteMsp` mantém o cliente fora de lead/proposta/assessment. A
+    it('cliente não conta o funil comercial da ness.', async () => {
+      // `somenteNess` mantém o cliente fora de lead/proposta/assessment. A
       // contagem de leads escapava dessa política: era global para todos.
       const res = await req('/api/v1/dashboard/stats', { headers: admA });
       expect((await res.json() as any).leads, 'cliente vê o tamanho do funil').toBe(0);

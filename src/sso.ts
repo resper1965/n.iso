@@ -341,28 +341,9 @@ export async function provisionar(
   // `password_hash` é NOT NULL. Grava-se um marcador que não é hash de senha
   // nenhuma — a conta existe, mas não tem senha para verificar, e o caminho de
   // login por senha falha por não bater com formato de hash algum.
-  // Escopo REAL, não só a coluna legada: `cliente_id` derivado do projeto do
-  // tenant (mesma derivação do backfill da migration 0032) e a concessão em
-  // `acesso_projeto`, que é o que dá alcance a papel comum. Sem as duas, quem
-  // entra por SSO é provisionado e barrado no mesmo request — `hidrataEscopo`
-  // não salva, porque a sessão vem com as chaves `null`, que é `!== undefined`.
-  const proj = await env.DB
-    .prepare('SELECT cliente_id FROM projects WHERE id = ?')
-    .bind(cfg.project_id)
-    .first<{ cliente_id: string | null }>();
   await env.DB.prepare(
-    `INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`
-  ).bind(id, email, 'sso:sem-senha-local', claims.name ?? email.split('@')[0], cfg.papel_padrao, cfg.project_id, proj?.cliente_id ?? null).run();
-  // `papel_padrao` nunca é papel de plataforma (`papelValidoParaSso`), e
-  // `org_admin` não precisa de concessão — mas ela não o atrapalha, e emiti-la
-  // sempre evita que a regra de papel viva em dois lugares. `if (proj)` porque
-  // `acesso_projeto.project_id` é FK NOT NULL.
-  if (proj) {
-    await env.DB
-      .prepare('INSERT OR IGNORE INTO acesso_projeto (user_id, project_id) VALUES (?, ?)')
-      .bind(id, cfg.project_id)
-      .run();
-  }
+    `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`
+  ).bind(id, email, 'sso:sem-senha-local', claims.name ?? email.split('@')[0], cfg.papel_padrao, cfg.project_id).run();
 
   log('info', { msg: 'sso_provisionamento', projeto: cfg.project_id, papel: cfg.papel_padrao });
 

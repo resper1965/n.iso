@@ -54,14 +54,9 @@ export async function checkCoherence(db: D1Database, projectId: string): Promise
     const controlIdsAprovados = (controls as any[]).filter(c => APROVADOS.includes(c.status)).map(c => c.id);
     if (controlIdsAprovados.length) {
       const placeholders = controlIdsAprovados.map(() => '?').join(',');
-      // `project_id = ?` como na consulta de `policy_versions` logo abaixo: a
-      // assimetria entre as duas estava a dois statements de distância. Uma
-      // evidência de outro projeto apontando para um controle daqui fazia o
-      // controle contar como "com evidência" e sumia o achado
-      // `control_approved_without_evidence` deste relatório.
       const { results: evid } = await db.prepare(
-        `SELECT DISTINCT control_id FROM evidence WHERE project_id = ? AND control_id IN (${placeholders})`
-      ).bind(projectId, ...controlIdsAprovados).all<any>();
+        `SELECT DISTINCT control_id FROM evidence WHERE control_id IN (${placeholders})`
+      ).bind(...controlIdsAprovados).all<any>();
       const comEvidencia = new Set((evid || []).map((e: any) => e.control_id));
 
       const { results: versions } = await db.prepare(
