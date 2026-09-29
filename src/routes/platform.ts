@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, ehComercial, somenteNess, somenteComercial } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -261,11 +261,11 @@ platformApp.get('/dashboard/stats', async (c) => {
     const params = escopo === null ? [] : [escopo];
 
     const stats = await c.env.DB.batch<{ count: number }>([
-      // O funil comercial é da ness. (ver `somenteNess` em helpers.ts): cliente
-      // não vê lead — nem o conteúdo, nem quantos existem. A contagem era
-      // global para todo mundo. O `SELECT 0` mantém o alinhamento posicional do
+      // O funil comercial é do comercial da ness. (ver `somenteComercial` em
+      // helpers.ts): cliente e consultor não veem lead — nem o conteúdo, nem
+      // quantos existem. O `SELECT 0` mantém o alinhamento posicional do
       // batch, para os índices abaixo não dependerem do papel de quem pergunta.
-      escopo === null
+      ehComercial(user)
         ? c.env.DB.prepare('SELECT count(*) as count FROM leads')
         : c.env.DB.prepare('SELECT 0 as count'),
       c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
@@ -434,7 +434,9 @@ platformApp.get('/phases/config', (c) => {
 });
 
 // Phase config & Auditor token
-platformApp.get('/pricing-config', async (c) => {
+// Tabela de preços da ness. (custo interno, tributos, margem): comercial apenas.
+// Estava sem trava nenhuma — qualquer sessão, inclusive de cliente, lia com 200.
+platformApp.get('/pricing-config', somenteComercial, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
@@ -451,7 +453,7 @@ platformApp.get('/pricing-config', async (c) => {
   }
 });
 
-platformApp.put('/pricing-config', async (c) => {
+platformApp.put('/pricing-config', somenteComercial, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const body = await c.req.json();

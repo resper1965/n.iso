@@ -3,6 +3,10 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
 import { navigate, render } from '../router.js';
 
+// Espelho de `ehComercial` (src/helpers.ts): o funil de leads é do comercial.
+// Local, e não `window.ehComercial`, para a view não depender da ordem de carga.
+const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'comercial'));
+
     async function renderDashboard(c, h, a) {
         h.textContent = 'Dashboard Executivo';
         a.innerHTML = `<button class="btn btn-primary" data-action="openCreateLeadModal">+ Novo Lead</button>
@@ -69,7 +73,7 @@ import { navigate, render } from '../router.js';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const [leads, assessments, projects, controls] = await Promise.all([
-                api('GET', '/api/v1/leads').catch(() => []),
+                ehComercial() ? api('GET', '/api/v1/leads').catch(() => []) : [],
                 api('GET', '/api/v1/assessments').catch(() => []),
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
@@ -88,7 +92,8 @@ import { navigate, render } from '../router.js';
             const complianceRate = totalControls > 0 ? Math.round((approvedControls / totalControls) * 100) : 0;
 
             const statsHtml = window.renderStatCards([
-                { label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' },
+                // Só o comercial vê o funil; para o consultor o cartão mostraria 0 e enganaria.
+                ...(ehComercial() ? [{ label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' }] : []),
                 { label: 'Levantamentos', value: assessmentsCount, color: '#ffcc00', subtext: 'Assessments cadastrados' },
                 { label: 'Projetos em Curso', value: projectsCount, color: '#34c759', subtext: 'Implementações ISO ativas' },
                 { label: 'Taxa de Conformidade', value: `${complianceRate}%`, color: complianceRate >= 80 ? '#34c759' : complianceRate >= 50 ? '#ffcc00' : '#00ade8', subtext: `${approvedControls} de ${totalControls} controles` }
@@ -101,7 +106,7 @@ import { navigate, render } from '../router.js';
                     {
                         label: 'Ações', align: 'right', render: (row) => `
                             <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openAssessmentDetail" data-args='["${row.id}"]'>Ver</button>
-                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>
+                            ${ehComercial() ? `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>` : ''}
                         `
                     }
                 ],

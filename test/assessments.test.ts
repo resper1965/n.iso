@@ -21,6 +21,9 @@ import { applySchema, resetData, resetSessions, sessionFor, pedir } from './help
  *      recusar o que a rota autenticada recusa.
  */
 
+const comercialSessao = async () =>
+  sessionFor({ id: 'u-v', email: 'comercial@ness.io', role: 'comercial', iat: Date.now() });
+
 const staffSessao = async () =>
   sessionFor({ id: 'u-c', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() });
 
@@ -125,11 +128,13 @@ describe('Funil de assessment', () => {
   });
 
   describe('precificação', () => {
+    // Preço é ato comercial (somenteComercial): o consultor conduz o
+    // diagnóstico, mas quem precifica é o comercial.
     it('sem respostas, recusa em vez de inventar preço', async () => {
       // Um preço calculado sobre zero respostas seria um número plausível e
       // errado — o pior tipo de saída numa proposta comercial.
       const { corpo } = await criar();
-      const res = await pedir(worker, `/api/v1/assessments/${corpo.id}/pricing`, { headers: staff });
+      const res = await pedir(worker, `/api/v1/assessments/${corpo.id}/pricing`, { headers: await comercialSessao() });
       expect(res.status).toBe(400);
     });
 
@@ -144,7 +149,7 @@ describe('Funil de assessment', () => {
           ],
         }),
       });
-      const res = await pedir(worker, `/api/v1/assessments/${corpo.id}/pricing`, { headers: staff });
+      const res = await pedir(worker, `/api/v1/assessments/${corpo.id}/pricing`, { headers: await comercialSessao() });
       expect(res.status, await res.clone().text()).toBe(200);
       const p = await res.json<any>();
       expect(p.precoFinal).toBeGreaterThan(0);
@@ -154,7 +159,7 @@ describe('Funil de assessment', () => {
     it('ajuste manual de preço fica gravado', async () => {
       const { corpo } = await criar();
       const res = await pedir(worker, `/api/v1/assessments/${corpo.id}/pricing`, {
-        method: 'PUT', headers: staff,
+        method: 'PUT', headers: { ...(await comercialSessao()), "Content-Type": "application/json" },
         body: JSON.stringify({ precoFinal: 123456, desconto: 10, notas: 'desconto de fechamento' }),
       });
       expect(res.status).toBe(200);

@@ -311,6 +311,28 @@ export async function somenteNess(
   await next();
 }
 
+/**
+ * Área comercial (leads, propostas, precificação) é o CRM da ness.: prospect de
+ * outra empresa, preço, custo interno e margem. Mais estreita que
+ * `somenteNess`: o consultor é da ness., mas entrega a adequação — não vende.
+ * O assessment (diagnóstico) segue em `somenteNess`, porque é trabalho dele.
+ */
+const PAPEIS_COMERCIAL = new Set(['platform_admin', 'comercial']);
+
+export function ehComercial(user: { role?: string | null } | null | undefined): boolean {
+  return PAPEIS_COMERCIAL.has(user?.role ?? '');
+}
+
+export async function somenteComercial(
+  c: { get: (k: 'user') => AtorAutorizado | undefined; json: (b: unknown, s: 403) => Response },
+  next: () => Promise<void>
+) {
+  if (!ehComercial(c.get('user'))) {
+    return c.json({ error: 'Forbidden: Área comercial restrita ao comercial da ness.' }, 403);
+  }
+  await next();
+}
+
 /** Escape HTML entities para prevenir XSS em templates HTML */
 export function escapeHtml(s: string): string {
   if (!s) return '';
