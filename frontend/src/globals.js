@@ -762,6 +762,7 @@ window.updateHeaderUser = function updateHeaderUser() {
                 let roleText = 'Usuário';
                 if (S.user.role === 'platform_admin' || S.user.role === 'admin') roleText = 'Administrador';
                 else if (S.user.role === 'consultor' || S.user.role === 'consultant') roleText = 'Consultor';
+                else if (S.user.role === 'comercial') roleText = 'Comercial';
                 else if (S.user.role === 'org_admin') roleText = 'Gestor do Cliente';
                 else if (S.user.role === 'org_user') roleText = 'Colaborador do Cliente';
                 else if (S.user.role === 'client') roleText = 'Cliente';
@@ -845,6 +846,22 @@ window.updateHeaderUser = function updateHeaderUser() {
                 const navUsersText = navUsers.querySelector('.sidebar-nav-text');
                 if (navUsersText) navUsersText.textContent = 'Usuários';
             }
+        }
+
+        // Comercial não entrega adequação: o servidor recusa projeto, controle e
+        // evidência a ele (não é staff em requireProjectAccess). O menu mostra só
+        // o que ele alcança, em vez de telas que abririam vazias ou com erro.
+        if (S.user && S.user.role === 'comercial') {
+            const doComercial = new Set(['nav-dashboard', 'nav-leads', 'nav-assessments', 'nav-proposals', 'nav-settings']);
+            document.querySelectorAll('.sidebar-nav[id^="nav-"]').forEach(el => {
+                el.style.display = doComercial.has(el.id) ? '' : 'none';
+            });
+            ['group-impl', 'group-ops', 'group-privacy', 'group-intel'].forEach(id => {
+                const g = document.getElementById(id);
+                if (g) g.style.display = 'none';
+                const rotulo = document.querySelector(`.sidebar-label[data-args='["${id}"]']`);
+                if (rotulo) rotulo.style.display = 'none';
+            });
         }
     }
 
