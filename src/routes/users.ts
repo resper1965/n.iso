@@ -72,7 +72,7 @@ usersApp.post('/', async (c) => {
         </div>
         <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
         <p style="margin-top: 25px;">
-          <a href="https://niso.ness.workers.dev" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no nISO</a>
+          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no nISO</a>
         </p>
       </div>
     `;

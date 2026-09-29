@@ -43,7 +43,7 @@ jobs:
       - name: Sondar
         id: sonda
         run: |
-          base=https://niso.ness.workers.dev
+          base=https://niso.ness.com.br
           for tentativa in 1 2 3; do
             motivo=""
             saude=$(curl -s -m 15 -w "\n%{http_code}" "$base/health" || echo $'\n000')

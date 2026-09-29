@@ -46,7 +46,7 @@ Claude Code | `.mcp.json` na raiz do projeto
       "command": "node",
       "args": ["/caminho/absoluto/para/mcp-server-niso/build/index.js"],
       "env": {
-        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_BASE_URL": "https://niso.ness.com.br",
         "NISO_API_KEY": "...",
         "NISO_ROLE": "consultant",
         "NISO_PROJECT_ID": "proj-..."
@@ -58,7 +58,7 @@ Claude Code | `.mcp.json` na raiz do projeto
 
 Variável | Default | O que faz
 ---|---|---
-`NISO_BASE_URL` | `https://niso.ness.workers.dev` | Base da API. Aponte para `http://localhost:8787` em desenvolvimento.
+`NISO_BASE_URL` | `https://niso.ness.com.br` | Base da API. Aponte para `http://localhost:8787` em desenvolvimento.
 `NISO_API_KEY` | — | Chave de API do projeto. Sem ela o servidor sobe, mas toda chamada volta 401.
 `NISO_ROLE` | vazio (todas as ferramentas) | `consultant` ou `auditor`. Ver abaixo.
 `NISO_READONLY` | `false` | `1`/`true` → só as 9 ferramentas de leitura, ignorando `NISO_ROLE`. Observador puro.
