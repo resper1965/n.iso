@@ -1136,7 +1136,9 @@ window.doInviteClient = async function doInviteClient(projectId) {
 // barra de verdade é o servidor.
 window.ehComercial = function ehComercial() { return !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'comercial')); }
 
-window.loadLeads = async function loadLeads() { try { S.leads = await api('GET', '/api/v1/leads'); } catch(e) { S.leads = []; } }
+// Leads são do comercial (somenteComercial no servidor): para os demais papéis
+// não pede — evita o 403 a cada login do consultor.
+window.loadLeads = async function loadLeads() { if (!window.ehComercial()) { S.leads = []; return; } try { S.leads = await api('GET', '/api/v1/leads'); } catch(e) { S.leads = []; } }
 
 window.loadAssessments = async function loadAssessments() { try { S.assessments = await api('GET', '/api/v1/assessments'); } catch(e) { S.assessments = []; } }
 

@@ -103,18 +103,26 @@ governanceApp.post('/projects/:id/governance', async (c) => {
       return c.json(recusaDesignacao, 403);
     }
 
+    // O DPO / Líder do SGSI é UM por projeto: marcar alguém desmarca os demais,
+    // no mesmo batch da gravação (a tela nunca vê dois líderes).
+    const desmarcaOutros = c.env.DB.prepare(
+      `UPDATE project_governance SET is_primary = 0 WHERE project_id = ? AND is_primary = 1 AND id IS NOT ?`
+    ).bind(projectId, id ?? null);
+
     if (id) {
-      await c.env.DB.prepare(`
-        UPDATE project_governance 
-        SET name = ?, email = ?, role_category = ?, job_title = ?, is_primary = ? 
+      const grava = c.env.DB.prepare(`
+        UPDATE project_governance
+        SET name = ?, email = ?, role_category = ?, job_title = ?, is_primary = ?
         WHERE id = ? AND project_id = ?
-      `).bind(name, email || null, role_category, job_title, is_primary ? 1 : 0, id, projectId).run();
+      `).bind(name, email || null, role_category, job_title, is_primary ? 1 : 0, id, projectId);
+      await c.env.DB.batch(is_primary ? [desmarcaOutros, grava] : [grava]);
       await logAudit(c.env.DB, 'governance.updated', c.get('user')?.email || 'system', `Membro da governança ${name} atualizado para projeto ${projectId}`);
     } else {
-      await c.env.DB.prepare(`
+      const grava = c.env.DB.prepare(`
         INSERT INTO project_governance (id, project_id, name, email, role_category, job_title, is_primary)
         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?)
-      `).bind(projectId, name, email || null, role_category, job_title, is_primary ? 1 : 0).run();
+      `).bind(projectId, name, email || null, role_category, job_title, is_primary ? 1 : 0);
+      await c.env.DB.batch(is_primary ? [desmarcaOutros, grava] : [grava]);
       await logAudit(c.env.DB, 'governance.created', c.get('user')?.email || 'system', `Membro da governança ${name} criado para projeto ${projectId}`);
     }
     return c.json({ ok: true });
