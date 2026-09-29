@@ -12,11 +12,19 @@ import type { PropsAgente } from '../middleware/agente';
  */
 export const oauthAutorizacao = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// Só existe atrás do OAuthProvider, que injeta OAUTH_PROVIDER. Caminho que chega
+// aqui sem ele (ex.: `/%6Fauth/...`, que o despacho de src/index.ts não
+// reconhece e o Hono decodifica) é 404 — nunca uma concessão sem grant.
+oauthAutorizacao.use('*', async (c, next) => (c.env.OAUTH_PROVIDER ? next() : c.notFound()));
+
 const TTL_PEDIDO = 600;
 const TTL_CONCESSAO_DIAS = 30;
 const chave = (t: string) => `oauth_pedido:${t}`;
 
-interface Pedido { oauth: unknown; clientName: string; userId?: string; email?: string }
+interface Pedido { oauth: unknown; clientName: string; destino: string; userId?: string; email?: string }
+
+/** Loopback é o callback local do cliente MCP na máquina da pessoa. */
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 function pagina(titulo: string, corpo: string, status = 200): Response {
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
@@ -44,16 +52,20 @@ async function lerPedido(c: any, token: string): Promise<Pedido | null> {
 oauthAutorizacao.get('/authorize', async (c) => {
   // Pedido malformado (client_id, redirect_uri, PKCE) faz a biblioteca lançar:
   // é erro do cliente, não do servidor — 400, sem contar na taxa de 5xx.
+  const provedor = c.env.OAUTH_PROVIDER;
+  if (!provedor) return c.notFound(); // o use('*') já barra; aqui só estreita o tipo
   let oauth, cliente;
   try {
-    oauth = await c.env.OAUTH_PROVIDER!.parseAuthRequest(c.req.raw);
-    cliente = await c.env.OAUTH_PROVIDER!.lookupClient(oauth.clientId);
+    oauth = await provedor.parseAuthRequest(c.req.raw);
+    cliente = await provedor.lookupClient(oauth.clientId);
   } catch {
     cliente = null;
   }
   if (!oauth || !cliente) return pagina('Pedido inválido', '<h1>Pedido de conexão inválido</h1><p>Volte ao seu cliente MCP e conecte de novo.</p>', 400);
   const token = genToken();
-  const pedido: Pedido = { oauth, clientName: cliente.clientName || 'Cliente MCP' };
+  // Registro de cliente é aberto (DCR): o nome é o que o cliente declarou. O
+  // host do redirect é o que identifica quem recebe o acesso.
+  const pedido: Pedido = { oauth, clientName: cliente.clientName || 'Cliente MCP', destino: new URL(oauth.redirectUri).host };
   await c.env.SESSIONS.put(chave(token), JSON.stringify(pedido), { expirationTtl: TTL_PEDIDO });
   return pagina('Conectar agente', `
 <h1>Conectar agente</h1>
@@ -113,7 +125,8 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   ).join('');
   return pagina('Escolha o cliente', `
 <h1>Em qual cliente o agente vai atuar?</h1>
-<p class="nota">Um cliente por conexão. Para outro cliente, conecte de novo.</p>
+<p class="nota">${escapeHtml(pedido.clientName)} em ${escapeHtml(pedido.destino)}. Um cliente por conexão. Para outro cliente, conecte de novo.</p>
+${LOOPBACK.has(new URL(`http://${pedido.destino}`).hostname) ? '' : `<p class="erro">Atenção: o acesso será entregue a ${escapeHtml(pedido.destino)}. Só autorize se você reconhece este endereço.</p>`}
 <form method="post" action="/oauth/authorize/confirmar">
 <input type="hidden" name="pedido" value="${token}">${opcoes}
 <p class="nota">O agente grava adequação (políticas, SoA, evidências, controles, riscos). Não apaga registros, não gera em lote e não registra achado de auditoria. O administrador do cliente vê e pode revogar este acesso.</p>
@@ -134,18 +147,24 @@ oauthAutorizacao.post('/authorize/confirmar', async (c) => {
   ).bind(projectId, pedido.email).first<{ client_name: string }>();
   if (!alvo) return pagina('Não autorizado', '<h1>Cliente fora da sua designação</h1>', 403);
 
+  // Grant primeiro: se completeAuthorization falhar, não sobra concessão nem
+  // trilha órfã. Se o INSERT falhar depois, o grant aponta para concessão
+  // inexistente e resolverAgente o recusa — falha fechada.
   const concessaoId = genId();
-  await c.env.DB.prepare(
-    `INSERT INTO agente_concessoes (id, user_id, project_id, cliente_mcp, expira_em) VALUES (?, ?, ?, ?, datetime('now', ?))`
-  ).bind(concessaoId, pedido.userId, projectId, pedido.clientName, `+${TTL_CONCESSAO_DIAS} days`).run();
-  await logAudit(c.env.DB, 'agente.autorizado', pedido.email, `Agente ${pedido.clientName} conectado ao cliente ${alvo.client_name}`, '', c.req.header('CF-Connecting-IP') || '', projectId);
-
+  const clienteMcp = `${pedido.clientName} (${pedido.destino})`.slice(0, 120);
   const props: PropsAgente = { userId: pedido.userId, email: pedido.email, projectId, concessaoId };
-  const { redirectTo } = await c.env.OAUTH_PROVIDER!.completeAuthorization({
+  const provedor = c.env.OAUTH_PROVIDER;
+  if (!provedor) return c.notFound(); // o use('*') já barra; aqui só estreita o tipo
+  const { redirectTo } = await provedor.completeAuthorization({
     request: pedido.oauth as any, userId: pedido.userId,
     metadata: { clientName: pedido.clientName, projectId }, scope: (pedido.oauth as any).scope ?? [],
     props, revokeExistingGrants: false,
   });
+
+  await c.env.DB.prepare(
+    `INSERT INTO agente_concessoes (id, user_id, project_id, cliente_mcp, expira_em) VALUES (?, ?, ?, ?, datetime('now', ?))`
+  ).bind(concessaoId, pedido.userId, projectId, clienteMcp, `+${TTL_CONCESSAO_DIAS} days`).run();
+  await logAudit(c.env.DB, 'agente.autorizado', pedido.email, `Agente ${clienteMcp} conectado ao cliente ${alvo.client_name}`, '', c.req.header('CF-Connecting-IP') || '', projectId);
 
   // Página com meta refresh, e não 302: o CSP `form-action 'self'` barra o
   // redirecionamento pós-formulário para o callback local do cliente MCP.

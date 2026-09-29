@@ -140,6 +140,47 @@ describe('Autorização OAuth do agente', () => {
     expect((await f('/oauth/authorize')).status).toBe(400);
   });
 
+  // Review fix 1: caminho percent-encoded não pode furar o OAuthProvider.
+  it('caminho percent-encoded não alcança a tela sem o OAuthProvider', async () => {
+    expect((await f('/%6Fauth/authorize?response_type=code')).status).toBe(404);
+    const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+    await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }));
+    const antes = await env.DB.prepare(`SELECT COUNT(*) AS n FROM agente_concessoes`).first<any>();
+    const auditAntes = await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'agente.autorizado'`).first<any>();
+    const r = await f('/%6Fauth/authorize/confirmar', form({ pedido, projeto: 'p-a' }));
+    expect(r.status).toBe(404);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM agente_concessoes`).first<any>()).n).toBe(antes.n);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'agente.autorizado'`).first<any>()).n).toBe(auditAntes.n);
+  });
+
+  // Review fix 3: a tela de consentimento diz para onde vai o acesso.
+  it('tela de autorizar mostra o host do redirect e avisa quando não é loopback', async () => {
+    const EVIL = 'https://evil.example/cb';
+    const reg = await f('/oauth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: [EVIL], client_name: 'Claude Code', token_endpoint_auth_method: 'none' }),
+    });
+    expect(reg.status).toBe(201);
+    const q = new URLSearchParams({
+      response_type: 'code', client_id: (await reg.json<any>()).client_id, redirect_uri: EVIL,
+      code_challenge: (await pkce()).challenge, code_challenge_method: 'S256', state: 'st', resource: `${BASE}/mcp`,
+    });
+    const r1 = await f(`/oauth/authorize?${q}`);
+    expect(r1.status).toBe(200);
+    const pedido = campo(await r1.text(), 'pedido');
+    const html = await (await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }))).text();
+    expect(html).toContain('evil.example');
+    expect(html).toContain('Atenção: o acesso será entregue a evil.example');
+    await f('/oauth/authorize/confirmar', form({ pedido, projeto: 'p-a' }));
+    const conc = await env.DB.prepare(`SELECT cliente_mcp FROM agente_concessoes WHERE cliente_mcp LIKE '%evil.example%'`).first<any>();
+    expect(conc.cliente_mcp).toBe('Claude Code (evil.example)');
+
+    const pedidoLocal = await iniciar(await registrarCliente(), (await pkce()).challenge);
+    const local = await (await f('/oauth/authorize/entrar', form({ pedido: pedidoLocal, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }))).text();
+    expect(local).toContain('127.0.0.1:33418');
+    expect(local).not.toContain('Atenção');
+  });
+
   it('rotas antigas seguem fora do OAuthProvider', async () => {
     expect((await f('/health')).status).toBe(200);
   });
