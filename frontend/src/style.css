@@ -83,9 +83,42 @@
         /* ——— AUTENTICAÇÃO ———————————————————————————————————————————
            Cartão centralizado, não mais hero + coluna. É a tela onde o usuário
            decide confiar antes de entregar credencial: nada compete com ela. */
-        #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; transition: opacity var(--slow) var(--ease-out); }
+        /* O overlay É a landing: rola, e as seções institucionais moram nele —
+           somem junto quando a pessoa entra (spec 2026-09-29-landing-login). */
+        #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9999; overflow-y: auto; scroll-behavior: smooth; transition: opacity var(--slow) var(--ease-out); }
         #login-overlay.hidden { opacity: 0; pointer-events: none; }
         .login-form-side { width: 100%; display: flex; align-items: center; justify-content: center; }
+
+        /* ——— TELA DE ENTRADA / LANDING ——— accent só no ponto, no botão e nos números. */
+        .entry-fold { min-height: 100vh; max-width: 1120px; margin: 0 auto; padding: 48px 32px; display: grid; grid-template-columns: 1fr 420px; gap: 64px; align-items: center; }
+        .entry-brand { display: flex; flex-direction: column; gap: 24px; max-width: 520px; }
+        .entry-mark { font-family: var(--font-head); font-weight: 500; font-size: 32px; letter-spacing: -0.015em; color: var(--text); }
+        .entry-mark span, .entry-dot { color: var(--accent); }
+        .entry-title { font-family: var(--font-head); font-weight: 600; font-size: 40px; line-height: 1.15; letter-spacing: -0.02em; color: var(--text); margin: 0; }
+        .entry-lede { font-size: 16px; line-height: 1.6; color: var(--text-2); margin: 0; }
+        .entry-more { align-self: flex-start; font-size: 14px; color: var(--text-dim); text-decoration: none; border-bottom: 1px solid var(--border); padding-bottom: 4px; transition: color var(--fast) var(--ease-out), border-color var(--fast) var(--ease-out); }
+        .entry-more:hover { color: var(--text); border-color: var(--accent); }
+        /* Com a marca grande ao lado, o logo do cartão seria eco. */
+        .entry-fold #standard-login-box .login-brand-logo { display: none; }
+
+        .entry-section { max-width: 1120px; margin: 0 auto; padding: 96px 32px; border-top: 1px solid var(--border); }
+        .entry-h2 { font-family: var(--font-head); font-weight: 600; font-size: 28px; letter-spacing: -0.015em; color: var(--text); margin: 0 0 48px; }
+        .entry-pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+        .entry-pillar { border-top: 1px solid var(--accent); padding-top: 24px; }
+        .entry-pillar h3, .entry-steps h3 { font-family: var(--font-head); font-weight: 500; font-size: 20px; color: var(--text); margin: 0 0 8px; }
+        .entry-pillar p, .entry-steps p { font-size: 15px; line-height: 1.6; color: var(--text-2); margin: 0; }
+        .entry-steps { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; padding: 0; margin: 0; }
+        .entry-step-n { display: block; font-family: var(--font-mono); font-size: 14px; color: var(--accent); margin-bottom: 16px; }
+        .entry-foot { max-width: 1120px; margin: 0 auto; padding: 32px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+        .entry-foot .login-sign-links { font-size: 12px; }
+
+        @media (max-width: 900px) {
+            .entry-fold { grid-template-columns: 1fr; gap: 48px; padding: 48px 16px; min-height: auto; }
+            .entry-fold #standard-login-box .login-brand-logo { display: block; }
+            .entry-title { font-size: 30px; }
+            .entry-section { padding: 64px 16px; }
+            .entry-pillars, .entry-steps { grid-template-columns: 1fr; }
+        }
         .login-box { width: min(420px, 100%); background: var(--surface); border: 1px solid var(--border); padding: 28px 32px 24px; display: flex; flex-direction: column; gap: 16px; animation: rise 220ms var(--ease-out); }
         .login-brand-logo { font-family: var(--font-head); font-size: 26px; font-weight: 500; letter-spacing: -0.015em; color: var(--text); margin-bottom: 4px; }
         .login-brand-logo span { color: var(--accent); }

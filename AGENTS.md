@@ -77,13 +77,19 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `policy-generator.ts`, `embeddings.ts`, `project-setup.ts`.
 - **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
 - **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
-  Duas páginas raiz, propósito diferente:
-  - `frontend/public/index.html` — landing pública (marketing + pricing ao
-    vivo via `/api/v1/public/pricing`), copiada verbatim pelo Vite. Serve `/`.
   - `frontend/login.html` — o app de verdade (login + SPA), entrada do Vite
     (`vite.config.js: rollupOptions.input`), com `src/main.js`, `router.js`,
     `state.js` (estado global `S`), `api.js`, `ui.js`, `globals.js`,
-    `src/views/*.js`. Serve `/login`.
+    `src/views/*.js`. Serve `/`, `/login` e toda rota desconhecida. Desde
+    2026-09-29 a tela de entrada É a landing: login na primeira dobra, seções
+    institucionais abaixo, tudo dentro de `#login-overlay`
+    (`docs/superpowers/specs/2026-09-29-landing-login-design.md`). **Não
+    recrie `frontend/public/index.html`**: ele voltaria a tomar `/` com CSS
+    próprio — foi assim que a landing antiga saiu da marca. Sem `index.html`,
+    `/` cai no catch-all de `src/index.ts`, que entrega `/login`
+    (`test/landing-raiz.test.ts`). Atenção: `vite.config.js` tem
+    `emptyOutDir: false`, então um `dist/index.html` de build antigo sobrevive
+    localmente — apague antes de testar a raiz com `wrangler dev`.
   - `frontend/public/politicas.html` — portal público de confirmação de
     leitura de política (LGPD art. 18 / ISO A.6.3). Serve `/politicas`
     (`/politicas.html` redireciona, 307, via `html_handling` do Workers
@@ -195,13 +201,16 @@ errar um digito destruia a sessao.
 
 - Marca: ness. (sempre minusculo, com ponto).
 - Layout: Enterprise Grade, header 56px com backdrop-filter.
-- Cores: #070b14 (fundo), #00ade8 (accent), #f5f5f7 (texto),
-  rgba(229,235,255,0.6) (muted).
-- Tipografia: Inter 300/400 para body, Montserrat 500/700 apenas headings.
-- Proibido: italicos, emojis/icones, peso 600 Montserrat, accent como background
-  de area.
-- Inputs: border-radius 10px, glassmorphism com backdrop-filter blur(24px).
-- Login: split-screen (branding esquerda, form direita).
+- **Fonte única dos tokens: `frontend/src/style.css` (`:root`).** Não repita
+  valores aqui — a cópia anterior (#070b14, "proibido peso 600") envelheceu e
+  a landing antiga seguiu a cópia, não o app. Hoje: `--bg #0b1326`,
+  `--surface #162244`, `--accent #00ade8`, `--text #f1f5f9`.
+- Tipografia: Inter no corpo; Montserrat 500 na marca, 600 em títulos.
+- Produto: `n.iso`, com o ponto em accent, como a marca `ness.`.
+- Proibido: italicos, emojis/icones, accent como background de area.
+- Inputs: border-radius 10px (`.form-input`).
+- Login: tela dividida — marca à esquerda, cartão à direita; empilha abaixo
+  de 900px.
 
 ## Documentos que valem a leitura
 
