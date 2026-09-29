@@ -5,6 +5,7 @@ import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
 import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
+import { resolverAgente } from './agente';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -148,7 +149,14 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   let apiKeyWriteCapable = false;
 
   const apiKey = c.req.header('X-API-Key');
-  if (apiKey) {
+  const agente = c.env.AGENTE;
+  if (agente) {
+    // Requisição interna do /mcp: precedência sobre chave e sessão.
+    const resolvido = await resolverAgente(c, agente);
+    if (resolvido instanceof Response) return resolvido;
+    user = resolvido;
+    apiKeyWriteCapable = true;
+  } else if (apiKey) {
     const resolved = await resolveApiKeyUser(c, apiKey);
     if (resolved instanceof Response) return resolved;
     user = resolved.user;
@@ -252,7 +260,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   //
   // Só vale para sessão humana: uma API key não tem a quem apresentar o texto,
   // e barrá-la derrubaria integração por decisão que não é dela.
-  if (!apiKey && !rotaLiberadaComBloqueio(path)) {
+  if (!apiKey && !agente && !rotaLiberadaComBloqueio(path)) {
     const docs = await c.env.DB.prepare(
       `SELECT id, kind, version, classification, title, url, published_at
          FROM legal_documents WHERE published_at IS NOT NULL`

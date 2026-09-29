@@ -24,6 +24,26 @@ As duas camadas respondem a perguntas diferentes e nenhuma substitui a outra:
 - **No worker** — o que a chave de API pode de fato fazer, em qual projeto. É a
   fronteira de segurança. Vale mesmo que alguém chame a API direto, sem MCP.
 
+## Servidor remoto (recomendado para consultor)
+
+O consultor nao precisa instalar nada nem guardar chave de API: o nISO expoe o
+MCP em `https://niso.ness.com.br/mcp` com login OAuth. Na primeira chamada o
+cliente abre o navegador, o consultor entra no n.iso e escolhe o cliente
+(um cliente por conexao). O administrador do cliente enxerga o acesso e pode
+revoga-lo. O recurso e fixo no dominio oficial: nao funciona em outro dominio.
+
+| Cliente | Onde | Trecho | Estado |
+|---|---|---|---|
+| Claude Code | terminal | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` | documenta MCP remoto com OAuth |
+| Cursor | `.cursor/mcp.json` | `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` | documenta MCP remoto com OAuth |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.niso]` + `url = "https://niso.ness.com.br/mcp"` | a confirmar |
+| Antigravity | `~/.gemini/config/mcp_config.json` | `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }` | a confirmar |
+
+Nenhum dos quatro foi ainda exercitado contra a producao: a verificacao real
+acontece depois do deploy. "A confirmar" significa que o suporte a login OAuth
+do cliente nao esta documentado; se falhar, o bloco sera marcado como nao
+suportado. O servidor local abaixo continua para integracoes e auditor.
+
 ## Instalação
 
 ```bash

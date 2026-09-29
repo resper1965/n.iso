@@ -108,6 +108,15 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
+- **MCP remoto** (consultor): `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
+  (`src/routes/oauth-autorizacao.ts`); principal agente em
+  `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
+  tabela `agente_concessoes`; KV `OAUTH_KV`. Regra: **so `ROTAS_OAUTH` passam
+  pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. O id do
+  KV `OAUTH_KV` precisa ser criado (`npx wrangler kv namespace create OAUTH_KV`)
+  e estar no `wrangler.jsonc` antes do deploy. Recurso fixo em
+  `niso.ness.com.br`; verificacao nos quatro clientes (Claude Code, Cursor,
+  Codex, Antigravity) ainda pendente ate o deploy.
 
 ## Decisoes de produto ja tomadas — nao reabrir
 
@@ -165,13 +174,10 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   reabrem o buraco.
 - **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
   em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
-- ~~**9 vulnerabilidades no `npm audit`**~~ **RESOLVIDO** (2026-09): `npm audit`
-  esta em zero. A migracao para vitest 4 aconteceu e o ultimo advisory era do
-  proprio `hono` (<=4.12.33, ReDoS no middleware de CORS) — nao da cadeia de
-  build, ao contrario do que esta linha afirmava. Hoje em 4.13.5.
-  **Licao:** "todas na cadeia de teste e build" era verdade quando foi escrito e
-  deixou de ser sem que ninguem reavaliasse. Rode `npm audit` antes de repetir
-  a afirmacao.
+- **`npm audit` nao esta em zero** (2026-09-29): 4 advisories moderados do
+  `undici`, anteriores ao MCP remoto. Em 2026-09 o audit chegou a zero (vitest 4,
+  `hono` 4.13.5), mas deixou de ser verdade sem ninguem reavaliar. Rode
+  `npm audit` antes de repetir qualquer afirmacao sobre ele.
 
 ## Segundo fator (MFA) — e como destravar alguem
 

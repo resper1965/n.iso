@@ -1,16 +1,16 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, SESSION_TTL_SEC, erro500 } from '../helpers';
+import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, SESSION_TTL_SEC, erro500 } from '../helpers';
 
 /** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
-function clientIp(c: any): string {
+export function clientIp(c: any): string {
   return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
 }
 import { authMiddleware } from '../middleware/auth';
 import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema, primeiroAcessoSchema, mudarSenhaSchema } from '../schemas';
 import {
   decisaoLogin, mensagemCredencialInvalida, mensagemBloqueio,
-  BLOQUEIO_SEG, JANELA_FALHAS_SEG,
+  BLOQUEIO_SEG, JANELA_FALHAS_SEG, type DecisaoLogin,
 } from '../auth-policy';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -20,13 +20,36 @@ export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  * contasse conta existente, o próprio número de tentativas restantes diria ao
  * atacante quais e-mails são válidos.
  */
-function chavesTentativa(email: string, ip: string) {
+export function chavesTentativa(email: string, ip: string) {
   const conta = email.trim().toLowerCase();
   return {
     conta,
     falhas: `login_fail:${conta}:${ip}`,
     bloqueio: `login_lock:${conta}:${ip}`,
   };
+}
+
+/**
+ * Conta uma falha de credencial e, no limite, bloqueia a conta+IP. Compartilhada
+ * com a tela OAuth do agente (routes/oauth-autorizacao.ts): as duas portas de
+ * senha somam as mesmas falhas e respeitam o mesmo bloqueio.
+ */
+export async function registrarFalhaLogin(
+  c: any, chaves: ReturnType<typeof chavesTentativa>, falhasAntes: number, desafioVerificavel: boolean, ip: string
+): Promise<DecisaoLogin> {
+  const total = falhasAntes + 1;
+  await c.env.SESSIONS.put(chaves.falhas, String(total), { expirationTtl: JANELA_FALHAS_SEG });
+  const depois = decisaoLogin(total, desafioVerificavel);
+  if (depois.bloqueado) {
+    await c.env.SESSIONS.put(chaves.bloqueio, '1', { expirationTtl: BLOQUEIO_SEG });
+    // Conta E IP na trilha: é o par que o auditor precisa para distinguir
+    // usuário que esqueceu a senha de tentativa de força bruta distribuída.
+    await logAudit(
+      c.env.DB, 'auth.lockout', chaves.conta,
+      `Bloqueio temporário de ${BLOQUEIO_SEG / 60} min após ${total} tentativas incorretas (IP ${ip})`
+    );
+  }
+  return depois;
 }
 
 /**
@@ -169,20 +192,8 @@ authApp.post('/login', async (c) => {
     ).bind(email).first() as any;
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {
-      const total = falhas + 1;
-      await c.env.SESSIONS.put(chaves.falhas, String(total), { expirationTtl: JANELA_FALHAS_SEG });
-      const depois = decisaoLogin(total, desafioVerificavel);
-
-      if (depois.bloqueado) {
-        await c.env.SESSIONS.put(chaves.bloqueio, '1', { expirationTtl: BLOQUEIO_SEG });
-        // Conta E IP na trilha: é o par que o auditor precisa para distinguir
-        // usuário que esqueceu a senha de tentativa de força bruta distribuída.
-        await logAudit(
-          c.env.DB, 'auth.lockout', chaves.conta,
-          `Bloqueio temporário de ${BLOQUEIO_SEG / 60} min após ${total} tentativas incorretas (IP ${ip})`
-        );
-        return c.json({ error: mensagemBloqueio(), locked: true }, 429);
-      }
+      const depois = await registrarFalhaLogin(c, chaves, falhas, desafioVerificavel, ip);
+      if (depois.bloqueado) return c.json({ error: mensagemBloqueio(), locked: true }, 429);
 
       // Mensagem única: nunca diz se o e-mail existe ou se foi a senha.
       return c.json({
@@ -261,6 +272,7 @@ authApp.post('/reset-password-first', async (c) => {
     ).bind(newHash, user.id).run();
 
     await invalidateUserSessions(c.env.SESSIONS, user.id);
+    await revogarAgentesPorTrocaDeSenha(c.env.DB, user.id);
     // A revogação derruba também ESTA sessão, e o `globals.js` segue com o mesmo
     // token para dentro do app: a pessoa voltava ao login achando que a senha
     // nova não pegou. Recarimbar `iat` mantém só ela viva — quem acabou de
@@ -359,7 +371,10 @@ authApp.post('/reset-password', async (c) => {
     // de "minha conta foi comprometida". Sem isto, quem roubou a sessão continua
     // dentro por até 24h mesmo depois da troca.
     const dono = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<any>();
-    if (dono) await invalidateUserSessions(c.env.SESSIONS, dono.id);
+    if (dono) {
+      await invalidateUserSessions(c.env.SESSIONS, dono.id);
+      await revogarAgentesPorTrocaDeSenha(c.env.DB, dono.id);
+    }
 
     await c.env.SESSIONS.delete(`reset_token:${token}`);
 
@@ -400,7 +415,8 @@ authApp.post('/change-password', async (c) => {
     const newHash = await hashPassword(newPassword);
     await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE email = ?')
       .bind(newHash, user.email).run();
-      
+    await revogarAgentesPorTrocaDeSenha(c.env.DB, user.id);
+
     await logAudit(c.env.DB, 'auth.password_changed', user.email, 'Senha alterada com sucesso');
     return c.json({ ok: true });
   } catch (e: any) {
