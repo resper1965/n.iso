@@ -15,19 +15,8 @@ describe('Diagnóstico de prontidão (D1 real)', () => {
     await applySchema();
     await resetData();
     await resetSessions();
-    // Cadeia conta→cliente: sem ela `p1` nasce órfão. `headers` é platform_admin
-    // e bypassa de qualquer forma, mas o teste de escopo abaixo precisa de um
-    // "outro tenant" com `cliente_id` real — senão o 403 dele mede ausência de
-    // escopo, não desigualdade de cliente.
     await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-rd', 'msp', 'Conta RD', 'Active')`
-    ).run();
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-rd', 'conta-rd', 'Cliente', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-rd-outro', 'conta-rd', 'Outro Cliente', 'Active')`),
-    ]);
-    await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('p1','Cliente','ISO 27001','controller','Active','cli-rd')`
+      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','Cliente','ISO 27001','controller','Active')`
     ).run();
     headers = await sessionFor({ id: 'u1', email: 'admin@ness.io', role: 'platform_admin', iat: Date.now() });
   });
@@ -115,7 +104,7 @@ describe('Diagnóstico de prontidão (D1 real)', () => {
   });
 
   it('projeto de OUTRO tenant é barrado por escopo (403)', async () => {
-    const h = await sessionFor({ id: 'u2', email: 'leitor@c.com', role: 'org_user', conta_id: null, cliente_id: 'cli-rd-outro', iat: Date.now() });
+    const h = await sessionFor({ id: 'u2', email: 'leitor@c.com', role: 'org_user', client_project_id: 'p-outro', iat: Date.now() });
     const { status } = await check('p1', h);
     expect(status).toBe(403);
   });

@@ -28,23 +28,15 @@ describe('Export de portabilidade', () => {
   beforeAll(async () => {
     await applySchema();
     const senha = await hashPassword('password123');
-    // Cadeia conta→cliente: sem ela A e B nascem órfãos e nem o org_admin de
-    // cada um alcança o próprio projeto (a rota GET /export passa pelo
-    // `projectAccessMiddleware`).
-    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-port', 'msp', 'Conta Port', 'Active')`).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-port-a', 'conta-port', 'Cliente A', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-port-b', 'conta-port', 'Cliente B', 'Active')`),
-    ]);
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-port-a'),
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active', 'cli-port-b'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-a', 'a@x.com', senha, 'A', 'org_admin', 'cli-port-a'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-b', 'b@x.com', senha, 'B', 'org_admin', 'cli-port-b'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-a', 'a@x.com', senha, 'A', 'org_admin', A),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-b', 'b@x.com', senha, 'B', 'org_admin', B),
 
       env.DB.prepare(`INSERT INTO risks (id, project_id, asset, threat, impact, probability) VALUES (?,?,?,?,?,?)`)
         .bind('r-a', A, 'Servidor do A', 'Ameaça A', 4, 4),
@@ -60,8 +52,8 @@ describe('Export de portabilidade', () => {
         .bind('at-a', A, 'token-secreto-do-auditor', '2099-01-01T00:00:00Z'),
     ]);
 
-    admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-port-a' });
-    admB = await sessionFor({ id: 'u-b', email: 'b@x.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-port-b' });
+    admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', client_project_id: A });
+    admB = await sessionFor({ id: 'u-b', email: 'b@x.com', role: 'org_admin', client_project_id: B });
   });
 
   it('a lista de tabelas sai do BANCO — tabela nova entra sozinha', async () => {
@@ -176,7 +168,7 @@ describe('Export de portabilidade', () => {
 
 describe('GET /api/v1/projects/:projectId/export', () => {
   it('cliente baixa o próprio projeto, como anexo', async () => {
-    const admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-port-a' });
+    const admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', client_project_id: A });
     const res = await pedir(worker, `/api/v1/projects/${A}/export`, { headers: admA });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(res.headers.get('Content-Disposition')).toContain(`niso-export-${A}`);
@@ -188,7 +180,7 @@ describe('GET /api/v1/projects/:projectId/export', () => {
     // A rota usa `:projectId` de propósito: é esse nome que faz o
     // `projectAccessMiddleware` rodar. Com `:id`, a guarda não pegaria — e o
     // vazamento seria do tenant inteiro de uma vez.
-    const admB = await sessionFor({ id: 'u-b', email: 'b@x.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-port-b' });
+    const admB = await sessionFor({ id: 'u-b', email: 'b@x.com', role: 'org_admin', client_project_id: B });
     const res = await pedir(worker, `/api/v1/projects/${A}/export`, { headers: admB });
     expect(res.status, 'o export ignorou o isolamento de tenant').toBe(403);
   });

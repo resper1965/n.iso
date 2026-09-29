@@ -17,27 +17,14 @@ describe('Adequação de controles (F3)', () => {
     await applySchema();
     await resetData();
     await resetSessions();
-    // Cadeia conta→cliente: sem ela `p1` nasce órfão e nem o consultor da
-    // própria conta alcança o projeto.
     await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-ca', 'msp', 'Conta CA', 'Active')`
-    ).run();
-    await env.DB.prepare(
-      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-ca', 'conta-ca', 'Cliente', 'Active')`
-    ).run();
-    // Segundo cliente: dá ao "outro tenant" da suíte um `cliente_id` real,
-    // para que o 403 meça a DESIGUALDADE de cliente, não a ausência de um.
-    await env.DB.prepare(
-      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-ca-outro', 'conta-ca', 'Outro Cliente', 'Active')`
-    ).run();
-    await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('p1','Cliente','ISO 27001','controller','Active','cli-ca')`
+      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','Cliente','ISO 27001','controller','Active')`
     ).run();
     await env.DB.prepare(
       `INSERT INTO compliance_controls (id, project_id, standard, title, status, maturity)
        VALUES ('A.5.1','p1','ISO 27001:2022','Políticas de segurança','Missing',0)`
     ).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', conta_id: 'conta-ca', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const req = (metodo: string, path: string, body?: unknown, h = headers, extraEnv?: any) =>
@@ -80,7 +67,7 @@ describe('Adequação de controles (F3)', () => {
 
   it('sugestões: fase inválida → 400; escopo de outro tenant → 403', async () => {
     expect((await req('GET', '/api/v1/projects/p1/control-adequacao/999/suggestions')).status).toBe(400);
-    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', conta_id: null, cliente_id: 'cli-ca-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', client_project_id: 'p-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
     expect((await req('GET', '/api/v1/projects/p1/control-adequacao/15/suggestions', undefined, h)).status).toBe(403);
   });
 

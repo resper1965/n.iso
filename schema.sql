@@ -3,57 +3,6 @@
 -- Cloudflare D1 (SQLite)
 
 -- ═══════════════════════════════════════════════
--- CAMADA MSP: CONTAS & CLIENTES (migration 0031)
--- ═══════════════════════════════════════════════
---
--- Três níveis: conta (quem tem contrato) → cliente (quem certifica, DONO DOS
--- DADOS) → projeto (um escopo). A conta é PONTEIRO para o cliente, nunca
--- container dele. Precisam ser declaradas antes de `users` e `projects`
--- porque essas duas passam a referenciá-las.
---
--- ADITIVA e SEM efeito por si só: tabelas nascem vazias, colunas relacionadas
--- (mais abaixo) nascem NULL. Ver cabeçalho de `migrations/0031_camada_msp.sql`.
-
-CREATE TABLE IF NOT EXISTS contas (
-    id TEXT PRIMARY KEY,
-
-    -- 'msp' atende clientes de terceiros e enxerga o funil comercial.
-    -- 'direto' é o cliente final que assina sozinho e NÃO tem pré-venda.
-    tipo TEXT NOT NULL CHECK (tipo IN ('msp', 'direto')),
-
-    nome TEXT NOT NULL,
-    plano TEXT NOT NULL DEFAULT 'trial',
-
-    -- NULL = sem teto. Ausência de limite é ausência de restrição, nunca
-    -- restrição padrão. Os tetos só passam a ser lidos no Plano 2.
-    max_clientes INTEGER,
-    max_projetos INTEGER,
-    max_usuarios INTEGER,
-
-    -- 'Active' | 'Suspensa'. A suspensão é lida no Plano 2.
-    status TEXT NOT NULL DEFAULT 'Active',
-
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS clientes (
-    id TEXT PRIMARY KEY,
-
-    -- Quem paga e gerencia este cliente HOJE. É a única coluna que muda quando
-    -- o cliente troca de consultoria — por isso os dados não moram aqui embaixo.
-    conta_id TEXT NOT NULL REFERENCES contas(id),
-
-    nome TEXT NOT NULL,
-    cnpj TEXT,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- A consulta de autorização sobe projeto → cliente → conta a cada requisição de
--- rota escopada. Sem estes índices ela vira varredura.
-CREATE INDEX IF NOT EXISTS idx_clientes_conta ON clientes(conta_id);
-
--- ═══════════════════════════════════════════════
 -- CORE: USERS & AUTH
 -- ═══════════════════════════════════════════════
 
@@ -79,15 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- existindo — a trilha referencia o e-mail dela, e apagar reescreveria o
     -- passado — mas não autentica. DEFAULT 1: nada muda para quem já existe.
     ativo INTEGER NOT NULL DEFAULT 1,
-    -- Camada MSP (migration 0031). Staff de MSP usa `conta_id`; usuário de
-    -- cliente usa `cliente_id`. Uma pessoa preenche exatamente uma das duas,
-    -- e `platform_admin` não preenche nenhuma. NULL até o backfill (0032).
-    conta_id TEXT REFERENCES contas(id),
-    cliente_id TEXT REFERENCES clientes(id),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_users_conta ON users(conta_id);
-CREATE INDEX IF NOT EXISTS idx_users_cliente ON users(cliente_id);
 
 -- ═══════════════════════════════════════════════
 -- STREAM A: CRM & PRÉ-SALES (Leads, Proposals, Contracts)
@@ -131,14 +73,9 @@ CREATE TABLE IF NOT EXISTS leads (
     -- Metadado da consulta
     cnpj_fetched_at DATETIME,
 
-    -- Camada MSP (migration 0031): dono do funil comercial. NULL até o
-    -- backfill (0032) — sem isso, pipeline vaza entre MSPs concorrentes.
-    conta_id TEXT REFERENCES contas(id),
-
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_leads_conta ON leads(conta_id);
 
 CREATE TABLE IF NOT EXISTS proposals (
     id TEXT PRIMARY KEY,
@@ -148,11 +85,8 @@ CREATE TABLE IF NOT EXISTS proposals (
     content_html TEXT, -- Printable HTML proposal
     total_price REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    approved_at DATETIME,
-    -- Camada MSP (migration 0031). NULL até o backfill (0032).
-    conta_id TEXT REFERENCES contas(id)
+    approved_at DATETIME
 );
-CREATE INDEX IF NOT EXISTS idx_proposals_conta ON proposals(conta_id);
 
 CREATE TABLE IF NOT EXISTS contracts (
     id TEXT PRIMARY KEY,
@@ -180,11 +114,8 @@ CREATE TABLE IF NOT EXISTS assessments (
     access_token TEXT,
     pricing_override REAL,
     pricing_desconto REAL,
-    pricing_notas TEXT,
-    -- Camada MSP (migration 0031). NULL até o backfill (0032).
-    conta_id TEXT REFERENCES contas(id)
+    pricing_notas TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_assessments_conta ON assessments(conta_id);
 
 CREATE TABLE IF NOT EXISTS assessment_answers (
     id TEXT PRIMARY KEY,
@@ -246,20 +177,7 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     language TEXT DEFAULT 'pt-BR',
     repository_url TEXT,
-    repository_token TEXT,
-    -- Camada MSP (migration 0031): dono deste projeto. NULL até o backfill
-    -- (0032); a autorização só passa a usar isto na Task 5 do plano MSP.
-    cliente_id TEXT REFERENCES clientes(id)
-);
-CREATE INDEX IF NOT EXISTS idx_projects_cliente ON projects(cliente_id);
-
--- Concessão explícita de projeto a usuário (migration 0031). Vazia até a Task
--- 5 do plano MSP começar a lê-la para autorização.
-CREATE TABLE IF NOT EXISTS acesso_projeto (
-    user_id TEXT NOT NULL REFERENCES users(id),
-    project_id TEXT NOT NULL REFERENCES projects(id),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, project_id)
+    repository_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS project_phases (
@@ -702,10 +620,18 @@ CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
 -- SPRINT 8: MARKET READY
 -- ═══════════════════════════════════════════════
 
--- `organizations` (Sprint 8) foi removida pela migration 0032: nunca teve FK
--- apontando para ela nem uso em código, e foi substituída pelo modelo
--- contas/clientes. Sem o CREATE aqui, para que schema.sql (usado por
--- applySchema() nos testes) não fique com uma tabela que produção não tem.
+CREATE TABLE IF NOT EXISTS organizations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    plan TEXT DEFAULT 'trial',
+    max_projects INTEGER DEFAULT 3,
+    max_users INTEGER DEFAULT 5,
+    owner_id TEXT,
+    logo_url TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS certification_tracking (
     id TEXT PRIMARY KEY,

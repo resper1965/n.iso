@@ -48,34 +48,20 @@ describe('nISO API (D1 e KV reais)', () => {
     await applySchema();
     const senha = await hashPassword('password123');
 
-    // Cadeia conta→cliente: os dois projetos ficam sob a MESMA conta, para que
-    // o staff (`consultor`) alcance os dois — mas em CLIENTES diferentes, para
-    // que org_admin/org_user/client de um não alcancem o projeto do outro.
-    await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-api', 'msp', 'Conta API', 'Active')`
-    ).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-api-um', 'conta-api', 'Cliente Um', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-api-dois', 'conta-api', 'Cliente Dois', 'Active')`),
-    ]);
-
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(PROJ, 'Cliente Um', 'ISO 27001', 'controller', 'Active', 'cli-api-um'),
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(OUTRO, 'Cliente Dois', 'ISO 27001', 'controller', 'Active', 'cli-api-dois'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(PROJ, 'Cliente Um', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(OUTRO, 'Cliente Dois', 'ISO 27001', 'controller', 'Active'),
 
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('usr-admin', 'admin@ness.io', senha, 'Admin', 'platform_admin', null),
-      // `cliente_id` a par de `client_project_id`: a sessão carrega os dois
-      // (ver comentário abaixo), e a linha de `users` deve modelar o mesmo
-      // estado — senão a fixture descreve um usuário que o login nunca emite.
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind('usr-orgadmin', 'orgadmin@cliente.com', senha, 'Org Admin', 'org_admin', PROJ, 'cli-api-um'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind('usr-orguser', 'orguser@cliente.com', senha, 'Org User', 'org_user', PROJ, 'cli-api-um'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind('usr-client', 'client@cliente.com', senha, 'Cliente', 'client', PROJ, 'cli-api-um'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-orgadmin', 'orgadmin@cliente.com', senha, 'Org Admin', 'org_admin', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-orguser', 'orguser@cliente.com', senha, 'Org User', 'org_user', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('usr-client', 'client@cliente.com', senha, 'Cliente', 'client', PROJ),
       // Alvo das operações de PUT/DELETE em /users/:id.
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('usr-alvo', 'alvo@cliente.com', senha, 'Alvo', 'org_user', PROJ),
@@ -112,24 +98,11 @@ describe('nISO API (D1 e KV reais)', () => {
         .bind('key-rw', PROJ, await sha256Hex(CHAVE_ESCRITA), 'escrita', 'write', 'Active'),
     ]);
 
-    // org_user e client só enxergam o CONCEDIDO (não são admin da empresa),
-    // então a fixture precisa da linha em `acesso_projeto` — sem ela, `cliente_id`
-    // batendo não basta.
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('usr-orguser', ?)`).bind(PROJ),
-      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('usr-client', ?)`).bind(PROJ),
-    ]);
-
     admin = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'platform_admin' });
-    // `client_project_id` continua na sessão: rotas legadas (users.ts,
-    // platform.ts, controls.ts) ainda leem esse campo, e a Task 10 é sobre a
-    // camada de PROJETO — a coluna legada só sai numa migration posterior.
-    orgAdmin = await sessionFor({ id: 'usr-orgadmin', email: 'orgadmin@cliente.com', role: 'org_admin', client_project_id: PROJ, conta_id: null, cliente_id: 'cli-api-um' });
-    orgUser = await sessionFor({ id: 'usr-orguser', email: 'orguser@cliente.com', role: 'org_user', client_project_id: PROJ, conta_id: null, cliente_id: 'cli-api-um' });
-    client = await sessionFor({ id: 'usr-client', email: 'client@cliente.com', role: 'client', client_project_id: PROJ, conta_id: null, cliente_id: 'cli-api-um' });
-    // Staff de conta: alcança QUALQUER projeto da própria conta (PROJ e OUTRO
-    // são clientes distintos, mas da mesma `conta-api`).
-    consultor = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'consultant', conta_id: 'conta-api', cliente_id: null });
+    orgAdmin = await sessionFor({ id: 'usr-orgadmin', email: 'orgadmin@cliente.com', role: 'org_admin', client_project_id: PROJ });
+    orgUser = await sessionFor({ id: 'usr-orguser', email: 'orguser@cliente.com', role: 'org_user', client_project_id: PROJ });
+    client = await sessionFor({ id: 'usr-client', email: 'client@cliente.com', role: 'client', client_project_id: PROJ });
+    consultor = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'consultant' });
     // Papel legado, mapeado para platform_admin pelo authMiddleware.
     legacyAdmin = await sessionFor({ id: 'usr-admin', email: 'admin@ness.io', role: 'admin' });
   });

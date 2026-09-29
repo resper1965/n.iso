@@ -177,14 +177,7 @@ evidenceApp.post('/:id/evaluate', async (c) => {
 
     let controlRef = '';
     if (evidence.control_id) {
-      // `AND project_id = ?`: a guarda acima autorizou a EVIDÊNCIA, não o
-      // controle que a linha dela aponta. Ter validado o container nunca
-      // validou o conteúdo — e aqui o conteúdo vira texto no prompt e na
-      // resposta, ou seja, sai do tenant pela porta da frente.
-      const ctrl = await c.env.DB
-        .prepare('SELECT title, description FROM compliance_controls WHERE id = ? AND project_id = ?')
-        .bind(evidence.control_id, evidence.project_id ?? '')
-        .first<any>();
+      const ctrl = await c.env.DB.prepare('SELECT title, description FROM compliance_controls WHERE id = ?').bind(evidence.control_id).first<any>();
       if (ctrl) controlRef = `${evidence.control_id}: ${ctrl.title}. ${ctrl.description || ''}`;
     }
 
@@ -326,24 +319,6 @@ projectEvidenceApp.post('/upload', async (c) => {
     // autenticado enche o R2, e HTML/SVG voltariam ao navegador como XSS.
     const invalido = validateUpload(file);
     if (invalido) return c.json({ error: invalido }, 400);
-
-    // Aterramento de tenant: só vincula a um controle DO MESMO projeto. A
-    // invariante estava ENUNCIADA na rota irmã (`PUT /api/v1/evidence/:id`) e
-    // OMITIDA aqui, que é o caminho por onde `control_id` entra na base pela
-    // primeira vez — cru, do multipart. Um id de controle alheio gravado aqui é
-    // desreferenciado depois por quem legitimamente possui a evidência:
-    // `POST /evidence/:id/evaluate` injeta título e descrição do controle no
-    // prompt e na resposta, e o relatório de prontidão do OUTRO projeto passa a
-    // considerar aquele controle "com evidência" — o achado crítico
-    // "assinatura sem lastro" desaparece do relatório de conformidade de outra
-    // consultoria. Adulteração, não só vazamento.
-    if (controlId) {
-      const ctrl = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(controlId).first<any>();
-      if (!ctrl) return c.json({ error: 'Controle não encontrado' }, 404);
-      if (ctrl.project_id !== projectId) {
-        return c.json({ error: 'Forbidden: controle pertence a outro projeto' }, 403);
-      }
-    }
 
     const id = genId();
     const r2Key = `evidence/${projectId}/${id}-${file.name}`;

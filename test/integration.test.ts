@@ -30,17 +30,7 @@ describe('Integration Tests', () => {
 
   // `iat` é obrigatório desde a revogação de sessão: o middleware trata sessão
   // sem ele como revogada quando existe marco de invalidação para o usuário.
-  //
-  // Papel `platform_admin`, não `consultor`: a camada MSP passou a exigir que
-  // staff de conta (`consultor`) tenha `conta_id` batendo com a conta DONA do
-  // projeto — uma cadeia real (`projects.cliente_id` → `clientes.conta_id`)
-  // que este `mockD1` não tem como responder (todo `first()` aqui devolve
-  // `null`). Este arquivo testa roteamento/validação genéricos, não isolamento
-  // de tenant — isso já está coberto contra D1 real em idor-tenant.test.ts e
-  // idor-tenant-project-scoped.test.ts — então `platform_admin` (o único papel
-  // que pula a checagem de escopo por completo) mantém a intenção original
-  // sem exigir um mock de D1 que simule a cadeia conta→cliente→projeto.
-  const validSession = { id: 1, email: 'test@example.com', role: 'platform_admin', iat: Date.now() };
+  const validSession = { id: 1, email: 'test@example.com', role: 'consultor', iat: Date.now() };
   // O mock devolve a sessão só para a chave de sessão. Antes devolvia o MESMO
   // objeto para qualquer chave, inclusive a de revogação — um KV que responde
   // a tudo não testa nada, e mascarava o comportamento do middleware.

@@ -40,31 +40,23 @@ describe('Assinatura do ROPA sai da matriz de governança, não de e-mail fixo',
 
   beforeAll(async () => {
     await applySchema();
-    // Cadeia conta→cliente: sem ela o projeto nasce órfão e nem o org_admin
-    // designado na matriz alcança o próprio projeto.
-    await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-gov', 'msp', 'Conta Gov', 'Active')`
-    ).run();
-    await env.DB.prepare(
-      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-gov', 'conta-gov', 'Cliente Gov', 'Active')`
-    ).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(PROJ, 'Cliente Gov', 'ISO 27001', 'controller', 'Active', 'cli-gov'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(PROJ, 'Cliente Gov', 'ISO 27001', 'controller', 'Active'),
       env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES (?,?,?)`)
         .bind('rec-1', PROJ, 'Cadastro de clientes'),
 
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-sgsi', 'sgsi@cliente.com', 'x', 'Lider SGSI', 'org_admin', 'cli-gov'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-ceo', 'ceo@cliente.com', 'x', 'Direcao', 'org_admin', 'cli-gov'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-outro', 'analista@cliente.com', 'x', 'Analista', 'org_admin', 'cli-gov'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-sgsi', 'sgsi@cliente.com', 'x', 'Lider SGSI', 'org_admin', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-ceo', 'ceo@cliente.com', 'x', 'Direcao', 'org_admin', PROJ),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-outro', 'analista@cliente.com', 'x', 'Analista', 'org_admin', PROJ),
       // Mesmo endereço que antes era privilegiado no código — aqui SEM cargo de
       // SGSI na matriz. Se o tratamento especial ainda existisse, ele assinaria
       // como ciso mesmo assim.
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-antigo', '44273656+resper1965@users.noreply.github.com', 'x', 'Antigo Privilegiado', 'org_admin', 'cli-gov'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-antigo', '44273656+resper1965@users.noreply.github.com', 'x', 'Antigo Privilegiado', 'org_admin', PROJ),
 
       env.DB.prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES (?,?,?,?,?,?)`)
         .bind('g-sgsi', PROJ, 'Lider SGSI', 'sgsi@cliente.com', 'tech', 'Líder do SGSI'),
@@ -76,10 +68,10 @@ describe('Assinatura do ROPA sai da matriz de governança, não de e-mail fixo',
         .bind('g-antigo', PROJ, 'Antigo Privilegiado', '44273656+resper1965@users.noreply.github.com', 'tech', 'Analista de Suporte'),
     ]);
 
-    liderSgsi = await sessionFor({ id: 'u-sgsi', email: 'sgsi@cliente.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-gov' });
-    direcao = await sessionFor({ id: 'u-ceo', email: 'ceo@cliente.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-gov' });
-    semCargo = await sessionFor({ id: 'u-outro', email: 'analista@cliente.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-gov' });
-    emailOutrora = await sessionFor({ id: 'u-antigo', email: '44273656+resper1965@users.noreply.github.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-gov' });
+    liderSgsi = await sessionFor({ id: 'u-sgsi', email: 'sgsi@cliente.com', role: 'org_admin', client_project_id: PROJ });
+    direcao = await sessionFor({ id: 'u-ceo', email: 'ceo@cliente.com', role: 'org_admin', client_project_id: PROJ });
+    semCargo = await sessionFor({ id: 'u-outro', email: 'analista@cliente.com', role: 'org_admin', client_project_id: PROJ });
+    emailOutrora = await sessionFor({ id: 'u-antigo', email: '44273656+resper1965@users.noreply.github.com', role: 'org_admin', client_project_id: PROJ });
   });
 
   it('o Líder SGSI designado assina como ciso', async () => {
