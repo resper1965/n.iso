@@ -94,6 +94,8 @@ export type Bindings = {
   CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
   /** Bucket da trilha de auditoria arquivada (src/trilha.ts). */
   TRILHA?: R2Bucket;
+  /** Só em requisição interna do /mcp (src/mcp/servidor.ts). Ver src/middleware/agente.ts. */
+  AGENTE?: import('./middleware/agente').PropsAgente;
 };
 
 export type Variables = {
