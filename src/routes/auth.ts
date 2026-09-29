@@ -98,31 +98,12 @@ authApp.post('/setup', async (c) => {
     
     const id = genId();
     const hash = await hashPassword(password);
-
-    /*
-     * O usuário semente é STAFF (`consultant`), e staff sem `conta_id` não
-     * alcança projeto nenhum nem o funil — ou seja, a instalação nova nascia
-     * inútil. Como aqui não existe "quem cria" de quem herdar a conta (o
-     * autenticador é o `SETUP_KEY`, não uma sessão), o bootstrap cria a DELE:
-     * id determinístico e `INSERT OR IGNORE`, então rodar duas vezes não
-     * duplica — mesma forma do backfill da migration 0032.
-     *
-     * Conta PRÓPRIA, e não a `conta-ness` do backfill, de propósito: numa base
-     * que já rodou a 0032 esta rota passaria a pendurar staff novo na carteira
-     * da consultoria existente, e um caminho protegido por chave de ambiente não
-     * é o lugar para isso. Quem nasce aqui nasce numa conta vazia, e
-     * `platform_admin` o move se for para outra.
-     */
+    
     await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO contas (id, tipo, nome, plano, status)
-       VALUES ('conta-bootstrap', 'msp', 'Conta inicial', 'interno', 'Active')`
-    ).run();
-
-    await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role, conta_id) VALUES (?, ?, ?, ?, 'consultant', 'conta-bootstrap')
+      `INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, 'consultant')
        ON CONFLICT(email) DO NOTHING`
     ).bind(id, email, hash, name).run();
-
+    
     return c.json({ ok: true, message: 'Seed user created or already exists' }, 201);
   } catch (e: any) {
     return erro500(c, 'Setup failed', e);

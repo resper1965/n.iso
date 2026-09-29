@@ -227,31 +227,10 @@ scimApp.post('/Users', async (c) => {
 
     const id = genId();
     const nome = String(corpo.displayName ?? corpo.name?.formatted ?? email.split('@')[0]);
-    // Escopo REAL do usuário provisionado, não só a coluna legada: `cliente_id`
-    // sai do projeto do token (mesma derivação do backfill da migration 0032) e
-    // a concessão em `acesso_projeto` é o que dá alcance ao papel comum. Sem as
-    // duas, o usuário que o IdP acaba de criar fica trancado fora do próprio
-    // projeto — `hidrataEscopo` não conserta, porque a sessão vem de `SELECT *`
-    // e traz as chaves com valor `null`, que é `!== undefined`.
-    const proj = await c.env.DB
-      .prepare('SELECT cliente_id FROM projects WHERE id = ?')
-      .bind(projectId)
-      .first<{ cliente_id: string | null }>();
     await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id, ativo)
-       VALUES (?,?,?,?,?,?,?,?)`
-    ).bind(id, email, 'scim:sem-senha-local', nome, PAPEL_PROVISIONADO, projectId, proj?.cliente_id ?? null, corpo.active === false ? 0 : 1).run();
-    // `PAPEL_PROVISIONADO` é `org_user` — papel COMUM, que alcança só o que lhe
-    // foi concedido. Se algum dia virar `org_admin`, a concessão deixa de ser
-    // necessária (ele passa a ver a empresa inteira) mas não passa a ser errada.
-    // `if (proj)`: `acesso_projeto.project_id` é FK NOT NULL, e token válido
-    // para projeto que já não existe abortaria o provisionamento no INSERT.
-    if (proj) {
-      await c.env.DB
-        .prepare('INSERT OR IGNORE INTO acesso_projeto (user_id, project_id) VALUES (?, ?)')
-        .bind(id, projectId)
-        .run();
-    }
+      `INSERT INTO users (id, email, password_hash, name, role, client_project_id, ativo)
+       VALUES (?,?,?,?,?,?,?)`
+    ).bind(id, email, 'scim:sem-senha-local', nome, PAPEL_PROVISIONADO, projectId, corpo.active === false ? 0 : 1).run();
 
     await logAudit(c.env.DB, 'scim.user_created', `scim:${projectId}`, `Conta ${email} provisionada por SCIM`, '', '', projectId);
 

@@ -328,16 +328,12 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
 
   beforeAll(async () => {
     await applySchema();
-    // Cadeia conta→cliente: sem ela `proj-m` nasce órfão e nem o staff da
-    // própria conta alcança o projeto.
-    await env.DB.prepare(`INSERT OR IGNORE INTO contas (id, tipo, nome, status) VALUES ('conta-vc', 'msp', 'Conta VC', 'Active')`).run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO clientes (id, conta_id, nome, status) VALUES ('cli-vc', 'conta-vc', 'Cliente M', 'Active')`).run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-      .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active', 'cli-vc').run();
-    await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role, conta_id) VALUES (?,?,?,?,?,?)`)
-      .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor', 'conta-vc').run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+      .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active').run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
+      .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor').run();
     staff = {
-      ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor', conta_id: 'conta-vc', cliente_id: null })),
+      ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor' })),
       'Content-Type': 'application/json',
     };
     // Insere preenchendo TODA coluna NOT NULL sem default. `INSERT OR IGNORE`
@@ -406,9 +402,8 @@ describe('Catraca de `any` nos caminhos de autorização', () => {
   const FUNCOES = [
     'requireResourceAccess',
     'requireProjectAccess',
-    'somenteMsp',
-    'somenteStaff',
-    'ehStaffDeConta',
+    'somenteNess',
+    'ehEquipeNess',
     'resolveApiKeyUser',
     'authMiddleware',
   ];

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, verifyPassword, erro500, ehStaffDeConta, hidrataEscopo, SQL_PROJETOS_DA_CONTA, AtorAutorizado } from '../helpers';
+import { logAudit, requireResourceAccess, verifyPassword, erro500 } from '../helpers';
 import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
 import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
@@ -36,33 +36,16 @@ export function recusaAplicabilidade(atual: EstadoControle, entrada: EstadoContr
   return 'Controle não aplicável exige justificativa de exclusão: a SoA não aceita exclusão de escopo sem registro.';
 }
 
-/*
- * Mesma forma de `GET /api/v1/projects`, e o mesmo defeito: allowlist de papel-
- * CLIENTE e, para todo o resto, `SELECT * FROM compliance_controls` sem `WHERE`
- * nenhum — os controles de TODAS as consultorias, com título, descrição, status
- * e assinatura. Encontrado pela varredura de rota SEM PARÂMETRO do
- * `contrato-isolamento-topo`, que é justamente o que nenhuma varredura anterior
- * enxergava.
- *
- * Três ramos, os mesmos de `projetosDoAtor`: `platform_admin` global, staff pela
- * cadeia `projects.cliente_id → clientes.conta_id`, qualquer outro papel preso
- * ao próprio `client_project_id` (que pode ser vazio, e vazio não casa com nada).
- */
 controlsApp.get('/', async (c) => {
   const user = c.get('user');
-  let stmt;
-  if (user?.role === 'platform_admin') {
-    stmt = c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC');
-  } else if (ehStaffDeConta(user)) {
-    await hidrataEscopo(c.env.DB, user as AtorAutorizado);
-    stmt = c.env.DB.prepare(
-      `SELECT * FROM compliance_controls WHERE project_id IN (${SQL_PROJETOS_DA_CONTA}) ORDER BY id ASC`
-    ).bind((user as AtorAutorizado)?.conta_id ?? '');
-  } else {
-    stmt = c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC')
-      .bind(user?.client_project_id ?? '');
+  if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
+    if (!user.client_project_id) {
+      return c.json([]);
+    }
+    const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(user.client_project_id).all();
+    return c.json(results || []);
   }
-  const { results } = await stmt.all();
+  const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC').all();
   return c.json(results || []);
 });
 

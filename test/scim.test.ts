@@ -35,28 +35,15 @@ describe('SCIM 2.0', () => {
     await resetData();
     await resetSessions();
     const senha = await hashPassword('password123');
-    // Cadeia conta→cliente: a MAIOR parte deste arquivo usa `/scim/v2/*`
-    // (autenticação por token de `project_scim`, nunca por sessão/`cliente_id`)
-    // e `/api/v1/portfolio` (rota legada por `client_project_id`, fora do
-    // `projectAccessMiddleware`) — nenhum dos dois precisa da cadeia. O único
-    // ponto que precisa é `POST /api/v1/projects/:projectId/scim-token`, que
-    // PASSA pelo middleware antes do próprio gate de papel (`somenteStaff`).
-    await env.DB.prepare(`INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-scim', 'msp', 'Conta SCIM', 'Active')`).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-scim-a', 'conta-scim', 'Cliente A', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-scim-b', 'conta-scim', 'Cliente B', 'Active')`),
-    ]);
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-scim-a'),
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active', 'cli-scim-b'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind('u-a1', 'pessoa@a.com', senha, 'Pessoa do A', 'org_user', A, 'cli-scim-a'),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, cliente_id) VALUES (?,?,?,?,?,?,?)`)
-        .bind('u-b1', 'pessoa@b.com', senha, 'Pessoa do B', 'org_user', B, 'cli-scim-b'),
-      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('u-a1', ?)`).bind(A),
-      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('u-b1', ?)`).bind(B),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-a1', 'pessoa@a.com', senha, 'Pessoa do A', 'org_user', A),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-b1', 'pessoa@b.com', senha, 'Pessoa do B', 'org_user', B),
     ]);
     await env.DB.batch([
       env.DB.prepare('INSERT INTO project_scim (project_id, token_hash) VALUES (?,?)').bind(A, await sha256Hex(TOKEN_A)),
@@ -279,7 +266,7 @@ describe('SCIM 2.0', () => {
         'Content-Type': 'application/json',
       };
       const cliente = {
-        ...(await sessionFor({ id: 'u-a1', email: 'pessoa@a.com', role: 'org_user', client_project_id: A, conta_id: null, cliente_id: 'cli-scim-a', iat: Date.now() })),
+        ...(await sessionFor({ id: 'u-a1', email: 'pessoa@a.com', role: 'org_user', client_project_id: A, iat: Date.now() })),
         'Content-Type': 'application/json',
       };
 

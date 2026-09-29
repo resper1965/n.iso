@@ -16,15 +16,9 @@ describe('PUT /projects/:id — scope gravável', () => {
     await resetData();
     await resetSessions();
     await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-psn1', 'msp', 'Conta PSN1', 'Active')`
+      `INSERT INTO projects (id, client_name, standards, org_role, status, scope) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','... (us-east-1) ...')`
     ).run();
-    await env.DB.prepare(
-      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-psn1', 'conta-psn1', 'C', 'Active')`
-    ).run();
-    await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, standards, org_role, status, scope, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','... (us-east-1) ...','cli-psn1')`
-    ).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', conta_id: 'conta-psn1', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   it('grava scope e o GET reflete', async () => {
@@ -43,15 +37,9 @@ describe('PUT /projects/:id/phases/:num — grava por número, 404 se inexistent
     await applySchema();
     await resetData();
     await resetSessions();
-    await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-psn2', 'msp', 'Conta PSN2', 'Active')`
-    ).run();
-    await env.DB.prepare(
-      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-psn2', 'conta-psn2', 'C', 'Active')`
-    ).run();
-    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','cli-psn2')`).run();
+    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr1','C','ISO 27001:2022','Controller','Active')`).run();
     await env.DB.prepare(`INSERT INTO project_phases (id, project_id, phase_number, title, status) VALUES ('ph-abc','pr1',0,'Mobilização','pending')`).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', conta_id: 'conta-psn2', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
+    headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const put = (num: string, body: unknown) =>

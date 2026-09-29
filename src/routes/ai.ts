@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireProjectAccess, hidrataEscopo } from '../helpers';
+import { logAudit, requireProjectAccess } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
 import { validateBody, chatSchema } from '../schemas';
@@ -285,8 +285,7 @@ aiApp.post('/mcp/execute', async (c) => {
   const projectId = args?.project_id;
   if (!projectId) return c.json({ error: 'project_id é obrigatório' }, 400);
   try {
-    await hidrataEscopo(c.env.DB, c.get('user'));
-    await requireProjectAccess(c.env.DB, c.get('user'), projectId);
+    requireProjectAccess(c.get('user'), projectId);
   } catch {
     return c.json({ error: 'Sem acesso a este projeto' }, 403);
   }

@@ -1,6 +1,0 @@
-# SQL sempre em LF no working tree, independente de `core.autocrlf`.
-#
-# `test/helpers/d1.ts` lê estes arquivos e os divide em statements. O parser já
-# normaliza `\r`, mas manter a origem em LF evita a classe inteira: nenhuma
-# ferramenta que leia SQL linha a linha precisa lembrar de tratar CRLF.
-*.sql text eol=lf

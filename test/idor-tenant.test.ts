@@ -42,35 +42,20 @@ describe('IDOR cross-tenant nos routers de topo', () => {
     await applySchema();
     const senha = await hashPassword('password123');
 
-    // Cadeia conta→cliente: A e B são clientes DISTINTOS, o que é o que torna a
-    // sessão de A ilegítima em B — sem isto, o projeto nasce órfão e nem o
-    // dono alcança.
-    await env.DB.prepare(
-      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-idor', 'msp', 'Conta IDOR', 'Active')`
-    ).run();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-idor-a', 'conta-idor', 'Cliente A', 'Active')`),
-      env.DB.prepare(`INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-idor-b', 'conta-idor', 'Cliente B', 'Active')`),
-    ]);
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active'),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active'),
 
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(A, 'Cliente A', 'ISO 27001', 'controller', 'Active', 'cli-idor-a'),
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind(B, 'Cliente B', 'ISO 27001', 'controller', 'Active', 'cli-idor-b'),
-
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-adm-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', 'cli-idor-a'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-adm-a', 'adm@a.com', senha, 'Admin do A', 'org_admin', A),
       // `users.role` é TEXT livre e `createUserSchema.role` é `z.string()`:
       // este papel é criável hoje, e era ele que furava a matriz de governança.
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, cliente_id) VALUES (?,?,?,?,?,?)`)
-        .bind('u-ciso-a', 'ciso@a.com', senha, 'CISO do A', 'ciso', 'cli-idor-a'),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
+        .bind('u-ciso-a', 'ciso@a.com', senha, 'CISO do A', 'ciso', A),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`)
         .bind('u-staff', 'staff@ness.io', senha, 'Staff ness.', 'platform_admin', null),
-
-      // `ciso` não é PAPEL ADMIN DE CLIENTE (só `org_admin` vê a empresa
-      // inteira): precisa da concessão explícita para alcançar o projeto A.
-      env.DB.prepare(`INSERT INTO acesso_projeto (user_id, project_id) VALUES ('u-ciso-a', ?)`).bind(A),
 
       // O ator do A é o Líder SGSI do PRÓPRIO projeto — é isso que torna a
       // assinatura dele legítima em A e ilegítima em B.
@@ -123,8 +108,8 @@ describe('IDOR cross-tenant nos routers de topo', () => {
         .bind('prop-x', 'lead-x', 'as-x', 'Draft', 250000, '<p>preco confidencial</p>'),
     ]);
 
-    orgAdminA = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-idor-a' });
-    cisoA = await sessionFor({ id: 'u-ciso-a', email: 'ciso@a.com', role: 'ciso', conta_id: null, cliente_id: 'cli-idor-a' });
+    orgAdminA = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A });
+    cisoA = await sessionFor({ id: 'u-ciso-a', email: 'ciso@a.com', role: 'ciso', client_project_id: A });
     staff = await sessionFor({ id: 'u-staff', email: 'staff@ness.io', role: 'platform_admin' });
     jsonA = { ...orgAdminA, 'Content-Type': 'application/json' };
     jsonCiso = { ...cisoA, 'Content-Type': 'application/json' };
