@@ -256,7 +256,7 @@ export function documentoOpenApi(origem?: string): Record<string, unknown> {
         'no item 3.3 do plano, contadas pela catraca de `test/validacao-corpo.test.ts`.',
       ].join('\n'),
     },
-    servers: [{ url: origem ?? 'https://niso.ness.workers.dev' }],
+    servers: [{ url: origem ?? 'https://niso.ness.com.br' }],
     components: {
       securitySchemes: {
         sessao: { type: 'http', scheme: 'bearer', description: 'Token de sessão do login' },

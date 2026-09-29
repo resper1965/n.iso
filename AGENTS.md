@@ -24,7 +24,7 @@ Entao:
   commit publicado, injetado no deploy:
 
   ```
-  curl -s https://niso.ness.workers.dev/health
+  curl -s https://niso.ness.com.br/health
   # {"status":"ok","version":"<sha>","deployment_id":"...","deployed_at":"..."}
   ```
 
@@ -36,7 +36,7 @@ Entao:
 
   ```
   curl -s -X POST -H "Content-Type: application/json" -d "{}" \
-    https://niso.ness.workers.dev/api/v1/auth/login
+    https://niso.ness.com.br/api/v1/auth/login
   ```
 
   Codigo atual devolve o envelope completo:

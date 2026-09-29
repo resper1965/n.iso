@@ -183,7 +183,7 @@ app.get('/.well-known/security.txt', (c) => {
       'Contact: https://github.com/resper1965/nISO/security/advisories/new',
       `Expires: ${expira}`,
       'Preferred-Languages: pt-BR, en',
-      'Canonical: https://niso.ness.workers.dev/.well-known/security.txt',
+      'Canonical: https://niso.ness.com.br/.well-known/security.txt',
       'Policy: https://github.com/resper1965/nISO/blob/main/SECURITY.md',
       '',
     ].join('\n'),

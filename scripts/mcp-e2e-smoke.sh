@@ -9,7 +9,7 @@
 # as duas chaves e o id do projeto de teste.
 #
 # Uso:
-#   NISO_BASE_URL=https://niso.ness.workers.dev \
+#   NISO_BASE_URL=https://niso.ness.com.br \
 #   PROJ=<id-do-projeto-de-teste> \
 #   KEY_CONSULTANT=<chave-e2e-consultor> \
 #   KEY_AUDITOR=<chave-e2e-auditor> \
@@ -21,7 +21,7 @@
 
 set -u
 
-BASE="${NISO_BASE_URL:-https://niso.ness.workers.dev}"
+BASE="${NISO_BASE_URL:-https://niso.ness.com.br}"
 PROJ="${PROJ:-}"
 KEY_CONSULTANT="${KEY_CONSULTANT:-}"
 KEY_AUDITOR="${KEY_AUDITOR:-}"
