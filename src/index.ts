@@ -28,6 +28,7 @@ import { publicApp } from './routes/public';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
+import { agentesApp } from './routes/agentes';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
 import { documentoOpenApi } from './openapi';
@@ -363,6 +364,7 @@ app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp)
 
 app.route('/api/v1', aiApp);
 app.route('/api/v1', governanceApp);
+app.route('/api/v1', agentesApp);
 app.route('/api/v1', auditorApp);
 app.route('/api/v1', platformApp);
 
