@@ -112,9 +112,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   (`src/routes/oauth-autorizacao.ts`); principal agente em
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
   tabela `agente_concessoes`; KV `OAUTH_KV`. Regra: **so `ROTAS_OAUTH` passam
-  pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. O id do
-  KV `OAUTH_KV` precisa ser criado (`npx wrangler kv namespace create OAUTH_KV`)
-  e estar no `wrangler.jsonc` antes do deploy. Recurso fixo em
+  pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. KV
+  `OAUTH_KV` (id `fc8dfff4…`) e `staging-OAUTH_KV` (id `9d9d24c0…`) criados em
+  2026-09-29 e declarados no `wrangler.jsonc`. Recurso fixo em
   `niso.ness.com.br`; verificacao nos quatro clientes (Claude Code, Cursor,
   Codex, Antigravity) ainda pendente ate o deploy.
 
