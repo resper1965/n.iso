@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Rota } from "./contrato-gerado.js";
+import type { Rota, Obrigatorios } from "./contrato-gerado.js";
 
 // Ferramentas MCP do nISO: definições, filtro por papel e despacho.
 // Módulo SEM efeito colateral (sem env, sem SDK do MCP, sem fetch próprio): o
@@ -10,7 +10,11 @@ import type { Rota } from "./contrato-gerado.js";
 export interface Transporte {
   get(path: string): Promise<unknown>;
   enviar(path: string, corpo?: unknown, method?: "POST" | "PUT" | "PATCH"): Promise<unknown>;
-  contrato<R extends Rota>(rota: R, params: Record<string, string>, corpo: unknown): Promise<unknown>;
+  contrato<R extends Rota>(
+    rota: R,
+    params: Record<string, string>,
+    corpo: Record<Obrigatorios<R>, unknown> & Record<string, unknown>
+  ): Promise<unknown>;
   uploadTexto(path: string, campos: Record<string, string>, conteudo: string, nomeArquivo: string): Promise<unknown>;
 }
 
@@ -410,6 +414,13 @@ export async function executarFerramenta(
   t: Transporte,
   opts: { projetoFixo?: string; papel: Papel }
 ): Promise<Resultado> {
+  // O papel é imposto aqui também: o MCP remoto não passa pelo guard do stdio.
+  if (!ferramentaPermitida(nome, opts.papel)) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: `Error: Ferramenta ${nome} indisponível para o papel configurado` }],
+    };
+  }
   // Recusa chamada a projeto diferente do fixado na sessão.
   const fora = (projectId: string) => {
     if (opts.projetoFixo && projectId !== opts.projetoFixo) {

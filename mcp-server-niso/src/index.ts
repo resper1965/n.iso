@@ -275,8 +275,7 @@ const PAPEL: Papel = NISO_READONLY ? "readonly" : (NISO_ROLE as Papel);
 const transporteHttp: Transporte = {
   get: nisoGet,
   enviar: nisoPost,
-  contrato: (rota, params, corpo) =>
-    nisoContrato(rota, params, corpo as Parameters<typeof nisoContrato>[2]),
+  contrato: nisoContrato,
   uploadTexto: nisoUploadText,
 };
 

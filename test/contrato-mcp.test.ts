@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ROTAS } from '../mcp-server-niso/src/contrato-gerado';
 import spec from '../docs/openapi.json';
 import mcpSrc from '../mcp-server-niso/src/ferramentas.ts?raw';
-import { TOOLS, ferramentaPermitida } from '../mcp-server-niso/src/ferramentas';
+import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte } from '../mcp-server-niso/src/ferramentas';
 
 /**
  * O MCP consome o contrato, não strings (item 3.2 do `enterprise-grade-plan.md`).
@@ -87,5 +87,12 @@ describe('ferramentas.ts é a fonte única das ferramentas MCP', () => {
     expect(ferramentaPermitida('niso_generate_policy', 'auditor')).toBe(false);
     expect(ferramentaPermitida('niso_create_audit_finding', 'consultant')).toBe(false);
     expect(ferramentaPermitida('niso_get_project', 'readonly')).toBe(true);
+  });
+  it('executarFerramenta impõe o papel sozinha, sem tocar o transporte', async () => {
+    const explode = () => { throw new Error('transporte não devia ser chamado'); };
+    const t = { get: explode, enviar: explode, contrato: explode, uploadTexto: explode } as unknown as Transporte;
+    const r = await executarFerramenta('niso_generate_policy', { projectId: 'p1' }, t, { papel: 'auditor' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('indisponível para o papel');
   });
 });
