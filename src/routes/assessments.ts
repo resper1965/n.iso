@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, hidrataEscopo, resolveCliente, linhaDoFunilDaConta, AtorAutorizado } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -15,7 +15,7 @@ export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variable
 // e o handler valida o `access_token` por conta própria.
 assessmentsApp.use('*', async (c, next) => {
   if (c.req.path.startsWith('/api/v1/assessments/public/')) return next();
-  return somenteNess(c, next);
+  return somenteMsp(c, next);
 });
 
 /** Traduz respostas do assessment para as chaves esperadas pelo SCORE_MAP */
@@ -131,12 +131,46 @@ assessmentsApp.post('/', async (c) => {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
 
+    const operador = c.get('user') as AtorAutorizado | undefined;
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+
+    // Você só opera o funil da SUA conta. Antes desta correção, a criação em
+    // si era permissiva de propósito (atribuía certo, mas deixava passar) —
+    // e isso produzia um registro que o próprio criador não conseguia depois
+    // operar: `/convert` e `/sign` já recusam (404) quem não é da conta de
+    // origem, então um assessment criado sobre lead alheio nascia poluindo a
+    // carteira do concorrente com o próximo passo travado. Fechado: lead de
+    // OUTRA conta responde 404 (não 403 — confirmaria a existência do lead na
+    // consultoria concorrente), com as MESMAS duas exceções que sempre
+    // valeram para a regra de atribuição (Ruling 14, que continua viva, só
+    // deixa de ser exercida por operador alheio):
+    //   - `platform_admin`, o único papel global;
+    //   - lead SEM DONO (`conta_id` nulo) — cai no operador, que é o
+    //     fallback da própria fórmula de atribuição logo abaixo.
+    //
+    // `lead_id` INEXISTENTE também responde 404, no mesmo `if` — não um `if`
+    // separado que deixaria passar (201) exatamente quando o id não resolve
+    // linha nenhuma. Deixar essas duas respostas diferentes (404 para
+    // alheio, 201 para inexistente) é um oráculo de existência: a diferença
+    // sozinha responde "esse id existe em outra consultoria?", que é
+    // precisamente o que a decisão de 404 existe para negar.
+    const lead = body.lead_id
+      ? await c.env.DB.prepare('SELECT conta_id FROM leads WHERE id = ?').bind(body.lead_id).first<{ conta_id: string | null }>()
+      : null;
+    if (body.lead_id && (
+      !lead ||
+      (operador?.role !== 'platform_admin' && lead.conta_id !== null && lead.conta_id !== (operador?.conta_id ?? null))
+    )) {
+      return c.json({ error: 'Lead não encontrado' }, 404);
+    }
+
     const id = genId();
     const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
+    const contaId = lead?.conta_id ?? (operador?.conta_id ?? null);
     await c.env.DB.prepare(
-      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, created_at)
-       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, datetime('now'))`
-    ).bind(id, body.lead_id || null, body.client_name, accessToken).run();
+      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, conta_id, created_at)
+       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
+    ).bind(id, body.lead_id || null, body.client_name, accessToken, contaId).run();
 
     if (body.lead_id) {
       await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
@@ -197,10 +231,14 @@ assessmentsApp.post('/public/:token/answers', async (c) => {
 
 assessmentsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM assessments ORDER BY created_at DESC'
-    ).all();
-    return c.json(results);
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const contaId = user?.role === 'platform_admin' ? null : (user?.conta_id ?? null);
+    const { results } = contaId
+      ? await c.env.DB.prepare('SELECT * FROM assessments WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
+      : await c.env.DB.prepare('SELECT * FROM assessments ORDER BY created_at DESC').all();
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // listagem pela mesma razão de `GET /:id`.
+    return c.json((results as any[]).map(({ conta_id, ...assessment }) => assessment));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar assessments', e);
   }
@@ -209,15 +247,18 @@ assessmentsApp.get('/', async (c) => {
 assessmentsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const progress = await c.env.DB.prepare(
       'SELECT COUNT(DISTINCT block) as answered_blocks FROM assessment_answers WHERE assessment_id = ?'
     ).bind(id).first<{ answered_blocks: number }>();
 
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // resposta pela mesma razão de `GET /leads/:id` e `GET /proposals/:id`.
+    const { conta_id, ...assessmentSemConta } = assessment;
     return c.json({
-      ...assessment,
+      ...assessmentSemConta,
       answered_blocks: progress?.answered_blocks ?? 0,
       total_blocks: 10,
     });
@@ -229,6 +270,8 @@ assessmentsApp.get('/:id', async (c) => {
 assessmentsApp.get('/:id/answers', async (c) => {
   try {
     const id = c.req.param('id');
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
+    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     const { results } = await c.env.DB.prepare(
       'SELECT block, question_key, answer, notes FROM assessment_answers WHERE assessment_id = ? ORDER BY block ASC'
     ).bind(id).all();
@@ -242,7 +285,7 @@ assessmentsApp.get('/:id/block/:num', async (c) => {
   try {
     const id = c.req.param('id');
     const num = parseInt(c.req.param('num'), 10);
-    const assessment = await c.env.DB.prepare('SELECT id FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (num < 1 || num > 10) return c.json({ error: 'Bloco deve ser entre 1 e 10' }, 400);
 
@@ -269,7 +312,7 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
   try {
     const id = c.req.param('id');
     const num = parseInt(c.req.param('num'), 10);
-    const assessment = await c.env.DB.prepare('SELECT id, status FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (num < 1 || num > 10) return c.json({ error: 'Bloco deve ser entre 1 e 10' }, 400);
 
@@ -312,6 +355,8 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
 assessmentsApp.get('/:id/pricing', async (c) => {
   try {
     const id = c.req.param('id');
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
+    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     const { results: answers } = await c.env.DB.prepare(
       'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
     ).bind(id).all<{ question_key: string; answer: string }>();
@@ -342,8 +387,11 @@ assessmentsApp.put('/:id', async (c) => {
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
     if (body.client_name) { updates.push('client_name = ?'); values.push(body.client_name); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+    const user = c.get('user') as AtorAutorizado | undefined;
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    let sql = `UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`;
+    if (user?.role !== 'platform_admin') { sql += ' AND conta_id = ?'; values.push(user?.conta_id ?? null); }
+    await c.env.DB.prepare(sql).bind(...values).run();
     await logAudit(c.env.DB, 'assessment.updated', c.get('user')?.email ?? 'system', `Assessment ${id} atualizado: ${updates.join(', ')}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -361,8 +409,11 @@ assessmentsApp.put('/:id/pricing', async (c) => {
     if (body.desconto !== undefined) { updates.push('pricing_desconto = ?'); values.push(body.desconto || null); }
     if (body.notas !== undefined) { updates.push('pricing_notas = ?'); values.push(body.notas || null); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+    const user = c.get('user') as AtorAutorizado | undefined;
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    let sql = `UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`;
+    if (user?.role !== 'platform_admin') { sql += ' AND conta_id = ?'; values.push(user?.conta_id ?? null); }
+    await c.env.DB.prepare(sql).bind(...values).run();
     await logAudit(c.env.DB, 'assessment.pricing_override', c.get('user')?.email ?? 'system', `Pricing ajustado no assessment ${id}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -375,7 +426,14 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
     const id = c.req.param('id');
     const user = c.get('user');
 
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
+    // O operador tem de ser da MESMA conta que vendeu (ou `platform_admin`).
+    // A Task 6 acertou a ATRIBUIÇÃO — a proposta gerada nasce na conta que
+    // vendeu o assessment, nunca na do operador —, mas atribuição correta não
+    // consertava a MUTAÇÃO em si: sem este gate, staff de outra consultoria
+    // gerava proposta (preço, HTML) a partir do questionário alheio. Alheio
+    // responde como inexistente, não 403: dizer 403 confirmaria a existência
+    // do assessment na consultoria concorrente.
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, user as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const { results: answers } = await c.env.DB.prepare(
@@ -418,10 +476,25 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 
     const proposalId = genId();
     const contentHtml = `<p>Proposta ${escapeHtml(meta.proposalNum)} para ${escapeHtml(meta.razaoSocial)}</p>`; // HTML proposal template
+    // A proposta herda a conta de quem vendeu o assessment que a origina. Sem
+    // isso, /sign teria só o operador de então como fonte de conta.
+    await hidrataEscopo(c.env.DB, user ?? {});
+    const contaId = assessment.conta_id ?? (user as AtorAutorizado | undefined)?.conta_id ?? null;
+    // `assessment.lead_id` é um id GRAVADO dentro da linha já verificada
+    // acima — não validado por si só ("id lavado", achado da revisão). O
+    // gate de `POST /assessments` garante isso para assessment criado daqui
+    // pra frente, mas não para um assessment de ANTES desse gate existir.
+    // Gravar um `lead_id` alheio aqui plantaria o MESMO vazamento na
+    // proposta recém-criada: a listagem (`GET /proposals`, que faz `LEFT
+    // JOIN leads`) devolveria nome e CNPJ do prospect alheio dentro de uma
+    // listagem corretamente escopada por `conta_id`.
+    const leadDoAssessment = assessment.lead_id
+      ? await linhaDoFunilDaConta(c.env.DB, 'leads', assessment.lead_id, user as AtorAutorizado | undefined)
+      : null;
     await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'Draft', datetime('now'))`
-    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal).run();
+      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, conta_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'Draft', ?, datetime('now'))`
+    ).bind(proposalId, leadDoAssessment ? assessment.lead_id : null, id, contentHtml, pricing.precoFinal, contaId).run();
 
     await logAudit(c.env.DB, 'proposal.generated', user?.email ?? 'system', `Proposta ${proposalId} gerada automaticamente do assessment ${id}.`);
     await createNotification(c.env.DB, 'proposal_ready', `Proposta gerada: ${clientName}`, `Tier ${pricing.tier.name}`, user?.id, `/proposals/${proposalId}`);
@@ -435,7 +508,14 @@ assessmentsApp.post('/:id/generate-proposal', async (c) => {
 assessmentsApp.post('/:id/convert', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
+    // Mesmo gate de `/generate-proposal` acima, e pela mesma razão: `/convert`
+    // MUTA o assessment (`status = 'converted'`) e materializa cliente e
+    // projeto — a atribuição da Task 6 garante que o projeto nasce na conta
+    // que vendeu, mas não impedia um staff de OUTRA consultoria de disparar
+    // essa mutação irreversível sobre o funil alheio. Alheio responde 404,
+    // não 403 (mesma razão de sempre: 403 confirmaria a existência do
+    // registro na consultoria concorrente).
+    const assessment = await linhaDoFunilDaConta(c.env.DB, 'assessments', id, c.get('user') as AtorAutorizado | undefined);
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (assessment.converted_project_id) return c.json({ error: 'Assessment já foi convertido', project_id: assessment.converted_project_id }, 409);
 
@@ -450,10 +530,38 @@ assessmentsApp.post('/:id/convert', async (c) => {
     const standards = answerMap.get('target_standard') ?? 'ISO 27001';
     const orgRole = answerMap.get('data_role') ?? '';
 
+    // A conta é a de quem CONDUZIU A VENDA, não a de quem clicou em converter:
+    // este roteador não garante que o operador pertence à conta de origem
+    // (`somenteMsp` exige papel de staff e conta tipo `msp`, mas não que seja
+    // A MESMA conta da origem), então usuário primeiro materializaria a venda
+    // de uma consultoria na carteira de outra. Origem primeiro; usuário só
+    // entra quando a origem não tem conta gravada (assessment anterior à
+    // Task 6 / migration 0031).
+    await hidrataEscopo(c.env.DB, c.get('user') ?? {});
+    const contaId = assessment.conta_id ?? (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
+    if (!contaId) {
+      return c.json({ error: 'conta_id é obrigatório para quem não é staff de uma conta' }, 400);
+    }
+    // CNPJ mora no lead (a um join de distância), não no assessment.
+    // `assessment.lead_id` é um id GRAVADO dentro de uma linha já verificada
+    // — a verificação de cima não valida o que está gravado dentro dela
+    // ("id lavado", achado da revisão). O gate de `POST /assessments`
+    // garante isso para assessment CRIADO daqui pra frente, mas não limpa o
+    // passado: um assessment de antes desse gate existir pode carregar
+    // `lead_id` de outra consultoria. Sem revalidar, o CNPJ alheio vazaria
+    // para `resolveCliente` e passaria a existir como cliente na carteira de
+    // quem converteu — dado real de uma empresa que nem é prospect desta
+    // conta. `linhaDoFunilDaConta` devolve `null` para lead inexistente ou de
+    // outra conta; o `cnpj` cai fora e `resolveCliente` casa por nome.
+    const leadDoAssessment = assessment.lead_id
+      ? await linhaDoFunilDaConta(c.env.DB, 'leads', assessment.lead_id, c.get('user') as AtorAutorizado | undefined)
+      : null;
+    const clienteId = await resolveCliente(c.env.DB, contaId, assessment.client_name, leadDoAssessment?.cnpj);
+
     await c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
-    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id).run();
+      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, cliente_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, datetime('now'))`
+    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id, clienteId).run();
 
     await seedPhases(c.env.DB, projectId);
 

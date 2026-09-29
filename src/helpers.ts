@@ -139,8 +139,127 @@ export async function createNotification(
  * devolveria o buraco pela porta dos fundos.
  */
 export interface AtorAutorizado {
+  id?: string;
   role?: string;
   client_project_id?: string | null;
+  /** Conta a que o staff pertence. Vazio para usuário de cliente e platform_admin. */
+  conta_id?: string | null;
+  /** Empresa a que o usuário de cliente pertence. Vazio para staff. */
+  cliente_id?: string | null;
+}
+
+/**
+ * Completa `conta_id`/`cliente_id` a partir do banco quando a sessão não os traz.
+ *
+ * A sessão é escrita no login com `{...user}` de um `SELECT *`, então normalmente
+ * já vem completa. Duas situações fogem disso e as duas são reais: sessão emitida
+ * ANTES desta mudança (vive até 24 h pelo teto de `SESSION_TTL_SEC`), e sessão
+ * criada por caminho que não é o login — SSO e SCIM montam usuário por conta
+ * própria.
+ *
+ * Sem isto, escopo ausente cairia no ramo escopado e a pessoa tomaria 403 em
+ * tudo. Fail-closed é a direção certa para papel DESCONHECIDO, mas trancar quem
+ * tem direito por causa do formato da sessão é o outro erro — e é o caro.
+ *
+ * Janela de validade: a cadeia `projeto → cliente → conta` que `requireProjectAccess`
+ * consulta depois é lida AO VIVO a cada chamada — cliente que muda de consultoria
+ * tem efeito imediato, que é o caso que mais importa. Quem fica velho é o escopo
+ * DO PRÓPRIO USUÁRIO (`conta_id`/`cliente_id`), porque ele mora na sessão: uma
+ * sessão emitida antes do desligamento de um consultor continua com o `conta_id`
+ * antigo até expirar (teto de `SESSION_TTL_SEC`, até 24 h) ou até a sessão ser
+ * invalidada explicitamente com `invalidateUserSessions` (definida mais abaixo
+ * neste mesmo arquivo). Um fluxo de desligamento/troca de consultoria que só
+ * atualize `users.conta_id`/`cliente_id` sem chamar `invalidateUserSessions`
+ * deixa a pessoa desligada com acesso por até 24 h.
+ */
+export async function hidrataEscopo(db: D1Database, user: AtorAutorizado): Promise<void> {
+  if (user.conta_id !== undefined || user.cliente_id !== undefined) return;
+  if (!user.id) return;
+  const row = await db
+    .prepare('SELECT conta_id, cliente_id FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ conta_id: string | null; cliente_id: string | null }>();
+  if (!row) return;
+  user.conta_id = row.conta_id;
+  user.cliente_id = row.cliente_id;
+}
+
+/**
+ * Devolve o id do cliente daquele nome dentro daquela conta, criando-o se ainda
+ * não existir.
+ *
+ * A ordem de busca não é estética. CNPJ é a chave REAL de uma empresa, então
+ * quando ele vem, decide sozinho — é o que faz "Acme S.A." e "Acme SA" caírem no
+ * mesmo cliente em vez de virarem duas empresas com evidência partida ao meio.
+ * Sem CNPJ, resta o nome, que é o que o produto sempre teve.
+ *
+ * A busca é SEMPRE dentro de `conta_id`. Duas consultorias podem atender
+ * empresas homônimas — e mesmo quando é a mesma empresa do mundo real, são
+ * clientes distintos aqui: cada consultoria enxerga só o seu, e fundi-los
+ * misturaria a evidência de duas carteiras.
+ */
+export async function resolveCliente(
+  db: D1Database,
+  contaId: string,
+  nome: string,
+  cnpj?: string | null
+): Promise<string> {
+  const limpo = (cnpj ?? '').replace(/\D/g, '');
+  if (limpo) {
+    const porCnpj = await db
+      .prepare('SELECT id FROM clientes WHERE conta_id = ? AND cnpj = ?')
+      .bind(contaId, limpo)
+      .first<{ id: string }>();
+    if (porCnpj) return porCnpj.id;
+  }
+  const porNome = await db
+    .prepare('SELECT id FROM clientes WHERE conta_id = ? AND nome = ?')
+    .bind(contaId, nome)
+    .first<{ id: string }>();
+  if (porNome) return porNome.id;
+
+  const id = genId();
+  await db
+    .prepare('INSERT INTO clientes (id, conta_id, nome, cnpj, status) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, contaId, nome, limpo || null, 'Active')
+    .run();
+  return id;
+}
+
+/**
+ * A conta que vai responder pelo projeto criado DIRETO por staff
+ * (`POST /projects`). Só serve a esse caminho — user-first é a ordem CERTA
+ * aqui porque não existe "registro de origem": quem está na tela É a origem.
+ *
+ * Staff carrega a própria conta. `platform_admin` não tem conta nenhuma — ele
+ * opera o SaaS — então precisa DIZER para qual conta está criando. Devolver
+ * `null` aqui é recusa: criar projeto sem conta produziria um órfão que ninguém
+ * alcança, e um 400 explícito é melhor que uma linha invisível no banco.
+ *
+ * NÃO USE isto em `assessments.ts:/:id/convert` ou `proposals.ts:/:id/sign`.
+ * Lá existe registro de origem (assessment/proposta) que já sabe qual conta
+ * conduziu a venda, e a ordem tem de ser INVERTIDA: origem primeiro, usuário
+ * como fallback só quando a origem não tem conta gravada. User-first nesses
+ * dois materializaria a venda de uma consultoria na carteira de quem meramente
+ * clicou em "converter"/"assinar" — que pode ser de OUTRA consultoria, porque
+ * nenhum dos dois roteadores garante que o operador pertence à conta de
+ * origem (isso é isolado, de propósito, para a Task 8/`somenteMsp`).
+ *
+ * O FALLBACK DO CORPO VALE SÓ PARA `platform_admin`, e a checagem de papel é o
+ * que faz a função cumprir o que este docstring sempre prometeu. Antes era
+ * `user?.conta_id ?? contaDoCorpo`: qualquer staff com `conta_id` NULO — que é
+ * o estado de todo consultor criado por `POST /users`, `SCIM` ou `SSO` enquanto
+ * nada em `src/` escrevia a coluna — podia mandar no corpo a `conta_id` da
+ * concorrente e materializar cliente e projeto na carteira DELA. A validação de
+ * `POST /projects` confirma que a conta EXISTE, nunca que é sua, então ela não
+ * fechava isso.
+ */
+export function contaCriadora(
+  user: AtorAutorizado | undefined,
+  contaDoCorpo?: string | null
+): string | null {
+  if (user?.conta_id) return user.conta_id;
+  return user?.role === 'platform_admin' ? (contaDoCorpo ?? null) : null;
 }
 
 const ALLOWED_TABLES = [
@@ -150,28 +269,181 @@ const ALLOWED_TABLES = [
   'performance_metrics', 'webhooks', 'api_keys', 'auditor_notes'
 ];
 
+/**
+ * Mesma pergunta de `requireProjectAccess`, feita a partir de um RECURSO: a
+ * linha pertence a um projeto, e o projeto responde pelo resto.
+ *
+ * Antes, staff passava direto e cliente era comparado com `client_project_id`.
+ * As duas pontas mudaram: staff agora é staff DE UMA CONTA, e o usuário de
+ * cliente pode ter mais de um projeto. Delegar a `requireProjectAccess` mantém
+ * UMA definição de alcance — duas definições divergem, e a que diverge para o
+ * lado permissivo é a que vaza.
+ */
 export async function requireResourceAccess(db: D1Database, table: string, resourceId: string, user: AtorAutorizado) {
   if (!ALLOWED_TABLES.includes(table)) {
     throw new Error('Invalid table');
   }
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
+  if (user.role === 'platform_admin') return true;
 
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
-  if (!row || row.project_id !== user.client_project_id) {
+  if (!row || !row.project_id) {
     throw new ForbiddenError('Forbidden: No access to this resource');
+  }
+  try {
+    await requireProjectAccess(db, user, row.project_id);
+  } catch (e) {
+    // Só recusa de autorização vira recusa de recurso. Qualquer outra exceção
+    // (falha de D1, por exemplo) segue subindo: mascará-la como 403 tiraria o
+    // erro do `registraErro` e entregaria ao cliente um "Forbidden" sem
+    // `request_id` para o suporte seguir.
+    if (e instanceof ForbiddenError) {
+      throw new ForbiddenError('Forbidden: No access to this resource');
+    }
+    throw e;
   }
   return true;
 }
 
 /**
- * Garante que o usuário tem acesso ao projeto. Papéis de staff (consultor/
- * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
- * seu client_project_id. Lança em caso de negação (fail-closed).
+ * O controle é DAQUELE projeto?
+ *
+ * `control_id` é a lavagem de id mais repetida da base: chega cru do corpo (ou
+ * do multipart), é gravado numa linha que o operador legitimamente possui, e
+ * depois é desreferenciado a partir dela por um `JOIN` que filtra só o dono da
+ * linha — nunca o dono do controle. `PUT /api/v1/evidence/:id` e o upload de
+ * evidência já enunciavam esta invariante em cópia local; `risks` e
+ * `auditor_notes` não. Aqui ela tem UMA definição.
+ *
+ * Uma consulta só, e recusa é recusa: controle inexistente e controle alheio
+ * respondem igual, para não dizer a quem sonda quais ids existem.
  */
-export function requireProjectAccess(user: AtorAutorizado, projectId: string): true {
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  if (user.client_project_id === projectId) return true;
+export async function controleEhDoProjeto(
+  db: D1Database,
+  controlId: string,
+  projectId: string
+): Promise<boolean> {
+  const ctrl = await db
+    .prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?')
+    .bind(controlId, projectId)
+    .first();
+  return !!ctrl;
+}
+
+/** Papéis do lado do cliente que enxergam a empresa INTEIRA, não só o concedido. */
+const PAPEIS_ADMIN_CLIENTE = new Set(['org_admin']);
+
+/**
+ * Garante que o usuário alcança o projeto.
+ *
+ * Deixou de ser comparação em memória porque a resposta agora depende da cadeia
+ * `projeto → cliente → conta`, que só o banco conhece. Desnormalizar `conta_id`
+ * em `projects` manteria isto síncrono e foi descartado: na saída do cliente
+ * `clientes.conta_id` muda, e cópia que não acompanhe em transação deixa a
+ * consultoria antiga enxergando os projetos. Divergência aqui é vazamento.
+ *
+ * `platform_admin` é o ÚNICO papel global: ele opera o SaaS. Consultor é staff de
+ * UMA conta e não enxerga a carteira das outras — foi essa distinção que faltava
+ * para a plataforma poder ser vendida a mais de uma consultoria.
+ *
+ * Projeto inexistente recusa com a mesma mensagem de projeto alheio: responder
+ * diferente diria a quem sonda quais ids existem.
+ */
+export async function requireProjectAccess(
+  db: D1Database,
+  user: AtorAutorizado,
+  projectId: string
+): Promise<true> {
+  if (user.role === 'platform_admin') return true;
+
+  const alvo = await db
+    .prepare('SELECT p.cliente_id, c.conta_id FROM projects p LEFT JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?')
+    .bind(projectId)
+    .first<{ cliente_id: string | null; conta_id: string | null }>();
+
+  if (!alvo) throw new ForbiddenError('Forbidden: No access to this project');
+
+  // Allowlist de PAPEL também aqui, simétrica à do ramo de cliente logo abaixo.
+  // Sem `PAPEIS_STAFF.has(...)`, qualquer papel com `users.conta_id` preenchido
+  // herdava a carteira inteira da conta — inclusive um papel que não deveria,
+  // como `auditor` (fora de `PAPEIS_STAFF` de propósito: audita, não administra
+  // a conta). Hoje nada em `src/` escreve `conta_id` fora do login, então isto
+  // era inalcançável — mas a assimetria era frágil, e `PAPEIS_STAFF` já existe.
+  if (user.conta_id && PAPEIS_STAFF.has(user.role ?? '') && alvo.conta_id && alvo.conta_id === user.conta_id) return true;
+
+  if (user.cliente_id && alvo.cliente_id && alvo.cliente_id === user.cliente_id) {
+    if (PAPEIS_ADMIN_CLIENTE.has(user.role ?? '')) return true;
+    const concedido = await db
+      .prepare('SELECT 1 FROM acesso_projeto WHERE user_id = ? AND project_id = ?')
+      .bind(user.id ?? '', projectId)
+      .first();
+    if (concedido) return true;
+  }
+
+  // Chave de API carrega o escopo na PRÓPRIA linha da chave (`api_keys.project_id`):
+  // não existe linha em `users` para `hidrataEscopo` achar, nem concessão a emitir.
+  // A dupla condição — ser ator de chave E o projeto bater — mantém isto fora do
+  // alcance de sessão humana, cuja `client_project_id` pode estar velha e cujo
+  // caminho legítimo é a concessão em `acesso_projeto`.
+  if (user.id?.startsWith('apikey:') && user.client_project_id === projectId) return true;
+
   throw new ForbiddenError('Forbidden: No access to this project');
+}
+
+/**
+ * Os projetos que o ator ALCANÇA — a versão em LISTA de `requireProjectAccess`.
+ *
+ * Existia em duas cópias, e é assim que uma delas fica para trás: `/portfolio`
+ * (`routes/platform.ts`) tinha os três ramos escopados e `GET /api/v1/projects`
+ * (`routes/projects.ts`) fazia `SELECT * FROM projects` sem `WHERE` nenhum para
+ * todo papel não-cliente — a carteira de TODAS as consultorias, por uma rota que
+ * devolve a mesma coisa que a outra. As duas rotas continuam existindo porque o
+ * envelope da resposta é diferente (array cru × `{ok, portfolio, projects}`) e
+ * o frontend lê os dois; o que passa a ter UMA definição é o escopo.
+ *
+ * Três ramos, na mesma ordem e com a mesma direção de falha do resto da camada:
+ *
+ * 1. `platform_admin` — o único papel global, opera o SaaS.
+ * 2. Staff de UMA conta — a cadeia `projects.cliente_id → clientes.conta_id`,
+ *    lida ao vivo (nada de `conta_id` desnormalizado em `projects`: cliente que
+ *    troca de consultoria move `clientes.conta_id`, e cópia que não acompanhe
+ *    deixaria a consultoria antiga enxergando o projeto).
+ * 3. Qualquer outro papel — inclusive um fora da lista conhecida, como `ciso` —
+ *    é escopado ao próprio `client_project_id`, que pode ser string VAZIA:
+ *    `WHERE id = ''` não casa com nada, então escopo ausente é NADA.
+ *
+ * `client_project_id` (coluna legada, preservada de propósito) segue sendo o
+ * critério do ramo 3 para não divergir de `/portfolio`, de `/client/dashboard`
+ * e das telas que ainda leem dela. Usuário de cliente criado pelos caminhos
+ * novos recebe `cliente_id` + `acesso_projeto` E `client_project_id`.
+ */
+/**
+ * Subconsulta dos projetos de uma conta, para escopar recurso que tem
+ * `project_id` mas não `conta_id`. Um `?`, que é a conta.
+ *
+ * Constante e não string literal repetida porque já vive em três consultas
+ * (`/dashboard`, `/dashboard/stats`, `GET /api/v1/controls`) e a cadeia
+ * `projects.cliente_id → clientes.conta_id` é a MESMA de `requireProjectAccess`.
+ */
+export const SQL_PROJETOS_DA_CONTA =
+  'SELECT p.id FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id WHERE cl.conta_id = ?';
+
+export async function projetosDoAtor(db: D1Database, user: AtorAutorizado | undefined): Promise<any[]> {
+  let stmt;
+  if (user?.role === 'platform_admin') {
+    stmt = db.prepare('SELECT * FROM projects ORDER BY created_at DESC');
+  } else if (ehStaffDeConta(user)) {
+    await hidrataEscopo(db, user!);
+    stmt = db
+      .prepare(
+        `SELECT p.* FROM projects p LEFT JOIN clientes cl ON cl.id = p.cliente_id
+         WHERE cl.conta_id = ? ORDER BY p.created_at DESC`
+      )
+      .bind(user!.conta_id ?? '');
+  } else {
+    stmt = db.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+  }
+  const { results } = await stmt.all();
+  return results ?? [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -201,6 +473,20 @@ export type PapelAssinatura = 'ciso' | 'ceo';
 
 /** Papéis que ADMINISTRAM a plataforma. Operar não é aprovar. */
 const PAPEIS_DE_PLATAFORMA = new Set(['platform_admin', 'admin']);
+
+/**
+ * O papel administra a PLATAFORMA (e não uma conta)?
+ *
+ * Exposto para que `POST/PUT /users` recuse ATRIBUIR papel de plataforma a quem
+ * não é `platform_admin`. Sem isso, qualquer `consultor` se auto-promovia:
+ * `PUT /users/<próprio id>` com `role: 'platform_admin'`, nova sessão, e a
+ * plataforma inteira. `admin` entra na lista porque o próprio `GET /users` o
+ * normaliza para `platform_admin` — bloquear só um dos dois nomes seria
+ * bloquear a grafia, não o poder.
+ */
+export function ehPapelDePlataforma(role: string | null | undefined): boolean {
+  return PAPEIS_DE_PLATAFORMA.has(role ?? '');
+}
 
 export interface AutoridadeAssinatura {
   /** A pessoa está designada na matriz DESTE projeto. */
@@ -264,51 +550,134 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
   return null;
 }
 
-/** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
-const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
+/**
+ * Papéis que OPERAM a plataforma ou prestam serviço — nunca papéis de cliente.
+ *
+ * Deliberadamente FORA daqui: `auditor`. O backfill (migration 0032) dá
+ * `conta_id` a `consultor`, `consultant` E `auditor`, porque os três pertencem
+ * à consultoria — mas isso responde só a "alcança projeto da conta?" (auditor
+ * sim, é por isso que tem `conta_id`), que é uma pergunta DIFERENTE de "vê o
+ * funil comercial?" (auditor não: ele audita o que já foi vendido, não vende).
+ * Não é inconsistência — não acrescente `auditor` aqui achando que é.
+ */
+const PAPEIS_STAFF = new Set(['consultor', 'consultant', 'platform_admin']);
 
 /**
- * O usuário é da equipe ness. (e não de um cliente)?
+ * O usuário é staff (e não gente do lado do cliente)?
  *
- * Existe para que a decisão "vê a plataforma inteira" seja tomada por
- * ALLOWLIST DE STAFF, nunca por allowlist de papel-cliente. A diferença é de
- * direção de falha, e ela já custou caro: `users.role` é TEXT livre e
- * `createUserSchema.role` é `z.string()`, então a lista de papéis-cliente
- * (`org_admin`/`org_user`/`client`) nunca é exaustiva — um papel fora dela,
- * como `ciso`, caía no ramo de plataforma e enxergava a carteira de TODOS os
- * tenants. Invertida, a lista desconhecida cai no ramo escopado, que é o lado
- * seguro de errar.
+ * Continua sendo ALLOWLIST DE STAFF, nunca allowlist de papel-cliente, e a razão
+ * está registrada em `src/helpers.ts` desde o incidente do `ciso`: `users.role` é
+ * TEXT livre e `createUserSchema.role` é `z.string()`, então a lista de
+ * papéis-cliente (`org_admin`/`org_user`/`client`) nunca é exaustiva — um papel
+ * fora dela, como `ciso`, caía no ramo de plataforma e enxergava a carteira de
+ * TODOS os tenants. Invertida, o papel desconhecido cai no ramo escopado — o
+ * lado seguro de errar.
  *
- * É o mesmo conjunto que `requireResourceAccess` e `requireProjectAccess` já
- * usam acima — deliberadamente a mesma fonte, para não haver duas definições
- * de "staff" que possam divergir.
+ * Perdeu o nome da ness porque a plataforma deixou de ser de uma consultoria só.
  */
-export function ehEquipeNess(user: { role?: string } | undefined | null): boolean {
-  return !!user && PAPEIS_NESS.has(user.role ?? '');
+export function ehStaffDeConta(user: { role?: string } | undefined | null): boolean {
+  return !!user && PAPEIS_STAFF.has(user.role ?? '');
 }
 
 /**
- * Guarda de papel para o pipeline comercial da ness. (lead → assessment →
- * proposta). Estes registros não pertencem a projeto nenhum: não existe
- * `project_id` para comparar, então `requireResourceAccess` não alcança essas
- * rotas e o isolamento tem de ser por PAPEL.
+ * Guarda de STAFF genérica — pergunta só "é staff desta conta?", nunca "esta
+ * conta vende para terceiros?".
  *
- * Sem esta guarda, o `org_admin` de um cliente — que o RBAC global deixa
- * escrever, porque a lista read-only só cobre `org_user` e `client` — lia a
- * carteira comercial inteira (contato, CNPJ, preço, HTML da proposta) de TODOS
- * os outros clientes e ainda aprovava ou excluía proposta alheia. Confirmado
- * por sonda: `GET /api/v1/proposals/:id` devolvia 200 com o `content_html` de
- * outro cliente e `DELETE` removia a linha.
+ * Serve para operação de PROJETO que o dono do projeto precisa alcançar
+ * independentemente de ter pré-venda: SCIM, SSO, política de segurança,
+ * verificação da trilha de auditoria. Conta `direto` é o cliente final que
+ * assina sozinho — ela não vende para ninguém, mas continua sendo dona do
+ * próprio projeto, então continua configurando o próprio SSO/SCIM/MFA.
+ *
+ * NÃO use isto no funil comercial (lead/assessment/proposta) — ali a
+ * pergunta certa é `somenteMsp`, logo abaixo.
  */
-export async function somenteNess(
+export async function somenteStaff(
   c: { get: (k: 'user') => AtorAutorizado | undefined; json: (b: unknown, s: 403) => Response },
   next: () => Promise<void>
 ) {
-  const user = c.get('user');
-  if (!user || !PAPEIS_NESS.has(user.role ?? '')) {
-    return c.json({ error: 'Forbidden: Área comercial restrita à equipe ness.' }, 403);
+  if (!ehStaffDeConta(c.get('user'))) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
   }
-  await next();
+  return next();
+}
+
+/**
+ * Guarda do funil comercial (lead → assessment → proposta) — E SÓ DELE.
+ *
+ * Duas condições, e a segunda é nova: ser staff NÃO basta, a conta precisa ser
+ * do tipo `msp`. Conta `direto` é o cliente final que assina sozinho — ele não
+ * vende para ninguém, então pré-venda não existe para ele.
+ *
+ * O QUE ISTO NÃO FAZ, e é preciso dizer porque o nome convida ao engano: esta
+ * guarda decide só quem ENTRA no roteador de leads/assessments/proposals —
+ * QUAIS LINHAS voltam é responsabilidade de cada consulta, não dela. `leads`,
+ * `assessments` e `proposals` não têm `project_id` — são o motivo de
+ * `requireResourceAccess` nunca as alcançar —, então o filtro por linha é o
+ * `WHERE conta_id = ?`/`linhaDoFunilDaConta` que cada rota aplica por conta
+ * própria (Task 9). Sem essa segunda camada, esta guarda sozinha garantiria
+ * só que o staff é de UMA conta `msp` — não que é a conta DONA da linha.
+ *
+ * NÃO reuse isto como guarda genérica de staff em rota de configuração de
+ * projeto (SCIM, SSO, política de segurança, trilha de auditoria) — foi
+ * exatamente esse reuso, num rename mecânico da Task 8, que tirou de conta
+ * `direto` o direito de configurar o próprio SSO/SCIM/MFA. Regressão de
+ * produto corrigida na sequência: use `somenteStaff` para isso.
+ */
+export async function somenteMsp(
+  c: {
+    get: (k: 'user') => AtorAutorizado | undefined;
+    env: { DB: D1Database };
+    json: (b: unknown, s: 403) => Response;
+  },
+  next: () => Promise<void>
+) {
+  const user = c.get('user');
+  if (!ehStaffDeConta(user)) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  if (user!.role === 'platform_admin') return next();
+
+  await hidrataEscopo(c.env.DB, user!);
+  if (!user!.conta_id) {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  const conta = await c.env.DB
+    .prepare('SELECT tipo FROM contas WHERE id = ?')
+    .bind(user!.conta_id)
+    .first<{ tipo: string }>();
+  if (conta?.tipo !== 'msp') {
+    return c.json({ error: 'Forbidden: rota restrita à equipe' }, 403);
+  }
+  return next();
+}
+
+/**
+ * Carrega uma linha do funil comercial (lead/assessment/proposta) só se
+ * pertencer à conta de quem pede. `platform_admin` não filtra — é o único
+ * papel global (opera o SaaS).
+ *
+ * Devolve `null` tanto para linha inexistente quanto para linha de OUTRA
+ * conta: o chamador responde os dois casos com a MESMA mensagem de "não
+ * encontrado". Dizer 403 para o segundo caso confirmaria a existência do
+ * registro na consultoria alheia, que é metade do que um concorrente quer
+ * saber (decisão da Task 9).
+ *
+ * `conta_id` NULL na linha (dado anterior à migration 0031/backfill 0032, ou
+ * criado fora do fluxo normal) também não casa com a conta de nenhum staff —
+ * escopo ausente na linha não vira acesso liberado, pela mesma direção de
+ * falha do resto da camada MSP: ausência é NADA, nunca TUDO.
+ */
+export async function linhaDoFunilDaConta(
+  db: D1Database,
+  table: 'leads' | 'assessments' | 'proposals',
+  id: string,
+  user: AtorAutorizado | undefined
+): Promise<any | null> {
+  const row = await db.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first<any>();
+  if (!row) return null;
+  if (user?.role !== 'platform_admin' && row.conta_id !== (user?.conta_id ?? null)) return null;
+  return row;
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */

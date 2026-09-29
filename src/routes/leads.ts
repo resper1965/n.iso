@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteMsp, erro500, linhaDoFunilDaConta, AtorAutorizado } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 
@@ -10,7 +10,7 @@ export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 // `project_id` aqui para o isolamento multi-tenant comparar. Sonda: o
 // `org_admin` de um cliente listava todos os leads (com contato e CNPJ) e
 // mudava o status de lead alheio com 200.
-leadsApp.use('*', somenteNess);
+leadsApp.use('*', somenteMsp);
 
 leadsApp.post('/', async (c) => {
   try {
@@ -19,13 +19,16 @@ leadsApp.post('/', async (c) => {
     const body = valid.data as any;
 
     const id = genId();
+    // Dono do lead é quem o cria — mesma regra de `resolveCliente`/`contaCriadora`:
+    // não existe "registro de origem" anterior a este ponto do funil.
+    const contaId = (c.get('user') as AtorAutorizado | undefined)?.conta_id ?? null;
     await c.env.DB.prepare(
       `INSERT INTO leads (id, company_name, contact_name, contact_email, source, status,
        cnpj, razao_social, nome_fantasia, natureza_juridica, porte, capital_social,
        cnae_fiscal, cnae_fiscal_descricao, data_inicio_atividade, situacao_cadastral,
        logradouro, numero, complemento, bairro, municipio, uf, cep,
-       telefone, qsa, cnpj_fetched_at, created_at)
-       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       telefone, qsa, cnpj_fetched_at, conta_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       id, body.company_name, body.contact_name || null, body.contact_email || null, body.source || null,
       body.cnpj || null, body.razao_social || null, body.nome_fantasia || null,
@@ -35,7 +38,7 @@ leadsApp.post('/', async (c) => {
       body.logradouro || null, body.numero || null, body.complemento || null,
       body.bairro || null, body.municipio || null, body.uf || null, body.cep || null,
       body.telefone || null, body.qsa ? JSON.stringify(body.qsa) : null,
-      body.cnpj ? new Date().toISOString() : null
+      body.cnpj ? new Date().toISOString() : null, contaId
     ).run();
 
     await logAudit(c.env.DB, 'lead.created', c.get('user')?.email ?? 'system', `Lead ${id} criado para ${body.company_name}`);
@@ -47,8 +50,14 @@ leadsApp.post('/', async (c) => {
 
 leadsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
-    return c.json(results);
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const contaId = user?.role === 'platform_admin' ? null : (user?.conta_id ?? null);
+    const { results } = contaId
+      ? await c.env.DB.prepare('SELECT * FROM leads WHERE conta_id = ? ORDER BY created_at DESC').bind(contaId).all()
+      : await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // listagem pela mesma razão de `GET /:id`.
+    return c.json((results as any[]).map(({ conta_id, ...lead }) => lead));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar leads', e);
   }
@@ -72,9 +81,9 @@ leadsApp.get('/', async (c) => {
  * provedor fora do ar vira "não encontrado", que é o que o navegador já fazia.
  *
  * Sem risco de SSRF: o caminho é montado com dígitos, e só com 14 deles.
- * `somenteNess` (o `use('*')` acima) vale aqui como nas outras: lead é registro
- * comercial da ness., e sem isso a rota viraria proxy de consulta para qualquer
- * sessão de cliente.
+ * `somenteMsp` (o `use('*')` acima) vale aqui como nas outras: lead é registro
+ * comercial, e sem isso a rota viraria proxy de consulta para qualquer sessão
+ * de cliente.
  */
 leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
   try {
@@ -101,13 +110,19 @@ leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
 leadsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const lead = await linhaDoFunilDaConta(c.env.DB, 'leads', id, c.get('user') as AtorAutorizado | undefined);
+    // Mesma resposta para inexistente e para alheio: 403 aqui confirmaria a
+    // existência do lead na consultoria concorrente.
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
-    
+
     const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ?').bind(id).all();
     const { results: proposals } = await c.env.DB.prepare('SELECT id, status, total_price, created_at FROM proposals WHERE lead_id = ?').bind(id).all();
 
-    return c.json({ ...lead, assessments, proposals });
+    // `conta_id` é escopo de tenancy interno, não campo de produto — fora da
+    // resposta para não virar algo que o front passa a depender como se
+    // fosse público.
+    const { conta_id, ...leadSemConta } = lead;
+    return c.json({ ...leadSemConta, assessments, proposals });
   } catch (e: any) {
     return erro500(c, 'Falha ao buscar lead', e);
   }
@@ -115,7 +130,12 @@ leadsApp.get('/:id', async (c) => {
 
 leadsApp.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  await c.env.DB.prepare('DELETE FROM leads WHERE id = ?').bind(id).run();
+  const user = c.get('user') as AtorAutorizado | undefined;
+  const sql = user?.role === 'platform_admin'
+    ? 'DELETE FROM leads WHERE id = ?'
+    : 'DELETE FROM leads WHERE id = ? AND conta_id = ?';
+  const binds = user?.role === 'platform_admin' ? [id] : [id, user?.conta_id ?? null];
+  await c.env.DB.prepare(sql).bind(...binds).run();
   return c.json({ success: true });
 });
 
@@ -125,7 +145,12 @@ leadsApp.put('/:id/status', async (c) => {
     const valid = await validateBody(c, leadStatusSchema);
     if (!valid.success) return valid.response;
     const { status } = valid.data;
-    await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?').bind(status, id).run();
+    const user = c.get('user') as AtorAutorizado | undefined;
+    const sql = user?.role === 'platform_admin'
+      ? 'UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?'
+      : 'UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ? AND conta_id = ?';
+    const binds = user?.role === 'platform_admin' ? [status, id] : [status, id, user?.conta_id ?? null];
+    await c.env.DB.prepare(sql).bind(...binds).run();
     return c.json({ ok: true, status });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar lead', e);
@@ -141,7 +166,7 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
     const cleanCnpj = (cnpj || '').replace(/\D/g, '');
     if (cleanCnpj.length !== 14) return c.json({ error: 'CNPJ inválido (14 dígitos)' }, 400);
 
-    const lead = await c.env.DB.prepare('SELECT id FROM leads WHERE id = ?').bind(id).first();
+    const lead = await linhaDoFunilDaConta(c.env.DB, 'leads', id, c.get('user') as AtorAutorizado | undefined);
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
 
     let res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
@@ -206,9 +231,10 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
       d.razao_social || d.nome_fantasia || '', id
     ).run();
 
-    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first<any>();
     await logAudit(c.env.DB, 'lead.cnpj_enriched', c.get('user')?.email ?? 'system', `Lead ${id} enriquecido via CNPJ ${cleanCnpj}`);
-    return c.json({ ok: true, lead: updated });
+    const { conta_id, ...leadSemConta } = updated ?? {};
+    return c.json({ ok: true, lead: leadSemConta });
   } catch (e: any) {
     return erro500(c, 'Falha ao enriquecer CNPJ', e);
   }

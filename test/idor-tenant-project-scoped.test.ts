@@ -58,7 +58,7 @@ describe('IDOR cross-tenant nas rotas de projeto (risks/policies/integrations)',
     // Ator preso ao projeto A: papel de cliente, não de staff — staff
     // (consultor/platform_admin) atravessa a checagem por desenho.
     headers = {
-      ...(await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A })),
+      ...(await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', conta_id: null, cliente_id: 'cli-a' })),
       'Content-Type': 'application/json',
     };
   });

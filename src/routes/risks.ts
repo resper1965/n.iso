@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, erro500, ForbiddenError } from '../helpers';
+import { genId, logAudit, requireResourceAccess, erro500, ForbiddenError, controleEhDoProjeto } from '../helpers';
 import { validateBody, createRiskSchema, riskUpdateSchema } from '../schemas';
 
 const risks = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -14,10 +14,14 @@ function riskLevel(score: number): string {
 
 risks.get('/api/v1/projects/:projectId/risks', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
-     FROM risks r 
-     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
-     WHERE r.project_id = ? 
+    // `AND cc.project_id = r.project_id` no ON: o `WHERE` escopa o RISCO, e o
+    // JOIN trazia título e norma do controle de qualquer projeto quando
+    // `control_id` apontava para fora. Sem predicado de projeto no JOIN, a
+    // linha que o operador possui desreferencia conteúdo que ele não possui.
+    `SELECT r.*, cc.standard as control_standard, cc.title as control_title
+     FROM risks r
+     LEFT JOIN compliance_controls cc ON r.control_id = cc.id AND cc.project_id = r.project_id
+     WHERE r.project_id = ?
      ORDER BY r.impact * r.probability DESC`
   ).bind(c.req.param('projectId')).all();
   return c.json({ ok: true, risks: results });
@@ -29,6 +33,14 @@ risks.post('/api/v1/projects/:projectId/risks', async (c) => {
     const valid = await validateBody(c, createRiskSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+
+    // Aterramento de tenant, igual ao do upload de evidência: `control_id` entra
+    // cru do corpo e é desreferenciado depois a partir do risco. Recusar aqui é
+    // o que impede a linha cruzada de existir.
+    if (body.control_id && !(await controleEhDoProjeto(c.env.DB, body.control_id, projectId))) {
+      return c.json({ ok: false, error: 'Forbidden: controle pertence a outro projeto' }, 403);
+    }
+
     const id = genId();
     const impact = body.impact ?? 3;
     const probability = body.probability ?? 3;
@@ -101,6 +113,12 @@ risks.put('/api/v1/risks/:id', async (c) => {
     // Buscar o project_id para registrar no histórico
     const currentRisk = await c.env.DB.prepare('SELECT project_id FROM risks WHERE id = ?').bind(id).first() as any;
     const projectId = currentRisk?.project_id;
+
+    // Mesma conferência do `POST`: `requireResourceAccess` acima validou o
+    // RISCO, nunca o controle que o corpo manda gravar nele.
+    if (body.control_id && !(await controleEhDoProjeto(c.env.DB, body.control_id, projectId ?? ''))) {
+      return c.json({ ok: false, error: 'Forbidden: controle pertence a outro projeto' }, 403);
+    }
 
     await c.env.DB.prepare(
       `UPDATE risks SET asset_id=?, asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, accepted_by=?, accepted_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`

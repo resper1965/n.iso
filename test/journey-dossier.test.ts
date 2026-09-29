@@ -15,11 +15,24 @@ describe('Dossiê da Jornada (F3)', () => {
     await applySchema();
     await resetData();
     await resetSessions();
+    // Cadeia conta→cliente: sem ela `p1` nasce órfão e nem o consultor da
+    // própria conta alcança o projeto.
     await env.DB.prepare(
-      `INSERT INTO projects (id, client_name, scope, standards, org_role, status)
-       VALUES ('p1','ACME S.A.','Sede e nuvem','ISO 27001','controller','Active')`
+      `INSERT INTO contas (id, tipo, nome, status) VALUES ('conta-jd', 'msp', 'Conta JD', 'Active')`
     ).run();
-    headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-jd', 'conta-jd', 'ACME S.A.', 'Active')`
+    ).run();
+    // Segundo cliente: dá ao "outro tenant" da suíte um `cliente_id` real,
+    // para que o 403 meça a DESIGUALDADE de cliente, não a ausência de um.
+    await env.DB.prepare(
+      `INSERT INTO clientes (id, conta_id, nome, status) VALUES ('cli-jd-outro', 'conta-jd', 'Outro Cliente', 'Active')`
+    ).run();
+    await env.DB.prepare(
+      `INSERT INTO projects (id, client_name, scope, standards, org_role, status, cliente_id)
+       VALUES ('p1','ACME S.A.','Sede e nuvem','ISO 27001','controller','Active','cli-jd')`
+    ).run();
+    headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', conta_id: 'conta-jd', cliente_id: null, iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
   const req = (metodo: string, path: string, body?: unknown, h = headers) =>
@@ -62,13 +75,24 @@ describe('Dossiê da Jornada (F3)', () => {
     expect(b.projeto.client_name).toBe('ACME S.A.');
   });
 
-  it('projeto inexistente → 404', async () => {
+  // Reescrito para a camada MSP: `projectAccessMiddleware` chama
+  // `requireProjectAccess` ANTES do handler, e projeto inexistente recusa com o
+  // mesmo 403 de projeto alheio — responder diferente diria a quem sonda quais
+  // ids existem (mesma regra de `camada-msp-isolamento.test.ts`). O 404 real do
+  // handler só é alcançável por `platform_admin`, que pula essa checagem.
+  it('projeto inexistente é recusa por escopo (403) para ator de tenant', async () => {
     const res = await req('GET', '/api/v1/projects/nao-existe/journey-dossier');
+    expect(res.status).toBe(403);
+  });
+
+  it('projeto inexistente → 404 quando o ator é platform_admin', async () => {
+    const admin = { ...(await sessionFor({ id: 'u-admin', email: 'admin@ness.io', role: 'platform_admin', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const res = await req('GET', '/api/v1/projects/nao-existe/journey-dossier', undefined, admin);
     expect(res.status).toBe(404);
   });
 
   it('projeto de outro tenant é barrado por escopo (403)', async () => {
-    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', client_project_id: 'p-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const h = { ...(await sessionFor({ id: 'u2', email: 'o@c.com', role: 'org_user', conta_id: null, cliente_id: 'cli-jd-outro', iat: Date.now() })), 'Content-Type': 'application/json' };
     const res = await req('GET', '/api/v1/projects/p1/journey-dossier', undefined, h);
     expect(res.status).toBe(403);
   });
