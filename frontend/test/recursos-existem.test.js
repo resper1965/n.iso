@@ -31,7 +31,9 @@ const SEM_EXTENSAO = (caminho) => !/\.\w+$/.test(caminho);
 
 describe('recursos referenciados pelo HTML', () => {
   it('encontrou as páginas (senão o teste não mediria nada)', () => {
-    expect(PAGINAS.length).toBeGreaterThan(2);
+    // Nomes, não contagem: a landing estática saiu (a tela de entrada é a
+    // landing), e "mais de 2" passou a falhar sem nada ter quebrado.
+    expect(PAGINAS).toEqual(expect.arrayContaining(['login.html', 'public/politicas.html']));
   });
 
   for (const pagina of PAGINAS) {
