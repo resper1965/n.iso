@@ -156,7 +156,7 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
 ${LOOPBACK.has(new URL(`http://${pedido.destino}`).hostname) ? '' : `<p class="erro">Atenção: o acesso será entregue a ${escapeHtml(pedido.destino)}. Só autorize se você reconhece este endereço.</p>`}
 <form method="post" action="/oauth/authorize/confirmar">
 <input type="hidden" name="pedido" value="${token}">${opcoes}
-<p class="nota">O agente grava adequação (políticas, SoA, evidências, controles, riscos). Não apaga registros, não gera em lote e não registra achado de auditoria. O administrador do cliente vê e pode revogar este acesso.</p>
+<p class="nota">O agente tem o mesmo alcance que você tem neste cliente: lê tudo e grava adequação (políticas, SoA, evidências, controles, riscos). Com a sua confirmação a cada vez, também apaga registros, gera políticas em lote, elimina dados de titular e revoga aprovações. Não registra achado de auditoria, não gerencia usuários, SSO, chaves de API nem webhooks. O administrador do cliente vê e pode revogar este acesso.</p>
 <button type="submit">Autorizar</button></form>`);
 });
 
