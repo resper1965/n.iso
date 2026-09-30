@@ -32,6 +32,11 @@ cliente abre o navegador, o consultor entra no n.iso e escolhe o cliente
 (um cliente por conexao). O administrador do cliente enxerga o acesso e pode
 revoga-lo. O recurso e fixo no dominio oficial: nao funciona em outro dominio.
 
+O metodo de trabalho tambem chega pelo MCP: `niso_skill` lista e entrega as skills do
+consultor (hoje `prontidao-certificacao`, a pre-avaliacao de prontidao para Stage 1 e 2),
+com referencias e o validador de achados. Nada para instalar; o texto mora em
+`agent-skills/` e e atualizado junto com o deploy.
+
 O agente remoto tem o alcance do consultor humano no projeto escolhido no login: le qualquer area com `niso_ler` e grava com `niso_executar` ou com as ferramentas especificas. Apagar, gerar em lote, eliminar dados do titular e revogar aprovacoes exigem `confirmado_pelo_usuario: true`, que o agente so envia depois de mostrar o que sera feito e receber o 'sim'. Fora do alcance: usuarios, SSO, politica de seguranca, SCIM, chaves de API, webhooks, credencial de auditor externo (auditor-token), conta pessoal (login, termos, notificacoes), criar projeto, painel global, area comercial, /agentes e registro de achado de auditoria. Para outro projeto, refaca o login.
 
 | Cliente | Onde | Trecho | Estado |

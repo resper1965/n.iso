@@ -3,6 +3,7 @@ import { Server, type CallToolResult } from '@modelcontextprotocol/server';
 import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte, type Ferramenta } from '../../mcp-server-niso/src/ferramentas';
 import { concessaoValida, CABECALHO_CONFIRMADO, type PropsAgente } from '../middleware/agente';
 import { INSTRUCOES, montarContexto } from './contexto';
+import { SKILLS } from './skills-gerado';
 
 type FetchHono = (r: Request, e: any, c?: any) => Response | Promise<Response>;
 
@@ -13,6 +14,16 @@ const CONTEXTO: Ferramenta = {
   name: 'niso_contexto',
   description: 'Comece por aqui. Diz o cliente desta conexão, o projectId a usar, o que você pode e não pode fazer, e os roteiros de trabalho.',
   inputSchema: { type: 'object', properties: {} },
+};
+
+const SKILL: Ferramenta = {
+  name: 'niso_skill',
+  description:
+    'Traz o método de trabalho de uma skill do consultor (ex.: pré-avaliação de prontidão para certificação). Sem argumentos lista as skills; com nome traz o SKILL.md; com nome e arquivo traz uma referência ou script. Só leitura.',
+  inputSchema: {
+    type: 'object',
+    properties: { nome: { type: 'string' }, arquivo: { type: 'string', description: 'Caminho dentro da skill, ex.: references/armadilhas-certificadora.md' } },
+  },
 };
 
 const GENERICAS: Ferramenta[] = [
@@ -43,6 +54,7 @@ const LIMITE_TEXTO = 100_000;
 
 const DISPONIVEIS: Ferramenta[] = [
   CONTEXTO,
+  SKILL,
   ...GENERICAS,
   ...TOOLS.filter((t) => ferramentaPermitida(t.name, 'consultant') && !BLOQUEADAS.has(t.name)),
 ];
@@ -124,6 +136,27 @@ function transporteInterno(bruto: Bruto): Transporte {
   };
 }
 
+/** Serve agent-skills/ (embutidas em skills-gerado.ts). Só lê do mapa: `nome` e `arquivo` nunca viram caminho de disco. */
+function skill(args: any): CallToolResult {
+  const ok = (text: string): CallToolResult => ({ content: [{ type: 'text', text }] });
+  const falha = (text: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text }] });
+  const nome = typeof args?.nome === 'string' ? args.nome : '';
+  if (!nome) {
+    return ok(
+      Object.entries(SKILLS)
+        .map(([n, s]) => `- ${n}: ${s.descricao}\n  arquivos: ${Object.keys(s.arquivos).join(', ')}`)
+        .join('\n')
+    );
+  }
+  const s = Object.hasOwn(SKILLS, nome) ? SKILLS[nome] : undefined;
+  if (!s) return falha(`Skill não encontrada. Disponíveis: ${Object.keys(SKILLS).join(', ')}`);
+  const arquivo = typeof args?.arquivo === 'string' && args.arquivo ? args.arquivo : 'SKILL.md';
+  const texto = Object.hasOwn(s.arquivos, arquivo) ? s.arquivos[arquivo] : undefined;
+  if (texto === undefined) return falha(`Arquivo não encontrado nesta skill. Disponíveis: ${Object.keys(s.arquivos).join(', ')}`);
+  const outros = Object.keys(s.arquivos).filter((a) => a !== 'SKILL.md').join(', ');
+  return ok(arquivo === 'SKILL.md' ? `${texto}\n\n---\nOutros arquivos desta skill (peça com niso_skill nome=${nome} arquivo=...): ${outros}` : texto);
+}
+
 async function genericas(nome: string, args: any, bruto: Bruto): Promise<CallToolResult> {
   const falha = (texto: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: texto }] });
   const caminho = typeof args?.caminho === 'string' ? args.caminho : '';
@@ -185,6 +218,7 @@ export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: Fe
           const projeto = (await t.get(`/api/v1/projects/${encodeURIComponent(props.projectId)}`)) as any;
           return { content: [{ type: 'text', text: montarContexto({ ...projeto, id: props.projectId }, props.email) }] };
         }
+        if (name === 'niso_skill') return skill(args);
         if (name === 'niso_ler' || name === 'niso_executar') return await genericas(name, args, bruto);
         if (!NOMES.has(name)) {
           return { isError: true, content: [{ type: 'text', text: `Ferramenta ${name} indisponível para o agente consultor` }] };
