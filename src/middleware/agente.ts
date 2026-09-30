@@ -22,12 +22,19 @@ const REFACA = 'Acesso do agente revogado, expirado ou sem designação no proje
  * consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
  * o resolverAgente a cada chamada interna.
  */
+/**
+ * Nome do cliente para exibir (projeto com alias `p`): cai para o nome do
+ * projeto quando `client_name` está vazio, e para o id em último caso. Usado no
+ * login OAuth do agente e na trilha — nunca "agente de x ()".
+ */
+export const NOME_CLIENTE_SQL = `COALESCE(NULLIF(trim(p.client_name), ''), p.project_name, p.id)`;
+
 export async function concessaoValida(
   db: D1Database,
   p: PropsAgente
 ): Promise<{ email: string; client_name: string } | null> {
   const row = await db.prepare(
-    `SELECT u.email, u.role, u.ativo, p.client_name
+    `SELECT u.email, u.role, u.ativo, ${NOME_CLIENTE_SQL} AS client_name
        FROM agente_concessoes ac
        JOIN users u ON u.id = ac.user_id
        JOIN projects p ON p.id = ac.project_id

@@ -13,11 +13,12 @@ export const ROTEIROS = `Roteiros de trabalho:
 3. Responder auditoria — leia as notas em niso_audit_pack → rascunhe a resposta → PEÇA APROVAÇÃO HUMANA → niso_respond_auditor_note.`;
 
 export function montarContexto(
-  projeto: { id: string; client_name: string; standards?: string | null; status?: string | null },
+  projeto: { id: string; client_name: string; project_name?: string | null; standards?: string | null; status?: string | null },
   email: string
 ): string {
   return [
-    `Cliente: ${projeto.client_name}`,
+    // Nome do cliente vazio cai para o do projeto (mesma regra de NOME_CLIENTE_SQL).
+    `Cliente: ${projeto.client_name?.trim() || projeto.project_name || projeto.id}`,
     `projectId (use em toda ferramenta): ${projeto.id}`,
     `Normas: ${projeto.standards ?? '—'} · Situação: ${projeto.status ?? '—'}`,
     `Você age em nome de: ${email}. Tudo que gravar sai na trilha como "agente de ${email}".`,
