@@ -79,6 +79,11 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
       ['GET', '/api/v1/projects/p-a/agentes'],
       ['DELETE', '/api/v1/webhooks/x'],
       ['POST', '/api/v1/webhooks/test/x'],
+      ['POST', '/api/v1/auth/reset-password-first'],
+      ['POST', '/api/v1/legal/accept'],
+      ['GET', '/api/v1/notifications'],
+      ['POST', '/api/v1/auth/mfa/verify'],
+      ['POST', '/api/v1/projects/p-a/auditor-token'],
     ] as const) {
       const r = await comoAgente(caminho, { method: metodo, headers: { ...confirmado, ...json }, body: metodo === 'GET' ? undefined : '{}' });
       expect(r.status, `${metodo} ${caminho}`).toBe(403);
@@ -92,6 +97,27 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
     expect((await sem.json<any>()).error).toContain('confirmado_pelo_usuario');
     const com = await comoAgente('/api/v1/projects/p-a/data-subject/erase', { method: 'POST', headers: { ...json, ...confirmado }, body: corpo });
     expect(com.status).not.toBe(403);
+  });
+
+  it('o agente não cria projeto, mas a listagem continua escopada', async () => {
+    for (const caminho of ['/api/v1/projects', '/api/v1/projects/']) {
+      const r = await comoAgente(caminho, { method: 'POST', headers: { ...confirmado, ...json }, body: JSON.stringify({ client_name: 'Novo', project_name: 'Novo' }) });
+      expect(r.status, caminho).toBe(403);
+    }
+    const lista = await comoAgente('/api/v1/projects');
+    expect(lista.status).toBe(200);
+    const texto = await lista.text();
+    expect(texto).toContain('p-a');
+    expect(texto).not.toContain('p-b');
+  });
+
+  it('revogar aprovações exige confirmação', async () => {
+    const corpo = JSON.stringify({ role: 'ciso', reason: 'revisão do escopo', control_ids: ['ctl-a'] });
+    const sem = await comoAgente('/api/v1/projects/p-a/revoke-approvals', { method: 'POST', headers: json, body: corpo });
+    expect(sem.status).toBe(403);
+    expect((await sem.json<any>()).error).toContain('confirmado_pelo_usuario');
+    const com = await comoAgente('/api/v1/projects/p-a/revoke-approvals', { method: 'POST', headers: { ...json, ...confirmado }, body: corpo });
+    expect(com.status, await com.clone().text()).not.toBe(403);
   });
 
   it('escrita de auditor continua recusada', async () => {

@@ -145,7 +145,15 @@ async function genericas(nome: string, args: any, bruto: Bruto): Promise<CallToo
     return { isError: !r.ok, content: [{ type: 'text', text: `HTTP ${r.status}
 ${texto}` }] };
   }
-  const tamanho = (await r.arrayBuffer()).byteLength;
+  // Só medir: com Content-Length não lê o corpo; sem ele, lê (não há outro jeito de saber).
+  const declarado = Number(r.headers.get('Content-Length'));
+  let tamanho: number;
+  if (r.headers.get('Content-Length') !== null && Number.isFinite(declarado)) {
+    tamanho = declarado;
+    await r.body?.cancel();
+  } else {
+    tamanho = (await r.arrayBuffer()).byteLength;
+  }
   return { isError: !r.ok, content: [{ type: 'text', text: JSON.stringify({ status: r.status, tipo, tamanho, observacao: 'binário: abra na interface' }) }] };
 }
 

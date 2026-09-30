@@ -61,18 +61,23 @@ export const CABECALHO_CONFIRMADO = 'X-Agente-Confirmado';
  * visão de todos os clientes ou a área comercial. O agente não amplia o próprio
  * acesso nem enxerga fora do projeto.
  */
-const FORA_DO_AGENTE: Array<[RegExp, string]> = [
+/** Terceiro campo opcional: só estes métodos são recusados (GET /projects segue valendo, escopado). */
+const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/(users|admin\/users)(\/|$)/, 'gestão de usuários'],
   [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
   [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/projects\/[^/]+\/(sso|security-policy|scim-token|api-keys|webhooks)(\/|$)/, 'configuração de segurança do cliente'],
   [/^\/api\/v1\/webhooks(\/|$)/, 'configuração de segurança do cliente'],
+  // O principal do agente carrega o users.id REAL do consultor: rotas de "minha conta" agiriam sobre ele.
+  [/^\/api\/v1\/(auth|legal|notifications)(\/|$)/, 'conta pessoal do consultor'],
+  [/^\/api\/v1\/projects\/[^/]+\/auditor-token(\/|$)/, 'credencial de auditor externo'],
+  [/^\/api\/v1\/projects\/?$/, 'o agente está preso a um projeto', ['POST']],
   [/\/agentes(\/|$)/, 'o agente não gere o próprio acesso'],
 ];
 
-/** Única definição do que exige confirmação: apagar, gerar em lote, anonimizar titular. */
+/** Única definição do que exige confirmação: apagar, gerar em lote, anonimizar titular, revogar aprovações. */
 export function acaoDestrutiva(method: string, path: string): boolean {
-  return method.toUpperCase() === 'DELETE' || path.endsWith('/generate-policies-bulk') || path.endsWith('/data-subject/erase');
+  return method.toUpperCase() === 'DELETE' || path.endsWith('/generate-policies-bulk') || path.endsWith('/data-subject/erase') || /\/revoke-approvals?$/.test(path);
 }
 
 export async function resolverAgente(
@@ -91,11 +96,11 @@ export async function resolverAgente(
 
   // Paridade com o consultor, preso ao projeto: `role: 'client'` + `client_project_id`
   // herda o isolamento de tenant; o que é destrutivo exige confirmação.
-  for (const [re, motivo] of FORA_DO_AGENTE) {
-    if (re.test(path)) return c.json({ error: `Forbidden: fora do alcance do agente (${motivo}) — use a interface` }, 403);
+  for (const [re, motivo, metodos] of FORA_DO_AGENTE) {
+    if (re.test(path) && (!metodos || metodos.includes(method))) return c.json({ error: `Forbidden: fora do alcance do agente (${motivo}) — use a interface` }, 403);
   }
   if (acaoDestrutiva(method, path) && c.req.header(CABECALHO_CONFIRMADO) !== '1') {
-    return c.json({ error: 'Forbidden: apagar, gerar em lote e eliminar titular exigem confirmação — mostre ao usuário o que será feito, espere o "sim" e reenvie com confirmado_pelo_usuario: true' }, 403);
+    return c.json({ error: 'Forbidden: apagar, gerar em lote, eliminar titular e revogar aprovações exigem confirmação — mostre ao usuário o que será feito, espere o "sim" e reenvie com confirmado_pelo_usuario: true' }, 403);
   }
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
