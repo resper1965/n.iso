@@ -188,7 +188,8 @@ function safeCsvCell(val: any): string {
 
 integrations.get('/api/v1/projects/:projectId/webhooks', async (c) => {
   const projectId = c.req.param('projectId');
-  const result = await c.env.DB.prepare('SELECT * FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  // Sem `secret`: ele é devolvido UMA vez, na criação. A listagem é legível por todo membro do projeto.
+  const result = await c.env.DB.prepare('SELECT id, project_id, url, events, status, last_triggered_at, failure_count, created_at FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
   return c.json({ ok: true, webhooks: result.results });
 });
 

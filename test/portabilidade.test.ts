@@ -50,6 +50,12 @@ describe('Export de portabilidade', () => {
         .bind('k-a', A, 'chave', 'hash-secreto-da-chave', 'read', 'Active'),
       env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
         .bind('at-a', A, 'token-secreto-do-auditor', '2099-01-01T00:00:00Z'),
+      // Segredo de integração em repouso: HMAC do webhook, segredo OIDC e hash SCIM.
+      env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events, secret) VALUES (?,?,?,?,?)`)
+        .bind('w-a', A, 'https://exemplo.com/hook', 'evidence.created', 'segredo-hmac-do-webhook'),
+      env.DB.prepare(`INSERT INTO project_sso (project_id, issuer, client_id, client_secret, dominios) VALUES (?,?,?,?,?)`)
+        .bind(A, 'https://idp.exemplo.com', 'cid', 'segredo-oidc-cifrado', 'a.com'),
+      env.DB.prepare(`INSERT INTO project_scim (project_id, token_hash) VALUES (?,?)`).bind(A, 'hash-scim-secreto'),
     ]);
 
     admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', client_project_id: A });
@@ -96,6 +102,19 @@ describe('Export de portabilidade', () => {
     const bruto = JSON.stringify(dados);
     expect(bruto).not.toContain('hash-secreto-da-chave');
     expect(bruto).not.toContain('token-secreto-do-auditor');
+  });
+
+  it('NÃO leva segredo de integração — webhook, SSO e SCIM saem sem o segredo', async () => {
+    // Mesma lógica das credenciais acima: o cliente precisa da URL e do evento
+    // para levar a configuração, não do segredo que assina as entregas dele.
+    const { dados } = await exportarProjeto(env as any, A);
+    const bruto = JSON.stringify(dados);
+    expect(bruto).not.toContain('segredo-hmac-do-webhook');
+    expect(bruto).not.toContain('segredo-oidc-cifrado');
+    expect(bruto).not.toContain('hash-scim-secreto');
+    // A configuração em si continua no arquivo.
+    expect((dados.webhooks as any[])[0].url).toBe('https://exemplo.com/hook');
+    expect((dados.project_sso as any[])[0].issuer).toBe('https://idp.exemplo.com');
   });
 
   it('o manifesto declara o que NÃO foi incluído, e por que não há assinatura', async () => {
