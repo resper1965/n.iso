@@ -4,7 +4,7 @@ import { verifyPassword, rateLimit, rateLimitD1, genId, genToken, logAudit, esca
 import { clientIp, chavesTentativa, registrarFalhaLogin } from './auth';
 import { mensagemBloqueio } from '../auth-policy';
 import { verificarCodigoTotp } from '../services/totp';
-import type { PropsAgente } from '../middleware/agente';
+import { NOME_CLIENTE_SQL, type PropsAgente } from '../middleware/agente';
 
 /*
  * Tela de autorização do MCP remoto (spec 2026-09-29-receita-agentes-mcp-remoto).
@@ -138,8 +138,8 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   }
 
   const { results } = await c.env.DB.prepare(
-    `SELECT p.id, p.client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
-      WHERE lower(g.email) = ? AND g.role_category = 'consultor' ORDER BY p.client_name`
+    `SELECT p.id, ${NOME_CLIENTE_SQL} AS client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
+      WHERE lower(g.email) = ? AND g.role_category = 'consultor' ORDER BY 2`
   ).bind(email).all<{ id: string; client_name: string }>();
   if (!results.length) {
     await c.env.SESSIONS.delete(chave(token));
@@ -169,7 +169,7 @@ oauthAutorizacao.post('/authorize/confirmar', async (c) => {
 
   const projectId = String(f.projeto || '');
   const alvo = await c.env.DB.prepare(
-    `SELECT p.client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
+    `SELECT ${NOME_CLIENTE_SQL} AS client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
       WHERE p.id = ? AND lower(g.email) = lower(?) AND g.role_category = 'consultor'`
   ).bind(projectId, pedido.email).first<{ client_name: string }>();
   if (!alvo) return pagina('Não autorizado', '<h1>Cliente fora da sua designação</h1>', 403);

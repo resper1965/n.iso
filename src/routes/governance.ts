@@ -156,7 +156,11 @@ governanceApp.put('/projects/:id/company-profile', async (c) => {
     
     await c.env.DB.prepare(`
       UPDATE projects 
-      SET cnpj = ?, employee_count = ?, scope = ?, sector = ?, client_name = ?
+      SET cnpj = ?, employee_count = ?, scope = ?, sector = ?,
+          -- Campo ausente ou em branco MANTÉM o nome atual: gravar '' apagava o
+          -- nome do cliente de quem salvava o perfil sem ele (3 projetos em
+          -- produção ficaram assim, e o login do agente mostrava cliente vazio).
+          client_name = COALESCE(NULLIF(trim(?), ''), client_name)
       WHERE id = ?
     `).bind(
       cnpj || null, 
@@ -165,7 +169,7 @@ governanceApp.put('/projects/:id/company-profile', async (c) => {
       employee_count ?? null, 
       scope || null, 
       sector || null, 
-      client_name || '', 
+      client_name ?? '',
       projectId
     ).run();
 
