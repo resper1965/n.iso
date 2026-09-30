@@ -556,6 +556,16 @@ projectsApp.put('/:id/phases/:num', async (c) => {
 });
 
 // Interviews inside Project
+// Antes de `/interviews/:track`: o Hono casa na ordem de registro, e a rota com
+// parâmetro capturava "summary" como nome de trilha.
+projectsApp.get('/:id/interviews/summary', async (c) => {
+  const projectId = c.req.param('id');
+  const { results } = await c.env.DB.prepare(
+    'SELECT track, COUNT(*) as total, SUM(gap_detected) as gaps FROM project_interviews WHERE project_id = ? GROUP BY track'
+  ).bind(projectId).all<{ track: string; total: number; gaps: number }>();
+  return c.json({ ok: true, summary: results });
+});
+
 projectsApp.get('/:id/interviews/:track', async (c) => {
   const projectId = c.req.param('id');
   const track = c.req.param('track');
@@ -581,14 +591,6 @@ projectsApp.post('/:id/interviews', async (c) => {
   } catch (e: any) {
     return erro500(c, 'Falha ao salvar entrevistas', e);
   }
-});
-
-projectsApp.get('/:id/interviews/summary', async (c) => {
-  const projectId = c.req.param('id');
-  const { results } = await c.env.DB.prepare(
-    'SELECT track, COUNT(*) as total, SUM(gap_detected) as gaps FROM project_interviews WHERE project_id = ? GROUP BY track'
-  ).bind(projectId).all<{ track: string; total: number; gaps: number }>();
-  return c.json({ ok: true, summary: results });
 });
 
 // Documents inside Project
