@@ -5,7 +5,8 @@ import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
 import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
-import { resolverAgente } from './agente';
+import { resolverAgente, acaoDestrutiva } from './agente';
+import { logAudit } from '../helpers';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -353,4 +354,10 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
 
   c.set('user', user);
   await next();
+  // Trilha genérica do agente: toda ação destrutiva que passou leva o projeto,
+  // sem depender de cada handler lembrar de registrar.
+  if (user.agente === true && acaoDestrutiva(c.req.method, c.req.path) && c.res.status < 400) {
+    await logAudit(c.env.DB, 'agente.exclusao', user.email, `${c.req.method} ${c.req.path}`,
+      'confirmado pelo usuário', c.req.header('CF-Connecting-IP') ?? '', user.client_project_id ?? undefined).catch(() => {});
+  }
 });

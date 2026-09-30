@@ -106,7 +106,7 @@ evidenceApp.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
-    const ev = await c.env.DB.prepare('SELECT file_name, r2_key FROM evidence WHERE id = ?').bind(id).first<any>();
+    const ev = await c.env.DB.prepare('SELECT file_name, r2_key, project_id FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
     if (ev.r2_key) {
@@ -114,7 +114,7 @@ evidenceApp.delete('/:id', async (c) => {
     }
 
     await c.env.DB.prepare('DELETE FROM evidence WHERE id = ?').bind(id).run();
-    await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`);
+    await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`, '', '', ev.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);

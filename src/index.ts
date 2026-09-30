@@ -117,6 +117,8 @@ export type Variables = {
     name?: string;
     role: string;
     client_project_id?: string | null;
+    /** Principal do agente MCP (middleware/agente.ts): paridade de consultor, preso ao projeto. */
+    agente?: boolean;
     /** Sessão autenticada por senha mas ainda sem o segundo fator. */
     mfa_pending?: boolean;
     /** Instante de emissão, usado para revogação. */

@@ -128,7 +128,7 @@ describe('/mcp remoto', () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_create_evidence', arguments: { projectId: 'p-a', fileName: 'nota.md', content: '# Evidência' } });
     expect(res.isError, res.content?.[0]?.text).toBeFalsy();
     const ev = await env.DB.prepare(`SELECT file_type, uploaded_by FROM evidence WHERE project_id = 'p-a' AND file_name = 'nota.md'`).first<any>();
-    expect(ev).toEqual({ file_type: 'text/markdown', uploaded_by: 'agente de cons@ness.lat (Twyn)' });
+    expect(ev).toEqual({ file_type: 'text/markdown', uploaded_by: 'agente de cons@ness.lat (Twyn / p-a)' });
   });
 
   it('escrita pelo agente sai com a autoria do humano', async () => {
@@ -136,7 +136,7 @@ describe('/mcp remoto', () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_create_risk', arguments: { projectId: 'p-a', asset: 'Base de clientes', threat: 'Vazamento via MCP', impact: 3, probability: 2 } });
     expect(res.isError, res.content?.[0]?.text).toBeFalsy();
     const log = await env.DB.prepare(`SELECT actor FROM audit_logs ORDER BY rowid DESC LIMIT 1`).first<{ actor: string }>();
-    expect(log!.actor).toBe('agente de cons@ness.lat (Twyn)');
+    expect(log!.actor).toBe('agente de cons@ness.lat (Twyn / p-a)');
   });
 
   // Revisão final, achado 1: id interpolado no caminho não pode levar o agente
