@@ -31,7 +31,7 @@ const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.us
 
             let html = `
                 <div class="fade-in" style="max-width:800px; margin:0 auto; padding:2rem 0">
-                    <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo à ness. nISO</h2>
+                    <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo ao n.iso</h2>
                     <p style="color:var(--text-dim); font-size:0.95rem; margin-bottom:2.5rem">Seu ambiente de governança de segurança da informação (SGSI) está em fase de preparação.</p>
                     <div style="display:flex; flex-direction:column; gap:1.5rem">
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
@@ -58,7 +58,7 @@ const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.us
                             <div>
                                 <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 3</div>
                                 <h3 style="font-family:'Montserrat'; font-weight:500; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Início do SGSI & Projetos</h3>
-                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no nISO, checklists de conformidade e ativação dos assistentes de IA.</p>
+                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no n.iso, checklists de conformidade e ativação dos assistentes de IA.</p>
                             </div>
                             <div style="text-align:right">
                                 <span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Bloqueado até assinatura</span>

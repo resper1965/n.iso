@@ -86,7 +86,7 @@ const EVIDENCE_TEXT_TYPES = [
 export const TOOLS: Ferramenta[] = [
   {
     name: "niso_list_projects",
-    description: "List all active GRC projects in the nISO portfolio",
+    description: "List all active GRC projects in the n.iso portfolio",
     inputSchema: {
       type: "object",
       properties: {},
@@ -202,7 +202,7 @@ export const TOOLS: Ferramenta[] = [
   },
   {
     name: "niso_generate_policy",
-    description: `Generate a policy document for a control via the nISO PolicyAgent (AI draft — must be reviewed before approval). ${WRITE_GUARDRAIL}`,
+    description: `Generate a policy document for a control via the n.iso PolicyAgent (AI draft — must be reviewed before approval). ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -240,7 +240,7 @@ export const TOOLS: Ferramenta[] = [
   },
   {
     name: "niso_create_evidence",
-    description: `Register a TEXTUAL evidence document (policy, procedure, meeting minutes, log excerpt, configuration dump) in a project's evidence repository, from text supplied in this call. The text is stored verbatim and its SHA-256 is recorded. TEXT ONLY: this tool cannot upload PDFs, images, spreadsheets, or any binary or pre-existing file — those go through the nISO web UI. Do not transcribe or re-type a binary document to work around this; a transcription is not the document. ${WRITE_GUARDRAIL}`,
+    description: `Register a TEXTUAL evidence document (policy, procedure, meeting minutes, log excerpt, configuration dump) in a project's evidence repository, from text supplied in this call. The text is stored verbatim and its SHA-256 is recorded. TEXT ONLY: this tool cannot upload PDFs, images, spreadsheets, or any binary or pre-existing file — those go through the n.iso web UI. Do not transcribe or re-type a binary document to work around this; a transcription is not the document. ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {

@@ -319,13 +319,14 @@ authApp.post('/forgot-password', async (c) => {
     }
     await c.env.SESSIONS.put(`reset_token:${token}`, JSON.stringify({ email: user.email }), { expirationTtl: 3600 });
 
-    console.log(`[PASSWORD RESET] Token para ${user.email}: ${token}`);
+    // O código NÃO vai para o log: com a observabilidade ligada, quem lê os logs
+    // trocaria a senha de qualquer conta. Falha de envio é registrada no sendEmail.
 
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
-        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0; text-align: center;">Recuperação de Senha - nISO</h2>
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0; text-align: center;">Recuperação de senha · n.iso</h2>
         <p>Olá, <strong>${escapeHtml(user.name)}</strong>,</p>
-        <p>Você solicitou a redefinição de sua senha de acesso ao portal do <strong>nISO</strong>.</p>
+        <p>Você solicitou a redefinição de sua senha de acesso ao portal do <strong>n.iso</strong>.</p>
         <p>Use o código de verificação de 6 dígitos abaixo para concluir a alteração (válido por 1 hora):</p>
         <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; font-family: monospace; font-size: 2rem; letter-spacing: 5px; font-weight: bold; color: #00ade8;">
           ${token}
@@ -333,7 +334,7 @@ authApp.post('/forgot-password', async (c) => {
         <p style="color: #8e8e93; font-size: 0.85rem; text-align: center;">Se você não solicitou esta redefinição, por favor desconsidere este e-mail de forma segura.</p>
       </div>
     `;
-    await sendEmail(c, email, 'Recuperação de Senha - nISO', emailHtml);
+    await sendEmail(c, email, 'Recuperação de senha · n.iso', emailHtml);
 
     if (c.env.ENVIRONMENT === 'development' || c.env.ENVIRONMENT === 'test') {
       return c.json({ ok: true, reset_token: token, message: 'Código de recuperação gerado (Desenvolvimento)' });

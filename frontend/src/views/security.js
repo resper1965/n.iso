@@ -195,7 +195,7 @@ function telaCodigosRecuperacao(codigos) {
 window.baixarCodigosMfa = function baixarCodigosMfa() {
   const codigos = window._mfaCodigos || [];
   const texto = [
-    'nISO — códigos de recuperação do segundo fator',
+    'n.iso — códigos de recuperação do segundo fator',
     `Conta: ${S.user?.email || ''}`,
     `Gerados em: ${new Date().toLocaleString('pt-BR')}`,
     '',

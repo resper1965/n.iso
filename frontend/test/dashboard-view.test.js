@@ -38,7 +38,7 @@ describe('renderDashboard — onboarding do cliente', () => {
     await window.renderDashboard(c, h, a);
     expect(h.textContent).toBe('Dashboard Executivo');
     expect(a.innerHTML).toContain('Novo Lead');
-    expect(c.textContent).toContain('Bem-vindo à ness. nISO');
+    expect(c.textContent).toContain('Bem-vindo ao n.iso');
     expect(c.textContent).toContain('Aguardando Liberação');
     // Não chamou API no caminho de onboarding.
     expect(apiMock).not.toHaveBeenCalled();
