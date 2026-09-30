@@ -108,9 +108,11 @@ export async function resolverAgente(
 
   // `role: 'client'` + `client_project_id` herda o isolamento de tenant do
   // projectAccessMiddleware; a escrita é liberada pelo chamador (writeCapable).
+  // Sem nome de cliente, NOME_CLIENTE_SQL já cai para o projeto: não repita o nome.
+  const rotulo = row.client_name === row.project_name ? row.client_name : `${row.client_name} / ${row.project_name}`;
   return {
     id: p.userId,
-    email: `agente de ${row.email} (${row.client_name} / ${row.project_name})`,
+    email: `agente de ${row.email} (${rotulo})`,
     role: 'client',
     client_project_id: p.projectId,
     agente: true,
