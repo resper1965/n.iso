@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "cf-typegen": "wrangler types",
     "openapi": "node scripts/gerar-openapi.mjs && node scripts/gerar-contrato-mcp.mjs",
+    "skills:gerar": "node scripts/gerar-skills.mjs",
     "db:backup": "wrangler d1 export niso-db --remote --output backups/niso-backup.sql",
     "db:backup:local": "wrangler d1 export niso-db --local --output backups/local-backup.sql"
   },

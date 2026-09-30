@@ -108,6 +108,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
+- **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
+  Worker nao le disco, entao `npm run skills:gerar` escreve `src/mcp/skills-gerado.ts` (commitado; o
+  `test/agente-skills.test.ts` falha se ficar velho). O agente as le pelo MCP com `niso_skill`,
+  atras do login. Skill nova = pasta nova + gerar + roteiro em `src/mcp/contexto.ts`.
 - **MCP remoto** (consultor): agente com alcance de consultor preso a um projeto (`src/mcp/servidor.ts`); `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
   (`src/routes/oauth-autorizacao.ts`); principal agente em
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
