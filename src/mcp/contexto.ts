@@ -27,7 +27,8 @@ export const ROTEIROS = `Roteiros de trabalho:
 
 1. Diagnóstico — niso_get_project → niso_gap_analysis → niso_traceability. Pare numa lista de lacunas priorizada. Não escreva nada.
 2. Fechar lacuna — escolha um controle → niso_list_evidence → rascunhe evidência ou política → PEÇA APROVAÇÃO HUMANA → niso_create_evidence / niso_update_control / niso_generate_policy. Pare quando o controle tiver evidência vinculada.
-3. Responder auditoria — leia as notas em niso_audit_pack → rascunhe a resposta → PEÇA APROVAÇÃO HUMANA → niso_respond_auditor_note.`;
+3. Responder auditoria — leia as notas em niso_audit_pack → rascunhe a resposta → PEÇA APROVAÇÃO HUMANA → niso_respond_auditor_note.
+4. Pré-avaliação de prontidão para certificação (Stage 1 e 2) — chame niso_skill (sem argumentos lista as skills; nome=prontidao-certificacao traz o método). Só leitura: nenhum achado vai para a n.iso, e não substitui a auditoria interna (9.2).`;
 
 export function montarContexto(
   projeto: { id: string; client_name: string; project_name?: string | null; standards?: string | null; status?: string | null },
