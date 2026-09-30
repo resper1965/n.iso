@@ -37,6 +37,31 @@ const NAO_EXPORTAR = new Set([
   'auditor_tokens',
 ]);
 
+/**
+ * Segredo em repouso de integração que NÃO sai no export, por tabela. O cliente
+ * leva a configuração (URL, eventos, emissor), não o segredo que assina as
+ * entregas dele: o arquivo é guardado onde o cliente quiser, e quem ler o
+ * segredo do webhook forja entregas assinadas ao receptor. `repository_token`
+ * e `client_secret` estão cifrados e `token_hash` é hash; saem mesmo assim,
+ * porque não servem fora daqui e não têm motivo para viajar.
+ */
+const SEGREDOS_DE_INTEGRACAO: Record<string, string[]> = {
+  webhooks: ['secret'],
+  project_sso: ['client_secret'],
+  project_scim: ['token_hash'],
+  projects: ['repository_token'],
+};
+
+function semSegredos(tabela: string, linhas: unknown[]): unknown[] {
+  const colunas = SEGREDOS_DE_INTEGRACAO[tabela];
+  if (!colunas) return linhas;
+  return linhas.map((l) => {
+    const copia = { ...(l as Record<string, unknown>) };
+    for (const c of colunas) if (c in copia) copia[c] = null;
+    return copia;
+  });
+}
+
 export type Manifesto = {
   projeto: string;
   gerado_em: string;
@@ -174,7 +199,7 @@ export async function exportarProjeto(env: Bindings, projectId: string): Promise
     const { results } = await env.DB.prepare(
       `SELECT * FROM "${t}" WHERE project_id = ? ORDER BY rowid`
     ).bind(projectId).all();
-    dados[t] = results ?? [];
+    dados[t] = semSegredos(t, results ?? []);
     contagem[t] = dados[t].length;
     total += dados[t].length;
   }
@@ -182,7 +207,7 @@ export async function exportarProjeto(env: Bindings, projectId: string): Promise
   // O projeto em si não tem `project_id` — tem `id`. Sem esta linha o export
   // sairia com todo o conteúdo e nenhuma identificação do cliente.
   const projeto = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first();
-  dados['projects'] = projeto ? [projeto] : [];
+  dados['projects'] = projeto ? semSegredos('projects', [projeto]) : [];
   contagem['projects'] = dados['projects'].length;
   total += contagem['projects'];
 
