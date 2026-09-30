@@ -53,15 +53,18 @@ export async function checkCoherence(db: D1Database, projectId: string): Promise
   if (controls && controls.length) {
     const controlIdsAprovados = (controls as any[]).filter(c => APROVADOS.includes(c.status)).map(c => c.id);
     if (controlIdsAprovados.length) {
-      const placeholders = controlIdsAprovados.map(() => '?').join(',');
+      // Subconsulta por projeto, não um `?` por controle: passa do teto de 100
+      // parâmetros do D1 quando há mais de 100 aprovados. O laço abaixo já
+      // filtra só os aprovados.
       const { results: evid } = await db.prepare(
-        `SELECT DISTINCT control_id FROM evidence WHERE control_id IN (${placeholders})`
-      ).bind(...controlIdsAprovados).all<any>();
+        `SELECT DISTINCT control_id FROM evidence
+          WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`
+      ).bind(projectId).all<any>();
       const comEvidencia = new Set((evid || []).map((e: any) => e.control_id));
 
       const { results: versions } = await db.prepare(
-        `SELECT DISTINCT control_id FROM policy_versions WHERE project_id = ? AND control_id IN (${placeholders})`
-      ).bind(projectId, ...controlIdsAprovados).all<any>();
+        `SELECT DISTINCT control_id FROM policy_versions WHERE project_id = ? AND control_id IS NOT NULL`
+      ).bind(projectId).all<any>();
       const comPolitica = new Set((versions || []).map((v: any) => v.control_id));
 
       for (const control of controls as any[]) {

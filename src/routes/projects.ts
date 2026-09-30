@@ -7,6 +7,7 @@ import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
+import { NA_STATUS } from '../services/soa-logic';
 import { validateBody, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
@@ -885,15 +886,17 @@ projectsApp.get('/:id/traceability', async (c) => {
 
   if (controlIds.length === 0) return c.json({ ok: true, controls: [] });
 
-  const placeholders = controlIds.map(() => '?').join(',');
-
+  // Subconsulta, não `IN (?, ?, …)`: um parâmetro por controle estoura o teto
+  // de 100 do D1 em projeto com mais de 100 controles (cliente tem 124).
   const risksResult = await db.prepare(
-    `SELECT id, asset, threat, risk_level, control_id FROM risks WHERE control_id IN (${placeholders})`
-  ).bind(...controlIds).all();
+    `SELECT id, asset, threat, risk_level, control_id FROM risks
+      WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`
+  ).bind(projectId).all();
 
   const evidenceResult = await db.prepare(
-    `SELECT id, file_name, created_at, control_id FROM evidence WHERE control_id IN (${placeholders})`
-  ).bind(...controlIds).all();
+    `SELECT id, file_name, created_at, control_id FROM evidence
+      WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`
+  ).bind(projectId).all();
 
   const risksMap: Record<string, any[]> = {};
   for (const r of (risksResult.results || []) as any[]) {
@@ -913,6 +916,45 @@ projectsApp.get('/:id/traceability', async (c) => {
   }));
 
   return c.json({ ok: true, controls: linked });
+});
+
+// Gap analysis: cobertura sobre os controles APLICÁVEIS e a lista de lacunas.
+// Sumiu na decomposição do index.ts (72f1b59) e a ferramenta do agente e o
+// modal da interface ficaram dando 404. Formato em snake_case, o que o
+// frontend (showGapAnalysis) lê.
+projectsApp.get('/:id/gap-analysis', async (c) => {
+  const projectId = c.req.param('id');
+  const db = c.env.DB;
+  const [controls, contagens] = await db.batch([
+    db.prepare(`SELECT id, title, status FROM compliance_controls WHERE project_id = ?`).bind(projectId),
+    db.prepare(
+      `SELECT cc.id,
+              (SELECT COUNT(*) FROM evidence e WHERE e.control_id = cc.id) AS evidence_count,
+              (SELECT COUNT(*) FROM risks r WHERE r.control_id = cc.id) AS risk_count
+         FROM compliance_controls cc WHERE cc.project_id = ?`
+    ).bind(projectId),
+  ]);
+  const rows = (controls.results || []) as { id: string; title: string; status: string }[];
+  const cont = new Map(((contagens.results || []) as any[]).map((r) => [r.id, r]));
+
+  const by_status: Record<string, number> = {};
+  let aplicaveis = 0, controls_with_evidence = 0, controls_with_risks = 0;
+  const gaps: any[] = [];
+  for (const ctrl of rows) {
+    by_status[ctrl.status] = (by_status[ctrl.status] || 0) + 1;
+    const { evidence_count = 0, risk_count = 0 } = cont.get(ctrl.id) || {};
+    if (evidence_count > 0) controls_with_evidence++;
+    if (risk_count > 0) controls_with_risks++;
+    // Não aplicável (SoA) não é lacuna nem entra no denominador da cobertura.
+    if (ctrl.status === NA_STATUS) continue;
+    aplicaveis++;
+    if (ctrl.status !== 'Implemented') {
+      gaps.push({ control_id: ctrl.id, title: ctrl.title, status: ctrl.status, evidence_count, risk_count });
+    }
+  }
+  const coverage_pct = aplicaveis > 0 ? Math.round(((by_status.Implemented || 0) / aplicaveis) * 100) : 0;
+
+  return c.json({ ok: true, total: rows.length, applicable: aplicaveis, by_status, coverage_pct, controls_with_evidence, controls_with_risks, gaps });
 });
 
 // Coerência entre fases do SGSI/SGPI: referências órfãs entre risks, compliance_controls,

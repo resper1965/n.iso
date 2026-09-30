@@ -120,6 +120,28 @@ export const TOOLS: Ferramenta[] = [
     },
   },
   {
+    name: "niso_update_risk",
+    description: `Update an existing risk (partial: only the fields you pass change; the rest is kept). Use niso_list_risks to get the riskId. Risk acceptance (accepted_by/accepted_at) is a management decision and cannot be set here. ${WRITE_GUARDRAIL}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "The project ID the risk belongs to" },
+        riskId: { type: "string", description: "The risk ID" },
+        asset: { type: "string" },
+        threat: { type: "string" },
+        vulnerability: { type: "string" },
+        impact: { type: "number", minimum: 1, maximum: 5 },
+        probability: { type: "number", minimum: 1, maximum: 5 },
+        treatment: { type: "string", description: "Mitigate, Accept, Transfer or Avoid" },
+        treatment_plan: { type: "string" },
+        control_id: { type: "string", description: "Linked control ID" },
+        owner: { type: "string" },
+        status: { type: "string", description: "e.g. Open, Mitigated, Closed" },
+      },
+      required: ["projectId", "riskId"],
+    },
+  },
+  {
     name: "niso_list_controls",
     description: "List all compliance controls for a specific project",
     inputSchema: {
@@ -465,6 +487,35 @@ export async function executarFerramenta(
         const validated = schema.parse(args);
         fora(validated.projectId);
         return await t.contrato("POST /api/v1/projects/{projectId}/risks", { projectId: validated.projectId }, validated);
+      }
+
+      case "niso_update_risk": {
+        const nota = z.number().int().min(1).max(5);
+        const { projectId, riskId, ...mudancas } = z.object({
+          projectId: z.string(),
+          riskId: z.string(),
+          asset: z.string().min(1).optional(),
+          threat: z.string().min(1).optional(),
+          vulnerability: z.string().optional(),
+          impact: nota.optional(),
+          probability: nota.optional(),
+          treatment: z.string().optional(),
+          treatment_plan: z.string().optional(),
+          control_id: z.string().optional(),
+          owner: z.string().optional(),
+          status: z.string().optional(),
+        }).strip().parse(args); // strip: accepted_by/accepted_at do agente são descartados
+        fora(projectId);
+        // O PUT da API substitui o registro inteiro (campo ausente vira default).
+        // Lê o atual DESTE projeto e reenvia tudo, trocando só o pedido.
+        const { risks: lista } = (await t.get(`/api/v1/projects/${enc(projectId)}/risks`)) as { risks?: any[] };
+        const atual = lista?.find((r) => r?.id === riskId);
+        if (!atual) throw new Error(`Risco ${riskId} não encontrado no projeto ${projectId}`);
+        const campos = ["asset_id", "asset", "threat", "vulnerability", "impact", "probability", "treatment", "treatment_plan", "control_id", "owner", "status", "accepted_by", "accepted_at"] as const;
+        const corpo: Record<string, unknown> = {};
+        for (const k of campos) corpo[k] = atual[k] ?? null;
+        Object.assign(corpo, mudancas);
+        return await t.contrato("PUT /api/v1/risks/{id}", { id: riskId }, corpo as { asset: unknown; threat: unknown });
       }
 
       case "niso_list_controls": {
