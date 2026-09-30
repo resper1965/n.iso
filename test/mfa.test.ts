@@ -67,7 +67,7 @@ describe('TOTP (RFC 6238)', () => {
     const uri = uriProvisionamento('ABCDEFGH', 'a@b.c');
     expect(uri).toContain('otpauth://totp/');
     expect(uri).toContain('secret=ABCDEFGH');
-    expect(uri).toContain('issuer=nISO');
+    expect(uri).toContain('issuer=n.iso');
     expect(uri).toContain('period=30');
   });
 

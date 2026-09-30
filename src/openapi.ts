@@ -246,7 +246,7 @@ export function documentoOpenApi(origem?: string): Record<string, unknown> {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'nISO API',
+      title: 'n.iso API',
       version: '1.0.0',
       description: [
         'Contrato das rotas de escrita que validam o corpo com Zod.',

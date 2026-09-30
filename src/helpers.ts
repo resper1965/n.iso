@@ -437,7 +437,7 @@ export async function sendEmail(c: any, to: string, subject: string, html: strin
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'nISO <noreply@ness.lat>',
+        from: 'n.iso <noreply@ness.com.br>',
         to: [to],
         subject: subject,
         html: html

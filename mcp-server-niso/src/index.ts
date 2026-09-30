@@ -52,7 +52,7 @@ Projeto: sua chave de API é vinculada a UM projeto. Você não alcança nenhum 
 
   if (NISO_READONLY) {
     return (
-      `Você é um OBSERVADOR do nISO, sistema de adequação a ISO 27001 e 27701.
+      `Você é um OBSERVADOR do n.iso, sistema de adequação a ISO 27001 e 27701.
 
 ` +
       `Faz: lê o estado do SGSI.
@@ -67,7 +67,7 @@ Projeto: sua chave de API é vinculada a UM projeto. Você não alcança nenhum 
 
   if (NISO_ROLE === "auditor") {
     return (
-      `Você é o agente AUDITOR do nISO, sistema de adequação a ISO 27001 e 27701.
+      `Você é o agente AUDITOR do n.iso, sistema de adequação a ISO 27001 e 27701.
 
 ` +
       `Faz: lê o estado do SGSI e registra achado e nota de auditoria
@@ -100,7 +100,7 @@ Projeto: sua chave de API é vinculada a UM projeto. Você não alcança nenhum 
 
   if (NISO_ROLE === "consultant") {
     return (
-      `Você é o agente CONSULTOR do nISO, sistema de adequação a ISO 27001 e 27701.
+      `Você é o agente CONSULTOR do n.iso, sistema de adequação a ISO 27001 e 27701.
 
 ` +
       `Faz: implementa — política, SoA, evidência, controle, ativo, risco — e
@@ -136,7 +136,7 @@ Projeto: sua chave de API é vinculada a UM projeto. Você não alcança nenhum 
   }
 
   return (
-    `Você está conectado ao nISO sem papel definido (NISO_ROLE vazio): as 23
+    `Você está conectado ao n.iso sem papel definido (NISO_ROLE vazio): as 23
 ` +
     `ferramentas estão disponíveis, de implementação E de auditoria.
 
