@@ -34,11 +34,11 @@ describe('Principal agente', () => {
     expect((await comoAgente('/api/v1/projects/p-b/risks')).status).toBe(403);
   });
 
-  it('não apaga nada', async () => {
+  it('não apaga sem confirmação', async () => {
     expect((await comoAgente('/api/v1/projects/p-a/risks/qualquer', { method: 'DELETE' })).status).toBe(403);
   });
 
-  it('não gera políticas em lote', async () => {
+  it('não gera políticas em lote sem confirmação', async () => {
     const res = await comoAgente('/api/v1/projects/p-a/generate-policies-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     expect(res.status).toBe(403);
   });
@@ -74,14 +74,14 @@ describe('Principal agente', () => {
     expect((await comoAgente('/api/v1/projects/p-a/agentes')).status).toBe(403);
   });
 
-  it('grava como "agente de <email> (<cliente>)" na trilha', async () => {
+  it('grava como "agente de <email> (<cliente> / <projeto>)" na trilha', async () => {
     const res = await comoAgente('/api/v1/projects/p-a/risks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ asset: 'Servidor de arquivos', threat: 'Risco do agente', impact: 3, probability: 3 }),
     });
     expect(res.status).toBeLessThan(300);
     const log = await env.DB.prepare(`SELECT actor FROM audit_logs ORDER BY rowid DESC LIMIT 1`).first<{ actor: string }>();
-    expect(log!.actor).toBe('agente de cons@ness.lat (Cliente A)');
+    expect(log!.actor).toBe('agente de cons@ness.lat (Cliente A / p-a)');
   });
 
   it('concessão revogada derruba o agente', async () => {

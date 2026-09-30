@@ -32,15 +32,16 @@ export const NOME_CLIENTE_SQL = `COALESCE(NULLIF(trim(p.client_name), ''), p.pro
 export async function concessaoValida(
   db: D1Database,
   p: PropsAgente
-): Promise<{ email: string; client_name: string } | null> {
+): Promise<{ email: string; client_name: string; project_name: string } | null> {
   const row = await db.prepare(
-    `SELECT u.email, u.role, u.ativo, ${NOME_CLIENTE_SQL} AS client_name
+    `SELECT u.email, u.role, u.ativo, ${NOME_CLIENTE_SQL} AS client_name,
+            COALESCE(NULLIF(trim(p.project_name), ''), p.id) AS project_name
        FROM agente_concessoes ac
        JOIN users u ON u.id = ac.user_id
        JOIN projects p ON p.id = ac.project_id
       WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
         AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')`
-  ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string }>();
+  ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string; project_name: string }>();
   if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) return null;
 
   // Tirar o consultor da governança derruba o agente na próxima requisição,
@@ -48,8 +49,25 @@ export async function concessaoValida(
   const designado = await db.prepare(
     `SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor'`
   ).bind(p.projectId, row.email).first();
-  return designado ? { email: row.email, client_name: row.client_name } : null;
+  return designado ? { email: row.email, client_name: row.client_name, project_name: row.project_name } : null;
 }
+
+/** Só `resolverAgente` lê; ele só roda com `env.AGENTE`, então de fora o cabeçalho é inerte. */
+export const CABECALHO_CONFIRMADO = 'X-Agente-Confirmado';
+
+/**
+ * O consultor humano alcança estas rotas; o agente não. Não são documento nem
+ * achado do SGSI: são controle de acesso, configuração de segurança do cliente,
+ * visão de todos os clientes ou a área comercial. O agente não amplia o próprio
+ * acesso nem enxerga fora do projeto.
+ */
+const FORA_DO_AGENTE: Array<[RegExp, string]> = [
+  [/^\/api\/v1\/(users|admin\/users)(\/|$)/, 'gestão de usuários'],
+  [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
+  [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/projects\/[^/]+\/(sso|security-policy|scim-token|api-keys|webhooks)(\/|$)/, 'configuração de segurança do cliente'],
+  [/\/agentes(\/|$)/, 'o agente não gere o próprio acesso'],
+];
 
 export async function resolverAgente(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
@@ -65,10 +83,15 @@ export async function resolverAgente(
     return c.json({ error: 'Forbidden: caminho inválido' }, 403);
   }
 
-  // Proporcionalidade: o agente escreve adequação, não destrói nem opera em lote.
-  if (method === 'DELETE') return c.json({ error: 'Forbidden: o agente não apaga registros — faça pela interface' }, 403);
-  if (path.endsWith('/generate-policies-bulk')) return c.json({ error: 'Forbidden: geração em lote exige a interface e aprovação humana' }, 403);
-  if (/\/agentes(\/|$)/.test(path)) return c.json({ error: 'Forbidden: o agente não gere o próprio acesso' }, 403);
+  // Paridade com o consultor, preso ao projeto: `role: 'client'` + `client_project_id`
+  // herda o isolamento de tenant; o que é destrutivo exige confirmação.
+  for (const [re, motivo] of FORA_DO_AGENTE) {
+    if (re.test(path)) return c.json({ error: `Forbidden: fora do alcance do agente (${motivo}) — use a interface` }, 403);
+  }
+  const destrutiva = method === 'DELETE' || path.endsWith('/generate-policies-bulk');
+  if (destrutiva && c.req.header(CABECALHO_CONFIRMADO) !== '1') {
+    return c.json({ error: 'Forbidden: apagar e gerar em lote exigem confirmação — mostre ao usuário o que será feito, espere o "sim" e reenvie com confirmado_pelo_usuario: true' }, 403);
+  }
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
 
@@ -82,8 +105,9 @@ export async function resolverAgente(
   // projectAccessMiddleware; a escrita é liberada pelo chamador (writeCapable).
   return {
     id: p.userId,
-    email: `agente de ${row.email} (${row.client_name})`,
+    email: `agente de ${row.email} (${row.client_name} / ${row.project_name})`,
     role: 'client',
     client_project_id: p.projectId,
+    agente: true,
   };
 }
