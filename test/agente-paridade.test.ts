@@ -31,10 +31,13 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
     expect((await r.json<any>()).error).toContain('confirmado_pelo_usuario');
   });
 
-  it('apagar com confirmação apaga', async () => {
+  it('apagar com confirmação apaga, e a trilha leva o projeto e o agente', async () => {
     const r = await comoAgente('/api/v1/risks/r-a2', { method: 'DELETE', headers: confirmado });
     expect(r.status, await r.clone().text()).toBe(200);
     expect(await env.DB.prepare(`SELECT 1 FROM risks WHERE id='r-a2'`).first()).toBeNull();
+    const log = await env.DB.prepare(`SELECT actor, project_id FROM audit_logs WHERE action='agente.exclusao'`).first<any>();
+    expect(log?.project_id).toBe('p-a');
+    expect(log?.actor).toMatch(/^agente de /);
   });
 
   it('gerar em lote sem confirmação é recusado', async () => {
@@ -74,10 +77,21 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
       ['GET', '/api/v1/projects/p-a/api-keys'],
       ['GET', '/api/v1/projects/p-a/webhooks'],
       ['GET', '/api/v1/projects/p-a/agentes'],
+      ['DELETE', '/api/v1/webhooks/x'],
+      ['POST', '/api/v1/webhooks/test/x'],
     ] as const) {
       const r = await comoAgente(caminho, { method: metodo, headers: { ...confirmado, ...json }, body: metodo === 'GET' ? undefined : '{}' });
       expect(r.status, `${metodo} ${caminho}`).toBe(403);
     }
+  });
+
+  it('eliminar titular (anonimização) exige confirmação', async () => {
+    const corpo = JSON.stringify({ identificador: 'x@y.lat', justificativa: 'pedido do titular' });
+    const sem = await comoAgente('/api/v1/projects/p-a/data-subject/erase', { method: 'POST', headers: json, body: corpo });
+    expect(sem.status).toBe(403);
+    expect((await sem.json<any>()).error).toContain('confirmado_pelo_usuario');
+    const com = await comoAgente('/api/v1/projects/p-a/data-subject/erase', { method: 'POST', headers: { ...json, ...confirmado }, body: corpo });
+    expect(com.status).not.toBe(403);
   });
 
   it('escrita de auditor continua recusada', async () => {
@@ -98,7 +112,8 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
   });
 
   it('a trilha nomeia agente, cliente e projeto', async () => {
-    await comoAgente('/api/v1/projects/p-a/risks', { method: 'POST', headers: json, body: JSON.stringify({ asset: 'Rede', threat: 'Intrusão' }) });
+    const r = await comoAgente('/api/v1/projects/p-a/risks', { method: 'POST', headers: json, body: JSON.stringify({ asset: 'Rede', threat: 'Intrusão' }) });
+    expect(r.status, await r.clone().text()).toBeLessThan(300);
     const log = await env.DB.prepare(`SELECT actor FROM audit_logs WHERE actor LIKE 'agente de%' ORDER BY created_at DESC LIMIT 1`).first<any>();
     expect(log?.actor).toBe('agente de cons@ness.lat (Cliente A / SGSI A)');
   });

@@ -66,8 +66,14 @@ const FORA_DO_AGENTE: Array<[RegExp, string]> = [
   [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
   [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/projects\/[^/]+\/(sso|security-policy|scim-token|api-keys|webhooks)(\/|$)/, 'configuração de segurança do cliente'],
+  [/^\/api\/v1\/webhooks(\/|$)/, 'configuração de segurança do cliente'],
   [/\/agentes(\/|$)/, 'o agente não gere o próprio acesso'],
 ];
+
+/** Única definição do que exige confirmação: apagar, gerar em lote, anonimizar titular. */
+export function acaoDestrutiva(method: string, path: string): boolean {
+  return method.toUpperCase() === 'DELETE' || path.endsWith('/generate-policies-bulk') || path.endsWith('/data-subject/erase');
+}
 
 export async function resolverAgente(
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
@@ -88,9 +94,8 @@ export async function resolverAgente(
   for (const [re, motivo] of FORA_DO_AGENTE) {
     if (re.test(path)) return c.json({ error: `Forbidden: fora do alcance do agente (${motivo}) — use a interface` }, 403);
   }
-  const destrutiva = method === 'DELETE' || path.endsWith('/generate-policies-bulk');
-  if (destrutiva && c.req.header(CABECALHO_CONFIRMADO) !== '1') {
-    return c.json({ error: 'Forbidden: apagar e gerar em lote exigem confirmação — mostre ao usuário o que será feito, espere o "sim" e reenvie com confirmado_pelo_usuario: true' }, 403);
+  if (acaoDestrutiva(method, path) && c.req.header(CABECALHO_CONFIRMADO) !== '1') {
+    return c.json({ error: 'Forbidden: apagar, gerar em lote e eliminar titular exigem confirmação — mostre ao usuário o que será feito, espere o "sim" e reenvie com confirmado_pelo_usuario: true' }, 403);
   }
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
