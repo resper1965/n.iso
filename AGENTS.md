@@ -101,14 +101,14 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
-  `migrations/`, ultima a **0020**. O estado real de producao e o historico da
+  `migrations/`, ultima a **0034**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
   AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
-- **MCP remoto** (consultor): `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
+- **MCP remoto** (consultor): agente com alcance de consultor preso a um projeto (`src/mcp/servidor.ts`); `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
   (`src/routes/oauth-autorizacao.ts`); principal agente em
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
   tabela `agente_concessoes`; KV `OAUTH_KV`. Regra: **so `ROTAS_OAUTH` passam

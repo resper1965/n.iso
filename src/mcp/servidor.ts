@@ -1,7 +1,7 @@
 import { createMcpHandler } from 'agents/mcp/server';
 import { Server, type CallToolResult } from '@modelcontextprotocol/server';
 import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte, type Ferramenta } from '../../mcp-server-niso/src/ferramentas';
-import { concessaoValida, type PropsAgente } from '../middleware/agente';
+import { concessaoValida, CABECALHO_CONFIRMADO, type PropsAgente } from '../middleware/agente';
 import { INSTRUCOES, montarContexto } from './contexto';
 
 type FetchHono = (r: Request, e: any, c?: any) => Response | Promise<Response>;
@@ -15,8 +15,35 @@ const CONTEXTO: Ferramenta = {
   inputSchema: { type: 'object', properties: {} },
 };
 
+const GENERICAS: Ferramenta[] = [
+  {
+    name: 'niso_ler',
+    description:
+      'Lê qualquer área do projeto desta conexão, como o consultor vê na interface. caminho começa com /api/v1/ — o mapa das áreas está em niso_contexto. Arquivo binário (PDF, planilha, imagem) volta só como metadados.',
+    inputSchema: { type: 'object', properties: { caminho: { type: 'string' } }, required: ['caminho'] },
+  },
+  {
+    name: 'niso_executar',
+    description:
+      'Grava no projeto desta conexão, como o consultor faria na interface: POST, PUT, PATCH ou DELETE em /api/v1/... Apagar e gerar em lote exigem confirmado_pelo_usuario: true — antes, mostre ao usuário o que será feito (nome e id) e espere o "sim".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        metodo: { type: 'string', enum: ['POST', 'PUT', 'PATCH', 'DELETE'] },
+        caminho: { type: 'string' },
+        corpo: { type: 'object' },
+        confirmado_pelo_usuario: { type: 'boolean' },
+      },
+      required: ['metodo', 'caminho'],
+    },
+  },
+];
+/** Teto do texto devolvido ao modelo: trilha e dossiê podem ter megabytes. */
+const LIMITE_TEXTO = 100_000;
+
 const DISPONIVEIS: Ferramenta[] = [
   CONTEXTO,
+  ...GENERICAS,
   ...TOOLS.filter((t) => ferramentaPermitida(t.name, 'consultant') && !BLOQUEADAS.has(t.name)),
 ];
 const NOMES = new Set(DISPONIVEIS.map((f) => f.name));
@@ -36,23 +63,31 @@ function caminhoSeguro(base: string, path: string): boolean {
   return new URL(base + rota).pathname === rota;
 }
 
+type Bruto = (path: string, init: RequestInit) => Promise<Response>;
+
 /**
  * Chama as rotas /api/v1 do próprio Worker como o agente — sem rede, sem
  * cabeçalho forjável. A identidade vai SÓ em `env.AGENTE`; o Authorization do
  * /mcp (token OAuth) não é repassado.
  */
-function transporteInterno(origem: Request, env: any, ctx: any, props: PropsAgente, fetchHono: FetchHono): Transporte {
+function requisicaoInterna(origem: Request, env: any, ctx: any, props: PropsAgente, fetchHono: FetchHono): Bruto {
   const base = new URL(origem.url).origin;
   // Espalhar o env preserva os bindings (DB, SESSIONS, STORAGE...): são
   // propriedades próprias e enumeráveis do objeto env no workerd.
   const envAgente = { ...env, AGENTE: props };
   // Allowlist de IP do tenant avalia o IP real do cliente MCP.
   const ip = origem.headers.get('CF-Connecting-IP');
-  const chamar = async (path: string, init: RequestInit) => {
+  return async (path, init) => {
     if (!caminhoSeguro(base, path)) throw new Error('caminho de API recusado (id com caractere inválido)');
     const headers = new Headers(init.headers);
     if (ip) headers.set('CF-Connecting-IP', ip);
-    const r = await fetchHono(new Request(base + path, { ...init, headers }), envAgente, ctx);
+    return fetchHono(new Request(base + path, { ...init, headers }), envAgente, ctx);
+  };
+}
+
+function transporteInterno(bruto: Bruto): Transporte {
+  const chamar = async (path: string, init: RequestInit) => {
+    const r = await bruto(path, init);
     const texto = await r.text();
     let corpo: any = null;
     try {
@@ -89,6 +124,39 @@ function transporteInterno(origem: Request, env: any, ctx: any, props: PropsAgen
   };
 }
 
+async function genericas(nome: string, args: any, bruto: Bruto): Promise<CallToolResult> {
+  const falha = (texto: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: texto }] });
+  const caminho = typeof args?.caminho === 'string' ? args.caminho : '';
+  const metodo = nome === 'niso_ler' ? 'GET' : String(args?.metodo ?? '').toUpperCase();
+  if (nome === 'niso_executar' && !['POST', 'PUT', 'PATCH', 'DELETE'].includes(metodo)) {
+    return falha('metodo deve ser POST, PUT, PATCH ou DELETE (para ler, use niso_ler)');
+  }
+  const headers = new Headers();
+  const temCorpo = nome === 'niso_executar' && args?.corpo !== undefined;
+  if (temCorpo) headers.set('Content-Type', 'application/json');
+  // Só o booleano true confirma: "true" em texto é engano do modelo, não o "sim" do usuário.
+  if (args?.confirmado_pelo_usuario === true) headers.set(CABECALHO_CONFIRMADO, '1');
+  const r = await bruto(caminho, { method: metodo, headers, body: temCorpo ? JSON.stringify(args.corpo) : undefined });
+  const tipo = r.headers.get('Content-Type') ?? '';
+  if (/json|^text\//i.test(tipo)) {
+    let texto = await r.text();
+    if (texto.length > LIMITE_TEXTO) texto = texto.slice(0, LIMITE_TEXTO) + `
+[resposta cortada em ${LIMITE_TEXTO} caracteres: filtre ou peça por item]`;
+    return { isError: !r.ok, content: [{ type: 'text', text: `HTTP ${r.status}
+${texto}` }] };
+  }
+  // Só medir: com Content-Length não lê o corpo; sem ele, lê (não há outro jeito de saber).
+  const declarado = Number(r.headers.get('Content-Length'));
+  let tamanho: number;
+  if (r.headers.get('Content-Length') !== null && Number.isFinite(declarado)) {
+    tamanho = declarado;
+    await r.body?.cancel();
+  } else {
+    tamanho = (await r.arrayBuffer()).byteLength;
+  }
+  return { isError: !r.ok, content: [{ type: 'text', text: JSON.stringify({ status: r.status, tipo, tamanho, observacao: 'binário: abra na interface' }) }] };
+}
+
 export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: FetchHono): Promise<Response> {
   const props = ctx.props as PropsAgente | undefined;
   // Token OAuth válido não basta: a concessão pode ter sido revogada, expirada
@@ -103,7 +171,8 @@ export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: Fe
       },
     });
   }
-  const t = transporteInterno(req, env, ctx, props, fetchHono);
+  const bruto = requisicaoInterna(req, env, ctx, props, fetchHono);
+  const t = transporteInterno(bruto);
 
   const criar = () => {
     const server = new Server({ name: 'niso', version: '2.0.0' }, { capabilities: { tools: {} }, instructions: INSTRUCOES });
@@ -116,6 +185,7 @@ export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: Fe
           const projeto = (await t.get(`/api/v1/projects/${encodeURIComponent(props.projectId)}`)) as any;
           return { content: [{ type: 'text', text: montarContexto({ ...projeto, id: props.projectId }, props.email) }] };
         }
+        if (name === 'niso_ler' || name === 'niso_executar') return await genericas(name, args, bruto);
         if (!NOMES.has(name)) {
           return { isError: true, content: [{ type: 'text', text: `Ferramenta ${name} indisponível para o agente consultor` }] };
         }
