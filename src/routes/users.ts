@@ -78,7 +78,7 @@ usersApp.post('/', async (c) => {
 
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
-        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao nISO!</h2>
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao n.iso!</h2>
         <p>Olá, <strong>${escapeHtml(name)}</strong>,</p>
         <p>Você foi convidado a acessar o portal de GRC da <strong>ness.</strong></p>
         <p>Aqui estão suas credenciais temporárias para o primeiro acesso:</p>
@@ -88,11 +88,11 @@ usersApp.post('/', async (c) => {
         </div>
         <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
         <p style="margin-top: 25px;">
-          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no nISO</a>
+          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no n.iso</a>
         </p>
       </div>
     `;
-    await sendEmail(c, email, 'Seu acesso ao nISO', emailHtml);
+    await sendEmail(c, email, 'Seu acesso ao n.iso', emailHtml);
 
     return c.json({ id, email, name, role: targetRole, client_project_id: targetProject }, 201);
   } catch (e: any) {

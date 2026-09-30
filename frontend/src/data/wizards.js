@@ -848,7 +848,7 @@ export     const DOC_WIZARDS = {
       ], auditorTip: 'Cl 7.2 — Registros devem ser mantidos como evidência de competência.', isoRef: 'Cl 7.2' },
 
       'p30_2': { title: 'Evidência: Dashboard de Métricas Implementado', evidenceOnly: true, fields: [
-        { id: 'tool', label: 'Ferramenta de dashboard', type: 'text', required: true, placeholder: 'Ex: Grafana, Power BI, nISO dashboard, planilha' },
+        { id: 'tool', label: 'Ferramenta de dashboard', type: 'text', required: true, placeholder: 'Ex: Grafana, Power BI, n.iso dashboard, planilha' },
         { id: 'kpis', label: 'KPIs monitorados', type: 'textarea', required: true },
         { id: 'evidence_desc', label: 'Evidências (print do dashboard)', type: 'textarea', required: true }
       ], auditorTip: 'Cl 9.1 — Dashboard deve apresentar KPIs relevantes para a análise crítica.', isoRef: 'Cl 9.1' },

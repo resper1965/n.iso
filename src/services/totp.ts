@@ -115,7 +115,7 @@ function comparacaoConstante(a: string, b: string): boolean {
 }
 
 /** URI otpauth:// para o QR Code do aplicativo autenticador. */
-export function uriProvisionamento(segredo: string, email: string, emissor = 'nISO'): string {
+export function uriProvisionamento(segredo: string, email: string, emissor = 'n.iso'): string {
   const rotulo = encodeURIComponent(`${emissor}:${email}`);
   const params = new URLSearchParams({
     secret: segredo,

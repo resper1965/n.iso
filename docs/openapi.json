@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "nISO API",
+    "title": "n.iso API",
     "version": "1.0.0",
     "description": "Contrato das rotas de escrita que validam o corpo com Zod.\n\nGerado dos MESMOS objetos Zod que os handlers executam — não escrito à mão.\nRota que lê o corpo sem schema não aparece aqui: são as que faltam fechar\nno item 3.3 do plano, contadas pela catraca de `test/validacao-corpo.test.ts`."
   },
