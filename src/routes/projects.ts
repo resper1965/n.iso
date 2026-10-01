@@ -8,7 +8,7 @@ import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
 import { NA_STATUS } from '../services/soa-logic';
-import { validateBody, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
+import { validateBody, checklistProgressSchema, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
 import { COLUNAS_REVOGACAO } from './controls';
@@ -679,6 +679,44 @@ projectsApp.get('/:id/checklist-progress', async (c) => {
     WHERE cp.project_id = ?
   `).bind(projectId).all();
   return c.json({ ok: true, progress: rows.results || [] });
+});
+
+// Sumiu na decomposição do index.ts (72f1b59): a tela chamava a rota e engolia o 404
+// num console.error, então marcação, nota, responsável e prazo não persistiam.
+projectsApp.put('/:id/checklist-progress', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const v = await validateBody(c, checklistProgressSchema);
+    if (!v.success) return v.response;
+    const { items } = v.data;
+
+    // Aterramento de tenant: evidência vinculada tem de ser DESTE projeto. Compara em
+    // memória (e não com `IN (?, …)`): até 500 itens passam do teto de 100 parâmetros do D1.
+    const pedidas = [...new Set(items.map((i) => i.evidence_id).filter((x): x is string => !!x))];
+    if (pedidas.length) {
+      const { results } = await c.env.DB.prepare('SELECT id FROM evidence WHERE project_id = ?').bind(projectId).all<{ id: string }>();
+      const doProjeto = new Set((results || []).map((r) => r.id));
+      if (pedidas.some((id) => !doProjeto.has(id))) {
+        return c.json({ error: 'evidence_id inexistente ou de outro projeto' }, 400);
+      }
+    }
+
+    const user = c.get('user');
+    // `checked_by` referencia users(id): chave de API não tem linha lá (id `apikey:…`).
+    const quem = user?.id && !user.id.startsWith('apikey:') ? user.id : null;
+    const stmt = c.env.DB.prepare(
+      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes, assigned_to, due_date)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET is_checked = excluded.is_checked, checked_by = excluded.checked_by, checked_at = excluded.checked_at, evidence_id = excluded.evidence_id, notes = excluded.notes, assigned_to = excluded.assigned_to, due_date = excluded.due_date`
+    );
+    await c.env.DB.batch(items.map((i) =>
+      stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, quem, i.evidence_id ?? null, i.notes ?? null, i.assigned_to ?? null, i.due_date ?? null)
+    ));
+    await logAudit(c.env.DB, 'checklist.updated', user?.email ?? 'system', `${items.length} item(ns) do checklist atualizado(s)`, '', '', projectId);
+    return c.json({ ok: true, count: items.length });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao salvar o progresso do checklist', e);
+  }
 });
 
 // Scope changes inside Project
