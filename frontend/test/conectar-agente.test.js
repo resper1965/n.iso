@@ -26,13 +26,24 @@ beforeEach(() => {
 });
 
 describe('Conectar agente — estrutura', () => {
-  it('título, endereço do servidor no topo e três passos', () => {
+  it('título, três passos, e o endereço do servidor UMA vez só (dentro do comando)', () => {
     const { c, h } = monta();
     expect(h.textContent).toBe('Conectar agente');
-    expect(c.querySelector('.ca-servidor').textContent).toContain('https://niso.ness.com.br/mcp');
+    expect(c.textContent.split('https://niso.ness.com.br/mcp').length - 1).toBe(1);
+    expect(painel(c).textContent).toContain('https://niso.ness.com.br/mcp');
     const passos = [...c.querySelectorAll('ol.ca-passos > li')];
     expect(passos).toHaveLength(3);
     expect(passos[2].textContent).toContain('niso_contexto');
+  });
+
+  it('duas colunas: o que se faz à esquerda, o que o agente faz à direita', () => {
+    const { c } = monta();
+    const main = c.querySelector('.ca > .ca-main');
+    const lado = c.querySelector('.ca > aside.ca-lado');
+    expect(main.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(main.querySelector('ol.ca-passos')).toBeTruthy();
+    expect(lado.querySelector('.ca-alcance')).toBeTruthy();
+    expect(lado.querySelector('[role="tablist"]')).toBeNull();
   });
 
   it('um cliente por vez, em abas acessíveis: o Claude Code vem selecionado', () => {
@@ -125,8 +136,8 @@ describe('Conectar agente — copiar', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     monta();
-    await window.__copiarTrecho('url');
-    expect(writeText).toHaveBeenCalledWith('https://niso.ness.com.br/mcp');
+    await window.__copiarTrecho('claude');
+    expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http niso https://niso.ness.com.br/mcp');
     expect(window.showToast).toHaveBeenCalledWith('Copiado');
   });
 

@@ -16,7 +16,7 @@ const CLIENTES = [
 ];
 
 const PASSOS = [
-    { titulo: 'Adicione o servidor', texto: 'Copie o endereço e adicione-o no seu cliente MCP, na aba abaixo.' },
+    { titulo: 'Adicione o servidor', texto: 'Copie o comando do seu cliente, na aba acima, e rode-o. O endereço já vai dentro dele.' },
     { titulo: 'Entre e escolha o cliente', texto: 'Na primeira chamada o navegador abre. Entre no n.iso e escolha um cliente: é um por conexão.' },
     { titulo: 'Chame niso_contexto', texto: 'Peça ao agente para começar por niso_contexto: ela diz o cliente, o mapa da app e os roteiros (diagnóstico, fechar lacuna, responder auditoria e a pré-avaliação de prontidão, que só lê).' },
 ];
@@ -71,9 +71,11 @@ function desenhar() {
 
     const passos = PASSOS.map((p, i) => `
         <li class="ca-passo">
-            <div class="ca-num">0${i + 1}</div>
-            <div class="ca-passo-titulo">${escapeHTML(p.titulo)}</div>
-            <p class="ca-passo-txt">${escapeHTML(p.texto)}</p>
+            <span class="ca-num">0${i + 1}</span>
+            <div class="ca-passo-corpo">
+                <div class="ca-passo-titulo">${escapeHTML(p.titulo)}</div>
+                <p class="ca-passo-txt">${escapeHTML(p.texto)}</p>
+            </div>
         </li>`).join('');
 
     const alcance = ALCANCE.map(x => `
@@ -84,30 +86,29 @@ function desenhar() {
 
     c.innerHTML = `
         <div class="ca fade-in">
-            <section class="ca-servidor" aria-label="Endereço do servidor">
-                <div>
-                    <h2 class="ca-titulo">Endereço do servidor</h2>
-                    <p class="ca-nota">O mesmo para todos os clientes. O login define quem é o agente e em qual cliente ele atua: ele age em nome de você, só nos clientes em que você é consultor, e a trilha registra o seu e-mail.</p>
-                </div>
-                ${bloco('url', URL_MCP)}
-            </section>
-            <ol class="ca-passos" aria-label="Como conectar">${passos}</ol>
-            <section aria-label="Seu cliente MCP">
-                <h2 class="ca-titulo">Seu cliente MCP</h2>
-                <div class="ca-abas" role="tablist" aria-label="Cliente MCP" data-action-keydown="__abaTecla" data-arg-event>${abas}</div>
-                <div class="ca-painel" role="tabpanel" id="painel-cliente" aria-labelledby="aba-${atual.id}">
-                    <div class="ca-painel-cab">
-                        <span class="ca-onde">${escapeHTML(atual.onde)}</span>
-                        <span class="ca-estado">${escapeHTML(estado)}</span>
+            <div class="ca-main">
+                <section aria-label="Seu cliente MCP">
+                    <h2 class="ca-titulo">Conectar o seu cliente</h2>
+                    <p class="ca-nota">O endereço do servidor é o mesmo para todos. O login define quem é o agente e em qual cliente ele atua: ele age em nome de você, só nos clientes em que você é consultor, e a trilha registra o seu e-mail.</p>
+                    <div class="ca-abas" role="tablist" aria-label="Cliente MCP" data-action-keydown="__abaTecla" data-arg-event>${abas}</div>
+                    <div class="ca-painel" role="tabpanel" id="painel-cliente" aria-labelledby="aba-${atual.id}">
+                        <div class="ca-painel-cab">
+                            <span class="ca-onde">${escapeHTML(atual.onde)}</span>
+                            <span class="ca-estado">${escapeHTML(estado)}</span>
+                        </div>
+                        ${bloco(atual.id, atual.trecho)}
                     </div>
-                    ${bloco(atual.id, atual.trecho)}
-                </div>
-            </section>
-            <section aria-label="O que o agente faz">
+                </section>
+                <section aria-label="Como conectar">
+                    <h2 class="ca-titulo">Em três passos</h2>
+                    <ol class="ca-passos">${passos}</ol>
+                </section>
+            </div>
+            <aside class="ca-lado" aria-label="O que o agente faz">
                 <h2 class="ca-titulo">O que o agente faz</h2>
                 <div class="ca-alcance">${alcance}</div>
-            </section>
-            <p class="ca-rodape">O MCP remoto só funciona em niso.ness.com.br. O administrador do cliente vê este acesso em Governança e pode revogá-lo; ele também cai quando você troca a senha ou sai da governança do projeto.</p>
+                <p class="ca-rodape">O MCP remoto só funciona em niso.ness.com.br. O administrador do cliente vê este acesso em Governança e pode revogá-lo; ele também cai quando você troca a senha ou sai da governança do projeto.</p>
+            </aside>
         </div>`;
 }
 
