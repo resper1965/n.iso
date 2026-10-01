@@ -212,6 +212,15 @@ describe('api()', () => {
             expect(window.doLogout).not.toHaveBeenCalled();
         });
 
+        // F7: trocar a propria senha pede a senha ATUAL; errar e 401 esperado, nao sessao morta.
+        it('nao desloga em 401 de /auth/change-password e propaga "Senha atual incorreta"', async () => {
+            window.doLogout = vi.fn();
+            fetchMock.mockResolvedValue(resposta({ error: 'Senha atual incorreta' }, { status: 401 }));
+            await expect(api('POST', '/api/v1/auth/change-password', { oldPassword: 'x', newPassword: 'y' }))
+                .rejects.toThrow('Senha atual incorreta');
+            expect(window.doLogout).not.toHaveBeenCalled();
+        });
+
         it('nao quebra quando window.doLogout ainda nao foi registrado', async () => {
             fetchMock.mockResolvedValue(resposta({ error: 'Unauthorized' }, { status: 401 }));
             await expect(api('GET', '/api/v1/projects')).rejects.toThrow('Unauthorized');

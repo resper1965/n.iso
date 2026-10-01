@@ -596,6 +596,7 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(naviga
 const LOGOUT_SHORTCUT = IS_MAC ? '⇧⌘Q' : '⇧Ctrl+Q';
 
 const ICON_KEY = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.5-8.5"/><path d="m17 6 3 3"/></svg>';
+const ICON_LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const ICON_HISTORY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>';
 const ICON_LOGOUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -632,6 +633,9 @@ window.renderAccountMenu = function renderAccountMenu() {
             ${tenantRows ? `<div class="account-group">Tenant</div>${tenantRows}<div class="account-rule"></div>` : ''}
             <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openProfileModal"]'>
                 ${ICON_KEY}<span class="account-item-label">Minha conta e MFA</span>
+            </button>
+            <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openChangePasswordModal"]'>
+                ${ICON_LOCK}<span class="account-item-label">Trocar senha</span>
             </button>
             <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openSessionTrail"]'>
                 ${ICON_HISTORY}<span class="account-item-label">Trilha da minha sessão</span>
