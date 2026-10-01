@@ -73,6 +73,11 @@ const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/projects\/[^/]+\/auditor-token(\/|$)/, 'credencial de auditor externo'],
   [/^\/api\/v1\/projects\/?$/, 'o agente está preso a um projeto', ['POST']],
   [/\/agentes(\/|$)/, 'o agente não gere o próprio acesso'],
+  // Desaprovar é ato da direção, pela interface (F6, decisão D1): o agente não revoga a aprovação de
+  // ROPA nem de DPIA, e não apaga análise crítica, que é registro assinado. Revogar aprovação de
+  // CONTROLE segue possível, com confirmação (acaoDestrutiva).
+  [/^\/api\/v1\/projects\/[^/]+\/(ropa|dpia)\/[^/]+\/revoke-approval$/, 'revogar aprovação de ROPA e DPIA é da direção, pela interface'],
+  [/^\/api\/v1\/management-reviews\/[^/]+$/, 'excluir análise crítica destrói registro assinado: use a interface', ['DELETE']],
 ];
 
 /** Única definição do que exige confirmação: apagar, gerar em lote, anonimizar titular, revogar aprovações. */

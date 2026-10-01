@@ -26,7 +26,7 @@ const PASSOS = [
 const ALCANCE = [
     { titulo: 'Lê', texto: 'Tudo o que você lê neste cliente: controles, riscos, evidências em texto, políticas, entrevistas, ROPA, DPIA, governança.' },
     { titulo: 'Grava', texto: 'Adequação, como você grava na interface: políticas, SoA, evidências em texto, controles, ativos e riscos.' },
-    { titulo: 'Pede o seu "sim"', sim: true, texto: 'Apagar, gerar políticas em lote, eliminar dados de titular e revogar aprovações. Ele mostra o que vai fazer antes.' },
+    { titulo: 'Pede o seu "sim"', sim: true, texto: 'Apagar, gerar políticas em lote, eliminar dados de titular e revogar aprovações de controle. Ele mostra o que vai fazer antes.' },
     { titulo: 'Não faz', texto: 'Usuários, SSO, chaves de API, webhooks, sua conta pessoal, criar projeto e registrar achado de auditoria (quem implementa não audita: ISO 27001, 9.2).' },
 ];
 

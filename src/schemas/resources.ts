@@ -43,6 +43,14 @@ export const checklistProgressSchema = z.object({
   })).min(1).max(500)
 });
 
+/**
+ * Revogar a aprovação de ROPA ou DPIA (F6): o motivo é obrigatório e vai para a trilha. Mínimo de
+ * 5 caracteres para barrar o "x" digitado só para passar.
+ */
+const motivoDaRevogacao = z.string().trim().min(5, 'Informe o motivo (mínimo de 5 caracteres)').max(500);
+export const revogarRopaSchema = z.object({ role: z.enum(['ciso', 'ceo', 'todas']), reason: motivoDaRevogacao });
+export const revogarDpiaSchema = z.object({ reason: motivoDaRevogacao });
+
 export const createVendorSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   category: z.string().optional().nullable()
