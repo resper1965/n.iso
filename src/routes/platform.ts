@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, ehComercial, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema } from '../schemas';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
@@ -114,20 +114,34 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     // governança DESTE projeto, não do papel de plataforma. Sem esta checagem,
     // qualquer editor do projeto carimbava a aprovação (falha de segregação de
     // funções). Mesmo padrão de evidência, controles e ROPA.
+    const valid = await validateBody(c, dpiaApprovalSchema);
+    if (!valid.success) return valid.response;
+    const { role } = valid.data;
+
     const autoridade = await autoridadeDeAssinatura(c.env.DB, projectId, user);
-    const recusa = recusaDeAssinatura(autoridade, 'ciso');
+    const recusa = recusaDeAssinatura(autoridade, role);
     if (recusa) return c.json({ error: recusa }, 403);
+
+    const atual = await c.env.DB.prepare('SELECT dpo_signature, ceo_signature FROM dpia_assessments WHERE id = ? AND project_id = ?')
+      .bind(assessmentId, projectId).first<{ dpo_signature: string | null; ceo_signature: string | null }>();
+    if (!atual) return c.json({ error: 'DPIA não encontrado' }, 404);
 
     const dbUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first<any>();
     // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
     const approvedBy = autoridade.nome || dbUser?.name || user.email;
     const now = new Date().toISOString();
 
-    await c.env.DB.prepare(
-      'UPDATE dpia_assessments SET status = ?, dpo_approved_by = ?, dpo_approved_at = ? WHERE id = ? AND project_id = ?'
-    ).bind('Approved', approvedBy, now, assessmentId, projectId).run();
+    // O DPO assina e o DPIA segue em análise; só com as duas assinaturas ele vira Approved.
+    if (role === 'ciso') {
+      await c.env.DB.prepare('UPDATE dpia_assessments SET dpo_signature = ?, dpo_approved_by = ?, dpo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?')
+        .bind(approvedBy, approvedBy, now, atual.ceo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
+    } else {
+      await c.env.DB.prepare('UPDATE dpia_assessments SET ceo_signature = ?, status = ? WHERE id = ? AND project_id = ?')
+        .bind(approvedBy, atual.dpo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
+    }
 
-    await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado pelo DPO (${approvedBy})`);
+    const quem = role === 'ciso' ? 'pelo DPO / Líder SGSI' : 'pela Direção Executiva';
+    await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado ${quem} (${approvedBy}); papel: ${role}`, '', c.req.header('CF-Connecting-IP') ?? '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Erro ao aprovar DPIA', e);

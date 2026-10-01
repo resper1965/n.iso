@@ -67,6 +67,9 @@ export const ropaApprovalSchema = z.object({
   role: z.enum(['ciso', 'ceo']),
 }).passthrough();
 
+// Aprovação de DPIA: mesmo contrato da de ROPA (F9).
+export const dpiaApprovalSchema = ropaApprovalSchema;
+
 // ─── Treinamento ─────────────────────────────────────────────────────────────
 export const trainingSchema = z.object({
   employee_name: curto,
