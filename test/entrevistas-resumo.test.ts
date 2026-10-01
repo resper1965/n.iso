@@ -34,6 +34,12 @@ describe('Resumo das entrevistas e mapa da app', () => {
     expect(MAPA_DA_APP).not.toMatch(/leads|proposals|assessments/);
   });
 
+  it('o mapa diz COMO editar governança, partes interessadas e checklist', () => {
+    expect(MAPA_DA_APP).toContain('POST com id no corpo EDITA o membro');
+    expect(MAPA_DA_APP).toContain('PUT /api/v1/stakeholders/{id}');
+    expect(MAPA_DA_APP).toContain('PUT grava o progresso por item');
+  });
+
   it('instruções refletem a paridade e cabem no limite', () => {
     expect(INSTRUCOES.length).toBeLessThanOrEqual(2048);
     expect(INSTRUCOES).toContain('confirmado_pelo_usuario');
