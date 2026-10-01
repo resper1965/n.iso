@@ -136,8 +136,8 @@ describe('Conectar agente — copiar', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     monta();
-    await window.__copiarTrecho('url');
-    expect(writeText).toHaveBeenCalledWith('https://niso.ness.com.br/mcp');
+    await window.__copiarTrecho('claude');
+    expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http niso https://niso.ness.com.br/mcp');
     expect(window.showToast).toHaveBeenCalledWith('Copiado');
   });
 
