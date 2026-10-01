@@ -61,7 +61,7 @@ describe('Conectar agente — estrutura', () => {
 
   it('o painel mostra só o trecho do cliente selecionado', () => {
     const { c } = monta();
-    expect(painel(c).textContent).toContain('claude mcp add --transport http niso');
+    expect(painel(c).textContent).toContain('claude mcp add --transport http --scope user niso');
     expect(painel(c).textContent).not.toContain('codex mcp add');
     window.__selecionarCliente('codex');
     expect(aba(c, 'Codex').getAttribute('aria-selected')).toBe('true');
@@ -84,6 +84,35 @@ describe('Conectar agente — estrutura', () => {
     expect(aba(c, 'Antigravity').getAttribute('aria-selected')).toBe('true');
     tecla('Home');
     expect(aba(c, 'Claude Code').getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+describe('Conectar agente — instruções que o consultor precisa', () => {
+  it('Claude Code: escopo user, instalação do CLI, estado esperado e diagnóstico', () => {
+    const { c } = monta();
+    const t = painel(c).textContent;
+    expect(t).toContain('--scope user');
+    expect(t).toContain('irm https://claude.ai/install.ps1 | iex');
+    expect(t).toContain('Needs authentication');
+    expect(t).toContain('/mcp');
+    expect(t).toContain('claude mcp list');
+    expect(t).toContain('claude mcp remove niso -s user');
+  });
+
+  it('o passo 2 diz que o login é do consultor, não do agente da sessão', () => {
+    const { c } = monta();
+    const p2 = c.querySelectorAll('ol.ca-passos > li')[1].textContent;
+    expect(p2).toContain('/mcp');
+    expect(p2).toMatch(/agente da sessão não o faz/);
+  });
+
+  it('os outros clientes não ganham instruções do Claude Code', () => {
+    const { c } = monta();
+    for (const id of ['cursor', 'codex', 'antigravity']) {
+      window.__selecionarCliente(id);
+      expect(painel(c).textContent, id).not.toContain('claude mcp');
+      expect(painel(c).textContent, id).not.toContain('Needs authentication');
+    }
   });
 });
 
@@ -137,7 +166,7 @@ describe('Conectar agente — copiar', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     monta();
     await window.__copiarTrecho('claude');
-    expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http niso https://niso.ness.com.br/mcp');
+    expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http --scope user niso https://niso.ness.com.br/mcp');
     expect(window.showToast).toHaveBeenCalledWith('Copiado');
   });
 

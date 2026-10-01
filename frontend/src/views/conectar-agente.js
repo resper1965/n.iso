@@ -5,8 +5,12 @@ const URL_MCP = 'https://niso.ness.com.br/mcp';
 // aConfirmar: só o Claude Code foi exercitado contra a produção (30/09/2026). Os outros três têm
 // a configuração, mas o login OAuth deles não foi visto funcionar: não prometer o que não se viu.
 const CLIENTES = [
+    // `--scope user`: o padrão ("local") prende o servidor à pasta onde o comando rodou, e some numa
+    // sessão sem pasta ou numa pasta temporária (caso real de um consultor, 01/10/2026).
     { id: 'claude', nome: 'Claude Code', onde: 'Terminal', aConfirmar: false,
-      trecho: `claude mcp add --transport http niso ${URL_MCP}` },
+      trecho: `claude mcp add --transport http --scope user niso ${URL_MCP}`,
+      precisa: 'Precisa do comando claude no terminal. Se o seu terminal disser que ele não existe (comum com o app desktop), instale no PowerShell com: irm https://claude.ai/install.ps1 | iex, e abra um terminal novo.',
+      depois: 'Depois do comando o servidor aparece como "Needs authentication": é o esperado. Abra o claude, rode /mcp, escolha niso e entre no navegador. Confira com: claude mcp list (deve mostrar conectado). Para refazer: claude mcp remove niso -s user.' },
     { id: 'cursor', nome: 'Cursor', onde: 'Arquivo .cursor/mcp.json', aConfirmar: true,
       trecho: `{ "mcpServers": { "niso": { "url": "${URL_MCP}" } } }` },
     { id: 'codex', nome: 'Codex', onde: 'Terminal', aConfirmar: true,
@@ -16,8 +20,8 @@ const CLIENTES = [
 ];
 
 const PASSOS = [
-    { titulo: 'Adicione o servidor', texto: 'Copie o comando do seu cliente, na aba acima, e rode-o. O endereço já vai dentro dele.' },
-    { titulo: 'Entre e escolha o cliente', texto: 'Na primeira chamada o navegador abre. Entre no n.iso e escolha um cliente: é um por conexão.' },
+    { titulo: 'Adicione o servidor', texto: 'Copie o comando do seu cliente, na aba acima, e rode-o de qualquer pasta. O endereço já vai dentro dele.' },
+    { titulo: 'Entre e escolha o cliente', texto: 'O servidor fica sem acesso até você entrar: no Claude Code, abra o claude, rode /mcp, escolha niso e entre no n.iso pelo navegador. Esse login é seu, o agente da sessão não o faz por você. Escolha um cliente: é um por conexão.' },
     { titulo: 'Chame niso_contexto', texto: 'Peça ao agente para começar por niso_contexto: ela diz o cliente, o mapa da app e os roteiros (diagnóstico, fechar lacuna, responder auditoria e a pré-avaliação de prontidão, que só lê).' },
 ];
 
@@ -96,7 +100,9 @@ function desenhar() {
                             <span class="ca-onde">${escapeHTML(atual.onde)}</span>
                             <span class="ca-estado">${escapeHTML(estado)}</span>
                         </div>
+                        ${atual.precisa ? `<p class="ca-dica">${escapeHTML(atual.precisa)}</p>` : ''}
                         ${bloco(atual.id, atual.trecho)}
+                        ${atual.depois ? `<p class="ca-dica">${escapeHTML(atual.depois)}</p>` : ''}
                     </div>
                 </section>
                 <section aria-label="Como conectar">
