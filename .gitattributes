@@ -1,0 +1,5 @@
+# O teste de migration e o de reconciliacao leem o .sql cru e separam por 
+; CRLF do
+# autocrlf do Windows quebra o parser. SQL e sempre LF.
+*.sql text eol=lf
+migrations/** text eol=lf

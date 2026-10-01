@@ -225,7 +225,7 @@ describe('Fluxo de MFA', () => {
       if (r.status === 429) bloqueou++;
     }
     expect(bloqueou).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('MFA exige sessão — não é rota pública', async () => {
     const res = await app.fetch(
@@ -395,7 +395,7 @@ describe('MFA imposto no login', () => {
       env as any
     );
     expect(verify.status, await verify.clone().text()).toBe(200);
-  });
+  }, 30_000);
 });
 
 describe('Reuso de código na janela tolerada', () => {

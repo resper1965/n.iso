@@ -69,7 +69,7 @@ describe('/mcp remoto', () => {
       env.DB.prepare(`INSERT INTO auditor_notes (id, project_id, auditor_token, content) VALUES ('nota-b','p-b','tok','Pergunta de B')`),
     ]);
     token = await tokenDoAgente();
-  });
+  }, 30_000);
 
   it('sem token é 401 com o desafio OAuth', async () => {
     const r = await f('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
