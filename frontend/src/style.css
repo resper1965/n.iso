@@ -1256,22 +1256,23 @@ textarea:focus-visible {
 }
 
 /* ═══ Conectar agente (src/views/conectar-agente.js) ═══
-   Uma ideia por faixa: endereço do servidor → três passos → UM cliente por vez (abas) → o que o
-   agente faz. Accent só em contorno e linha, nunca como área; sem itálico nem ícone. */
-.ca { max-width: 1120px; display: flex; flex-direction: column; gap: 32px; }
+   Duas colunas que ocupam a largura: à esquerda o que se faz (cliente em abas, com o comando, e os
+   três passos); à direita o que o agente faz, fixo ao rolar. O endereço do servidor aparece uma vez,
+   dentro do comando. Accent só em contorno e linha, nunca como área; sem itálico nem ícone. */
+.ca { max-width: 1360px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 40px; align-items: start; }
+.ca-main { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.ca-lado { position: sticky; top: 0; min-width: 0; }
 .ca-titulo { margin: 0 0 12px; font: 600 16px/1.3 var(--font-head); color: var(--text); }
-.ca-nota { margin: 0; max-width: 64ch; font-size: 14px; line-height: 1.55; color: var(--text-2); }
-
-.ca-servidor { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-.ca-servidor .ca-titulo { margin-bottom: 8px; }
+.ca-nota { margin: 0 0 16px; max-width: 70ch; font-size: 14px; line-height: 1.55; color: var(--text-2); }
 
 .ca-bloco { display: flex; gap: 8px; align-items: stretch; }
 .ca-pre { flex: 1; min-width: 0; margin: 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font: 400 13px/1.55 var(--font-mono); color: var(--text); white-space: pre-wrap; word-break: break-all; }
 
-.ca-passos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.ca-passo { padding: 20px; border: 1px solid var(--border); border-radius: 12px; }
-.ca-num { font: 500 12px var(--font-mono); letter-spacing: 0.1em; color: var(--accent); }
-.ca-passo-titulo { margin: 8px 0 6px; font: 600 15px/1.3 var(--font-head); color: var(--text); }
+.ca-passos { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; }
+.ca-passo { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 16px 20px; }
+.ca-passo + .ca-passo { border-top: 1px solid var(--border); }
+.ca-num { padding-top: 2px; font: 500 12px var(--font-mono); letter-spacing: 0.1em; color: var(--accent); }
+.ca-passo-titulo { margin: 0 0 4px; font: 600 15px/1.3 var(--font-head); color: var(--text); }
 .ca-passo-txt { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
 
 .ca-abas { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); }
@@ -1283,18 +1284,19 @@ textarea:focus-visible {
 .ca-selo-ok { border-color: rgba(0, 173, 232, 0.45); color: var(--accent); }
 
 .ca-painel { margin-top: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-.ca-painel-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+.ca-painel-cab { display: flex; flex-direction: column; gap: 6px; }
 .ca-onde { font: 500 13px var(--font-mono); color: var(--text-2); }
 .ca-estado { max-width: 62ch; font-size: 13.5px; line-height: 1.5; color: var(--text-dim); }
 
-.ca-alcance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.ca-alc { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.ca-alcance { display: flex; flex-direction: column; gap: 12px; }
+.ca-alc { padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .ca-alc-sim { border-left: 3px solid var(--accent); }
-.ca-alc-titulo { margin: 0 0 8px; font: 600 15px/1.3 var(--font-head); color: var(--text); }
+.ca-alc-titulo { margin: 0 0 6px; font: 600 15px/1.3 var(--font-head); color: var(--text); }
 .ca-alc-txt { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
 
-.ca-rodape { margin: 0; max-width: 90ch; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
+.ca-rodape { margin: 16px 0 0; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
 
-@media (max-width: 960px) {
-    .ca-servidor, .ca-passos, .ca-alcance { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1100px) {
+    .ca { grid-template-columns: minmax(0, 1fr); }
+    .ca-lado { position: static; }
 }
