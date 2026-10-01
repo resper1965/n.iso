@@ -26,8 +26,8 @@ cor por quê:
 | Propriedade | Valor | Por quê |
 |---|---|---|
 | `role` | `client` | É o papel que todo o isolamento de tenant já conhece. O `projectAccessMiddleware` e o `requireResourceAccess` tratam `client` como "só o `client_project_id` dele". |
-| `client_project_id` | o projeto escolhido no login | A fronteira. Um consultor humano com três clientes alcança os três; o agente alcança um. |
-| `id` | o `users.id` **real** do consultor | Armadilha. Rota que age sobre "o usuário atual" age sobre a conta do consultor, que vale em todos os projetos. É a causa dos dois achados críticos de 30/09/2026 (abaixo). |
+| `client_project_id` | o projeto escolhido no login | A fronteira. Um consultor humano designado em três clientes alcança os três (e só eles, desde a D5); o agente alcança um. |
+| `id` | o `users.id` **real** do consultor | Armadilha. Rota que age sobre "o usuário atual" age sobre a conta do consultor, que vale em todos os projetos em que ele está designado. É a causa dos dois achados críticos de 30/09/2026 (abaixo). |
 
 A terceira linha é o que mais surpreende. Se você criar uma rota de "minha
 conta" (trocar senha, aceitar termo, ler notificação, configurar MFA), ela
@@ -66,6 +66,7 @@ quê (mesma regra do [`SECURITY.md`](../../SECURITY.md)).
 | **I9** | O fluxo OAuth usa a mesma contagem e o mesmo bloqueio do login do app; senha errada, conta inativa e papel sem acesso dão a **mesma** resposta; senha provisória barra a conexão; o escopo é fixo em `niso:consultor`; o pedido é de uso único. | `src/routes/oauth-autorizacao.ts`, `registrarFalhaLogin` (`routes/auth.ts`) | `oauth-autorizacao` |
 | **I10** | `niso_skill` só lê de um mapa embutido. `nome` e `arquivo` **nunca** viram caminho de disco. | `skill()` em `servidor.ts` (`Object.hasOwn`) | `agente-skills` — nome inexistente, `../`, `..\` |
 | **I11** | Segredo de integração não sai: a listagem de webhooks não devolve `secret`, e o export de portabilidade omite webhook, SSO, SCIM e `repository_token`. | `routes/integrations.ts`, `src/portabilidade.ts` | `webhooks-segredo`, `portabilidade` |
+| **I12** | **O consultor humano só alcança os projetos em que consta como `consultor` na governança** (`project_governance.role_category = 'consultor'`, e-mail sem caixa, conta ativa). Vale para rota de projeto, recurso por id e listagem entre projetos (`/projects`, `/portfolio`, `/controls`, `/dashboard`, `/dashboard/stats`, `/users`). É a **mesma** regra da concessão do agente (I7): uma função, `consultorDesignado`, e um SQL, `PROJETOS_DO_CONSULTOR_SQL`. Tirar a linha da governança derruba o acesso na requisição seguinte. Erro na consulta nega. Só o `platform_admin` vê todos. | `src/helpers.ts` (`requireProjectAccess`, `requireResourceAccess`, `projetosVisiveis`), `src/middleware/project-access.ts`, `src/routes/users.ts` | `consultor-escopo` |
 
 ### O que está fora do alcance (I4) e por quê
 

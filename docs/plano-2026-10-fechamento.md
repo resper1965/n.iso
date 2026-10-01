@@ -41,6 +41,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | F7 | Trocar a própria senha pelo cartão de perfil (a rota `change-password` existia; faltava a tela e invalidar as outras sessões) | agente | S | **feito** (PR aberto) | — |
 | F9 | DPIA: a tela decide "Assinar" por `dpo_signature`/`ceo_signature`, mas a rota de aprovação grava só `dpo_approved_by/at` e ignora o `role`. Achado ao fazer o F6 | agente | S | **feito** | — |
 | F10 | `management_reviews` em produção tem `ciso_signed_*`/`ceo_signed_*` que `schema.sql` e as migrations não têm (banco novo diverge). Reconciliar com migration idempotente | agente | S | **feito** (PR aberto; falta registrar a 0035 em `d1_migrations` antes do merge) | confirmado em produção |
+| D5 | Consultor humano preso às designações: só alcança (e só lista) os projetos em que consta como `consultor` na governança, como o agente | agente | M | **feito** (PR aberto; merge só depois de confirmar as designações) | D5 (decidido) |
 | **Onda 3 — dívida estrutural (contínua)** | | | | | |
 | T1 | `any` em `src/`: 510, com catraca | agente | L | P3 | D4 (decidido) |
 | T2 | 4 arquivos de teste que mockam o D1 | agente | M cada | P3 | — |
@@ -226,6 +227,7 @@ senha/confirmação e trilha com o projeto, e o teste provar que o agente **não
 | **D2** | O conteúdo de PDF do cliente pode passar por um serviço de conversão (F4)? | **Em aberto.** Veja abaixo. |
 | **D3** | Trilha de exclusão por gancho central ou por handler (C4)? | **Gancho central**, mais o texto específico onde já existe. |
 | **D4** | Meta para o `any` (T1)? | **Catraca agora**, que não deixa o número subir, sem meta de calendário. |
+| **D5** | O consultor humano fica preso aos projetos em que está designado na governança? | **Sim.** `platform_admin` segue vendo todos; cliente, só o próprio. |
 
 E as ações que só você faz: **H2** (MFA), **H3/H4** (arquivos soltos e stashes), **F2** (login nos três clientes).
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 import { PHASE_QUESTIONS } from '../src/phase-questions';
 import { parseSugestoes } from '../src/agents/control-adequacao';
 
@@ -24,6 +24,7 @@ describe('Adequação de controles (F3)', () => {
       `INSERT INTO compliance_controls (id, project_id, standard, title, status, maturity)
        VALUES ('A.5.1','p1','ISO 27001:2022','Políticas de segurança','Missing',0)`
     ).run();
+    await designarConsultor('c@ness.io', 'p1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 

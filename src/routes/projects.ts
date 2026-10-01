@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, ehConsultor, PROJETOS_DO_CONSULTOR_SQL } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -349,7 +349,10 @@ projectsApp.get('/', async (c) => {
       return c.json(project ? [redactProject(project)] : []);
     }
 
-    const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    // Consultor: só os projetos em que está designado (D5).
+    const { results } = await (ehConsultor(user)
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${PROJETOS_DO_CONSULTOR_SQL}) ORDER BY created_at DESC`).bind(user.email)
+      : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')).all();
     return c.json((results ?? []).map(redactProject));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar projetos', e);

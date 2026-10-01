@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, ehComercial, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
@@ -267,12 +267,16 @@ platformApp.get('/dashboard', async (c) => {
   if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
     return c.json({ error: 'Forbidden: Client role cannot access global platform dashboard' }, 403);
   }
+  // Consultor conta só os projetos em que está designado (D5); lead, só o comercial.
+  const v = projetosVisiveis(user);
+  const doProjeto = v ? `AND project_id IN (${v.sql})` : '';
+  const conta = (sql: string) => (v ? c.env.DB.prepare(sql).bind(v.bind) : c.env.DB.prepare(sql)).first() as Promise<any>;
   const [projects, leads, controls, evidence, risks] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM projects').first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM leads').first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed'").first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending'").first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15').first() as Promise<any>
+    conta(`SELECT COUNT(*) as count FROM projects WHERE 1=1 ${v ? `AND id IN (${v.sql})` : ''}`),
+    (ehComercial(user) ? c.env.DB.prepare('SELECT COUNT(*) as count FROM leads') : c.env.DB.prepare('SELECT 0 as count')).first() as Promise<any>,
+    conta(`SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed' ${doProjeto}`),
+    conta(`SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending' ${doProjeto}`),
+    conta(`SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15 ${doProjeto}`),
   ]);
   return c.json({
     projects: projects?.count || 0,
@@ -295,11 +299,14 @@ platformApp.get('/dashboard/stats', async (c) => {
     // o escopo do cliente. A string pode ser VAZIA, e é esse o ponto —
     // `WHERE id = ''` não casa com nada, então cliente sem projeto conta zero
     // em vez de contar a plataforma inteira.
-    const escopo: string | null = ehEquipeNess(user) ? null : (user?.client_project_id ?? '');
+    //
+    // Desde a D5 a decisão é de `projetosVisiveis`: o consultor conta só os
+    // projetos em que está designado; só o platform_admin conta tudo.
+    const v = projetosVisiveis(user);
 
-    const whereResource = escopo === null ? '' : 'WHERE project_id = ?';
-    const whereProject = escopo === null ? '' : 'WHERE id = ?';
-    const params = escopo === null ? [] : [escopo];
+    const whereResource = v ? `WHERE project_id IN (${v.sql})` : '';
+    const whereProject = v ? `WHERE id IN (${v.sql})` : '';
+    const params = v ? [v.bind] : [];
 
     const stats = await c.env.DB.batch<{ count: number }>([
       // O funil comercial é do comercial da ness. (ver `somenteComercial` em
@@ -456,13 +463,15 @@ platformApp.get('/portfolio', async (c) => {
     //    `users.role` é TEXT livre — um papel fora da lista, como `ciso`
     //    (que a própria suíte usa), enxergava a carteira de TODOS os tenants.
     //
-    // Agora quem decide é `ehEquipeNess`: só a equipe ness. vê a plataforma
-    // inteira, e todo o resto é escopado ao próprio projeto. Papel desconhecido
-    // cai no lado seguro. Com o escopo vazio, `WHERE id = ''` não casa com
-    // nada — escopo ausente significa NADA, nunca TUDO.
-    const stmt = ehEquipeNess(user)
-      ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
-      : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+    // Agora quem decide é `projetosVisiveis`: só o platform_admin vê a
+    // plataforma inteira; o consultor, os projetos em que está designado (D5);
+    // todo o resto, o próprio projeto. Papel desconhecido cai no lado seguro.
+    // Com o escopo vazio, `IN (SELECT '')` não casa com nada — escopo ausente
+    // significa NADA, nunca TUDO.
+    const v = projetosVisiveis(user);
+    const stmt = v
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${v.sql}) ORDER BY created_at DESC`).bind(v.bind)
+      : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
     const { results } = await stmt.all();
     return c.json({ ok: true, portfolio: results || [], projects: results || [] });
   } catch (e: any) {

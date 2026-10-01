@@ -101,6 +101,20 @@ export async function seedTwoProjects(): Promise<void> {
 }
 
 /**
+ * D5: consultor só alcança projeto em que consta como `consultor` na governança, com conta ativa
+ * em `users`. Cria as duas linhas (a conta só se ainda não existir). Os projetos têm de existir.
+ */
+export async function designarConsultor(email: string, ...projetos: string[]): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?, ?, 'x', 'Consultor', 'consultor')`)
+      .bind(`cons:${email}`, email),
+    ...projetos.map((p) =>
+      env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES (?, 'Consultor', ?, 'consultor', 'Consultor')`)
+        .bind(p, email)),
+  ]);
+}
+
+/**
  * `env` do worker com o binding de IA trocado por stub.
  *
  * Oito arquivos de teste declaravam esta mesma função local. Ela vive aqui para

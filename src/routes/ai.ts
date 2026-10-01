@@ -285,7 +285,7 @@ aiApp.post('/mcp/execute', async (c) => {
   const projectId = args?.project_id;
   if (!projectId) return c.json({ error: 'project_id é obrigatório' }, 400);
   try {
-    requireProjectAccess(c.get('user'), projectId);
+    await requireProjectAccess(c.env.DB, c.get('user'), projectId);
   } catch {
     return c.json({ error: 'Sem acesso a este projeto' }, 403);
   }

@@ -50,12 +50,13 @@ Invariantes de segurança que o código mantém e que **não devem regredir**:
 | Invariante | Onde é garantido |
 |---|---|
 | Isolamento de tenant em rotas de projeto | `src/middleware/project-access.ts` + teste cobrindo os 3 estilos de montagem |
+| Consultor humano só alcança os projetos em que está designado como `consultor` na governança (rota de projeto, recurso por id e listagens entre projetos); só o `platform_admin` vê todos. Mesma regra do agente, falha fechada | `consultorDesignado` / `PROJETOS_DO_CONSULTOR_SQL` em `src/helpers.ts`, usados por `requireProjectAccess`, `requireResourceAccess`, `projetosVisiveis` e `concessaoValida` — `test/consultor-escopo.test.ts` |
 | Escrita restrita para papéis read-only | `src/middleware/auth.ts` (allow-list por método+rota) |
 | Segredos nunca no repositório | `SETUP_KEY` via `wrangler secret`; falha fechada se ausente |
 | Tokens de segurança com CSPRNG | `genToken` / `genNumericCode` em `src/helpers.ts` — nunca `Math.random` |
 | Trilha de auditoria imutável | Triggers `audit_logs_no_update` / `audit_logs_no_delete` |
 | Código bate com o schema | `test/schema-contract.test.ts` roda contra D1 real |
-| Agente de IA preso a um projeto, sem alcançar conta pessoal, acesso, credencial nem área comercial | `resolverAgente` e `FORA_DO_AGENTE` em `src/middleware/agente.ts`; os 11 invariantes e o checklist de PR em [`docs/agente/seguranca.md`](docs/agente/seguranca.md) — `test/agente-paridade.test.ts` |
+| Agente de IA preso a um projeto, sem alcançar conta pessoal, acesso, credencial nem área comercial | `resolverAgente` e `FORA_DO_AGENTE` em `src/middleware/agente.ts`; os 12 invariantes e o checklist de PR em [`docs/agente/seguranca.md`](docs/agente/seguranca.md) — `test/agente-paridade.test.ts` |
 | Ação destrutiva do agente (apagar, lote, eliminar titular, revogar aprovações) exige confirmação **no servidor** e deixa trilha com o projeto | `acaoDestrutiva` + `X-Agente-Confirmado`; hook em `src/middleware/auth.ts` — `test/agente-paridade.test.ts` |
 | Concessão do agente revalidada a cada chamada; troca de senha a revoga | `concessaoValida` — `test/mcp-remoto.test.ts`, `test/agente-principal.test.ts` |
 | Segredo de integração não sai (listagem de webhooks, export de portabilidade) | `src/routes/integrations.ts`, `src/portabilidade.ts` — `test/webhooks-segredo.test.ts` |

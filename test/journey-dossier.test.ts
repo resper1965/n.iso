@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 import { PHASE_QUESTIONS } from '../src/phase-questions';
 
 /**
@@ -19,6 +19,7 @@ describe('Dossiê da Jornada (F3)', () => {
       `INSERT INTO projects (id, client_name, scope, standards, org_role, status)
        VALUES ('p1','ACME S.A.','Sede e nuvem','ISO 27001','controller','Active')`
     ).run();
+    await designarConsultor('c@ness.io', 'p1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
@@ -63,8 +64,11 @@ describe('Dossiê da Jornada (F3)', () => {
   });
 
   it('projeto inexistente → 404', async () => {
-    const res = await req('GET', '/api/v1/projects/nao-existe/journey-dossier');
+    // D5: consultor não está designado em projeto inexistente (403); o 404 é o que o platform_admin vê.
+    const admin = { ...(await sessionFor({ id: 'u-pa', email: 'pa@ness.io', role: 'platform_admin', iat: Date.now() })), 'Content-Type': 'application/json' };
+    const res = await req('GET', '/api/v1/projects/nao-existe/journey-dossier', undefined, admin);
     expect(res.status).toBe(404);
+    expect((await req('GET', '/api/v1/projects/nao-existe/journey-dossier')).status).toBe(403);
   });
 
   it('projeto de outro tenant é barrado por escopo (403)', async () => {
