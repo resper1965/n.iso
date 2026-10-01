@@ -12,6 +12,9 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não publicado]
 
+### Fixed
+- **`management_reviews` igual em produção e em banco novo (F10).** Produção tinha `ciso_signed_by/at/ip` e `ceo_signed_by/at/ip` que `schema.sql` e as migrations não declaravam. Agora o `schema.sql` as traz e a migration 0035 as adiciona a bancos antigos; em produção ela só é registrada em `d1_migrations`, nunca executada (as colunas já existem). Teste de contrato em `test/schema-contract.test.ts` e `test/migration-0035.test.ts`.
+
 ### Changed
 - **Tela "Conectar agente" em duas colunas.** À esquerda, o cliente em abas com o comando e os três passos em lista compacta; à direita, "O que o agente faz", fixo ao rolar. O endereço do servidor aparece uma vez só, dentro do comando (antes repetia numa faixa própria), e a tela usa a largura disponível em vez de ficar encostada à esquerda. Abaixo de 1100px empilha.
 

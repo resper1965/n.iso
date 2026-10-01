@@ -262,3 +262,22 @@ de desenvolvimento**, como untracked:
 Enquanto estiverem ali, `wrangler d1 migrations apply` aplicaria DDL que nunca
 passou por revisão. Guarde uma cópia fora de `migrations/` antes de removê-los —
 podem ser a única pista de alguma alteração feita à mão em produção.
+
+---
+
+## 0035 — assinaturas da análise crítica (F10, 2026-10-01)
+
+`management_reviews` em produção já tem `ciso_signed_by/at/ip` e
+`ceo_signed_by/at/ip` (confirmado por `pragma_table_info` em 2026-10-01); nem o
+`schema.sql` nem as migrations as declaravam. O `schema.sql` agora as traz, e a
+`0035_management_reviews_assinaturas.sql` leva o mesmo DDL a bancos antigos.
+
+**Em produção a 0035 NÃO é executada** (`ADD COLUMN` não é idempotente: abortaria
+com "duplicate column"). Só se registra, e o deploy deixa de ver migration pendente:
+
+```powershell
+npx wrangler d1 execute niso-db --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0035_management_reviews_assinaturas.sql');"
+npx wrangler d1 migrations list niso-db --remote   # esperado: "No migrations to apply"
+```
+
+Ordem: registrar **antes** do merge, porque `deploy.yml` recusa migration pendente.

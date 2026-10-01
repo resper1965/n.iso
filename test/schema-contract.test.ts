@@ -200,4 +200,11 @@ describe('schema contract (real D1)', () => {
         .bind('ak2', 'p1', 'samehash', 'k2').run()
     ).rejects.toThrow();
   });
+  it('management_reviews tem as colunas de assinatura que existem em produção (F10)', async () => {
+    const { results } = await env.DB.prepare("SELECT name FROM pragma_table_info('management_reviews')").all<any>();
+    const colunas = results.map((r) => r.name);
+    for (const c of ['ciso_signed_by', 'ciso_signed_at', 'ciso_signed_ip', 'ceo_signed_by', 'ceo_signed_at', 'ceo_signed_ip']) {
+      expect(colunas).toContain(c);
+    }
+  });
 });

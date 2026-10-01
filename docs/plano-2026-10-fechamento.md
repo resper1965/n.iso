@@ -39,7 +39,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | F5 | Regras de verificação normativa no `coherence_check` | agente | M–L | P3 | uso real |
 | F6 | O humano revogar aprovação de ROPA/DPIA e apagar análise crítica pela interface | agente | M | **feito** | D1 (decidido) |
 | F9 | DPIA: a tela decide "Assinar" por `dpo_signature`/`ceo_signature`, mas a rota de aprovação grava só `dpo_approved_by/at` e ignora o `role`. Achado ao fazer o F6 | agente | S | **feito** | — |
-| F10 | `management_reviews` em produção tem `ciso_signed_*`/`ceo_signed_*` que `schema.sql` e as migrations não têm (banco novo diverge). Reconciliar com migration idempotente | agente | S | P2 | confirmar em produção |
+| F10 | `management_reviews` em produção tem `ciso_signed_*`/`ceo_signed_*` que `schema.sql` e as migrations não têm (banco novo diverge). Reconciliar com migration idempotente | agente | S | **feito** (PR aberto; falta registrar a 0035 em `d1_migrations` antes do merge) | confirmado em produção |
 | **Onda 3 — dívida estrutural (contínua)** | | | | | |
 | T1 | `any` em `src/`: 510, com catraca | agente | L | P3 | D4 (decidido) |
 | T2 | 4 arquivos de teste que mockam o D1 | agente | M cada | P3 | — |
