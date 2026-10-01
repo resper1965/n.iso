@@ -768,7 +768,13 @@ CREATE TABLE IF NOT EXISTS management_reviews (
     minutes_url TEXT,
     status TEXT DEFAULT 'Planned',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ciso_signed_by TEXT,
+    ciso_signed_at DATETIME,
+    ciso_signed_ip TEXT,
+    ceo_signed_by TEXT,
+    ceo_signed_at DATETIME,
+    ceo_signed_ip TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mgmt_reviews_project ON management_reviews(project_id);
 
