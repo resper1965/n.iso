@@ -50,6 +50,7 @@ entrada é o [`README.md`](../README.md) da raiz.
 | Documento | Responde |
 |---|---|
 | [`enterprise-grade-plan.md`](enterprise-grade-plan.md) | O plano que guiou o endurecimento do projeto: isolamento provado em vez de presumido, catraca de cobertura, contrato de API, staging, trilha, portabilidade. |
+| [`plano-2026-10-fechamento.md`](plano-2026-10-fechamento.md) | O que ficou aberto depois do ciclo do agente consultor (outubro/2026): o que é seu e o que é de um agente, a ordem, o critério de pronto de cada item e as quatro decisões que dependem de você. |
 | [`backlog-plan.md`](backlog-plan.md) | Gaps e débitos técnicos com causa, correção, arquivos, esforço e risco — em ordem de execução. |
 | [`api-triage-2026-08.md`](api-triage-2026-08.md) | Defeitos reportados no uso real da API v1, triados contra o código: corrigido, backlog, ou por design. |
 | [`READINESS.md`](READINESS.md) | O estado de prontidão para produção, controle a controle. |
