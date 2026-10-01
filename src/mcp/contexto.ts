@@ -9,7 +9,7 @@ export const INSTRUCOES =
 
 /** Onde está cada coisa. {p} = projectId. Leitura com niso_ler; escrita com niso_executar. */
 export const MAPA_DA_APP = `Mapa da app ({p} = projectId):
-- Projeto e fases: /api/v1/projects/{p} · /api/v1/projects/{p}/phases · /api/v1/projects/{p}/checklist-progress
+- Projeto e fases: /api/v1/projects/{p} · /api/v1/projects/{p}/phases · /api/v1/projects/{p}/checklist-progress (PUT grava o progresso por item: { items: [{ phase_number, item_id, is_checked, notes, assigned_to, due_date }] })
 - Trilhas de entrevista: /api/v1/projects/{p}/interviews/summary · /api/v1/projects/{p}/interviews/{trilha} (POST /api/v1/projects/{p}/interviews grava)
 - Respostas das fases: /api/v1/projects/{p}/phase-answers · dossiê da jornada: /api/v1/projects/{p}/journey-dossier
 - Controles e SoA: /api/v1/projects/{p}/controls · versões de política do controle: /api/v1/projects/{p}/controls/{controle}/versions
@@ -18,7 +18,7 @@ export const MAPA_DA_APP = `Mapa da app ({p} = projectId):
 - Ativos: /api/v1/projects/{p}/assets · Fornecedores: /api/v1/projects/{p}/vendors · Treinamento: /api/v1/projects/{p}/training
 - Privacidade: /api/v1/projects/{p}/ropa · /api/v1/projects/{p}/dpia · direitos do titular: /api/v1/projects/{p}/data-subject
 - Auditorias: /api/v1/projects/{p}/audits · achados: /api/v1/audits/{id}/findings (só leitura) · CAPA: /api/v1/projects/{p}/capa
-- Governança: /api/v1/projects/{p}/governance · /api/v1/projects/{p}/stakeholders · /api/v1/projects/{p}/context · /api/v1/projects/{p}/management-reviews · /api/v1/projects/{p}/metrics · /api/v1/projects/{p}/policy-acknowledgments
+- Governança: /api/v1/projects/{p}/governance (POST com id no corpo EDITA o membro; linha de consultor só o platform_admin ou o administrador do cliente altera) · /api/v1/projects/{p}/stakeholders (POST cria; PUT /api/v1/stakeholders/{id} edita) · /api/v1/projects/{p}/context · /api/v1/projects/{p}/management-reviews · /api/v1/projects/{p}/metrics · /api/v1/projects/{p}/policy-acknowledgments
 - Certificação: /api/v1/projects/{p}/certification · mudanças de escopo: /api/v1/projects/{p}/scope-changes
 - Diagnóstico: /api/v1/projects/{p}/gap-analysis · /api/v1/projects/{p}/traceability · /api/v1/projects/{p}/coherence · /api/v1/projects/{p}/audit-pack
 Fora do seu alcance (use a interface): usuários, SSO, política de segurança, SCIM, chaves de API, webhooks, credencial de auditor externo (auditor-token), conta pessoal (login, termos, notificações), criar projeto, painel global, área comercial e /agentes.`;
