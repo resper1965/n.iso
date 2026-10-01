@@ -32,7 +32,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | C6 | Rótulo `agente.exclusao` também nomeia lote, eliminação e revogação | agente | S | feito | — |
 | C7 | Fragilidades de teste do agente | agente | S | feito | — |
 | **Onda 2 — produto** | | | | | |
-| F1 | Tela "Conectar agente" (está no stash) | agente | S–M | P2 | — |
+| F1 | Tela "Conectar agente" | agente | S–M | feito | — |
 | F2 | Confirmar o login OAuth em Codex, Cursor e Antigravity | **você** + agente | S | P2 | — |
 | F3 | "Último uso" do cartão de agentes atualizar sozinho | agente | S | P3 | — |
 | F4 | O agente ler PDF e planilha | agente | L | P3 | D2 (em aberto) |
@@ -159,7 +159,7 @@ confere texto, não a existência da rota.
 
 ## Onda 2 — produto
 
-### F1 · Tela "Conectar agente" · P2
+### F1 · Tela "Conectar agente" · feito
 A reescrita está no `stash@{0}` (branch `fix/tela-conectar-agente`): cópia que não promete o que
 não verificou, cartões por cliente com selo "Verificado" ou "A confirmar", e blocos copiáveis.
 **Falta:** (1) dizer que o **login** define o usuário e o cliente (a dúvida do consultor sobre como
