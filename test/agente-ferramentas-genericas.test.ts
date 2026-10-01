@@ -60,6 +60,15 @@ describe('niso_ler / niso_executar', () => {
     expect(r.isError, r.content[0].text).toBeFalsy();
   });
 
+  it('caminho fora de /api/v1/ diz o que está errado, não "id com caractere inválido"', async () => {
+    for (const caminho of ['/health', 'api/v1/projects', '/api/v2/x', '']) {
+      const r = await chamarFerramenta(token, 'niso_ler', { caminho });
+      expect(r.isError, JSON.stringify(caminho)).toBe(true);
+      expect(r.content[0].text, JSON.stringify(caminho)).toContain('deve começar com /api/v1/');
+      expect(r.content[0].text).not.toContain('id com caractere');
+    }
+  });
+
   it('método inválido é recusado sem chamar a API', async () => {
     const r = await chamarFerramenta(token, 'niso_executar', { metodo: 'GET', caminho: '/api/v1/projects/p-a/risks' });
     expect(r.isError).toBe(true);

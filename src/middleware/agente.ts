@@ -94,6 +94,12 @@ export async function resolverAgente(
     return c.json({ error: 'Forbidden: caminho inválido' }, 403);
   }
 
+  // A concessão primeiro: agente revogado, expirado ou sem designação ouve 401 ("refaça o
+  // login") em QUALQUER rota. Com a lista de proibidas antes, ele ouvia 403 e não sabia que
+  // precisava reconectar.
+  const row = await concessaoValida(c.env.DB, p);
+  if (!row) return c.json({ error: REFACA }, 401);
+
   // Paridade com o consultor, preso ao projeto: `role: 'client'` + `client_project_id`
   // herda o isolamento de tenant; o que é destrutivo exige confirmação.
   for (const [re, motivo, metodos] of FORA_DO_AGENTE) {
@@ -104,9 +110,6 @@ export async function resolverAgente(
   }
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
-
-  const row = await concessaoValida(c.env.DB, p);
-  if (!row) return c.json({ error: REFACA }, 401);
 
   await c.env.DB.prepare(`UPDATE agente_concessoes SET ultimo_uso_em = datetime('now') WHERE id = ?`)
     .bind(p.concessaoId).run().catch(() => {});

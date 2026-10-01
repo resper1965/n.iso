@@ -147,8 +147,8 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   }
 
   await c.env.SESSIONS.put(chave(token), JSON.stringify({ ...pedido, userId: u.id, email: u.email }), { expirationTtl: TTL_PEDIDO });
-  const opcoes = results.map((p, i) =>
-    `<label class="op"><input type="radio" name="projeto" value="${escapeHtml(p.id)}" ${i === 0 ? 'checked' : ''}> ${escapeHtml(p.client_name)}</label>`
+  const opcoes = results.map((p) =>
+    `<label class="op"><input type="radio" name="projeto" value="${escapeHtml(p.id)}" required> ${escapeHtml(p.client_name)}</label>`
   ).join('');
   return pagina('Escolha o cliente', `
 <h1>Em qual cliente o agente vai atuar?</h1>

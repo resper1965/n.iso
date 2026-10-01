@@ -34,6 +34,28 @@ describe('Resumo das entrevistas e mapa da app', () => {
     expect(MAPA_DA_APP).not.toMatch(/leads|proposals|assessments/);
   });
 
+  it('todo caminho do mapa da app existe como rota (o agente não é mandado a um 404)', async () => {
+    // O teste anterior confere texto; este confere que a rota responde. "Rota não encontrada" é o
+    // 404 do roteador; um 404 de registro inexistente (placeholder `x`) é outra coisa e passa.
+    // O verbo vem do próprio mapa ("POST /api/…", "PUT /api/…"); sem verbo é GET. Corpo vazio: as
+    // rotas de escrita respondem 400 e nada é gravado.
+    const entradas = new Map<string, string>();
+    for (const m of MAPA_DA_APP.replaceAll('{p}', 'p-a').matchAll(/(?:(POST|PUT)\s+)?(\/api\/v1\/[^\s·(),]+)/g)) {
+      entradas.set(`${m[1] ?? 'GET'} ${m[2].replace(/\{[^}]+\}/g, 'x').replace(/[:;.]+$/, '')}`, m[1] ?? 'GET');
+    }
+    expect(entradas.size, 'o mapa ficou sem caminhos?').toBeGreaterThan(20);
+    const mortos: string[] = [];
+    for (const [chave, metodo] of entradas) {
+      const caminho = chave.slice(metodo.length + 1);
+      const r = await worker.fetch(
+        new Request('http://localhost' + caminho, { method: metodo, headers: { 'Content-Type': 'application/json' }, body: metodo === 'GET' ? undefined : '{}' }),
+        { ...workerEnv(), AGENTE: P } as any,
+      );
+      if ((await r.text()).includes('API route not found')) mortos.push(chave);
+    }
+    expect(mortos, 'caminhos do mapa sem rota').toEqual([]);
+  });
+
   it('o mapa diz COMO editar governança, partes interessadas e checklist', () => {
     expect(MAPA_DA_APP).toContain('POST com id no corpo EDITA o membro');
     expect(MAPA_DA_APP).toContain('PUT /api/v1/stakeholders/{id}');
