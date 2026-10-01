@@ -41,15 +41,18 @@ O agente remoto tem o alcance do consultor humano no projeto escolhido no login:
 
 | Cliente | Onde | Trecho | Estado |
 |---|---|---|---|
-| Claude Code | terminal | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` | documenta MCP remoto com OAuth |
+| Claude Code | terminal | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` | exercitado em producao (30/09/2026) |
 | Cursor | `.cursor/mcp.json` | `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` | documenta MCP remoto com OAuth |
 | Codex | `~/.codex/config.toml` | `[mcp_servers.niso]` + `url = "https://niso.ness.com.br/mcp"` | a confirmar |
 | Antigravity | `~/.gemini/config/mcp_config.json` | `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }` | a confirmar |
 
-Nenhum dos quatro foi ainda exercitado contra a producao: a verificacao real
-acontece depois do deploy. "A confirmar" significa que o suporte a login OAuth
-do cliente nao esta documentado; se falhar, o bloco sera marcado como nao
-suportado. O servidor local abaixo continua para integracoes e auditor.
+O Claude Code foi exercitado contra a producao em 30/09/2026 (conexao, leitura e
+escrita). Cursor, Codex e Antigravity ainda nao tiveram o login OAuth confirmado:
+"a confirmar" significa que o suporte ao login do cliente nao esta documentado; se
+falhar, o bloco sera marcado como nao suportado. O servidor local abaixo continua
+para integracoes e auditor.
+
+Guia completo do agente remoto (uso, arquitetura e seguranca): [`docs/agente/`](../docs/agente/README.md).
 
 ## Instalação
 
@@ -132,7 +135,7 @@ Os dois recebem também o limite de projeto: a chave de API é vinculada a **um*
 projeto, e nenhum agente alcança outro. Com `NISO_PROJECT_ID`, o contexto nomeia
 qual.
 
-Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 22 ferramentas
+Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 24 ferramentas
 estão na mesma sessão e que isso mistura os dois lados que a norma separa.
 
 ## Chave de API: `read` não escreve

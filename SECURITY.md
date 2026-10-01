@@ -30,6 +30,10 @@ Interessa especialmente (foi onde já encontramos problemas reais):
 - **Injeção** — SQL, XSS (inclusive stored, nos relatórios HTML), SSRF via webhooks
 - **Trilha de auditoria** — qualquer forma de adulterar ou apagar `audit_logs`
 - **Exposição de PII** — ROPA/DPIA acessíveis fora do projeto dono
+- **Agente de IA (MCP remoto)** — qualquer caminho em que o agente alcance outro
+  projeto, aja sobre a conta do consultor, amplie o próprio acesso ou execute ação
+  destrutiva sem confirmação (modelo de ameaça em
+  [`docs/agente/seguranca.md`](docs/agente/seguranca.md))
 
 ## Fora de escopo
 
@@ -51,6 +55,10 @@ Invariantes de segurança que o código mantém e que **não devem regredir**:
 | Tokens de segurança com CSPRNG | `genToken` / `genNumericCode` em `src/helpers.ts` — nunca `Math.random` |
 | Trilha de auditoria imutável | Triggers `audit_logs_no_update` / `audit_logs_no_delete` |
 | Código bate com o schema | `test/schema-contract.test.ts` roda contra D1 real |
+| Agente de IA preso a um projeto, sem alcançar conta pessoal, acesso, credencial nem área comercial | `resolverAgente` e `FORA_DO_AGENTE` em `src/middleware/agente.ts`; os 11 invariantes e o checklist de PR em [`docs/agente/seguranca.md`](docs/agente/seguranca.md) — `test/agente-paridade.test.ts` |
+| Ação destrutiva do agente (apagar, lote, eliminar titular, revogar aprovações) exige confirmação **no servidor** e deixa trilha com o projeto | `acaoDestrutiva` + `X-Agente-Confirmado`; hook em `src/middleware/auth.ts` — `test/agente-paridade.test.ts` |
+| Concessão do agente revalidada a cada chamada; troca de senha a revoga | `concessaoValida` — `test/mcp-remoto.test.ts`, `test/agente-principal.test.ts` |
+| Segredo de integração não sai (listagem de webhooks, export de portabilidade) | `src/routes/integrations.ts`, `src/portabilidade.ts` — `test/webhooks-segredo.test.ts` |
 | 500 não devolve o interior do banco | `erro500` em `src/helpers.ts`: detalhe do D1 vai ao log, cliente recebe `request_id` — `test/erro-sem-vazamento.test.ts` |
 
 Ao alterar qualquer um destes pontos, o PR precisa explicar por quê.

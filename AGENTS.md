@@ -112,6 +112,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   Worker nao le disco, entao `npm run skills:gerar` escreve `src/mcp/skills-gerado.ts` (commitado; o
   `test/agente-skills.test.ts` falha se ficar velho). O agente as le pelo MCP com `niso_skill`,
   atras do login. Skill nova = pasta nova + gerar + roteiro em `src/mcp/contexto.ts`.
+- **Documentacao do agente**: `docs/agente/` (uso, arquitetura com diagramas, seguranca e o
+  checklist de PR). Leia `docs/agente/seguranca.md` antes de criar rota nova: o principal do
+  agente carrega o `users.id` real do consultor, e rota de "minha conta" entra em
+  `FORA_DO_AGENTE`.
 - **MCP remoto** (consultor): agente com alcance de consultor preso a um projeto (`src/mcp/servidor.ts`); `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
   (`src/routes/oauth-autorizacao.ts`); principal agente em
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;

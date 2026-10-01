@@ -30,6 +30,14 @@ entrada é o [`README.md`](../README.md) da raiz.
 | [`security-owasp-2026-08.md`](security-owasp-2026-08.md) | A aplicação avaliada contra o OWASP Top 10:2021, item a item, com o que foi corrigido e o que ficou. |
 | [`portabilidade.md`](portabilidade.md) | O caminho de saída dos dados de um tenant (LGPD art. 18, V), e por que a assinatura do export é assimétrica. |
 
+## Vou mexer no agente consultor (MCP remoto)
+
+| Documento | Responde |
+|---|---|
+| [`agente/README.md`](agente/README.md) | O que é o agente, como o consultor conecta o Claude Code, o Codex, o Cursor ou o Antigravity, o que ele lê, grava e o que pede o seu "sim"; o que o cliente vê e revoga; solução de problemas. |
+| [`agente/arquitetura.md`](agente/arquitetura.md) | Como a conexão nasce e como cada chamada é decidida (com diagramas), o mapa de arquivos, os dados, os prazos, e como estender com skill, ferramenta ou rota. |
+| [`agente/seguranca.md`](agente/seguranca.md) | Contra quem o agente é desenhado, os 11 invariantes e o teste de cada um, os limites que **não** são garantia, e o checklist para um PR que toque a superfície do agente. |
+
 ## Vou escrever ou depurar teste
 
 | Documento | Responde |
