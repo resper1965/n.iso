@@ -7,6 +7,7 @@ import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 import { resolverAgente, acaoDestrutiva } from './agente';
 import { logAudit } from '../helpers';
+import { alvoDaExclusao } from '../trilha-exclusao';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -353,7 +354,14 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   }
 
   c.set('user', user);
+  // Trilha central de exclusão (C4): o projeto do recurso é resolvido ANTES do handler, que
+  // apaga a linha. O agente fica de fora: já tem a sua (`agente.acao_destrutiva`), abaixo.
+  const exclusao = c.req.method === 'DELETE' && user.agente !== true ? await alvoDaExclusao(c.env.DB, c.req.path) : null;
   await next();
+  if (exclusao && c.res.status < 400) {
+    await logAudit(c.env.DB, 'registro.excluido', user.email, `${c.req.method} ${c.req.path}`,
+      '', c.req.header('CF-Connecting-IP') ?? '', exclusao.projectId ?? undefined).catch(() => {});
+  }
   // Trilha genérica do agente: toda ação destrutiva que passou leva o projeto,
   // sem depender de cada handler lembrar de registrar.
   if (user.agente === true && acaoDestrutiva(c.req.method, c.req.path) && c.res.status < 400) {

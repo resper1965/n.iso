@@ -27,7 +27,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | C1 | `reset-password-first` só com troca pendente | agente | S–M | feito (#229) | — |
 | C2 | ~~OAuth: `redirect_uri` com esquema próprio dá 500 depois do login~~ | — | — | descartado | premissa errada |
 | C3 | ~~`Forbidden` vira 500 em três rotas~~ | — | — | descartado | premissa errada |
-| C4 | Trilha de exclusão: 10 rotas sem trilha, 6 sem o projeto | agente | M | P2 | D3 (decidido) |
+| C4 | Trilha de exclusão: 10 rotas sem trilha, 6 sem o projeto | agente | M | feito | D3 (decidido) |
 | C5 | Tela de consentimento sem projeto pré-marcado | agente | S | feito | — |
 | C6 | Rótulo `agente.exclusao` também nomeia lote, eliminação e revogação | agente | S | feito | — |
 | C7 | Fragilidades de teste do agente | agente | S | feito | — |
@@ -128,7 +128,7 @@ administrador de outro projeto apagando os três recursos, dá 403 e o registro 
 nos handlers, mas não o corpo dele.
 **O que ficou.** O teste, como proteção de regressão.
 
-### C4 · Trilha de exclusão · P2
+### C4 · Trilha de exclusão · feito
 **Medido.** Dos 20 handlers `DELETE` de `src/routes/`, **10 não gravam trilha**
 (`governance` ×3, `integrations` ×2, `leads`, `risks`, `scim`, `training`, `vendors`) e **6 gravam
 sem o projeto** (`audits`, `capa`, `platform`, `proposals`, `ropa`, `users`). Exclusão que não
@@ -136,7 +136,7 @@ aparece na trilha do projeto é exatamente o que o auditor pergunta. (A contagem
 varredura de 30 linhas por handler; o primeiro passo do item é confirmar cada caso.)
 **Decidido (D3, 01/10/2026): gancho central** que registra todo `DELETE` bem-sucedido (como já existe
 para o agente), mais o texto específico onde o handler já grava. O gancho garante que nada fica de fora.
-**Pronto quando** um teste que **enumere** as rotas `DELETE` exija trilha com o projeto em todas.
+**Feito:** gancho central no `authMiddleware` (`registro.excluido`, com o projeto resolvido antes do handler apagar) e `test/trilha-exclusao.test.ts`, que enumera as 20 rotas `DELETE` do roteador e reprova a que não estiver classificada em `src/trilha-exclusao.ts`. SCIM fica de fora (token próprio; "excluir" ali é desativar).
 
 ### C5 · Consentimento sem projeto pré-marcado · feito
 O primeiro projeto da lista vem marcado. Um tenant que se nomeie para ordenar primeiro faz um
