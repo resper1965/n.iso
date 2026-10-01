@@ -153,7 +153,7 @@ segundo não aparece.
 | Suspeita de uso indevido de um agente | Revogue na tela de Governança do projeto, cartão "Agentes com acesso". Corta na **próxima chamada** (I7). |
 | Conta do consultor possivelmente comprometida | Troque a senha: isso revoga **todas** as concessões dele (I8). Depois, siga o [`runbook-incidente.md`](../runbook-incidente.md). |
 | Revogar todos os agentes de um consultor de uma vez | Faça backup (`npm run db:backup`) e rode no D1: `UPDATE agente_concessoes SET revogado_em = datetime('now'), revogado_por = 'incidente' WHERE user_id = '<id>' AND revogado_em IS NULL;` |
-| Ver o que um agente fez | A trilha (`audit_logs`) guarda toda **escrita** com o ator `agente de <consultor> (<cliente> / <projeto>)`, e `agente.acao_destrutiva` para toda ação destrutiva (até 01/10/2026 o rótulo era `agente.exclusao`; as linhas antigas o mantêm). **Leitura não é registrada**: o único sinal é `ultimo_uso_em` da concessão. |
+| Ver o que um agente fez | A trilha (`audit_logs`) guarda toda **escrita** (e toda exclusão, também pelo gancho central `registro.excluido`) com o ator `agente de <consultor> (<cliente> / <projeto>)`, e `agente.acao_destrutiva` para toda ação destrutiva (até 01/10/2026 o rótulo era `agente.exclusao`; as linhas antigas o mantêm). **Leitura não é registrada**: o único sinal é `ultimo_uso_em` da concessão. |
 
 ---
 
