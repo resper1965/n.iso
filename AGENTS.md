@@ -100,7 +100,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     Ciência de Políticas", não o do app.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
+- **Schema**: `schema.sql` — **53 tabelas** (medido em 2026-10-01: linhas `CREATE TABLE`). Migrations numeradas em
   `migrations/`, ultima a **0034**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
@@ -163,17 +163,20 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
-  tocar e melhoria barata; nao precisa de permissao.
-- **1 de 58 arquivos de teste ainda mocka o D1**: `test/mcp-integration.test.ts`. Todos os demais que tocam banco usam o D1 real do
-  `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
+- **~510 `any` em `src/`** (medido em 2026-10-01: `: any`, `as any` e `<any>` em
+  `src/*.ts`). `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria
+  barata; nao precisa de permissao. Falta uma catraca que reprove o aumento.
+- **4 de 94 arquivos de teste ainda mockam o D1**: `api`, `integration`,
+  `mcp-integration` e `services-rag` (medido em 2026-10-01). Os demais que tocam
+  banco usam o D1 real do `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com quase nenhum teste** (~12k linhas). `test/e2e/` cobre so o fluxo
-  de MFA, roda fora do `npm test` e exige servidor e navegador. Todo o resto da
-  interface nao tem cobertura nenhuma.
-- **~46 leituras de corpo sem schema semantico** (`projects`, `policies`,
-  `assessments`, `platform`, `public`). O `bodyGuard` global cobre teto de
+- **Frontend com pouco teste.** `frontend/test/` tem 19 arquivos (jsdom) e
+  `test/e2e/` cobre so o fluxo de MFA, fora do `npm test`, com servidor e
+  navegador. A maior parte das telas nao tem cobertura.
+- **36 leituras de corpo (`c.req.json`) sem schema semantico em 12 arquivos**
+  (medido em 2026-10-01; mais em `policies` 7, `assessments` 6, `governance` 6,
+  `projects` 4). O `bodyGuard` global cobre teto de
   tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
 - ~~**324 handlers `onclick=` inline**~~ **RESOLVIDO.** A migracao para delegacao
   de eventos terminou (PRs #121–#134) e `'unsafe-inline'` saiu de `script-src`
@@ -227,6 +230,8 @@ errar um digito destruia a sessao.
   de 900px.
 
 ## Documentos que valem a leitura
+
+- `docs/plano-2026-10-fechamento.md` — o que esta aberto, de quem e a ordem
 
 - `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
 - `SECURITY.md` — invariantes de seguranca que nao podem regredir
