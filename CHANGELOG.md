@@ -12,6 +12,9 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não publicado]
 
+### Changed
+- **Tela "Conectar agente" em duas colunas.** À esquerda, o cliente em abas com o comando e os três passos em lista compacta; à direita, "O que o agente faz", fixo ao rolar. O endereço do servidor aparece uma vez só, dentro do comando (antes repetia numa faixa própria), e a tela usa a largura disponível em vez de ficar encostada à esquerda. Abaixo de 1100px empilha.
+
 ### Added
 - **O humano desaprova pela interface; o agente não (F6, decisão D1).** `platform_admin` e o administrador do cliente revogam a aprovação de ROPA (por papel) e de DPIA, com motivo obrigatório (mínimo de 5 caracteres) que vai para a trilha com o projeto (`ropa.approval_revoked`, `dpia.approval_revoked`), e excluem análise crítica (`management_review.deleted`, além do `registro.excluido` central). Consultor e usuário comum levam 403. O agente também: as três rotas entram na lista de fora do alcance, mesmo com confirmação. A limpeza da Twyn precisou de SQL justamente por essa lacuna.
 - **Agente consultor por MCP remoto (`/mcp`, #212 e #213).** O consultor conecta o Claude Code, o Codex, o Cursor ou o Antigravity ao n.iso, entra com a própria conta (senha e segundo fator) e escolhe um cliente — sem chave de API e sem instalar nada. OAuth 2.1 pela `@cloudflare/workers-oauth-provider`, tela de autorização própria, concessão por projeto (`agente_concessoes`, migration 0034) revalidada a cada chamada, e o cartão "Agentes com acesso" na Governança para o cliente ver e revogar. O agente não tem API própria: chama as rotas de sempre, com um principal que herda o isolamento de tenant. Guia completo em `docs/agente/`.
