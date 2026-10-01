@@ -16,6 +16,9 @@ export default defineConfig({
     // src/ quebra antes do primeiro assert.
     environment: 'jsdom',
     include: ['test/**/*.test.js'],
+    // Os testes estaticos de CSS leem `src/style.css` com `?raw`. Sem isto o Vitest
+    // zera todo CSS (devolve ''), e o teste mediria um arquivo vazio.
+    css: { include: [/src[\/]style\.css/] },
     setupFiles: ['./test/setup.js'],
     restoreMocks: true,
     reporters: ci

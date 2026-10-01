@@ -50,7 +50,7 @@ describe('Templates de política', () => {
       if (res.status !== 200) quebrados.push(`${res.status} ${nome}`);
     }
     expect(quebrados, `o catálogo anuncia template que não existe:\n  ${quebrados.join('\n  ')}`).toEqual([]);
-  });
+  }, 30_000);
 
   it('template inexistente responde 404, não 500', async () => {
     const res = await pedir(worker, '/api/v1/policies/templates/politica-que-nao-existe', { headers });

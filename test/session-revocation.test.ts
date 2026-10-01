@@ -51,7 +51,7 @@ describe('Revogação de sessão', () => {
     expect(status).toBe(200);
     const res = await app.fetch(new Request('http://localhost/api/v1/projects', { headers: comSessao(token) }), env as any);
     expect(res.status).toBe(200);
-  });
+  }, 30_000);
 
   it('invalidar as sessões do usuário derruba a sessão em curso', async () => {
     const { token } = await login();

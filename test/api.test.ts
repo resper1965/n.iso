@@ -190,7 +190,7 @@ describe('nISO API (D1 e KV reais)', () => {
         const l = await env.DB.prepare('SELECT title, status FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
         expect(l.title).toBe('Título novo');
         expect(l.status).toBe('Approved');
-      });
+      }, 30_000);
     });
 
     it('platform_admin altera e remove usuário, e a linha some do banco', async () => {

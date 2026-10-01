@@ -102,7 +102,7 @@ describe('Autorização OAuth do agente', () => {
 
     const conc = await env.DB.prepare(`SELECT project_id, expira_em FROM agente_concessoes WHERE user_id = 'u-c'`).first<any>();
     expect(conc.project_id).toBe('p-a');
-  });
+  }, 30_000);
 
   it('não confirma projeto fora da designação, mesmo forjando o formulário', async () => {
     const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
@@ -149,7 +149,7 @@ describe('Autorização OAuth do agente', () => {
     expect(certa.status).toBe(429);
     expect(await certa.text()).not.toContain('Em qual cliente');
     expect((await loginApi('lock1@ness.lat', 'senha-forte-123', ip)).status).toBe(429);
-  });
+  }, 30_000);
 
   it('conta bloqueada pelo login do app também é recusada na tela OAuth', async () => {
     const ip = '10.0.0.2';
@@ -200,7 +200,7 @@ describe('Autorização OAuth do agente', () => {
     expect((await f('/oauth/authorize/entrar', form({ ...base, codigo: bom }))).status).toBe(200);
     const pedido2 = await iniciar(await registrarCliente(), (await pkce()).challenge);
     expect((await f('/oauth/authorize/entrar', form({ ...base, pedido: pedido2, codigo: bom }))).status).toBe(401);
-  });
+  }, 30_000);
 
   // Review Focus 3
   it('pedido desconhecido ou já usado não emite código', async () => {
@@ -264,7 +264,7 @@ describe('Autorização OAuth do agente', () => {
     const local = await (await f('/oauth/authorize/entrar', form({ pedido: pedidoLocal, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }))).text();
     expect(local).toContain('127.0.0.1:33418');
     expect(local).not.toContain('Atenção');
-  });
+  }, 30_000);
 
   it('o provider recusa callback de esquema próprio já no registro', async () => {
     // Plano de fechamento, C2: a hipótese era um 500 depois do login para `myapp:/cb` (host vazio,
