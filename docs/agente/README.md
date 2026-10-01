@@ -89,7 +89,7 @@ Quatro ações. O agente deve **mostrar o que vai fazer** (nome e id) e esperar:
 - apagar um registro;
 - gerar políticas em lote;
 - eliminar dados de um titular (LGPD);
-- revogar aprovações.
+- revogar aprovações de controle (a de ROPA e DPIA e a exclusão de análise crítica são só da interface).
 
 O servidor recusa se o agente tentar sem a confirmação. E o seu cliente MCP ainda
 pergunta antes de executar a chamada. **Não libere `niso_executar` de forma

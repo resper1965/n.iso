@@ -13,6 +13,13 @@ import { log, requestId, resumoErro } from './observability';
  * "sem acesso a este projeto" responde sobre o pedido dele, não sobre o
  * interior do banco.
  */
+/**
+ * Quem pode DESAPROVAR por interface: revogar a aprovação de ROPA/DPIA e excluir análise crítica
+ * (F6). É a plataforma e o administrador do cliente: aprovar e desaprovar é ato da direção. O
+ * consultor humano não entra, e o agente fica de fora (FORA_DO_AGENTE).
+ */
+export const PODE_REVOGAR_APROVACAO = new Set(['platform_admin', 'org_admin']);
+
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
     super(message);

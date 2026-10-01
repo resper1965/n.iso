@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO } from '../helpers';
 import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -356,6 +356,31 @@ governanceApp.post('/projects/:id/management-reviews', async (c) => {
     return c.json({ ok: true, id });
   } catch (e: any) {
     return erro500(c, 'Falha ao criar reunião de análise crítica', e);
+  }
+});
+
+// Excluir análise crítica (F6, decisão D1): humano, pela interface, platform_admin e administrador do
+// cliente. Não existia rota nenhuma, nem para o humano. Além da linha central `registro.excluido`
+// (src/trilha-exclusao.ts), grava o texto específico com a data e o status da análise. As colunas de
+// assinatura (`ciso_signed_by`...) existem em produção mas NÃO em schema.sql nem em migration (achado
+// no plano de fechamento): ler daqui quebraria banco novo e staging, por isso a rota não depende delas.
+governanceApp.delete('/management-reviews/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_REVOGAR_APROVACAO.has(user?.role ?? '')) {
+      return c.json({ error: 'Forbidden: excluir análise crítica é do administrador do cliente ou da plataforma' }, 403);
+    }
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'management_reviews', id, user);
+    const r = await c.env.DB.prepare('SELECT project_id, review_date, status FROM management_reviews WHERE id = ?')
+      .bind(id).first<{ project_id: string; review_date: string; status: string | null }>();
+    if (!r) return c.json({ error: 'Análise crítica não encontrada' }, 404);
+    await c.env.DB.prepare('DELETE FROM management_reviews WHERE id = ?').bind(id).run();
+    await logAudit(c.env.DB, 'management_review.deleted', user.email,
+      `Análise crítica ${id} (${r.review_date}, ${r.status ?? 'sem status'}) excluída.`, '', '', r.project_id);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao excluir análise crítica', e);
   }
 });
 
