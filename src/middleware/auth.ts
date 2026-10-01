@@ -357,7 +357,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   // Trilha genérica do agente: toda ação destrutiva que passou leva o projeto,
   // sem depender de cada handler lembrar de registrar.
   if (user.agente === true && acaoDestrutiva(c.req.method, c.req.path) && c.res.status < 400) {
-    await logAudit(c.env.DB, 'agente.exclusao', user.email, `${c.req.method} ${c.req.path}`,
+    await logAudit(c.env.DB, 'agente.acao_destrutiva', user.email, `${c.req.method} ${c.req.path}`,
       'confirmado pelo usuário', c.req.header('CF-Connecting-IP') ?? '', user.client_project_id ?? undefined).catch(() => {});
   }
 });

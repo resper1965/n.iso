@@ -266,6 +266,30 @@ describe('Autorização OAuth do agente', () => {
     expect(local).not.toContain('Atenção');
   });
 
+  it('o provider recusa callback de esquema próprio já no registro', async () => {
+    // Plano de fechamento, C2: a hipótese era um 500 depois do login para `myapp:/cb` (host vazio,
+    // `new URL('http://')` lança). Não é alcançável: o registro dinâmico já recusa. Fica como
+    // documentação e como alarme: se uma versão futura da biblioteca passar a aceitar esquema próprio,
+    // este teste falha e o caminho do host vazio (linha do `new URL` na tela de escolha) volta a valer.
+    // Também importa para o login em clientes de desktop que usam `cursor://` ou `vscode://`.
+    const r = await f('/oauth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: ['myapp:/cb'], client_name: 'App Nativo', token_endpoint_auth_method: 'none' }),
+    });
+    expect(r.status).toBe(400);
+    expect((await r.json<any>()).error).toBe('invalid_client_metadata');
+  });
+
+  it('nenhum cliente vem pré-marcado: a escolha é explícita e obrigatória', async () => {
+    // O primeiro da lista vinha marcado: um tenant que se nomeie para ordenar primeiro faz
+    // um consultor apressado conectar o agente ao projeto errado.
+    const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
+    const html = await (await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }))).text();
+    expect(html).toContain('name="projeto"');
+    expect(html).not.toMatch(/<input[^>]*name="projeto"[^>]*checked/);
+    expect(html).toMatch(/<input[^>]*name="projeto"[^>]*required/);
+  });
+
   it('rotas antigas seguem fora do OAuthProvider', async () => {
     expect((await f('/health')).status).toBe(200);
   });

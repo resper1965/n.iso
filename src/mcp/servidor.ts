@@ -90,7 +90,7 @@ function requisicaoInterna(origem: Request, env: any, ctx: any, props: PropsAgen
   // Allowlist de IP do tenant avalia o IP real do cliente MCP.
   const ip = origem.headers.get('CF-Connecting-IP');
   return async (path, init) => {
-    if (!caminhoSeguro(base, path)) throw new Error('caminho de API recusado (id com caractere inválido)');
+    if (!caminhoSeguro(base, path)) throw new Error('caminho de API recusado: deve começar com /api/v1/ e não pode conter %, # ou segmentos . e ..');
     const headers = new Headers(init.headers);
     if (ip) headers.set('CF-Connecting-IP', ip);
     return fetchHono(new Request(base + path, { ...init, headers }), envAgente, ctx);

@@ -36,7 +36,9 @@ Na primeira chamada o cliente abre o navegador. Você:
 > **Estado dos clientes.** O Claude Code foi exercitado contra a produção em
 > 30/09/2026 (conexão, leitura e escrita). Codex, Cursor e Antigravity
 > têm a configuração acima, mas o login OAuth deles **ainda não foi confirmado**.
-> Se algum falhar, registre qual e em que etapa.
+> Se algum falhar, registre qual e em que etapa. Um ponto a vigiar: o provider recusa, já no registro,
+> callback de esquema próprio (`myapp:/cb`; erro `invalid_client_metadata`, "Redirect URI must use https,
+> or http on a loopback host"). Cliente de desktop que registre um callback desse tipo não consegue conectar.
 
 **Um cliente por conexão.** Cliente com dois projetos tem duas conexões, e o
 agente de uma não enxerga a outra. Para trocar de projeto, conecte de novo e

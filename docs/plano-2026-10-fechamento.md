@@ -24,13 +24,13 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | H4 | Decidir os dois stashes antigos (era do PR #32) | **você** | S | P4 | — |
 | H5 | Números velhos do `AGENTS.md` | agente | S | P2 | — |
 | **Onda 1 — correções pequenas, cada uma com teste** | | | | | |
-| C1 | `reset-password-first` só com troca pendente | agente | S–M | **P1** | — |
-| C2 | OAuth: `redirect_uri` com esquema próprio dá 500 depois do login | agente | S | P2 | — |
-| C3 | `Forbidden` vira 500 em três rotas | agente | S | P2 | — |
+| C1 | `reset-password-first` só com troca pendente | agente | S–M | feito (#229) | — |
+| C2 | ~~OAuth: `redirect_uri` com esquema próprio dá 500 depois do login~~ | — | — | descartado | premissa errada |
+| C3 | ~~`Forbidden` vira 500 em três rotas~~ | — | — | descartado | premissa errada |
 | C4 | Trilha de exclusão: 10 rotas sem trilha, 6 sem o projeto | agente | M | P2 | D3 (decidido) |
-| C5 | Tela de consentimento sem projeto pré-marcado | agente | S | P3 | — |
-| C6 | Rótulo `agente.exclusao` também nomeia lote, eliminação e revogação | agente | S | P4 | — |
-| C7 | Fragilidades de teste do agente | agente | S | P4 | — |
+| C5 | Tela de consentimento sem projeto pré-marcado | agente | S | feito | — |
+| C6 | Rótulo `agente.exclusao` também nomeia lote, eliminação e revogação | agente | S | feito | — |
+| C7 | Fragilidades de teste do agente | agente | S | feito | — |
 | **Onda 2 — produto** | | | | | |
 | F1 | Tela "Conectar agente" (está no stash) | agente | S–M | P2 | — |
 | F2 | Confirmar o login OAuth em Codex, Cursor e Antigravity | **você** + agente | S | P2 | — |
@@ -100,7 +100,7 @@ Regra de todas: branch a partir de `origin/main`, **teste primeiro** (vermelho, 
 rodar a **suíte inteira** e o `npm run openapi` se a rota mudar, conferir o código de saída e a
 ausência de "Unhandled", um PR por item.
 
-### C1 · `reset-password-first` só com troca pendente · P1
+### C1 · `reset-password-first` só com troca pendente · feito (#229)
 **Causa.** `src/routes/auth.ts:259` troca a senha da sessão **sem pedir a senha atual e sem
 conferir** que a conta está em troca forçada (`requires_password_change = 1`). Quem tiver uma
 sessão aberta, por exemplo uma sessão roubada, define uma senha nova e passa a ser dono da
@@ -111,18 +111,22 @@ for 1. A troca de senha comum continua em `change-password`, que exige a senha a
 forçada passa; conta normal é recusada; e a sessão é renovada como hoje (#204).
 **Pronto quando** `test/` provar os três casos e o fluxo de primeiro acesso funcionar na tela.
 
-### C2 · `redirect_uri` com esquema próprio dá 500 · P2
-**Causa.** Em `src/routes/oauth-autorizacao.ts`, a linha 73 guarda `new URL(oauth.redirectUri).host` como destino; para um callback de esquema próprio, como `myapp:/cb`, o `host` é vazio. A linha 156, ao montar a tela de escolha do cliente, faz `new URL('http://' + destino)` e lança com destino vazio, **depois** do login bem-sucedido: o consultor autentica e recebe um 500.
-**Correção.** Tratar o destino vazio (mostrar o esquema, ou recusar o pedido com 400 no início).
-**Pronto quando** um cliente MCP com esquema próprio vê uma resposta clara, sem 500, e o teste prova.
+### C2 · `redirect_uri` com esquema próprio · descartado
+**A hipótese.** Um callback como `myapp:/cb` tem `host` vazio, e a tela de escolha do cliente lançaria ao
+montar `new URL('http://')`, dando 500 depois do login.
+**Por que caiu.** Ao reproduzir, o provider **recusa** o callback já no registro (`400 invalid_client_metadata`:
+"Redirect URI must use https, or http on a loopback host"). O cliente nunca chega ao login; o caminho não existe.
+**O que ficou.** Um teste que registra o comportamento (e avisa se uma versão futura da biblioteca passar a aceitar
+esquema próprio) e uma observação no F2: cliente de desktop com callback de esquema próprio não consegue conectar.
+Eu tinha dado este item como defeito lendo o código, sem reproduzir; o erro foi meu.
 
-### C3 · `Forbidden` vira 500 · P2
-**Causa.** Os handlers de exclusão de auditoria (`audits.ts:31`), parte interessada
-(`governance.ts:51`) e métrica (`governance.ts:432`) chamam `requireResourceAccess` dentro de um
-`try` cujo `catch` só faz `erro500`: a exceção de acesso negado vira 500. Nenhuma escrita acontece (a exceção vem antes do `DELETE`), mas o
-cliente recebe 500 e o log fica com ruído.
-**Correção.** Tratar `ForbiddenError` como nos demais handlers (403).
-**Pronto quando** a requisição ao recurso de outro projeto dá 403, para as três rotas.
+### C3 · `Forbidden` vira 500 · descartado
+**A hipótese** (da revisão final do #221): os `DELETE` de auditoria, parte interessada e métrica transformariam o
+acesso negado em 500.
+**Por que caiu.** `erro500` (`src/helpers.ts`) já trata `ForbiddenError` como 403. O teste novo, com um
+administrador de outro projeto apagando os três recursos, dá 403 e o registro permanece. Eu li o uso de `erro500`
+nos handlers, mas não o corpo dele.
+**O que ficou.** O teste, como proteção de regressão.
 
 ### C4 · Trilha de exclusão · P2
 **Medido.** Dos 20 handlers `DELETE` de `src/routes/`, **10 não gravam trilha**
@@ -134,17 +138,17 @@ varredura de 30 linhas por handler; o primeiro passo do item é confirmar cada c
 para o agente), mais o texto específico onde o handler já grava. O gancho garante que nada fica de fora.
 **Pronto quando** um teste que **enumere** as rotas `DELETE` exija trilha com o projeto em todas.
 
-### C5 · Consentimento sem projeto pré-marcado · P3
+### C5 · Consentimento sem projeto pré-marcado · feito
 O primeiro projeto da lista vem marcado. Um tenant que se nomeie para ordenar primeiro faz um
 consultor apressado conectar o agente ao projeto errado. Não cruza fronteira de tenant (por isso
 é endurecimento, não vulnerabilidade), mas custa uma linha: nenhum projeto marcado e `required`.
 **Pronto quando** o formulário exigir a escolha e o teste confirmar.
 
-### C6 · Rótulo `agente.exclusao` · P4
+### C6 · Rótulo `agente.exclusao` · feito
 O mesmo rótulo marca lote, eliminação de titular e revogação, que não são exclusões. Renomear
 para `agente.acao_destrutiva` (linhas antigas continuam como estão) e atualizar `seguranca.md`.
 
-### C7 · Fragilidades de teste do agente · P4
+### C7 · Fragilidades de teste do agente · feito
 Cinco pontos, todos pequenos: a prova de que o cabeçalho de confirmação é inerte usa um papel que
 já é só de leitura (trocar por uma chave de API `read`); a consulta da trilha no teste não tem
 `ORDER BY`; um agente revogado recebe 403, e não 401, nas rotas da lista de proibidas; a mensagem
