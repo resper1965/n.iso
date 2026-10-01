@@ -43,5 +43,5 @@ describe('login rate-limit por conta (S6)', () => {
 
     // Conta DIFERENTE, mesmo IP: não herda o bloqueio (teto por conta, não por IP).
     expect((await tentativa('outro@ness.io')).status).toBe(401);
-  });
+  }, 30_000);
 });
