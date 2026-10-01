@@ -5,13 +5,11 @@
 // perceber (jsdom não faz cascata, então teste de render não pega isso). Aqui a
 // verificação é estática: lê a view e o CSS do disco e cruza os nomes.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-// `cwd` é `frontend/` aqui e no CI. Ler do disco, não `?raw`: CSS com `?raw`
-// volta vazio no pipeline do Vite.
-const view = readFileSync(resolve(process.cwd(), 'src/views/monitor.js'), 'utf8');
-const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf8');
+// Sem `node:fs`: o Vite entrega o texto dos arquivos (funciona em qualquer SO).
+const lido = (glob) => Object.values(glob)[0];
+const view = lido(import.meta.glob('../src/views/monitor.js', { query: '?raw', import: 'default', eager: true }));
+const css = lido(import.meta.glob('../src/style.css', { query: '?raw', import: 'default', eager: true }));
 
 const classesDaView = [...new Set(
   [...view.matchAll(/class="([^"]+)"/g)]

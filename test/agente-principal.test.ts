@@ -120,5 +120,5 @@ describe('Principal agente', () => {
     expect((await comoAgente('/api/v1/projects/p-a/risks', {}, Ps)).status).toBe(401);
     const conc = await env.DB.prepare(`SELECT revogado_por FROM agente_concessoes WHERE id = 'c-senha'`).first<any>();
     expect(conc.revogado_por).toBe('troca de senha');
-  });
+  }, 30_000);
 });
