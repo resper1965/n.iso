@@ -30,6 +30,7 @@ export const ROTAS = {
   'POST /api/v1/projects/{id}/auditor-token': { obrigatorios: [] },
   'POST /api/v1/projects/{id}/chat': { obrigatorios: ['message'] },
   'POST /api/v1/projects/{id}/dpia': { obrigatorios: [] },
+  'POST /api/v1/projects/{id}/dpia/{assessmentId}/approve': { obrigatorios: ['role'] },
   'POST /api/v1/projects/{id}/dpia/{assessmentId}/revoke-approval': { obrigatorios: ['reason'] },
   'POST /api/v1/projects/{id}/governance': { obrigatorios: ['job_title', 'name', 'role_category'] },
   'POST /api/v1/projects/{id}/interviews': { obrigatorios: ['answers'] },
