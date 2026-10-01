@@ -1519,12 +1519,26 @@ import { navigate } from '../router.js';
                     </select>
                 </div>
                 <div style="text-align:right">
+                    ${S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin') ? `<button type="button" data-action="excluirMgmtReview" data-args='["${review.id}"]' class="btn-secondary" style="margin-right:8px">Excluir análise</button>` : ''}
                     <button type="button" data-action="openEditMgmtReviewModal" data-args='["${review.id}"]' class="btn-secondary" style="margin-right:8px">Voltar</button>
                     <button type="submit" class="btn-primary">Salvar Alterações</button>
                 </div>
             </form>
         `;
         openModal(html);
+    };
+
+    // F6: excluir análise crítica é da direção, pela interface (o agente não alcança a rota).
+    window.excluirMgmtReview = async function(id) {
+        if (!confirm('Excluir esta análise crítica? Ela é um registro de gestão, possivelmente assinado, e a exclusão é permanente (fica na trilha de auditoria).')) return;
+        try {
+            await api('DELETE', `/api/v1/management-reviews/${id}`);
+            showToast('Análise crítica excluída');
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao excluir: ' + err.message, 'error');
+        }
     };
 
     window.saveMgmtReviewDetails = async function(e, id) {

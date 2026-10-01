@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, ehComercial, somenteNess, somenteComercial } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema } from '../schemas';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, ehComercial, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema } from '../schemas';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
@@ -74,6 +74,33 @@ platformApp.put('/dpia/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar DPIA', e);
+  }
+});
+
+// Revogar a aprovação do DPIA (F6, decisão D1): humano, pela interface, platform_admin e administrador
+// do cliente. Limpa assinaturas e aprovação do DPO e volta o DPIA a rascunho; o motivo é obrigatório
+// e vai para a trilha com o projeto.
+platformApp.post('/projects/:id/dpia/:assessmentId/revoke-approval', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_REVOGAR_APROVACAO.has(user?.role ?? '')) {
+      return c.json({ error: 'Forbidden: revogar aprovação é do administrador do cliente ou da plataforma' }, 403);
+    }
+    const projectId = c.req.param('id');
+    const assessmentId = c.req.param('assessmentId');
+    const valid = await validateBody(c, revogarDpiaSchema);
+    if (!valid.success) return valid.response;
+
+    const existe = await c.env.DB.prepare('SELECT 1 FROM dpia_assessments WHERE id = ? AND project_id = ?').bind(assessmentId, projectId).first();
+    if (!existe) return c.json({ error: 'DPIA não encontrado' }, 404);
+
+    await c.env.DB.prepare(
+      `UPDATE dpia_assessments SET dpo_signature = NULL, ceo_signature = NULL, dpo_approved_by = NULL, dpo_approved_at = NULL, status = 'Draft' WHERE id = ? AND project_id = ?`
+    ).bind(assessmentId, projectId).run();
+    await logAudit(c.env.DB, 'dpia.approval_revoked', user.email, `DPIA ${assessmentId}: aprovação e assinaturas revogadas; voltou a Draft.`, valid.data.reason, c.req.header('CF-Connecting-IP') ?? '', projectId);
+    return c.json({ ok: true, status: 'Draft' });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao revogar aprovação do DPIA', e);
   }
 });
 

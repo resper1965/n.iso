@@ -22,6 +22,7 @@ export const TABELA_DO_RECURSO: Record<string, string> = {
   capa: 'corrective_actions',
   certification: 'certification_tracking',
   evidence: 'evidence',
+  'management-reviews': 'management_reviews',
   metrics: 'performance_metrics',
   risks: 'risks',
   ropa: 'ropa_records',

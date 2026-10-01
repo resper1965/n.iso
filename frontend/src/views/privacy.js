@@ -121,14 +121,14 @@ import { navigate, render } from '../router.js';
                             <strong>Líder SGSI:</strong> 
                             ${r.ciso_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ciso"]'>Assinar</button>` : ''}
+                        ${!r.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ciso"]'>Assinar</button>` : podeRevogar() ? `<button class="btn-secondary" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="revogarROPA" data-args='["${projectId}","${r.id}","ciso"]'>Revogar</button>` : ''}
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.5rem; border-radius:8px; font-size:0.75rem">
                         <div>
                             <strong>Direção Executiva:</strong> 
                             ${r.ceo_approved_by ? `<span style="color:var(--success)">Aprovado por ${escapeHTML(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : `<span style="color:var(--text-dim)">Aguardando assinatura</span>`}
                         </div>
-                        ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ceo"]'>Assinar</button>` : ''}
+                        ${!r.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveROPA" data-args='["${projectId}","${r.id}","ceo"]'>Assinar</button>` : podeRevogar() ? `<button class="btn-secondary" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="revogarROPA" data-args='["${projectId}","${r.id}","ceo"]'>Revogar</button>` : ''}
                     </div>
                 </div>
             </div>
@@ -371,6 +371,7 @@ import { navigate, render } from '../router.js';
                         </div>
                         ${!dp.ceo_signature ? `<button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="approveDPIA" data-args='["${projectId}","${dp.id}","ceo"]'>Assinar</button>` : ''}
                     </div>
+                    ${podeRevogar() && (dp.dpo_signature || dp.ceo_signature || dp.status === 'Approved') ? `<div style="text-align:right"><button class="btn-secondary" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="revogarDPIA" data-args='["${projectId}","${dp.id}"]'>Revogar aprovação do DPIA</button></div>` : ''}
                 </div>
             </div>
             
@@ -474,6 +475,54 @@ import { navigate, render } from '../router.js';
 
     window.openROPAReport = function(projectId) {
         window.open(`/api/v1/projects/${projectId}/ropa/report?token=${S.token}`, '_blank');
+    };
+
+    // Desaprovar é ato da direção (F6): só platform_admin e org_admin veem o botão; o servidor decide de novo.
+    // O motivo é obrigatório e vai para a trilha. ponytail: prompt() nativo em vez de modal próprio.
+    function podeRevogar() {
+        return !!S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin');
+    }
+    function pedeMotivo(o_que) {
+        const motivo = (window.prompt(`Revogar ${o_que}. Informe o motivo (obrigatório, vai para a trilha de auditoria):`) || '').trim();
+        if (motivo.length < 5) {
+            if (motivo) showToast('Motivo muito curto (mínimo de 5 caracteres)', 'error');
+            return null;
+        }
+        return motivo;
+    }
+
+    window.revogarROPA = async function(projectId, recordId, role) {
+        const motivo = pedeMotivo(role === 'ciso' ? 'a aprovação do Líder SGSI no ROPA' : 'a aprovação da Direção no ROPA');
+        if (!motivo) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/ropa/${recordId}/revoke-approval`, { role, reason: motivo });
+            showToast('Aprovação do ROPA revogada');
+            forceCloseModal();
+            let records = [];
+            try { records = await api('GET', `/api/v1/projects/${projectId}/ropa`); } catch(e) {}
+            S.ropa = records;
+            window.openROPADetailsModal(recordId);
+            render();
+        } catch(e) {
+            showToast('Erro ao revogar aprovação: ' + e.message, 'error');
+        }
+    };
+
+    window.revogarDPIA = async function(projectId, id) {
+        const motivo = pedeMotivo('a aprovação e as assinaturas do DPIA');
+        if (!motivo) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/dpia/${id}/revoke-approval`, { reason: motivo });
+            showToast('Aprovação do DPIA revogada');
+            forceCloseModal();
+            let assessments = [];
+            try { assessments = await api('GET', `/api/v1/projects/${projectId}/dpia`); } catch(e) {}
+            S.dpia = assessments;
+            window.openDPIADetailsModal(id);
+            render();
+        } catch(e) {
+            showToast('Erro ao revogar aprovação: ' + e.message, 'error');
+        }
     };
 
     window.approveROPA = async function(projectId, recordId, role) {
