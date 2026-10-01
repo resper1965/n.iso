@@ -27,7 +27,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | C1 | `reset-password-first` só com troca pendente | agente | S–M | **P1** | — |
 | C2 | OAuth: `redirect_uri` com esquema próprio dá 500 depois do login | agente | S | P2 | — |
 | C3 | `Forbidden` vira 500 em três rotas | agente | S | P2 | — |
-| C4 | Trilha de exclusão: 10 rotas sem trilha, 6 sem o projeto | agente | M | P2 | D3 |
+| C4 | Trilha de exclusão: 10 rotas sem trilha, 6 sem o projeto | agente | M | P2 | D3 (decidido) |
 | C5 | Tela de consentimento sem projeto pré-marcado | agente | S | P3 | — |
 | C6 | Rótulo `agente.exclusao` também nomeia lote, eliminação e revogação | agente | S | P4 | — |
 | C7 | Fragilidades de teste do agente | agente | S | P4 | — |
@@ -35,11 +35,11 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 | F1 | Tela "Conectar agente" (está no stash) | agente | S–M | P2 | — |
 | F2 | Confirmar o login OAuth em Codex, Cursor e Antigravity | **você** + agente | S | P2 | — |
 | F3 | "Último uso" do cartão de agentes atualizar sozinho | agente | S | P3 | — |
-| F4 | O agente ler PDF e planilha | agente | L | P3 | D2 |
+| F4 | O agente ler PDF e planilha | agente | L | P3 | D2 (em aberto) |
 | F5 | Regras de verificação normativa no `coherence_check` | agente | M–L | P3 | uso real |
-| F6 | O humano revogar aprovação de ROPA/DPIA e apagar análise crítica pela interface | agente | M | P2 | D1 |
+| F6 | O humano revogar aprovação de ROPA/DPIA e apagar análise crítica pela interface | agente | M | P2 | D1 (decidido) |
 | **Onda 3 — dívida estrutural (contínua)** | | | | | |
-| T1 | `any` em `src/`: 510, com catraca | agente | L | P3 | D4 |
+| T1 | `any` em `src/`: 510, com catraca | agente | L | P3 | D4 (decidido) |
 | T2 | 4 arquivos de teste que mockam o D1 | agente | M cada | P3 | — |
 | T3 | 36 leituras de corpo sem schema | agente | M | P3 | — |
 | T4 | Teste de frontend nas telas novas | agente | M | P3 | — |
@@ -130,9 +130,8 @@ cliente recebe 500 e o log fica com ruído.
 sem o projeto** (`audits`, `capa`, `platform`, `proposals`, `ropa`, `users`). Exclusão que não
 aparece na trilha do projeto é exatamente o que o auditor pergunta. (A contagem vem de uma
 varredura de 30 linhas por handler; o primeiro passo do item é confirmar cada caso.)
-**Decisão D3.** Duas formas: (a) um gancho central que registra todo `DELETE` bem-sucedido (como já
-existe para o agente), ou (b) corrigir cada handler. **Recomendo (a) mais (b) só onde o detalhe
-importa**: o gancho garante que nada fica de fora, e os handlers que já gravam mantêm o texto.
+**Decidido (D3, 01/10/2026): gancho central** que registra todo `DELETE` bem-sucedido (como já existe
+para o agente), mais o texto específico onde o handler já grava. O gancho garante que nada fica de fora.
 **Pronto quando** um teste que **enumere** as rotas `DELETE` exija trilha com o projeto em todas.
 
 ### C5 · Consentimento sem projeto pré-marcado · P3
@@ -179,8 +178,7 @@ agente tivesse parado. Recarregar a lista a cada 60 s, só enquanto a Governanç
 Hoje binário volta só como tamanho e tipo, e foi a queixa do primeiro uso real (PDFs e políticas
 nunca lidos). **Primeiro uma investigação** (S–M): comparar converter dentro do Worker e usar um
 serviço de IA da Cloudflare; medir qualidade em PDFs reais do cliente, tamanho e custo.
-**Decisão D2.** O conteúdo do cliente passaria por um serviço de conversão: aceitável para o
-contrato e a LGPD?
+**Decisão D2 (em aberto):** veja "D2 — o que está em jogo", abaixo.
 **Pronto quando** `niso_ler` devolver texto de PDF dentro do limite de 100.000 caracteres, com
 teste e sem enfraquecer a fronteira de projeto.
 
@@ -193,7 +191,7 @@ frequentes a regra.
 ### F6 · O humano revoga aprovação e apaga análise crítica · P2 · decisão D1
 A limpeza da Twyn precisou de SQL porque **nem a interface** tem: exclusão de análise crítica, e
 revogação de aprovação de ROPA e DPIA (só existe para controles). É o D3 do `backlog-plan.md`.
-**Importante:** isto é **para o humano, pela interface**. O agente continua sem essas ações, como
+**Decidido (D1, 01/10/2026): sim.** Isto é **para o humano, pela interface**. O agente continua sem essas ações, como
 você decidiu.
 **Pronto quando** `platform_admin` e o administrador do cliente fizerem as duas coisas na tela, com
 senha/confirmação e trilha com o projeto, e o teste provar que o agente **não** alcança.
@@ -204,7 +202,7 @@ senha/confirmação e trilha com o projeto, e o teste provar que o agente **não
 
 | ID | O quê | Como medir progresso |
 |---|---|---|
-| T1 | 510 `any` em `src/`. Tipar o que se toca é barato; falta uma **catraca**: um teste ou regra que reprove o aumento. | contagem do H5 só desce |
+| T1 | 510 `any` em `src/`. Tipar o que se toca é barato; falta uma **catraca**: um teste ou regra que reprove o aumento. **Decidido (D4): catraca agora, sem meta de calendário.** | contagem do H5 só desce |
 | T2 | `api`, `integration`, `mcp-integration`, `services-rag` mockam o D1 e não pegam deriva de schema. Trocar por D1 real, um arquivo por PR. | lista do H5 esvazia |
 | T3 | 36 leituras de `c.req.json` em 12 arquivos sem schema semântico (`policies` 7, `assessments` 6, `governance` 6, `projects` 4). | contagem por arquivo |
 | T4 | Teste de frontend para as telas novas (`conectar-agente`, cartão de agentes, checklist): hoje 19 arquivos em `frontend/test/`. | arquivos novos por tela |
@@ -213,16 +211,52 @@ senha/confirmação e trilha com o projeto, e o teste provar que o agente **não
 
 ---
 
-## O que preciso de você
+## Decisões
 
-| # | Decisão | Minha recomendação |
+| # | Decisão | Resposta (01/10/2026) |
 |---|---|---|
-| **D1** | A interface humana ganha revogar aprovação de ROPA/DPIA e apagar análise crítica (F6)? | **Sim**, só humano, com confirmação e trilha. O agente segue sem. |
-| **D2** | O conteúdo de PDF do cliente pode passar por um serviço de conversão (F4)? | Decidir **depois** da investigação: ela diz o que muda e quanto custa. |
-| **D3** | Trilha de exclusão por gancho central ou por handler (C4)? | Gancho central, mais o texto específico onde já existe. |
-| **D4** | Meta para o `any` (T1)? | Catraca agora (não sobe) e redução por arquivo tocado; sem meta de calendário. |
+| **D1** | A interface humana ganha revogar aprovação de ROPA/DPIA e apagar análise crítica (F6)? | **Sim.** Só o humano, com confirmação e trilha. O agente segue sem. |
+| **D2** | O conteúdo de PDF do cliente pode passar por um serviço de conversão (F4)? | **Em aberto.** Veja abaixo. |
+| **D3** | Trilha de exclusão por gancho central ou por handler (C4)? | **Gancho central**, mais o texto específico onde já existe. |
+| **D4** | Meta para o `any` (T1)? | **Catraca agora**, que não deixa o número subir, sem meta de calendário. |
 
 E as ações que só você faz: **H2** (MFA), **H3/H4** (arquivos soltos e stashes), **F2** (login nos três clientes).
+
+### D2 — o que está em jogo
+
+**A pergunta.** Hoje o agente só lê **texto** de evidência; PDF, planilha e imagem voltam como tamanho e
+tipo. Foi a queixa do primeiro uso real. Para o agente ler um PDF, o arquivo precisa ser convertido em texto.
+
+**O caminho que a Cloudflare oferece.** `env.AI.toMarkdown()` (Workers AI) converte documentos em
+Markdown, inclusive PDF e imagem; na imagem, um modelo de IA descreve o conteúdo. Usa o binding `AI`
+que o projeto **já tem**. Fonte: documentação da Cloudflare, "Markdown Conversion".
+
+**O que o n.iso já manda para o Workers AI** (medido em `src/`): geração de política (`policies.ts`), avaliação
+de evidência (`EvidenceAgent`), embeddings do RAG (`knowledge-service`, `memory`), questionário de fases,
+prontidão e adequação de controle. Ou seja, **o conteúdo do cliente já passa pelo Workers AI**. O que mudaria é
+o formato: hoje vai texto já extraído; passaria a ir o arquivo original (PDF, imagem). Não entra um
+terceiro novo: é o mesmo fornecedor e a mesma conta.
+
+**O que eu não consegui confirmar** (a busca na documentação não trouxe resposta autoritativa):
+(1) o preço da conversão, e (2) a política de retenção e de uso de dados (treino) do Workers AI. Isso
+precisa ser lido por você nos termos e no DPA da Cloudflare, e conferido contra o que os contratos de
+vocês com os clientes dizem sobre suboperadores.
+
+**As três saídas**
+
+| Saída | Prós | Contras |
+|---|---|---|
+| **A. `toMarkdown` da Cloudflare** | Nenhuma infraestrutura nova; lê PDF e imagem; mesmo fornecedor de hoje | Custo a medir; descrição de imagem é gerada por modelo (pode errar); PDF escaneado depende de OCR |
+| **B. Biblioteca dentro do Worker** | Nada sai do Worker | Só PDF com texto (escaneado fica ilegível); pesa no tamanho do bundle e no tempo de CPU |
+| **C. Não fazer** | Zero risco novo | O consultor continua extraindo o texto à mão e subindo como evidência de texto |
+
+**Limites que valem em qualquer saída:** o upload já é limitado a 25 MB por arquivo, a leitura do agente
+é cortada em 100.000 caracteres, e a conversão rodaria **depois** da checagem de projeto
+(`requireResourceAccess`), então não abre acesso a arquivo de outro cliente.
+
+**Como decidir sem apostar:** uma investigação curta (S–M) antes de qualquer código: rodar a saída A em 5 a
+10 documentos **não sensíveis** (públicos ou da própria ness.), medir qualidade, tempo e custo, e trazer o
+resultado. Só com isso você responde sim ou não com número na mão.
 
 ---
 
