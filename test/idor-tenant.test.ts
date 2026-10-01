@@ -400,11 +400,11 @@ describe('IDOR cross-tenant nos routers de topo', () => {
         .bind('dpia-a', A, 'Tratamento A', 'Draft').run();
 
       // ciso@a.com NÃO está na matriz de governança → não assina (fail-closed).
-      const naoDesignado = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonCiso });
+      const naoDesignado = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonCiso, body: JSON.stringify({ role: 'ciso' }) });
       expect(naoDesignado.status, await naoDesignado.clone().text()).toBe(403);
 
       // Conta de plataforma (staff) não carimba conformidade.
-      const plataforma = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonStaff });
+      const plataforma = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonStaff, body: JSON.stringify({ role: 'ciso' }) });
       expect(plataforma.status).toBe(403);
 
       // Estado intacto após as recusas.
@@ -412,10 +412,10 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       expect(dpia.status).toBe('Draft');
 
       // adm@a.com É o CISO designado na matriz (gov-a) → assina de forma legítima.
-      const legitimo = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonA });
+      const legitimo = await req('/api/v1/projects/proj-a/dpia/dpia-a/approve', { method: 'POST', headers: jsonA, body: JSON.stringify({ role: 'ciso' }) });
       expect(legitimo.status, await legitimo.clone().text()).toBe(200);
       dpia = await env.DB.prepare('SELECT status, dpo_approved_by FROM dpia_assessments WHERE id = ?').bind('dpia-a').first<any>();
-      expect(dpia.status).toBe('Approved');
+      expect(dpia.status).toBe('Under Review');
       expect(dpia.dpo_approved_by).toBe('Admin do A');
     });
   });
