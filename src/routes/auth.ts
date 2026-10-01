@@ -428,7 +428,17 @@ authApp.post('/change-password', async (c) => {
     const newHash = await hashPassword(newPassword);
     await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE email = ?')
       .bind(newHash, user.email).run();
+    // Sessão roubada não pode sobreviver à troca de senha (até 24 h): derruba
+    // todas as emitidas antes e recarimba só esta, como o primeiro acesso faz.
+    await invalidateUserSessions(c.env.SESSIONS, user.id);
     await revogarAgentesPorTrocaDeSenha(c.env.DB, user.id);
+    const sessionId = c.get('sessionId');
+    if (sessionId) {
+      const agora = Date.now();
+      const renovada = JSON.stringify({ ...user, iat: agora, seen: agora });
+      await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
+      await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
+    }
 
     await logAudit(c.env.DB, 'auth.password_changed', user.email, 'Senha alterada com sucesso');
     return c.json({ ok: true });
