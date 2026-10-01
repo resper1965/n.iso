@@ -265,6 +265,18 @@ authApp.post('/reset-password-first', async (c) => {
     if (!v.success) return v.response;
     const { newPassword } = v.data;
 
+    // Esta rota troca a senha SEM pedir a atual, então só vale no primeiro acesso
+    // (`requires_password_change = 1`). Fora dele, qualquer sessão aberta — uma
+    // sessão roubada, por exemplo — definiria senha nova e tomaria a conta. A troca
+    // comum é `change-password`, que exige a senha atual. O flag não viaja na sessão
+    // (o login o apaga), então a fonte é o banco.
+    const conta = await c.env.DB.prepare('SELECT requires_password_change FROM users WHERE id = ?')
+      .bind(user.id).first<{ requires_password_change: number | null }>();
+    if (conta?.requires_password_change !== 1) {
+      await logAudit(c.env.DB, 'auth.reset_primeiro_recusado', user.email, 'Troca de senha sem a atual recusada: a conta não está em primeiro acesso');
+      return c.json({ error: 'Esta troca só vale no primeiro acesso. Use a troca de senha normal, que pede a senha atual.' }, 403);
+    }
+
     const newHash = await hashPassword(newPassword);
     
     await c.env.DB.prepare(
