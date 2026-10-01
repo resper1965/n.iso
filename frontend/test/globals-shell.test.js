@@ -86,6 +86,14 @@ describe('menu de conta', () => {
     expect(marcados[0].textContent).toContain('Twyn');
   });
 
+  it('oferece "Trocar senha", que abre o modal de troca (F7)', () => {
+    window.toggleAccountMenu();
+    const item = [...document.querySelectorAll('#account-menu .account-item')].find((b) => b.textContent.includes('Trocar senha'));
+    expect(item, 'o menu não tem "Trocar senha"').toBeTruthy();
+    expect(item.getAttribute('data-action')).toBe('accountMenuAction');
+    expect(JSON.parse(item.getAttribute('data-args'))).toEqual(['openChangePasswordModal']);
+  });
+
   it('não oferece "Tema": não existe tema claro para trocar', () => {
     window.toggleAccountMenu();
     expect(document.getElementById('account-menu').textContent).not.toContain('Tema');
