@@ -1,7 +1,8 @@
-// Tela "Conectar agente" (src/views/conectar-agente.js): o que ela promete tem de bater com o
-// que foi verificado e com o que o agente faz hoje (docs/agente/). Três coisas importam:
-// (1) o selo "Verificado" só no cliente exercitado em produção; (2) o texto diz que o LOGIN
-// define quem é o agente e o cliente; (3) "Copiado" só depois que a área de transferência aceitou.
+// Tela "Conectar agente" (src/views/conectar-agente.js). Três coisas importam:
+// (1) a estrutura: endereço do servidor, três passos, UM cliente por vez em abas, e o alcance do agente;
+// (2) o que ela afirma bate com o que foi verificado: "Verificado" só no cliente exercitado em produção,
+//     e o texto diz que o LOGIN define quem é o agente e o cliente;
+// (3) "Copiado" só depois que a área de transferência aceitou.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import '../src/ui.js';
@@ -16,35 +17,82 @@ function monta() {
   return { c, h, a };
 }
 
-const cartao = (c, nome) => [...c.querySelectorAll('section')].find((s) => s.getAttribute('aria-label') === nome);
+const abas = (c) => [...c.querySelectorAll('[role="tab"]')];
+const aba = (c, nome) => abas(c).find((t) => t.textContent.includes(nome));
+const painel = (c) => c.querySelector('[role="tabpanel"]');
 
 beforeEach(() => {
   window.showToast = vi.fn();
 });
 
-describe('Conectar agente — o que a tela afirma', () => {
-  it('título e quatro clientes, cada um com o seu trecho', () => {
+describe('Conectar agente — estrutura', () => {
+  it('título, endereço do servidor no topo e três passos', () => {
     const { c, h } = monta();
     expect(h.textContent).toBe('Conectar agente');
-    for (const nome of ['Claude Code', 'Cursor', 'Codex', 'Antigravity']) expect(cartao(c, nome), nome).toBeTruthy();
-    expect(c.textContent).toContain('https://niso.ness.com.br/mcp');
+    expect(c.querySelector('.ca-servidor').textContent).toContain('https://niso.ness.com.br/mcp');
+    const passos = [...c.querySelectorAll('ol.ca-passos > li')];
+    expect(passos).toHaveLength(3);
+    expect(passos[2].textContent).toContain('niso_contexto');
   });
 
+  it('um cliente por vez, em abas acessíveis: o Claude Code vem selecionado', () => {
+    const { c } = monta();
+    expect(c.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(abas(c).map((t) => t.textContent.replace(/\s+/g, ' ').trim().split(' ')[0])).toEqual(['Claude', 'Cursor', 'Codex', 'Antigravity']);
+    const sel = abas(c).filter((t) => t.getAttribute('aria-selected') === 'true');
+    expect(sel).toHaveLength(1);
+    expect(sel[0].textContent).toContain('Claude Code');
+    // tabindex móvel: só a aba selecionada entra na ordem de tabulação
+    expect(abas(c).map((t) => t.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1']);
+    expect(painel(c).getAttribute('aria-labelledby')).toBe(sel[0].id);
+    expect(abas(c).every((t) => t.getAttribute('aria-controls') === painel(c).id)).toBe(true);
+  });
+
+  it('o painel mostra só o trecho do cliente selecionado', () => {
+    const { c } = monta();
+    expect(painel(c).textContent).toContain('claude mcp add --transport http niso');
+    expect(painel(c).textContent).not.toContain('codex mcp add');
+    window.__selecionarCliente('codex');
+    expect(aba(c, 'Codex').getAttribute('aria-selected')).toBe('true');
+    expect(aba(c, 'Claude Code').getAttribute('aria-selected')).toBe('false');
+    expect(painel(c).textContent).toContain('codex mcp add niso --url https://niso.ness.com.br/mcp');
+    expect(painel(c).textContent).toContain('codex mcp login niso');
+    expect(painel(c).textContent).not.toContain('claude mcp add');
+  });
+
+  it('as setas, Home e End movem a seleção (e dão a volta)', () => {
+    const { c } = monta();
+    const tecla = (key) => window.__abaTecla(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    tecla('ArrowRight');
+    expect(aba(c, 'Cursor').getAttribute('aria-selected')).toBe('true');
+    tecla('End');
+    expect(aba(c, 'Antigravity').getAttribute('aria-selected')).toBe('true');
+    tecla('ArrowRight'); // dá a volta
+    expect(aba(c, 'Claude Code').getAttribute('aria-selected')).toBe('true');
+    tecla('ArrowLeft'); // dá a volta para trás
+    expect(aba(c, 'Antigravity').getAttribute('aria-selected')).toBe('true');
+    tecla('Home');
+    expect(aba(c, 'Claude Code').getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+describe('Conectar agente — o que a tela afirma', () => {
   it('só o Claude Code é "Verificado"; os outros três são "A confirmar"', () => {
     // Em 30/09/2026 só o Claude Code foi exercitado contra a produção.
     const { c } = monta();
-    expect(cartao(c, 'Claude Code').textContent).toContain('Verificado');
+    expect(aba(c, 'Claude Code').textContent).toContain('Verificado');
     for (const nome of ['Cursor', 'Codex', 'Antigravity']) {
-      expect(cartao(c, nome).textContent, nome).toContain('A confirmar');
-      expect(cartao(c, nome).textContent, nome).not.toContain('Verificado');
+      expect(aba(c, nome).textContent, nome).toContain('A confirmar');
+      expect(aba(c, nome).textContent, nome).not.toContain('Verificado');
     }
   });
 
-  it('o Codex mostra o comando de adicionar E o de login', () => {
+  it('o painel de um cliente "A confirmar" diz que o login ainda não foi visto funcionando', () => {
     const { c } = monta();
-    const t = cartao(c, 'Codex').textContent;
-    expect(t).toContain('codex mcp add niso --url https://niso.ness.com.br/mcp');
-    expect(t).toContain('codex mcp login niso');
+    window.__selecionarCliente('cursor');
+    expect(painel(c).textContent).toMatch(/ainda não foi confirmado/i);
+    window.__selecionarCliente('claude');
+    expect(painel(c).textContent).toMatch(/exercitado em produção/i);
   });
 
   it('diz que o LOGIN define quem é o agente e em qual cliente ele atua', () => {
@@ -53,12 +101,16 @@ describe('Conectar agente — o que a tela afirma', () => {
     expect(c.textContent).toContain('em nome de você');
   });
 
-  it('diz o que o agente faz, o que pede o "sim" e o que ele não faz', () => {
+  it('o alcance tem quatro blocos, e o "sim" é o destacado', () => {
     const { c } = monta();
-    const t = c.textContent.toLowerCase();
+    const blocos = [...c.querySelectorAll('.ca-alcance > .ca-alc')];
+    expect(blocos).toHaveLength(4);
+    const t = c.querySelector('.ca-alcance').textContent.toLowerCase();
     for (const pede of ['apagar', 'gerar políticas em lote', 'eliminar dados de titular', 'revogar aprovações']) expect(t, pede).toContain(pede);
     for (const nao of ['usuários', 'sso', 'chaves de api', 'webhooks', 'achado de auditoria']) expect(t, nao).toContain(nao);
-    expect(t).toContain('niso_contexto');
+    const destacado = c.querySelectorAll('.ca-alc-sim');
+    expect(destacado).toHaveLength(1);
+    expect(destacado[0].textContent).toContain('sim');
   });
 
   it('sem handler inline nem script inline (o CSP atual os barra)', () => {
@@ -76,6 +128,15 @@ describe('Conectar agente — copiar', () => {
     await window.__copiarTrecho('url');
     expect(writeText).toHaveBeenCalledWith('https://niso.ness.com.br/mcp');
     expect(window.showToast).toHaveBeenCalledWith('Copiado');
+  });
+
+  it('copia o trecho do cliente que está na aba, não o de outro', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    monta();
+    window.__selecionarCliente('codex');
+    await window.__copiarTrecho('codex');
+    expect(writeText.mock.calls[0][0]).toContain('codex mcp login niso');
   });
 
   it('se a área de transferência recusar, diz que falhou em vez de mentir', async () => {

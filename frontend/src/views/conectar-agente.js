@@ -7,13 +7,31 @@ const URL_MCP = 'https://niso.ness.com.br/mcp';
 const CLIENTES = [
     { id: 'claude', nome: 'Claude Code', onde: 'Terminal', aConfirmar: false,
       trecho: `claude mcp add --transport http niso ${URL_MCP}` },
-    { id: 'cursor', nome: 'Cursor', onde: '.cursor/mcp.json', aConfirmar: true,
+    { id: 'cursor', nome: 'Cursor', onde: 'Arquivo .cursor/mcp.json', aConfirmar: true,
       trecho: `{ "mcpServers": { "niso": { "url": "${URL_MCP}" } } }` },
     { id: 'codex', nome: 'Codex', onde: 'Terminal', aConfirmar: true,
       trecho: `codex mcp add niso --url ${URL_MCP}\ncodex mcp login niso` },
-    { id: 'antigravity', nome: 'Antigravity', onde: '~/.gemini/config/mcp_config.json', aConfirmar: true,
+    { id: 'antigravity', nome: 'Antigravity', onde: 'Arquivo ~/.gemini/config/mcp_config.json', aConfirmar: true,
       trecho: `{ "mcpServers": { "niso": { "serverUrl": "${URL_MCP}" } } }` },
 ];
+
+const PASSOS = [
+    { titulo: 'Adicione o servidor', texto: 'Copie o endereço e adicione-o no seu cliente MCP, na aba abaixo.' },
+    { titulo: 'Entre e escolha o cliente', texto: 'Na primeira chamada o navegador abre. Entre no n.iso e escolha um cliente: é um por conexão.' },
+    { titulo: 'Chame niso_contexto', texto: 'Peça ao agente para começar por niso_contexto: ela diz o cliente, o mapa da app e os roteiros (diagnóstico, fechar lacuna, responder auditoria e a pré-avaliação de prontidão, que só lê).' },
+];
+
+// O que o agente faz hoje (docs/agente/README.md). Mudou o alcance? Mude aqui, no consentimento
+// da tela OAuth (src/routes/oauth-autorizacao.ts) e no niso_contexto.
+const ALCANCE = [
+    { titulo: 'Lê', texto: 'Tudo o que você lê neste cliente: controles, riscos, evidências em texto, políticas, entrevistas, ROPA, DPIA, governança.' },
+    { titulo: 'Grava', texto: 'Adequação, como você grava na interface: políticas, SoA, evidências em texto, controles, ativos e riscos.' },
+    { titulo: 'Pede o seu "sim"', sim: true, texto: 'Apagar, gerar políticas em lote, eliminar dados de titular e revogar aprovações. Ele mostra o que vai fazer antes.' },
+    { titulo: 'Não faz', texto: 'Usuários, SSO, chaves de API, webhooks, sua conta pessoal, criar projeto e registrar achado de auditoria (quem implementa não audita: ISO 27001, 9.2).' },
+];
+
+let selecionado = 'claude';
+let ultimo = null; // { c, h, a } da última renderização, para trocar de aba sem perder o contêiner
 
 // "Copiado" só depois que a área de transferência aceitou; senão, diz que falhou.
 window.__copiarTrecho = async (id) => {
@@ -27,63 +45,95 @@ window.__copiarTrecho = async (id) => {
 };
 
 const bloco = (id, texto) => `
-    <div style="display:flex;gap:8px;align-items:stretch">
-        <pre id="trecho-${id}" style="flex:1;min-width:0;margin:0;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-family:var(--font-mono);font-size:13px;white-space:pre-wrap;word-break:break-all">${escapeHTML(texto)}</pre>
+    <div class="ca-bloco">
+        <pre id="trecho-${id}" class="ca-pre">${escapeHTML(texto)}</pre>
         <button class="btn btn-secondary" data-action="__copiarTrecho" data-args='["${id}"]' aria-label="Copiar">Copiar</button>
     </div>`;
 
-// O que o agente faz hoje (docs/agente/README.md). Mudou o alcance? Mude aqui, no consentimento
-// da tela OAuth (src/routes/oauth-autorizacao.ts) e no niso_contexto.
-const ALCANCE = [
-    { titulo: 'Lê', texto: 'Tudo o que você lê neste cliente: controles, riscos, evidências em texto, políticas, entrevistas, ROPA, DPIA, governança.' },
-    { titulo: 'Grava', texto: 'Adequação, como você grava na interface: políticas, SoA, evidências em texto, controles, ativos e riscos.' },
-    { titulo: 'Pede o seu "sim"', texto: 'Apagar, gerar políticas em lote, eliminar dados de titular e revogar aprovações. Ele mostra o que vai fazer antes.' },
-    { titulo: 'Não faz', texto: 'Usuários, SSO, chaves de API, webhooks, sua conta pessoal, criar projeto e registrar achado de auditoria (quem implementa não audita: ISO 27001, 9.2).' },
-];
+const selo = (aConfirmar) => aConfirmar
+    ? '<span class="ca-selo">A confirmar</span>'
+    : '<span class="ca-selo ca-selo-ok">Verificado</span>';
 
-function renderConectarAgente(c, h, a) {
+function desenhar() {
+    const { c, h, a } = ultimo;
     h.textContent = 'Conectar agente';
     a.innerHTML = '';
-    const selo = (aConfirmar) => aConfirmar
-        ? '<span class="org-badge" style="color:var(--text-dim);border-color:var(--border)" title="Login OAuth deste cliente ainda não verificado">A confirmar</span>'
-        : '<span class="org-badge" title="Exercitado em produção em 30/09/2026">Verificado</span>';
-    const cartoes = CLIENTES.map(cl => `
-        <section class="gov-section-card" aria-label="${escapeHTML(cl.nome)}">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-                <h3 class="gov-section-title" style="border:0;padding:0;margin:0">${escapeHTML(cl.nome)}</h3>
-                ${selo(cl.aConfirmar)}
-            </div>
-            <div class="gov-member-email" style="font-family:var(--font-mono);margin-bottom:8px">${escapeHTML(cl.onde)}</div>
-            ${bloco(cl.id, cl.trecho)}
-        </section>`).join('');
+    const atual = CLIENTES.find(cl => cl.id === selecionado) || CLIENTES[0];
+
+    const abas = CLIENTES.map(cl => {
+        const ativa = cl.id === atual.id;
+        return `<button type="button" role="tab" id="aba-${cl.id}" class="ca-aba" aria-selected="${ativa}" aria-controls="painel-cliente" tabindex="${ativa ? 0 : -1}" data-action="__selecionarCliente" data-args='["${cl.id}"]'>${escapeHTML(cl.nome)} ${selo(cl.aConfirmar)}</button>`;
+    }).join('');
+
+    const estado = atual.aConfirmar
+        ? 'A configuração está pronta, mas o login deste cliente ainda não foi confirmado. Se falhar, avise a ness. dizendo em que etapa.'
+        : 'Exercitado em produção em 30/09/2026: conexão, leitura e escrita.';
+
+    const passos = PASSOS.map((p, i) => `
+        <li class="ca-passo">
+            <div class="ca-num">0${i + 1}</div>
+            <div class="ca-passo-titulo">${escapeHTML(p.titulo)}</div>
+            <p class="ca-passo-txt">${escapeHTML(p.texto)}</p>
+        </li>`).join('');
+
     const alcance = ALCANCE.map(x => `
-        <section class="gov-section-card" aria-label="${escapeHTML(x.titulo)}">
-            <h3 class="gov-section-title" style="border:0;padding:0;margin:0 0 6px">${escapeHTML(x.titulo)}</h3>
-            <p style="margin:0;font-size:14px;color:var(--text-2)">${escapeHTML(x.texto)}</p>
-        </section>`).join('');
+        <article class="ca-alc${x.sim ? ' ca-alc-sim' : ''}">
+            <h3 class="ca-alc-titulo">${escapeHTML(x.titulo)}</h3>
+            <p class="ca-alc-txt">${escapeHTML(x.texto)}</p>
+        </article>`).join('');
+
     c.innerHTML = `
-        <div class="fade-in" style="max-width:1120px;display:flex;flex-direction:column;gap:24px">
-            <div>
-                <p class="org-header-intro" style="margin-bottom:12px">Conecte seu agente de IA ao n.iso para trabalhar a adequação de um cliente em que você é consultor designado.</p>
-                <p style="margin:0 0 12px;font-size:14px;color:var(--text-2)">O login define quem é o agente e em qual cliente ele atua. Ele age em nome de você, só nos clientes em que você é consultor, e a trilha registra o seu e-mail.</p>
-                <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--text-2)">
-                    <li>Adicione o servidor no seu cliente MCP (trechos abaixo).</li>
-                    <li>Na primeira chamada, o navegador abre: entre no n.iso e escolha o cliente. Um cliente por conexão.</li>
-                    <li>Peça ao agente para chamar <code style="font-family:var(--font-mono);color:var(--text)">niso_contexto</code>: ele diz o cliente, o mapa da app e os roteiros (diagnóstico, fechar lacuna, responder auditoria e a pré-avaliação de prontidão para certificação, que só lê).</li>
-                </ol>
-            </div>
-            <div>
-                <div class="gov-section-title" style="border:0;padding:0">Endereço do servidor</div>
+        <div class="ca fade-in">
+            <section class="ca-servidor" aria-label="Endereço do servidor">
+                <div>
+                    <h2 class="ca-titulo">Endereço do servidor</h2>
+                    <p class="ca-nota">O mesmo para todos os clientes. O login define quem é o agente e em qual cliente ele atua: ele age em nome de você, só nos clientes em que você é consultor, e a trilha registra o seu e-mail.</p>
+                </div>
                 ${bloco('url', URL_MCP)}
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">${cartoes}</div>
-            <div>
-                <div class="gov-section-title" style="border:0;padding:0">O que o agente faz</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">${alcance}</div>
-            </div>
-            <p class="gov-agentes-nota" style="color:var(--text-dim)">O MCP remoto só funciona em niso.ness.com.br. O administrador do cliente vê este acesso em Governança e pode revogá-lo; ele também cai quando você troca a senha ou sai da governança do projeto.</p>
+            </section>
+            <ol class="ca-passos" aria-label="Como conectar">${passos}</ol>
+            <section aria-label="Seu cliente MCP">
+                <h2 class="ca-titulo">Seu cliente MCP</h2>
+                <div class="ca-abas" role="tablist" aria-label="Cliente MCP" data-action-keydown="__abaTecla" data-arg-event>${abas}</div>
+                <div class="ca-painel" role="tabpanel" id="painel-cliente" aria-labelledby="aba-${atual.id}">
+                    <div class="ca-painel-cab">
+                        <span class="ca-onde">${escapeHTML(atual.onde)}</span>
+                        <span class="ca-estado">${escapeHTML(estado)}</span>
+                    </div>
+                    ${bloco(atual.id, atual.trecho)}
+                </div>
+            </section>
+            <section aria-label="O que o agente faz">
+                <h2 class="ca-titulo">O que o agente faz</h2>
+                <div class="ca-alcance">${alcance}</div>
+            </section>
+            <p class="ca-rodape">O MCP remoto só funciona em niso.ness.com.br. O administrador do cliente vê este acesso em Governança e pode revogá-lo; ele também cai quando você troca a senha ou sai da governança do projeto.</p>
         </div>`;
 }
+
+function renderConectarAgente(c, h, a) {
+    selecionado = 'claude';
+    ultimo = { c, h, a };
+    desenhar();
+}
+
+window.__selecionarCliente = (id) => {
+    if (!ultimo || !CLIENTES.some(cl => cl.id === id)) return;
+    selecionado = id;
+    desenhar();
+};
+
+// Setas, Home e End movem a seleção e dão a volta (padrão WAI-ARIA de abas). O foco acompanha,
+// porque redesenhar troca o botão no DOM.
+window.__abaTecla = (e) => {
+    const i = CLIENTES.findIndex(cl => cl.id === selecionado);
+    const n = CLIENTES.length;
+    const destino = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
+    if (destino === undefined) return;
+    e.preventDefault();
+    window.__selecionarCliente(CLIENTES[destino].id);
+    document.getElementById('aba-' + CLIENTES[destino].id)?.focus();
+};
 
 export { renderConectarAgente };
 window.renderConectarAgente = renderConectarAgente;
