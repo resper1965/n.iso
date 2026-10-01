@@ -121,7 +121,7 @@ flowchart TD
   L --> M["projectAccessMiddleware e<br/>requireResourceAccess"]
   M --> N["handler da rota"]
   N --> O{"ação destrutiva<br/>com status menor que 400?"}
-  O -- "sim" --> P["trilha: agente.exclusao + projeto"]
+  O -- "sim" --> P["trilha: agente.acao_destrutiva + projeto"]
   O -- "não" --> Q["resposta ao agente"]
   P --> Q
 ```
@@ -143,7 +143,7 @@ governança derruba o agente dela na chamada seguinte, sem esperar o token expir
 | `src/mcp/contexto.ts` | O que o agente lê ao começar: `INSTRUCOES` (até 2048 caracteres), `MAPA_DA_APP`, `ROTEIROS`, `montarContexto`. |
 | `src/mcp/skills-gerado.ts` | As skills embutidas no Worker. **Gerado**: não edite à mão. |
 | `src/middleware/agente.ts` | `concessaoValida`, `resolverAgente`, `FORA_DO_AGENTE`, `acaoDestrutiva`, `NOME_CLIENTE_SQL`. |
-| `src/middleware/auth.ts` | Ramo `env.AGENTE` do `authMiddleware` e a trilha `agente.exclusao`. |
+| `src/middleware/auth.ts` | Ramo `env.AGENTE` do `authMiddleware` e a trilha `agente.acao_destrutiva`. |
 | `src/routes/agentes.ts` | O que o cliente vê e faz: listar e revogar os agentes do projeto. |
 | `mcp-server-niso/src/ferramentas.ts` | As 24 ferramentas tipadas, o filtro por papel e o despacho. **Compartilhado** entre o servidor local (stdio) e o remoto. |
 | `agent-skills/` | A fonte das skills (SKILL.md, referências, scripts). |

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, workerEnv, sessionFor } from './helpers/d1';
+import { sha256Hex } from '../src/helpers';
 
 /** Spec 2026-09-30-agente-paridade-consultor: paridade de consultor, preso a UM projeto. */
 const P = { userId: 'u-cons', email: 'cons@ness.lat', projectId: 'p-a', concessaoId: 'c-1' };
@@ -35,7 +36,7 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
     const r = await comoAgente('/api/v1/risks/r-a2', { method: 'DELETE', headers: confirmado });
     expect(r.status, await r.clone().text()).toBe(200);
     expect(await env.DB.prepare(`SELECT 1 FROM risks WHERE id='r-a2'`).first()).toBeNull();
-    const log = await env.DB.prepare(`SELECT actor, project_id FROM audit_logs WHERE action='agente.exclusao'`).first<any>();
+    const log = await env.DB.prepare(`SELECT actor, project_id FROM audit_logs WHERE action='agente.acao_destrutiva' ORDER BY created_at DESC LIMIT 1`).first<any>();
     expect(log?.project_id).toBe('p-a');
     expect(log?.actor).toMatch(/^agente de /);
   });
@@ -130,6 +131,27 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
     const r = await worker.fetch(new Request('http://localhost/api/v1/risks/r-a', { method: 'DELETE', headers: { ...auth, ...confirmado } }), workerEnv() as any);
     expect(r.status).toBe(403);
     expect(await env.DB.prepare(`SELECT 1 FROM risks WHERE id='r-a'`).first()).not.toBeNull();
+  });
+
+  it('o cabeçalho de confirmação também é inerte para uma chave de API somente leitura', async () => {
+    // A prova com org_user é fraca: esse papel já é read-only. A chave `read` só se distingue pelo
+    // cabeçalho se ele destravasse algo, e não destrava.
+    await env.DB.prepare(`INSERT INTO api_keys (id, project_id, name, key_hash, permissions, status) VALUES ('k-ro','p-a','leitura', ?, 'read', 'Active')`).bind(await sha256Hex('chave-leitura')).run();
+    const r = await worker.fetch(new Request('http://localhost/api/v1/risks/r-a', { method: 'DELETE', headers: { 'X-API-Key': 'chave-leitura', ...confirmado } }), workerEnv() as any);
+    expect(r.status).toBe(403);
+    expect(((await r.json<any>()).error as string).toLowerCase()).toContain('read-only');
+    expect(await env.DB.prepare(`SELECT 1 FROM risks WHERE id='r-a'`).first()).not.toBeNull();
+  });
+
+  it('agente com concessão revogada recebe 401 (refaça o login), mesmo numa rota proibida', async () => {
+    // Antes a lista de proibidas vinha ANTES da revalidação: o agente revogado ouvia 403 e não
+    // sabia que precisava reconectar.
+    await env.DB.prepare(`INSERT INTO agente_concessoes (id, user_id, project_id, expira_em, revogado_em) VALUES ('c-rev','u-cons','p-a', datetime('now','+30 days'), datetime('now'))`).run();
+    const revogado = { ...P, concessaoId: 'c-rev' };
+    for (const caminho of ['/api/v1/users', '/api/v1/auth/me', '/api/v1/projects/p-a/risks']) {
+      const r = await worker.fetch(new Request('http://localhost' + caminho), { ...workerEnv(), AGENTE: revogado } as any);
+      expect(r.status, caminho).toBe(401);
+    }
   });
 
   it('direitos do titular: agente alcança o próprio projeto, não o outro', async () => {
