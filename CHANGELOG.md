@@ -13,6 +13,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não publicado]
 
 ### Changed
+- **"Conectar agente" passa a instruir o que travou um consultor de verdade (01/10/2026).** O comando do Claude Code leva `--scope user` (o padrão `local` prende o servidor à pasta e ele some em sessão sem pasta); a aba diz como instalar o `claude` quando o terminal não o reconhece (comum com o app desktop); explica que "Needs authentication" é o estado esperado e que o login é pelo `/mcp`, feito pelo consultor e não pelo agente da sessão; e traz `claude mcp list` e `claude mcp remove niso -s user` para conferir e refazer. Só o Claude Code ganha essas linhas: os outros clientes seguem "A confirmar".
 - **Tela "Conectar agente" em duas colunas.** À esquerda, o cliente em abas com o comando e os três passos em lista compacta; à direita, "O que o agente faz", fixo ao rolar. O endereço do servidor aparece uma vez só, dentro do comando (antes repetia numa faixa própria), e a tela usa a largura disponível em vez de ficar encostada à esquerda. Abaixo de 1100px empilha.
 
 ### Added

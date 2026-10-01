@@ -1287,6 +1287,7 @@ textarea:focus-visible {
 .ca-painel { margin-top: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .ca-painel-cab { display: flex; flex-direction: column; gap: 6px; }
 .ca-onde { font: 500 13px var(--font-mono); color: var(--text-2); }
+.ca-dica { margin: 0; max-width: 70ch; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
 .ca-estado { max-width: 62ch; font-size: 13.5px; line-height: 1.5; color: var(--text-dim); }
 
 .ca-alcance { display: flex; flex-direction: column; gap: 12px; }
