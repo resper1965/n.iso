@@ -116,6 +116,7 @@ const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'PUT /api/v1/proposals/config/pricing': 'precificação antiga (settings global): só org_ness (tarefa 2)',
   'PUT /api/v1/pricing-config': 'precificação antiga (settings global): só org_ness (tarefa 2)',
   'PUT /api/v1/org/config': 'configuração da organização da sessão',
+  'POST /api/v1/org/logo': 'logo da organização da sessão; a chave do R2 é derivada da sessão, o corpo é só a imagem',
   'POST /api/v1/servicos/semear-padrao': 'semeia o catálogo da organização da sessão',
   'POST /api/v1/servicos': 'cria na organização da sessão',
   'POST /api/v1/projects': 'cria na organização da sessão (X-Org-Id só para platform_admin)',
@@ -249,6 +250,11 @@ beforeAll(async () => {
       .bind(o.proj, `Cliente ${o.m}`, o.org).run();
     await semearOrganizacao(o, neutro);
     await semearPessoas(o, senha);
+    // Logo (tarefa 6): cada organização tem o seu, com o marcador nos bytes. `GET /api/v1/org/logo`
+    // entra na varredura de listas: devolver o logo alheio traria o marcador alheio no corpo.
+    const chave = `logos/${o.org}/${o.m}-logo.png`;
+    await env.STORAGE.put(chave, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new TextEncoder().encode(`${o.m}-logo`)]));
+    await env.DB.prepare('UPDATE organizations SET logo_chave = ? WHERE id = ?').bind(chave, o.org).run();
   }
   for (const [de, alheio] of [[NESS, B], [B, NESS]] as const) {
     const m = de.m;
@@ -282,8 +288,8 @@ describe('contrato de isolamento entre organizações', () => {
     // exercitar nos dois lados do corte.
     const proprio: Record<string, string[]> = {
       consultor: ['/api/v1/projects/:p/risks'],
-      comercial: ['/api/v1/servicos/:r'],
-      consultoria_admin: ['/api/v1/projects/:p/risks', '/api/v1/servicos/:r', '/api/v1/leads/:r', '/api/v1/org/config'],
+      comercial: ['/api/v1/servicos/:r', '/api/v1/org/logo'],
+      consultoria_admin: ['/api/v1/projects/:p/risks', '/api/v1/servicos/:r', '/api/v1/leads/:r', '/api/v1/org/config', '/api/v1/org/logo'],
       agente: ['/api/v1/projects/:p/risks'],
       'chave-api': ['/api/v1/projects/:p/risks'],
     };

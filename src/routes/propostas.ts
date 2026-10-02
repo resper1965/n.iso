@@ -11,6 +11,7 @@ import { exigirOrg, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from 
 import { calcularItem, totais, descontoAcimaDoTeto, margem, type Faixa } from '../services/preco-proposta';
 import { diagnosticoDe, type Diagnostico } from '../services/diagnostico';
 import { montarConteudo, textosEditaveis, renderizarHtml, hashDocumento, type DadosDocumento } from '../services/documento-proposta';
+import { logoComoDataUri } from '../services/logo-org';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
 import { fecharVenda, consultorValido } from '../services/fechar-venda';
@@ -18,7 +19,7 @@ import { fecharVenda, consultorValido } from '../services/fechar-venda';
 export const propostasApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /** O documento não leva script nem recurso externo além das fontes. Aplicado em index.ts, por fora do secureHeaders. */
-export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com";
+export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:";
 
 const NEGADO = { error: 'Forbidden: Área comercial restrita ao comercial da ness.' };
 const EDITAVEIS = `('rascunho', 'aguardando_aprovacao')`;
@@ -97,7 +98,7 @@ export const diaEmBrasilia = (agora = new Date()) => FUSO_BR.format(agora);
 const maisDias = (dia: string, n: number) => isoDia(new Date(Date.parse(`${dia}T00:00:00Z`) + n * 86_400_000));
 const cnpjBr = (s: string | null) => (s && /^\d{14}$/.test(s) ? s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : s ?? null);
 
-async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
+async function montar(db: D1Database, storage: R2Bucket, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
   const lead = p.lead_id ? await db.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(p.lead_id).first<any>() : null;
   const hoje = diaEmBrasilia();
   const validaAte = maisDias(hoje, p.validade_dias);
@@ -107,6 +108,8 @@ async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], cal
     textos: { contexto: p.contexto, escopo: p.escopo, observacoes: p.observacoes },
     itens: itens.map((i, k) => ({ servico: i.servico, calc: calc.calcs[k], textoCliente: i.textoCliente })),
     totais: calc.totais, pagamento: p.pagamento, diagnostico: dg,
+    // o logo entra como data: URI, então o documento gerado não depende do R2 nem de troca posterior
+    logo: await logoComoDataUri(storage, cfg.logoChave, cfg.id),
   };
   const editadas = JSON.parse(p.secoes_editadas || '{}');
   const conteudo = montarConteudo(dados, editadas);
@@ -251,7 +254,7 @@ propostasApp.get('/:id/previa', async (c) => {
     const itens = await itensDe(db, p.id);
     const dg = await diagnosticoDaProposta(db, p.assessment_id);
     const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, Number(diaEmBrasilia().slice(0, 4)), cfg.proximoNumero);
-    const { conteudo, html, textos } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
+    const { conteudo, html, textos } = await montar(db, c.env.STORAGE, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
     // só a parte editável de cada seção editável presente, para a tela pré-preencher (seção ausente: sem chave)
     return c.json({ conteudo, html, textos });
   } catch (e) { return falha(c, e, 'Erro ao montar a prévia'); }
@@ -305,7 +308,7 @@ propostasApp.post('/:id/gerar', async (c) => {
       proximo = cfg.proximoNumero + 1;
     }
 
-    const { conteudo, html, validaAte } = await montar(db, cfg, p, itens, calc, dg, numero);
+    const { conteudo, html, validaAte } = await montar(db, c.env.STORAGE, cfg, p, itens, calc, dg, numero);
     const hash = await hashDocumento(html);
     // Tudo num batch (transação): sem número reservado à toa se algo falhar. Duas gerações
     // simultâneas com o mesmo número esbarram no índice único (org_id, numero, revisao) e uma leva 409.

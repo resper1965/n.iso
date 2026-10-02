@@ -116,6 +116,8 @@ export interface ConfigOrg {
   id: string; nome: string; cnpj: string | null; corDestaque: string; seloNiso: boolean;
   prefixoProposta: string; proximoNumero: number;
   preco: ConfigPreco; textos: TextosOrg; secoesDesligadas: SecaoDesligavel[];
+  /** Chave do logo no R2 (`logos/<org>/<sha256>.<ext>`); ausente/nula = sem logo. */
+  logoChave?: string | null;
 }
 
 const faixa = (m: Record<number, number>): PorFaixa => ({ '1': m[1], '2': m[2], '3': m[3] });
@@ -169,6 +171,7 @@ export async function lerConfigOrg(db: D1Database, orgId: string): Promise<Confi
     preco: mesclarPreco(precoPadrao(), json(r.config_preco, {}, orgId, 'config_preco')),
     textos: { ...TEXTOS_VAZIOS, ...json<Partial<TextosOrg>>(r.textos, {}, orgId, 'textos') },
     secoesDesligadas: json<SecaoDesligavel[]>(r.secoes_desligadas, [], orgId, 'secoes_desligadas'),
+    logoChave: r.logo_chave ?? null,
   };
 }
 
