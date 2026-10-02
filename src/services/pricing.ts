@@ -453,7 +453,7 @@ export const GAPS = [
     field: 'ropa',
     trigger: (v?: string) => v === 'Inexistente',
     gap: {
-      controles: 'A.1.2.4, A.1.3.5 (ISO 27701)',
+      controles: 'A.1.2.9, A.1.2.2, A.1.2.3 (ISO 27701) · LGPD art. 37',
       titulo: 'Ausência de RoPA (Registro de Operações)',
       impacto: 'Crítico / Legal',
       risco: 'Tratamento de dados sem registro formal, risco de multa ANPD.',
@@ -464,7 +464,7 @@ export const GAPS = [
     field: 'dsr_channel',
     trigger: (v?: string) => v === 'Inexistente',
     gap: {
-      controles: 'A.8.8, A.1.2.6 (ISO 27701)',
+      controles: 'A.1.3.2, A.1.3.7, A.1.3.10 (ISO 27701) · LGPD art. 18',
       titulo: 'Ausência de Canal de Direitos dos Titulares',
       impacto: 'Alto',
       risco: 'Impossibilidade de atendimento a solicitações de titulares de dados.',
@@ -486,7 +486,7 @@ export const GAPS = [
     field: 'sdlc',
     trigger: (v?: string) => v === 'Sem processo formal' || v === 'Processo informal / ad-hoc',
     gap: {
-      controles: 'A.8.25, A.8.26, A.8.27',
+      controles: 'A.8.25, A.8.26, A.8.27, A.8.28',
       titulo: 'Ausência de Desenvolvimento Seguro (SSDLC)',
       impacto: 'Alto',
       risco: 'Vulnerabilidades em produção, sem validação de segurança no código.',

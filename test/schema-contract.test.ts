@@ -226,4 +226,32 @@ describe('schema contract (real D1)', () => {
       env.DB.prepare(`INSERT INTO servicos (id, org_id, nome, tipo) VALUES ('s1', 'org_ness', 'x', 'pacote')`).run()
     ).rejects.toThrow();
   });
+  it('propostas e proposta_itens: colunas, CHECK de status e unicidade de número por organização', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['org_id', 'lead_id', 'assessment_id', 'numero', 'revisao', 'status', 'cliente', 'secoes_editadas', 'documento_conteudo', 'documento_html', 'documento_hash', 'desconto_aprovado_por', 'criada_por']) {
+      expect(await colunas('propostas'), c).toContain(c);
+    }
+    for (const c of ['proposta_id', 'ordem', 'servico_id', 'servico', 'valor_base', 'desconto_pct', 'valor', 'texto_cliente']) {
+      expect(await colunas('proposta_itens'), c).toContain(c);
+    }
+    const ins = (id: string, org: string, numero: string | null, status = 'rascunho') =>
+      env.DB.prepare(`INSERT INTO propostas (id, org_id, numero, status, cliente, criada_por) VALUES (?, ?, ?, ?, 'x', 'u')`).bind(id, org, numero, status).run();
+    await expect(ins('pr_x', 'org_ness', 'NESS-2026-001', 'outra')).rejects.toThrow();
+    await ins('pr_a', 'org_ness', 'NESS-2026-001');
+    await expect(ins('pr_b', 'org_ness', 'NESS-2026-001')).rejects.toThrow();
+    await ins('pr_c', 'outra_org', 'NESS-2026-001');
+    await ins('pr_d', 'org_ness', null);
+    await ins('pr_e', 'org_ness', null);
+    await env.DB.prepare(`DELETE FROM propostas WHERE id IN ('pr_a','pr_c','pr_d','pr_e')`).run();
+  });
+  it('a org_ness nasce com os termos iniciais', async () => {
+    const r = await env.DB.prepare(`SELECT textos FROM organizations WHERE id = 'org_ness'`).first<any>();
+    const t = JSON.parse(r.textos);
+    expect(t.termos).toContain('## Foro');
+    expect(t.termos).toContain('## Obrigações da ness.');
+    expect(JSON.stringify(t)).not.toMatch(/\{org\}|de ness\./);
+    expect(t.pagamentoPadrao).toBe('40/30/30');
+    for (const k of ['sobre', 'comoTrabalhamos', 'premissas']) expect(t[k].length, k).toBeGreaterThan(50);
+  });
 });
