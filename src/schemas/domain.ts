@@ -530,6 +530,12 @@ export const atualizarOrgSchema = z.object({
   status: z.enum(['Active', 'Suspended']).optional(),
 }).strict().refine((o) => Object.keys(o).length > 0, 'Nada a alterar');
 
+/** Transferência de projeto para outra organização (só platform_admin). */
+export const transferirProjetoSchema = z.object({
+  orgDestinoId: z.string().trim().min(1).max(80),
+  motivo: z.string().trim().min(5, 'Motivo com 5 a 500 caracteres').max(500, 'Motivo com 5 a 500 caracteres'),
+}).strict();
+
 // ---------------------------------------------------------------------------
 // Catálogo de serviços (spec do sistema de propostas, seção 3)
 // ---------------------------------------------------------------------------

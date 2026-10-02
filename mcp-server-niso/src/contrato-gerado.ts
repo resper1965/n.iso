@@ -28,6 +28,7 @@ export const ROTAS = {
   'POST /api/v1/legal/accept': { obrigatorios: ['documentIds'] },
   'POST /api/v1/legal/documents': { obrigatorios: ['classification', 'kind', 'title', 'version'] },
   'POST /api/v1/platform/orgs': { obrigatorios: ['adminEmail', 'adminNome', 'maxProjetos', 'maxUsuarios', 'nome', 'prefixoProposta', 'slug', 'termoVersao'] },
+  'POST /api/v1/platform/projects/{id}/transferir': { obrigatorios: ['motivo', 'orgDestinoId'] },
   'POST /api/v1/projects/{id}/auditor-token': { obrigatorios: [] },
   'POST /api/v1/projects/{id}/chat': { obrigatorios: ['message'] },
   'POST /api/v1/projects/{id}/dpia': { obrigatorios: [] },

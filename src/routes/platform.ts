@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema } from '../schemas';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema } from '../schemas';
+import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
@@ -233,6 +234,32 @@ platformApp.get('/admin/trilha/verificar', somenteNess, exigirOrg, somenteOrgNes
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
   } catch (e: any) {
     return erro500(c, 'Falha ao verificar a cadeia da trilha', e);
+  }
+});
+
+/**
+ * Transfere o projeto para outra organização (fatia 5, spec §9): só o platform_admin. A consultoria
+ * de origem perde o acesso na hora (designações dela e agentes do projeto saem no mesmo batch);
+ * propostas, contratos e usuários do cliente ficam. Ver services/transferencia-projeto.ts.
+ */
+platformApp.post('/platform/projects/:id/transferir', async (c) => {
+  if (c.get('user')?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador da plataforma transfere projetos' }, 403);
+  try {
+    const v = await validateBody(c, transferirProjetoSchema);
+    if (!v.success) return v.response;
+    const r = await transferirProjeto(c.env.DB, {
+      projetoId: c.req.param('id'), orgDestinoId: v.data.orgDestinoId, motivo: v.data.motivo,
+      atorEmail: c.get('user').email, ip: c.req.header('CF-Connecting-IP') ?? '',
+    });
+    if (r.ok) return c.json(r);
+    switch (r.motivo) {
+      case 'nao_encontrado': return c.json({ error: 'Projeto ou organização de destino não encontrado' }, 404);
+      case 'destino_invalido': return c.json({ error: 'A organização de destino não está ativa' }, 409);
+      case 'mesma_org': return c.json({ error: 'O projeto já é dessa organização' }, 409);
+      case 'corrida': return c.json(MSG_CORRIDA, 409);
+    }
+  } catch (e: any) {
+    return erro500(c, 'Falha ao transferir o projeto', e);
   }
 });
 

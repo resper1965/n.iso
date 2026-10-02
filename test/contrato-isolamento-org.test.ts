@@ -68,6 +68,8 @@ const CORPOS: Record<string, (alvo: Org) => unknown> = {
   'PUT /api/v1/controls/:id/approve': () => ({ password: SENHA }),
   'PUT /api/v1/leads/:id/status': () => ({ status: 'Lost' }),
   'POST /api/v1/leads/:id/enrich-cnpj': () => ({ cnpj: '11222333000181' }),
+  // tenta trazer o projeto alheio para a organização de quem chama: só platform_admin transfere
+  'POST /api/v1/platform/projects/:id/transferir': (alvo) => ({ orgDestinoId: alvo === B ? NESS.org : B.org, motivo: 'varredura de isolamento' }),
 };
 
 /**
@@ -225,8 +227,8 @@ async function chamar(p: Principal, metodo: string, caminho: string, corpo?: unk
 
 /** Troca os parâmetros pelos ids da organização `o`. */
 function forjar(caminho: string, o: Org): string {
-  // O primeiro parâmetro depois de /projects/ é o projeto (`:id` ou `:projectId`).
-  const c = caminho.replace(/^\/api\/v1\/projects\/:\w+/, `/api/v1/projects/${o.proj}`);
+  // O primeiro parâmetro depois de /projects/ é o projeto (`:id` ou `:projectId`), também em /platform/projects.
+  const c = caminho.replace(/^\/api\/v1\/(platform\/)?projects\/:\w+/, (_t, plat = '') => `/api/v1/${plat}projects/${o.proj}`);
   return c.replace(/:(\w+)/g, (_t, nome: string) => {
     // Token público é a autorização por desenho; um válido testaria o desenho, não a guarda.
     if (nome.toLowerCase().includes('token')) return 'token-forjado-inexistente';
