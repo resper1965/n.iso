@@ -217,6 +217,51 @@ describe('rotas públicas da proposta', () => {
     }
   }, 120_000);
 
+  /** env cujo DB roda `antes` imediatamente antes do primeiro batch: muda o banco entre o resolver e o batch. */
+  const comAntesDoBatch = (antes: () => Promise<unknown>) => {
+    const real = db();
+    let feito = false;
+    const DB = new Proxy(real, {
+      get(t: any, k) {
+        if (k === 'batch') return async (s: D1PreparedStatement[]) => { if (!feito) { feito = true; await antes(); } return t.batch(s); };
+        const v = t[k];
+        return typeof v === 'function' ? v.bind(t) : v;
+      },
+    });
+    return { ...workerEnv(), DB };
+  };
+  const chamarCom = (envio: any, acao: string, corpo: unknown) => app.fetch(new Request(`http://localhost/api/v1/public/propostas/${acao}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': `10.8.0.${++ipSeq % 250}` }, body: JSON.stringify(corpo),
+  }), envio);
+
+  it('recusar com o status mudado entre o resolver e o batch: 404, sem trilha de recusa nem lead Lost', async () => {
+    const p = await proposta();
+    const r = await chamarCom(comAntesDoBatch(() => db().prepare(`UPDATE propostas SET status = 'aceita' WHERE id = ?`).bind(p.id).run()), 'recusar', { token: p.token, motivo: 'caro' });
+    expect(r.status).toBe(404);
+    expect((await linha(p.id)).status).toBe('aceita');
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'proposta.recusada' AND details LIKE ?`, `%${p.id}%`)).toBe(0);
+    expect((await db().prepare('SELECT status FROM leads WHERE id = ?').bind(p.leadId).first<any>()).status).toBe('Proposal');
+    expect(await conta(`SELECT COUNT(*) n FROM notifications WHERE target_id = ?`, p.id)).toBe(0);
+  }, 60_000);
+
+  it('aceitar com o link rotacionado entre o resolver e o batch: nada gravado', async () => {
+    const p = await proposta();
+    const novo = await sha256Hex(genToken());
+    const r = await chamarCom(comAntesDoBatch(() => db().prepare('UPDATE propostas SET token_hash = ? WHERE id = ?').bind(novo, p.id).run()), 'aceitar', { token: p.token, ...ACEITE });
+    expect(r.status).toBe(404);
+    expect((await linha(p.id)).status).toBe('enviada');
+    expect(await conta('SELECT COUNT(*) n FROM contracts WHERE proposta_id = ?', p.id)).toBe(0);
+    expect(await conta('SELECT COUNT(*) n FROM projects WHERE proposta_id = ?', p.id)).toBe(0);
+  }, 60_000);
+
+  it('aceitar: o e-mail digitado não vira autor da trilha', async () => {
+    const p = await proposta();
+    expect((await chamar('aceitar', { token: p.token, ...ACEITE, email: 'admin@ness.com.br' })).status).toBe(200);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE lower(actor) = 'admin@ness.com.br'`)).toBe(0);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE actor = 'cliente (link)' AND action = 'proposta.aceita' AND details LIKE ?`, `%${p.id}%`)).toBe(1);
+    expect((await linha(p.id)).aceite_email).toBe('admin@ness.com.br');
+  }, 60_000);
+
   it('ajuste: acumula as mensagens com data, notifica o criador e a proposta continua aberta', async () => {
     const p = await proposta({ status: 'visualizada' });
     expect((await chamar('ajuste', { token: p.token, mensagem: '' })).status).toBe(400);

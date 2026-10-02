@@ -11,7 +11,7 @@ import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { genId, sha256Hex, rateLimitD1, erro500 } from '../helpers';
 import { validateBody, propostaTokenSchema, propostaAceiteLinkSchema, propostaRecusaSchema, propostaAjusteSchema } from '../schemas';
-import { fecharVenda } from '../services/fechar-venda';
+import { fecharVenda, ATOR_LINK } from '../services/fechar-venda';
 import { diaEmBrasilia } from './propostas';
 
 export const publicPropostasApp = new Hono<{ Bindings: Bindings }>();
@@ -57,7 +57,7 @@ async function resolver(c: Ctx, token: string): Promise<Response | Record<string
 const DESTA = 'EXISTS (SELECT 1 FROM audit_logs WHERE id = ?)';
 const trilha = (db: D1Database, auditId: string, acao: string, detalhe: string, ip: string) => db.prepare(
   `INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id, created_at)
-   SELECT ?, ?, 'cliente (link)', ?, '', ?, NULL, datetime('now') WHERE changes() > 0`).bind(auditId, acao, detalhe, ip);
+   SELECT ?, ?, ?, ?, '', ?, NULL, datetime('now') WHERE changes() > 0`).bind(auditId, acao, ATOR_LINK, detalhe, ip);
 /** Notificação ao comercial que criou a proposta, se ele tem conta. */
 const notificar = (db: D1Database, p: any, auditId: string, titulo: string, mensagem: string, tipo: string) => db.prepare(
   `INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
@@ -104,7 +104,8 @@ publicPropostasApp.post('/aceitar', async (c) => {
     const ip = ipDe(c);
     const dados = v.data;
     const f = await fecharVenda(c.env.DB, {
-      propostaId: p.id, orgId: p.org_id, origem: 'link', atorEmail: dados.email,
+      // o e-mail digitado não é identidade: fica no aceite (aceite_email), não como autor da trilha
+      propostaId: p.id, orgId: p.org_id, origem: 'link', atorEmail: ATOR_LINK, tokenHash: p.token_hash,
       aceite: { nome: dados.nome, cargo: dados.cargo, email: dados.email, ip },
     });
     // a mensagem do fecharVenda diz o estado: para o cliente, só o 409 do já aceita ou o 404 uniforme

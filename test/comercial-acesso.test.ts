@@ -65,13 +65,13 @@ describe('Área comercial: só platform_admin e comercial', () => {
     expect((await req('/api/v1/assessments/qualquer/pricing', { method: 'PUT', headers: s, body: '{"precoFinal":1}' })).status).toBe(403);
   });
 
-  it('consultor não gera proposta a partir do assessment (preço é ato comercial)', async () => {
-    const s = {
-      ...(await sessionFor({ id: 'u-cons2', email: 'c2@x.com', role: 'consultor' })),
-      'Content-Type': 'application/json',
-    };
-    const res = await req('/api/v1/assessments/qualquer/generate-proposal', { method: 'POST', headers: s, body: '{}' });
-    expect(res.status).toBe(403);
+  it('o gerador antigo de proposta a partir do assessment responde 410 (substituído pela tela Propostas)', async () => {
+    for (const [id, role] of [['u-cons2', 'consultor'], ['u-com2', 'comercial']]) {
+      const s = { ...(await sessionFor({ id, email: `${id}@x.com`, role })), 'Content-Type': 'application/json' };
+      const res = await req('/api/v1/assessments/qualquer/generate-proposal', { method: 'POST', headers: s, body: '{}' });
+      expect(res.status, role).toBe(410);
+      expect(await res.json(), role).toEqual({ error: 'O gerador antigo foi substituído pela tela Propostas' });
+    }
   });
 
   it('painel: consultor não vê quantos leads existem; comercial vê', async () => {

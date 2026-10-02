@@ -36,6 +36,7 @@ async function abre(hash = '#' + TOKEN) {
 }
 
 beforeEach(async () => {
+  try { sessionStorage.clear(); } catch { /* sem storage */ }
   await import('../public/proposta.js');
   consoles = ['log', 'info', 'warn', 'error', 'debug'].map((m) => vi.spyOn(console, m));
 });
@@ -87,7 +88,44 @@ describe('abertura', () => {
     expect($('pp-meta').textContent).toContain('01/11/2026');
     // no celular o documento é longo: atalho para a resposta
     expect($('pp-ir').hidden).toBe(false);
-    expect($('pp-ir').getAttribute('href')).toBe('#pp-resposta');
+  });
+
+  it('"Ir para a resposta" é botão que rola até a resposta sem tocar no hash', async () => {
+    servidor({ '/api/v1/public/propostas/ver': json(VER) });
+    await abre();
+    const rolar = vi.fn();
+    Element.prototype.scrollIntoView = rolar;
+    try {
+      expect($('pp-ir').tagName).toBe('BUTTON');
+      expect($('pp-ir').getAttribute('type')).toBe('button');
+      expect($('pp-ir').hasAttribute('href')).toBe(false);
+      $('pp-ir').click();
+      expect(rolar).toHaveBeenCalledTimes(1);
+      expect(rolar.mock.contexts[0]).toBe($('pp-resposta'));
+      expect(location.hash).toBe('');
+    } finally { delete Element.prototype.scrollIntoView; }
+  });
+
+  it('recarregar (F5) sem o hash usa o token guardado na sessão da aba', async () => {
+    servidor({ '/api/v1/public/propostas/ver': () => json(VER) });
+    await abre();
+    expect(location.hash).toBe('');
+    await abre('');
+    expect(chamadas('/ver')).toHaveLength(2);
+    expect(corpo('/ver', 1)).toEqual({ token: TOKEN });
+    expect($('pp-proposta').hidden).toBe(false);
+  });
+
+  it('sessionStorage indisponível: abre pelo hash e, sem ele, diz que o link é inválido', async () => {
+    const ler = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('bloqueado'); });
+    const gravar = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('bloqueado'); });
+    servidor({ '/api/v1/public/propostas/ver': json(VER) });
+    await abre();
+    expect($('pp-proposta').hidden).toBe(false);
+    await abre('');
+    expect(chamadas('/ver')).toHaveLength(1);
+    expect($('pp-estado').textContent).toMatch(/Link inválido ou expirado/);
+    ler.mockRestore(); gravar.mockRestore();
   });
 
   it('sem token: link inválido, sem chamar o servidor', async () => {

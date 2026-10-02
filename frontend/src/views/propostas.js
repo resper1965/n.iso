@@ -21,9 +21,9 @@ const STATUS = {
     substituida: ['Substituída', 'prp-st-encerrada'],
 };
 const EDITAVEL = ['rascunho', 'aguardando_aprovacao'];
-const COM_REVISAO = ['gerada', 'enviada', 'visualizada'];
+// expirada: sai por revisão nova, por reenvio (se a validade ainda não passou) ou por aceite em papel
+const COM_REVISAO = ['gerada', 'enviada', 'visualizada', 'expirada'];
 const ENVIAVEL = COM_REVISAO;                 // envio, link e aceite manual: as mesmas da revisão
-const COM_LINK = ['enviada', 'visualizada'];   // só aí existe link para revogar
 const AJUDA = 'Texto simples: uma linha em branco separa parágrafos; linha iniciada por "- " vira item de lista; "## " vira subtítulo. Tabelas, indicadores e a lista de serviços da proposta são automáticos e continuam no documento.';
 
 let ultimo = null;      // { c, h, a }
@@ -546,7 +546,7 @@ function fichaEnvio(p) {
     const acoes = ENVIAVEL.includes(p.status) ? `<div class="prp-acoes prp-envio-acoes">
             <button type="button" class="btn btn-primary" data-action="__prpEnviar" data-args='${args(p.id)}'>Enviar ao cliente</button>
             <button type="button" class="btn btn-secondary" data-action="__prpCopiarLink" aria-describedby="prp-link-dica">Copiar link</button>
-            ${COM_LINK.includes(p.status) ? '<button type="button" class="btn btn-secondary" data-action="__prpRevogarLink">Revogar link</button>' : ''}
+            ${p.tem_link ? '<button type="button" class="btn btn-secondary" data-action="__prpRevogarLink">Revogar link</button>' : ''}
             <button type="button" class="btn btn-secondary" data-action="__prpAceiteManual">Marcar como aceita (papel)</button>
         </div>
         <p class="prp-dica" id="prp-link-dica">Enviar ou copiar gera um link novo: o anterior deixa de valer. O cliente abre sem conta, pelo link.</p>

@@ -11,6 +11,10 @@
     const INVALIDO = 'Link inválido ou expirado';
     let token = '';
     let ocupado = false;
+    // F5 sem o hash (que saiu da barra): o token fica na sessão desta aba, que some ao fechá-la
+    const GUARDA = 'proposta-token';
+    const guardar = (t) => { try { sessionStorage.setItem(GUARDA, t); } catch { /* sem storage: F5 pede o link de novo */ } };
+    const guardado = () => { try { return sessionStorage.getItem(GUARDA) || ''; } catch { return ''; } };
 
     const $ = (id) => document.getElementById(id);
     const FUSO = 'America/Sao_Paulo';
@@ -202,9 +206,15 @@
         if (!$('pp-main')) return;
         ocupado = false;
         token = location.hash.slice(1);
+        if (token) guardar(token); else token = guardado();
         // some da barra, do histórico e de qualquer cópia do endereço
         if (location.hash) history.replaceState(null, '', location.pathname + location.search);
         $('pp-doc').addEventListener('load', ajustarAltura);
+        // botão, não âncora: com #pp-resposta no endereço, o F5 leria "pp-resposta" como token
+        $('pp-ir').addEventListener('click', () => {
+            $('pp-resposta').scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            $('pp-resposta-titulo').focus({ preventScroll: true });
+        });
         for (const p of ['aceitar', 'ajuste', 'recusar']) $('pp-op-' + p).addEventListener('click', () => abrirPainel(p));
         $('pp-painel-aceitar').addEventListener('submit', aceitar);
         $('pp-painel-ajuste').addEventListener('submit', ajuste);

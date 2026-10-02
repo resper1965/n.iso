@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { applySchema, workerEnv, sessionFor } from './helpers/d1';
-import { sha256Hex } from '../src/helpers';
+import { sha256Hex, sendEmail } from '../src/helpers';
 
 const db = () => env.DB as D1Database;
 const json = { 'Content-Type': 'application/json' };
@@ -14,13 +14,13 @@ const chamar = (metodo: string, caminho: string, headers: Record<string, string>
 const AGENTE = { userId: 'u-cons', email: 'cons@ness.lat', projectId: 'p-a', concessaoId: 'c-1' };
 
 let seq = 0;
-async function proposta(o: { status?: string; org?: string } = {}) {
+async function proposta(o: { status?: string; org?: string; validaAte?: string } = {}) {
   const id = `pe-${String(++seq).padStart(3, '0')}`;
   await db().batch([
     db().prepare(`INSERT INTO leads (id, company_name, cnpj, status, org_id) VALUES (?, 'Cliente', ?, 'Proposal', ?)`).bind(`l-${id}`, `1122233${String(1000000 + seq)}`, o.org ?? 'org_ness'),
     db().prepare(`INSERT INTO propostas (id, org_id, lead_id, numero, status, cliente, total_projeto, mensalidade, documento_html, documento_hash, valida_ate, criada_por)
-      VALUES (?, ?, ?, ?, ?, 'Cliente Ltda.', 8200, 0, '<p>doc</p>', 'h', '2026-12-31', 'com@ness.lat')`)
-      .bind(id, o.org ?? 'org_ness', `l-${id}`, `NESS-2026-${seq}`, o.status ?? 'gerada'),
+      VALUES (?, ?, ?, ?, ?, 'Cliente Ltda.', 8200, 0, '<p>doc</p>', 'h', ?, 'com@ness.lat')`)
+      .bind(id, o.org ?? 'org_ness', `l-${id}`, `NESS-2026-${seq}`, o.status ?? 'gerada', o.validaAte ?? '2026-12-31'),
     db().prepare(`INSERT INTO proposta_itens (id, proposta_id, ordem, servico, valor) VALUES (?, ?, 0, ?, 8200)`)
       .bind(`${id}-i`, id, JSON.stringify({ nome: 'Treinamento LGPD', norma: '', tipo: 'avulso', descricao: '', premissas: [], exclusoes: [], formaPreco: 'fixo', valorFixo: 8200, entregaveis: ['x'], criterioAceite: 'ok' })),
   ]);
@@ -80,7 +80,7 @@ describe('envio, link e aceite manual', () => {
     const g = await proposta();
     expect((await chamar('POST', `/api/v1/propostas/${g}/enviar`, com, { email: 'nao-e-email' })).status).toBe(400);
     expect((await chamar('POST', `/api/v1/propostas/${g}/enviar`, com, { email: 'a@b.com', extra: 1 })).status).toBe(400);
-    for (const st of ['expirada', 'aceita', 'recusada', 'substituida']) {
+    for (const st of ['aceita', 'recusada', 'substituida']) {
       const x = await proposta({ status: st });
       expect((await chamar('POST', `/api/v1/propostas/${x}/enviar`, com, { email: 'a@b.com' })).status, st).toBe(409);
       expect((await chamar('POST', `/api/v1/propostas/${x}/link`, com, {})).status, st).toBe(409);
@@ -198,5 +198,56 @@ describe('envio, link e aceite manual', () => {
     expect((await chamar('POST', `/api/v1/propostas/${id}/aceite-manual`, com, corpo)).status).toBe(409);
     const rasc = await proposta({ status: 'rascunho' });
     expect((await chamar('POST', `/api/v1/propostas/${rasc}/aceite-manual`, com, corpo)).status).toBe(409);
+  }, 60_000);
+
+  it('expirada: reenvio e link exigem validade no futuro; com ela, voltam a enviada; aceite manual fecha', async () => {
+    preparar();
+    const vencida = await proposta({ status: 'expirada', validaAte: '2020-01-01' });
+    for (const rota of ['enviar', 'link']) {
+      const r = await chamar('POST', `/api/v1/propostas/${vencida}/${rota}`, com, rota === 'enviar' ? { email: 'a@b.com' } : {});
+      expect(r.status, rota).toBe(409);
+      expect(await r.json(), rota).toEqual({ error: 'A validade passou: gere uma revisão com nova validade' });
+    }
+    expect(corposResend).toHaveLength(0);
+    expect(await linha(vencida)).toMatchObject({ status: 'expirada', token_hash: null });
+    const ok = await proposta({ status: 'expirada', validaAte: '2099-12-31' });
+    expect((await chamar('POST', `/api/v1/propostas/${ok}/enviar`, com, { email: 'a@b.com' })).status).toBe(200);
+    expect((await linha(ok)).status).toBe('enviada');
+    const manual = await proposta({ status: 'expirada', validaAte: '2020-01-01' });
+    const r = await chamar('POST', `/api/v1/propostas/${manual}/aceite-manual`, com, { nome: 'Ana Souza', cargo: 'Diretora', email: 'ana@cliente.com', comprovante: 'Contrato assinado' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect((await linha(manual)).status).toBe('aceita');
+  }, 60_000);
+
+  it('enviar sem RESEND_API_KEY: 503 e nada muda (a simulação não marca enviada)', async () => {
+    preparar();
+    const id = await proposta();
+    const r = await app.fetch(new Request(`http://localhost/api/v1/propostas/${id}/enviar`, {
+      method: 'POST', headers: { ...json, ...com }, body: JSON.stringify({ email: 'a@b.com' }),
+    }), { ...workerEnv(), RESEND_API_KEY: undefined } as any);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'Envio de e-mail não configurado' });
+    expect(await linha(id)).toMatchObject({ status: 'gerada', token_hash: null, enviada_em: null });
+    expect(corposResend).toHaveLength(0);
+  }, 60_000);
+
+  it('sendEmail sem chave (dev): loga destinatário e assunto, nunca o HTML', async () => {
+    preparar();
+    const ok = await sendEmail({ env: {} }, 'x@y.com', 'Assunto X', '<a href="https://niso.ness.com.br/proposta#SEGREDO123">link</a>');
+    expect(ok).toBe(true);
+    expect(logs()).toContain('x@y.com');
+    expect(logs()).toContain('Assunto X');
+    expect(logs()).not.toContain('SEGREDO123');
+  });
+
+  it('GET da lista e da ficha dizem se há link (tem_link), sem expor o hash', async () => {
+    preparar();
+    const id = await proposta();
+    const ver = async () => [(await (await chamar('GET', '/api/v1/propostas', com)).json<any[]>()).find((p) => p.id === id), await (await chamar('GET', `/api/v1/propostas/${id}`, com)).json<any>()];
+    for (const p of await ver()) { expect(p.tem_link).toBe(false); expect(p).not.toHaveProperty('token_hash'); }
+    await chamar('POST', `/api/v1/propostas/${id}/link`, com);
+    for (const p of await ver()) { expect(p.tem_link).toBe(true); expect(p).not.toHaveProperty('token_hash'); }
+    await chamar('POST', `/api/v1/propostas/${id}/revogar-link`, com);
+    for (const p of await ver()) expect(p.tem_link).toBe(false);
   }, 60_000);
 });

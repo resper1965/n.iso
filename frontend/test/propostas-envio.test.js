@@ -24,7 +24,7 @@ const base = (o = {}) => ({
   total_projeto: 100000, mensalidade: 0, memoria: null, margem: null, secoes_editadas: {}, itens: [],
   enviada_em: null, enviada_para: null, visualizada_em: null, ajuste_mensagem: null, recusa_motivo: null,
   aceite_nome: null, aceite_cargo: null, aceite_email: null, aceite_em: null, aceite_origem: null, aceite_comprovante: null,
-  contrato_id: null, projeto_id: null, ...o,
+  contrato_id: null, projeto_id: null, tem_link: false, ...o,
 });
 
 let fetchMock;
@@ -86,16 +86,25 @@ describe('botões por estado', () => {
     expect(TEM(ACOES)).toEqual([true, true, false, true]);
   });
   for (const status of ['enviada', 'visualizada']) {
-    it(`${status}: as quatro ações`, async () => {
-      await ficha({ status });
+    it(`${status} com link: as quatro ações`, async () => {
+      await ficha({ status, tem_link: true });
       expect(TEM(ACOES)).toEqual([true, true, true, true]);
     });
   }
-  for (const status of ['aceita', 'recusada', 'expirada', 'substituida']) {
+  it('enviada sem link (revogado): sem "Revogar link"', async () => {
+    await ficha({ status: 'enviada', tem_link: false });
+    expect(TEM(ACOES)).toEqual([true, true, false, true]);
+  });
+  it('expirada: enviar, aceite manual e nova revisão', async () => {
+    await ficha({ status: 'expirada' });
+    expect(TEM(['__prpEnviar', '__prpAceiteManual', '__prpRevisao'])).toEqual([true, true, true]);
+    expect(document.querySelector('.prp-pilula').textContent).toBe('Expirada');
+  });
+  for (const status of ['aceita', 'recusada', 'substituida']) {
     it(`${status}: nenhuma ação de envio, pílula do estado`, async () => {
       await ficha({ status });
       expect(TEM(ACOES)).toEqual([false, false, false, false]);
-      expect(document.querySelector('.prp-pilula').textContent).toBe({ aceita: 'Aceita', recusada: 'Recusada', expirada: 'Expirada', substituida: 'Substituída' }[status]);
+      expect(document.querySelector('.prp-pilula').textContent).toBe({ aceita: 'Aceita', recusada: 'Recusada', substituida: 'Substituída' }[status]);
     });
   }
   it('na lista, "Enviar ao cliente" só nas enviáveis', async () => {
@@ -191,7 +200,7 @@ describe('link', () => {
   });
 
   it('"Revogar link" chama a rota', async () => {
-    await ficha({ status: 'visualizada' });
+    await ficha({ status: 'visualizada', tem_link: true });
     await clica('__prpRevogarLink');
     expect(chamadas('POST', '/api/v1/propostas/p1/revogar-link')).toHaveLength(1);
     expect(window.showToast).toHaveBeenCalledWith(expect.stringMatching(/revogado/i));

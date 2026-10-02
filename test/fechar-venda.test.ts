@@ -193,4 +193,66 @@ describe('fecharVenda', () => {
     expect((await db().prepare(`SELECT email FROM project_governance WHERE project_id = ?`).bind(ra.projetoId).all<any>()).results).toEqual([{ email: 'cons2@ness.lat' }]);
     expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, rb.projetoId)).toBe(0);
   });
+
+  // ——— revisão final da fatia 4 ———
+  /** Revisão do mesmo número da proposta `de`, com o status dado. */
+  async function revisao(de: string, rev: number, status: string) {
+    const id = `${de}-r${rev}`;
+    await db().prepare(`INSERT INTO propostas (id, org_id, lead_id, numero, revisao, status, cliente, total_projeto, mensalidade, documento_html, documento_hash, criada_por)
+      SELECT ?, org_id, lead_id, numero, ?, ?, cliente, total_projeto, mensalidade, documento_html, documento_hash, criada_por FROM propostas WHERE id = ?`).bind(id, rev, status, de).run();
+    await db().prepare(`INSERT INTO proposta_itens (id, proposta_id, ordem, servico, valor) SELECT ? || '-i', ?, ordem, servico, valor FROM proposta_itens WHERE proposta_id = ? AND ordem = 0`).bind(id, id, de).run();
+    return id;
+  }
+
+  it('aceite da rev. 1: revisões posteriores abertas viram substituida no mesmo batch; a outra revisão aceita depois dá ja_fechada', async () => {
+    const { id } = await proposta();
+    const abertas = await Promise.all(['rascunho', 'gerada', 'enviada', 'visualizada', 'aguardando_aprovacao'].map((st, k) => revisao(id, k + 2, st)));
+    const recusada = await revisao(id, 7, 'recusada');
+    expect((await fecharVenda(db(), entrada(id))).ok).toBe(true);
+    for (const r of abertas) expect((await db().prepare('SELECT status FROM propostas WHERE id = ?').bind(r).first<any>()).status, r).toBe('substituida');
+    expect((await db().prepare('SELECT status FROM propostas WHERE id = ?').bind(recusada).first<any>()).status).toBe('recusada');
+    // forçada de volta a enviada (dado antigo, corrida): o aceite não fecha a venda de novo
+    await db().prepare(`UPDATE propostas SET status = 'enviada' WHERE id = ?`).bind(abertas[2]).run();
+    expect(await fecharVenda(db(), entrada(abertas[2]))).toMatchObject({ ok: false, motivo: 'ja_fechada' });
+    expect(await fecharVenda(db(), entrada(abertas[2], { origem: 'manual', atorEmail: 'com@ness.lat' }))).toMatchObject({ ok: false, motivo: 'ja_fechada' });
+    expect((await db().prepare('SELECT status, contrato_id FROM propostas WHERE id = ?').bind(abertas[2]).first<any>())).toEqual({ status: 'enviada', contrato_id: null });
+    const numero = (await db().prepare('SELECT numero FROM propostas WHERE id = ?').bind(id).first<any>()).numero;
+    expect(await conta(`SELECT COUNT(*) n FROM contracts c JOIN propostas p ON p.id = c.proposta_id WHERE p.numero = ?`, numero)).toBe(1);
+    expect(await conta(`SELECT COUNT(*) n FROM projects pj JOIN propostas p ON p.id = pj.proposta_id WHERE p.numero = ?`, numero)).toBe(1);
+  });
+
+  it('origem link: toda linha da trilha tem o ator "cliente (link)", nunca o e-mail digitado', async () => {
+    const { id } = await proposta();
+    const r = await fecharVenda(db(), entrada(id, { atorEmail: 'admin@ness.com.br', aceite: { nome: 'Maria', cargo: 'CEO', email: 'admin@ness.com.br', ip: '1.2.3.4' } }));
+    expect(r.ok).toBe(true);
+    const atores = (await db().prepare(`SELECT DISTINCT actor FROM audit_logs WHERE details LIKE ?`).bind(`%${id}%`).all<any>()).results.map((x: any) => x.actor);
+    expect(atores).toEqual(['cliente (link)']);
+    expect((await db().prepare('SELECT aceite_email FROM propostas WHERE id = ?').bind(id).first<any>()).aceite_email).toBe('admin@ness.com.br');
+  });
+
+  it('expirada: aceite manual fecha a venda; pelo link, não', async () => {
+    const a = await proposta({ status: 'expirada' });
+    expect(await fecharVenda(db(), entrada(a.id))).toMatchObject({ ok: false, motivo: 'estado_invalido' });
+    expect((await fecharVenda(db(), entrada(a.id, { origem: 'manual', atorEmail: 'com@ness.lat' }))).ok).toBe(true);
+  });
+
+  it('link: token rotacionado depois da leitura não fecha a venda (tokenHash do chamador)', async () => {
+    const { id } = await proposta();
+    await db().prepare(`UPDATE propostas SET token_hash = 'hash-novo' WHERE id = ?`).bind(id).run();
+    expect(await fecharVenda(db(), entrada(id, { tokenHash: 'hash-antigo' }))).toMatchObject({ ok: false });
+    expect((await db().prepare('SELECT status FROM propostas WHERE id = ?').bind(id).first<any>()).status).toBe('enviada');
+    expect(await conta('SELECT COUNT(*) n FROM contracts WHERE proposta_id = ?', id)).toBe(0);
+    expect((await fecharVenda(db(), entrada(id, { tokenHash: 'hash-novo' }))).ok).toBe(true);
+  });
+
+  it('consultor_email que deixou de ser consultor ativo não é designado', async () => {
+    await db().prepare(`INSERT INTO users (id, email, password_hash, name, role, ativo) VALUES ('u-cons-off','off@ness.lat','x','Inativo','consultor',0)`).run();
+    const a = await proposta({ consultor: 'off@ness.lat' });
+    const b = await proposta({ consultor: 'com@ness.lat' });
+    for (const p of [a, b]) {
+      const r = await fecharVenda(db(), entrada(p.id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, r.projetoId)).toBe(0);
+    }
+  });
 });

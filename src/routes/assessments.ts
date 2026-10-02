@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
+import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { orgDoUsuario } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
@@ -381,69 +381,9 @@ assessmentsApp.put('/:id/pricing', somenteComercial, async (c) => {
   }
 });
 
-// Gerar proposta põe preço: é ato comercial, não do consultor que conduziu o
-// diagnóstico. O resto do assessment segue em `somenteNess`.
-assessmentsApp.post('/:id/generate-proposal', somenteComercial, async (c) => {
-  try {
-    const id = c.req.param('id');
-    const user = c.get('user');
-
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
-    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
-
-    const { results: answers } = await c.env.DB.prepare(
-      'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
-    ).bind(id).all<{ question_key: string; answer: string }>();
-
-    const ansMap: Record<string, any> = {};
-    for (const a of (answers || [])) ansMap[a.question_key] = a.answer;
-
-    const pricingAnswers = buildPricingAnswers(ansMap);
-    const configRow = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
-    const configOverrides = configRow ? JSON.parse(configRow.value) : undefined;
-    const pricing = calculatePricing(pricingAnswers, configOverrides);
-
-    if (assessment.pricing_override) {
-      pricing.precoFinal = assessment.pricing_override;
-      const total = pricing.fases.reduce((a: number, f: any) => a + (f.valorFase || 0), 0);
-      if (total > 0) pricing.fases.forEach((f: any) => { f.valorFase = Math.round((f.valorFase || 0) / total * pricing.precoFinal); });
-    } else if (assessment.pricing_desconto && assessment.pricing_desconto > 0) {
-      const factor = 1 - (assessment.pricing_desconto / 100);
-      pricing.precoFinal = Math.ceil(pricing.precoFinal * factor / 1000) * 1000;
-      pricing.fases.forEach((f: any) => { f.valorFase = Math.round((f.valorFase || 0) * factor); });
-    }
-
-    const clientName = assessment.client_name || 'Cliente';
-    const now = new Date().toLocaleDateString('pt-BR');
-    const body = await c.req.json().catch(() => ({}));
-    const meta = {
-      proposalNum: body.proposalNum || `PROP-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
-      validade: body.validade || '30',
-      razaoSocial: body.razaoSocial || clientName,
-      cnpj: body.cnpj || '',
-      respCliente: body.respCliente || '',
-      cargoCliente: body.cargoCliente || '',
-      respNess: body.respNess || 'ness.',
-      cargoNess: body.cargoNess || 'Lead Consultant',
-      condicaoPagamento: body.condicaoPagamento || '40/30/30',
-      observacoes: body.observacoes || ''
-    };
-
-    const proposalId = genId();
-    const contentHtml = `<p>Proposta ${escapeHtml(meta.proposalNum)} para ${escapeHtml(meta.razaoSocial)}</p>`; // HTML proposal template
-    await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'Draft', datetime('now'))`
-    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal).run();
-
-    await logAudit(c.env.DB, 'proposal.generated', user?.email ?? 'system', `Proposta ${proposalId} gerada automaticamente do assessment ${id}.`);
-    await createNotification(c.env.DB, 'proposal_ready', `Proposta gerada: ${clientName}`, `Tier ${pricing.tier.name}`, user?.id, `/proposals/${proposalId}`);
-
-    return c.json({ ok: true, proposal_id: proposalId, proposal_num: meta.proposalNum, tier: pricing.tier.name, preco: pricing.precoFinal, html: contentHtml });
-  } catch (e: any) {
-    return erro500(c, 'Falha ao gerar proposta', e);
-  }
-});
+// O gerador antigo (tabela proposals, preço por tier) deu lugar à tela Propostas (fatia 3/4).
+assessmentsApp.post('/:id/generate-proposal', (c) =>
+  c.json({ error: 'O gerador antigo foi substituído pela tela Propostas' }, 410));
 
 // O projeto nasce do aceite da proposta (fecharVenda); este caminho criava projeto em dobro.
 assessmentsApp.post('/:id/convert', (c) =>
