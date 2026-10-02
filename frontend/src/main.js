@@ -17,6 +17,8 @@ import './views/monitor.js';
 import './views/dashboard.js';
 import './views/admin.js';
 import './views/conectar-agente.js';
+import './views/catalogo.js';
+import './views/config-comercial.js';
 import './views/trocar-senha.js';
 import './views/ai.js';
 import './views/privacy.js';
