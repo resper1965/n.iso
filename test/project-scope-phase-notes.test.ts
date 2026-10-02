@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 
 describe('PUT /projects/:id — scope gravável', () => {
   let headers: Record<string, string>;
@@ -18,6 +18,7 @@ describe('PUT /projects/:id — scope gravável', () => {
     await env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status, scope) VALUES ('pr1','C','ISO 27001:2022','Controller','Active','... (us-east-1) ...')`
     ).run();
+    await designarConsultor('consultor@ness.io', 'pr1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
@@ -39,6 +40,7 @@ describe('PUT /projects/:id/phases/:num — grava por número, 404 se inexistent
     await resetSessions();
     await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('pr1','C','ISO 27001:2022','Controller','Active')`).run();
     await env.DB.prepare(`INSERT INTO project_phases (id, project_id, phase_number, title, status) VALUES ('ph-abc','pr1',0,'Mobilização','pending')`).run();
+    await designarConsultor('consultor@ness.io', 'pr1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 

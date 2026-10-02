@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { apiKeyRoleViolation } from '../auth-policy';
+import { consultorDesignado } from '../helpers';
 
 /**
  * Identidade de um agente de IA conectado pelo MCP remoto (spec
@@ -46,10 +47,8 @@ export async function concessaoValida(
 
   // Tirar o consultor da governança derruba o agente na próxima requisição,
   // sem esperar o token expirar.
-  const designado = await db.prepare(
-    `SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor'`
-  ).bind(p.projectId, row.email).first();
-  return designado ? { email: row.email, client_name: row.client_name, project_name: row.project_name } : null;
+  // Mesma regra do consultor humano (D5): uma fonte só.
+  return await consultorDesignado(db, row.email, p.projectId) ?{ email: row.email, client_name: row.client_name, project_name: row.project_name } : null;
 }
 
 /** Só `resolverAgente` lê; ele só roda com `env.AGENTE`, então de fora o cabeçalho é inerte. */

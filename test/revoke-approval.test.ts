@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 
 describe('revogar aprovação de controle (D3)', () => {
   let headers: Record<string, string>;
@@ -33,6 +33,7 @@ describe('revogar aprovação de controle (D3)', () => {
       `INSERT INTO compliance_controls (id, project_id, standard, title, status, ciso_approved_by) VALUES ('c-outro','pr2','ISO 27001:2022','A.5.1 Z','Approved','Ricardo Esper')`
     ).run();
     // Chave de ESCRITA do consultor (sem senha de aprovador).
+    await designarConsultor('consultor@ness.io', 'pr1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 

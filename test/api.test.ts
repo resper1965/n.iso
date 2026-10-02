@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword, sha256Hex } from '../src/helpers';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, sessionFor, designarConsultor } from './helpers/d1';
 
 /**
  * Testes de API contra D1 e KV REAIS (miniflare).
@@ -401,7 +401,8 @@ describe('nISO API (D1 e KV reais)', () => {
       expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: client })).status).toBe(403);
     });
 
-    it('papel de staff alcança qualquer projeto', async () => {
+    it('consultor alcança o projeto em que está designado (D5)', async () => {
+      await designarConsultor('admin@ness.io', OUTRO);
       expect((await req(`/api/v1/projects/${OUTRO}/risks`, { headers: consultor })).status).toBe(200);
     });
 

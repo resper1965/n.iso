@@ -70,8 +70,9 @@ governanceApp.get('/projects/:id/governance', async (c) => {
  * Designar o consultor de um projeto é ato de quem contrata (o `org_admin`
  * daquele cliente) ou de quem opera a plataforma (`platform_admin`) — nunca do
  * próprio consultor. A governança é a fonte de "em quais clientes este
- * consultor atua" (escopo da chave de agente); se ele pudesse se incluir, o
- * escopo seria decorativo, porque o consultor alcança todos os projetos.
+ * consultor atua" — do agente e, desde a D5, do próprio consultor humano
+ * (`consultorDesignado` em helpers.ts); se ele pudesse se incluir, o escopo
+ * seria decorativo.
  *
  * Vale para criar, alterar (inclusive trocar o e-mail, que é designar outra
  * pessoa, e rebaixar o papel) e remover. Os demais papéis seguem livres.

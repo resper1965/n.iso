@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword, verifyPassword } from '../src/helpers';
-import { applySchema, sessionFor, pedir } from './helpers/d1';
+import { applySchema, sessionFor, pedir, designarConsultor } from './helpers/d1';
 import middlewareSrc from '../src/middleware/auth.ts?raw';
 import helpersSrc from '../src/helpers.ts?raw';
 
@@ -332,6 +332,7 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
       .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active').run();
     await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
       .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor').run();
+    await designarConsultor('st@ness.io', 'proj-m');
     staff = {
       ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor' })),
       'Content-Type': 'application/json',

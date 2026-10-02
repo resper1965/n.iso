@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, ehConsultor, PROJETOS_DO_CONSULTOR_SQL, designacaoDoCriador } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -314,7 +314,8 @@ projectsApp.post('/', async (c) => {
     }
 
     const id = genId();
-    await c.env.DB.prepare(
+    const user = c.get('user');
+    const cria = c.env.DB.prepare(
       `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
     ).bind(
@@ -325,10 +326,16 @@ projectsApp.post('/', async (c) => {
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
       body.org_role ?? ''
-    ).run();
+    );
+    // D5: consultor que cria fica designado no projeto, no mesmo batch.
+    const designa = designacaoDoCriador(c.env.DB, user, id);
+    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
 
     await seedPhases(c.env.DB, id);
-    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    await logAudit(c.env.DB, 'project.created', user?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    if (designa) {
+      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${id} que criou`, '', '', id);
+    }
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
   } catch (e: any) {
@@ -349,7 +356,10 @@ projectsApp.get('/', async (c) => {
       return c.json(project ? [redactProject(project)] : []);
     }
 
-    const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    // Consultor: só os projetos em que está designado (D5).
+    const { results } = await (ehConsultor(user)
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${PROJETOS_DO_CONSULTOR_SQL}) ORDER BY created_at DESC`).bind(user.email)
+      : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')).all();
     return c.json((results ?? []).map(redactProject));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar projetos', e);

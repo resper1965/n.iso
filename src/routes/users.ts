@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500 } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL } from '../helpers';
 import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -17,6 +17,9 @@ usersApp.get('/', async (c) => {
     let stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC');
     if (user.role === 'org_admin') {
       stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users WHERE client_project_id = ? ORDER BY created_at DESC').bind(user.client_project_id || '');
+    } else if (ehConsultor(user)) {
+      // D5: só as contas de cliente dos projetos em que o consultor está designado.
+      stmt = c.env.DB.prepare(`SELECT id, email, name, role, client_project_id, created_at FROM users WHERE client_project_id IN (${PROJETOS_DO_CONSULTOR_SQL}) ORDER BY created_at DESC`).bind(user.email);
     }
     const { results } = await stmt.all();
     const mapped = (results || []).map((u: any) => {
@@ -45,6 +48,15 @@ const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefin
   quem.role !== 'platform_admin' && !PAPEIS_CLIENTE_GERIVEIS.has(papel ?? '');
 const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
 
+/*
+ * D5: o consultor só gere conta de cliente de projeto em que está designado. Sem isto ele criava
+ * ou trocava a senha de um usuário de OUTRO cliente e entrava como ele — a designação viraria
+ * decorativa. Projeto ausente nega.
+ */
+const consultorForaDoProjeto = async (db: D1Database, quem: { role?: string; email?: string }, projectId: string | null | undefined) =>
+  ehConsultor(quem) && !(projectId && await consultorDesignado(db, quem.email ?? '', projectId));
+const recusaProjeto = { error: 'Forbidden: consultor só gere usuários dos projetos em que está designado' };
+
 usersApp.post('/', async (c) => {
   const admin = c.get('user');
   if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
@@ -57,6 +69,7 @@ usersApp.post('/', async (c) => {
     const { email, password, name, role, client_project_id } = valid.data;
 
     if (soPlatformAdmin(admin, role)) return c.json(recusaPapelInterno, 403);
+    if (await consultorForaDoProjeto(c.env.DB, admin, client_project_id)) return c.json(recusaProjeto, 403);
 
     let targetProject = client_project_id;
     let targetRole = role;
@@ -122,6 +135,10 @@ usersApp.put('/:id', async (c) => {
     // um admin ou colega) E o papel novo também (senão é promoção).
     if (soPlatformAdmin(admin, user.role) || (role !== undefined && soPlatformAdmin(admin, role))) {
       return c.json(recusaPapelInterno, 403);
+    }
+    if (await consultorForaDoProjeto(c.env.DB, admin, user.client_project_id) ||
+        (client_project_id !== undefined && await consultorForaDoProjeto(c.env.DB, admin, client_project_id))) {
+      return c.json(recusaProjeto, 403);
     }
 
     if (admin.role === 'org_admin') {
@@ -194,6 +211,7 @@ usersApp.delete('/:id', async (c) => {
     }
 
     if (soPlatformAdmin(admin, user.role)) return c.json(recusaPapelInterno, 403);
+    if (await consultorForaDoProjeto(c.env.DB, admin, user.client_project_id)) return c.json(recusaProjeto, 403);
 
     if (admin.role === 'org_admin' && user.client_project_id !== admin.client_project_id) {
       return c.json({ error: 'Forbidden: Access denied to this user' }, 403);
