@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { applySchema, workerEnv, sessionFor } from './helpers/d1';
-import { lerConfigOrg, formatarNumeroProposta } from '../src/services/organizacao';
+import { lerConfigOrg, formatarNumeroProposta, precoPadrao } from '../src/services/organizacao';
+import { configOrgSchema } from '../src/schemas';
 
 const worker = app;
 const json = { 'Content-Type': 'application/json' };
@@ -45,7 +46,27 @@ describe('configuração da organização', () => {
   it('consultor, cliente e agente não leem: a configuração tem custo e margem', async () => {
     expect((await chamar('GET', '/api/v1/org/config', consultor)).status).toBe(403);
     expect((await chamar('GET', '/api/v1/org/config', cliente)).status).toBe(403);
-    expect((await comoAgente('GET', '/api/v1/org/config')).status).toBe(403);
+    const a = await comoAgente('GET', '/api/v1/org/config');
+    expect(a.status).toBe(403);
+    expect((await a.json<any>()).error).toMatch(/fora do alcance do agente/);
+  });
+
+  it('PUT: porte fora de ordem, com null no meio ou sem faixa ilimitada → 400 em preco.porte; válido → 200', async () => {
+    const put = (porte: unknown) => chamar('PUT', '/api/v1/org/config', adm, { preco: { porte } });
+    for (const porte of [
+      [{ maxPessoas: 50, fator: 1 }, { maxPessoas: 10, fator: 1.2 }, { maxPessoas: null, fator: 1.5 }],
+      [{ maxPessoas: 10, fator: 1 }, { maxPessoas: null, fator: 1.2 }, { maxPessoas: null, fator: 1.5 }],
+      [{ maxPessoas: 10, fator: 1 }, { maxPessoas: 50, fator: 1.2 }],
+    ]) {
+      const r = await put(porte);
+      expect(r.status).toBe(400);
+      expect((await r.json<any>()).details.map((d: any) => d.path)).toContain('preco.porte');
+    }
+    expect((await put([{ maxPessoas: 10, fator: 1 }, { maxPessoas: 50, fator: 1.2 }, { maxPessoas: null, fator: 1.5 }])).status).toBe(200);
+  });
+
+  it('o porte padrão passa no configOrgSchema', () => {
+    expect(configOrgSchema.safeParse({ preco: { porte: precoPadrao().porte } }).success).toBe(true);
   });
 
   it('PUT: só platform_admin grava; comercial leva 403', async () => {

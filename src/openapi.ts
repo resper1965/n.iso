@@ -44,6 +44,7 @@ import {
   primeiroAcessoSchema,
   projectPhaseSchema,
   configOrgSchema,
+  servicoSchema,
   proposalSchema,
   proposalUpdateSchema,
   resetConfirmSchema,
@@ -179,6 +180,8 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/public/sso/iniciar', schema: ssoInicioSchema, nome: 'ssoInicioSchema' },
   { metodo: 'PUT', caminho: '/api/v1/risks/:id', schema: riskUpdateSchema, nome: 'riskUpdateSchema' },
   { metodo: 'PUT', caminho: '/api/v1/ropa/:id', schema: ropaSchema, nome: 'ropaSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/servicos/:id', schema: servicoSchema, nome: 'servicoSchema' },
+  { metodo: 'POST', caminho: '/api/v1/servicos', schema: servicoSchema, nome: 'servicoSchema' },
   { metodo: 'PUT', caminho: '/api/v1/training/:id', schema: trainingUpdateSchema, nome: 'trainingUpdateSchema' },
   { metodo: 'PUT', caminho: '/api/v1/vendors/:id', schema: vendorUpdateSchema, nome: 'vendorUpdateSchema' },
 ];
