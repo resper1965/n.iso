@@ -32,7 +32,7 @@ const ORGS = [
   { id: 'org_ness', nome: 'ness.', slug: 'ness', plano: 'interno', status: 'Active', maxProjetos: 1000, maxUsuarios: 1000,
     termoAceitoEm: null, termoVersao: null, projetos: 12, usuarios: 8, propostas: {} },
   { id: 'org_alfa', nome: 'Alfa Consultoria', slug: 'alfa', plano: 'consultoria', status: 'Active', maxProjetos: 10, maxUsuarios: 5,
-    termoAceitoEm: '2026-10-02 12:00:00', termoVersao: 'v1-2026', projetos: 3, usuarios: 2, propostas: {} },
+    termoAceitoEm: '2026-10-02 12:00:00', termoVersao: 'v1-2026', projetos: 3, usuarios: 2, propostas: {}, adminPendente: true },
   { id: 'org_beta', nome: 'Beta <b>Seg</b>', slug: 'beta', plano: 'consultoria', status: 'Suspended', maxProjetos: 4, maxUsuarios: 3,
     termoAceitoEm: '2026-09-30 09:00:00', termoVersao: 'v1-2026', projetos: 1, usuarios: 1, propostas: {} },
 ];
@@ -134,6 +134,24 @@ describe('lista', () => {
   });
 });
 
+describe('reenviar convite', () => {
+  it('só na linha com administrador pendente (e ativa); envia o POST e avisa; falha do e-mail aparece', async () => {
+    let resposta = { emailEnviado: true };
+    rotas['POST /api/v1/platform/orgs/org_alfa/reenviar-convite'] = () => json(resposta);
+    const toast = vi.fn();
+    window.showToast = toast;
+    await monta();
+    expect(linha('org_ness').querySelector('[data-action="__orgReenviar"]')).toBeNull();
+    expect(linha('org_beta').querySelector('[data-action="__orgReenviar"]')).toBeNull();
+    await clica('__orgReenviar', ['org_alfa']);
+    expect(chamadas('POST', '/api/v1/platform/orgs/org_alfa/reenviar-convite')).toHaveLength(1);
+    expect(toast.mock.calls.at(-1)[0]).toMatch(/Convite reenviado/);
+    resposta = { emailEnviado: false };
+    await clica('__orgReenviar', ['org_alfa']);
+    expect(toast.mock.calls.at(-1)).toEqual([expect.stringMatching(/falhou/), 'error']);
+  });
+});
+
 describe('suspender e reativar', () => {
   it('pede confirmação na linha, só então envia {status: Suspended}; cancelar não envia', async () => {
     rotas['PUT /api/v1/platform/orgs/org_alfa'] = () => json({ ok: true });
@@ -196,7 +214,7 @@ describe('nova organização', () => {
     expect(document.querySelector('#modal-content input[type="password"]')).toBeNull();
   });
 
-  it('CNPJ preenchido vai no corpo; emailEnviado false mostra o caminho "Esqueci a senha"', async () => {
+  it('CNPJ preenchido vai no corpo; emailEnviado false aponta para "Reenviar convite"', async () => {
     rotas['POST /api/v1/platform/orgs'] = () =>
       json({ id: 'org_gama', slug: 'gama', adminId: 'u9', adminEmail: 'ana@gama.test', emailEnviado: false }, 201);
     await monta();
@@ -208,7 +226,7 @@ describe('nova organização', () => {
     const aviso = document.querySelector('#modal-content .org-aviso');
     expect(aviso.getAttribute('role')).toBe('alert');
     expect(aviso.textContent).toMatch(/NÃO foi enviado/);
-    expect(aviso.textContent).toContain('Esqueci a senha');
+    expect(aviso.textContent).toContain('Reenviar convite');
     expect(aviso.textContent).toContain('ana@gama.test');
   });
 

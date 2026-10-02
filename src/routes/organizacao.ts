@@ -46,11 +46,19 @@ organizacaoApp.put('/config', async (c) => {
       textos: { ...atual.textos, ...(b.textos ?? {}) },
       secoesDesligadas: b.secoesDesligadas ?? atual.secoesDesligadas,
     };
-    await c.env.DB.prepare(
-      `UPDATE organizations SET name = ?, cnpj = ?, cor_destaque = ?, selo_niso = ?, prefixo_proposta = ?,
-       proximo_numero = ?, config_preco = ?, textos = ?, secoes_desligadas = ? WHERE id = ?`
-    ).bind(novo.nome, novo.cnpj, novo.corDestaque, novo.seloNiso ? 1 : 0, novo.prefixoProposta, novo.proximoNumero,
-      JSON.stringify(novo.preco), JSON.stringify(novo.textos), JSON.stringify(novo.secoesDesligadas), orgId).run();
+    try {
+      // Sem prefixo grava NULL, não '' (`lerConfigOrg` devolve ''): o índice único parcial só deixa
+      // passar NULL, e duas organizações sem prefixo não conflitam.
+      await c.env.DB.prepare(
+        `UPDATE organizations SET name = ?, cnpj = ?, cor_destaque = ?, selo_niso = ?, prefixo_proposta = ?,
+         proximo_numero = ?, config_preco = ?, textos = ?, secoes_desligadas = ? WHERE id = ?`
+      ).bind(novo.nome, novo.cnpj, novo.corDestaque, novo.seloNiso ? 1 : 0, novo.prefixoProposta || null, novo.proximoNumero,
+        JSON.stringify(novo.preco), JSON.stringify(novo.textos), JSON.stringify(novo.secoesDesligadas), orgId).run();
+    } catch (e: any) {
+      // corrida com a conferência acima: o índice único (idx_organizations_prefixo) decide
+      if (String(e?.message ?? e).includes('UNIQUE')) return c.json({ error: 'Prefixo de proposta já usado por outra organização' }, 409);
+      throw e;
+    }
     await logAudit(c.env.DB, 'org.config_atualizada', user.email ?? 'system',
       `Configuração comercial da organização ${orgId} atualizada: ${Object.keys(b).join(', ') || 'nenhum campo'}`);
     return c.json(await lerConfigOrg(c.env.DB, orgId));

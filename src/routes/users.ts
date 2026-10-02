@@ -27,7 +27,13 @@ usersApp.get('/', async (c) => {
   
   try {
     let stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC');
-    if (ehAdminDaOrg(user)) {
+    if (user.role === 'platform_admin' && c.req.header('X-Org-Id')?.trim()) {
+      // A organização em que o platform_admin atua (a tela de organizações manda o cabeçalho);
+      // sem ele, todas as contas. Organização inexistente → 403, como em `exigirOrg`.
+      const org = await resolverOrg(c);
+      if (!org) return c.json(SEM_ORG, 403);
+      stmt = c.env.DB.prepare(`SELECT u.id, u.email, u.name, u.role, u.client_project_id, u.created_at FROM users u WHERE ${ORG_DA_CONTA_SQL} = ? ORDER BY u.created_at DESC`).bind(org);
+    } else if (ehAdminDaOrg(user)) {
       // Todas as contas da organização (equipe e clientes dos projetos dela), nenhuma de fora.
       stmt = c.env.DB.prepare(`SELECT u.id, u.email, u.name, u.role, u.client_project_id, u.created_at FROM users u WHERE ${ORG_DA_CONTA_SQL} = ? ORDER BY u.created_at DESC`).bind(orgDoUsuario(user) ?? '');
     } else if (user.role === 'org_admin') {
@@ -69,6 +75,10 @@ const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefin
 const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
 const EQUIPE_SEM_PROJETO = { error: 'Conta de equipe não se prende a projeto' };
 
+/** Nome da organização para o e-mail de boas-vindas; sem organização, "ness.". */
+export const nomeDaOrg = async (db: D1Database, orgId: string | null | undefined) =>
+  (orgId ? (await db.prepare('SELECT name FROM organizations WHERE id = ?').bind(orgId).first<{ name: string }>())?.name : null) || 'ness.';
+
 /** Organização de um projeto; `null` se não existe. */
 const orgDoProjeto = async (db: D1Database, projectId: string | null | undefined) =>
   projectId ? (await db.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id ?? null : null;
@@ -99,12 +109,14 @@ const recusaProjeto = { error: 'Forbidden: consultor só gere usuários dos proj
  * `POST /users` e o provisionamento de organização (`routes/organizacoes.ts`) usam este. Devolve se o
  * provedor aceitou; a senha nunca vai para log (`sendEmail` só registra destinatário e assunto).
  */
-export function enviarBoasVindas(c: any, email: string, name: string, password: string): Promise<boolean> {
+export function enviarBoasVindas(c: any, email: string, name: string, password: string, nomeOrg: string): Promise<boolean> {
+  // O nome da organização de quem convida (a ness. é "ness.", que já termina em ponto).
+  const org = escapeHtml(nomeOrg.endsWith('.') ? nomeOrg : `${nomeOrg}.`);
   const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
         <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao n.iso!</h2>
         <p>Olá, <strong>${escapeHtml(name)}</strong>,</p>
-        <p>Você foi convidado a acessar o portal de GRC da <strong>ness.</strong></p>
+        <p>Você foi convidado a acessar o portal de GRC da <strong>${org}</strong></p>
         <p>Aqui estão suas credenciais temporárias para o primeiro acesso:</p>
         <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 0.95rem;">
           <strong>E-mail:</strong> ${escapeHtml(email)}<br/>
@@ -154,7 +166,8 @@ usersApp.post('/', async (c) => {
     }
     const orgNovo = ehCliente ? (await orgDoProjeto(c.env.DB, targetProject)) ?? orgCriador : orgCriador;
     if (!orgNovo) return c.json(SEM_ORG, 403);
-    if (await limiteDoPlanoAtingido(c.env.DB, orgNovo, 'usuarios')) return c.json(LIMITE_USUARIOS, 409);
+    // O limite do plano conta só a EQUIPE da consultoria; conta de cliente não entra.
+    if (!ehCliente && await limiteDoPlanoAtingido(c.env.DB, orgNovo, 'usuarios')) return c.json(LIMITE_USUARIOS, 409);
 
     const id = genId();
     const hash = await hashPassword(password);
@@ -165,7 +178,7 @@ usersApp.post('/', async (c) => {
 
     await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${targetRole}`);
 
-    await enviarBoasVindas(c, email, name, password);
+    await enviarBoasVindas(c, email, name, password, await nomeDaOrg(c.env.DB, orgNovo));
 
     return c.json({ id, email, name, role: targetRole, client_project_id: targetProject }, 201);
   } catch (e: any) {
@@ -230,6 +243,14 @@ usersApp.put('/:id', async (c) => {
       if (role !== undefined && role !== 'org_admin' && role !== 'org_user' && role !== 'client') {
         return c.json({ error: 'Forbidden: Cannot assign this role' }, 403);
       }
+    }
+
+    // Cliente que vira equipe passa a contar no limite do plano (senão o limite se contornava
+    // criando cliente e promovendo depois).
+    if (role !== undefined && PAPEIS_EQUIPE_ORG.has(role) && !PAPEIS_EQUIPE_ORG.has(user.role)) {
+      const orgEquipe = ehAdminDaOrg(admin) ? orgDoUsuario(admin)
+        : (await c.env.DB.prepare('SELECT org_id FROM users WHERE id = ?').bind(id).first<{ org_id: string }>())?.org_id;
+      if (!orgEquipe || await limiteDoPlanoAtingido(c.env.DB, orgEquipe, 'usuarios')) return c.json(LIMITE_USUARIOS, 409);
     }
 
     const updates = [];

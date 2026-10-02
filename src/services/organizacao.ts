@@ -71,17 +71,24 @@ export async function somenteOrgNess(c: any, next: () => Promise<void>) {
   await next();
 }
 
+/** Conta de EQUIPE (o que o `max_users` do plano limita); conta de cliente não conta. */
+export const SQL_EQUIPE = `role IN ('consultor', 'consultant', 'comercial', 'consultoria_admin')`;
+
 /** Plano da ness. (`organizations.plan`): sem limite de projetos nem de usuários. */
 export const PLANO_INTERNO = 'interno';
 
 /**
- * A organização já usa tudo o que o plano permite? Conta o que existe (`COUNT(*)` por `org_id`).
+ * A organização já usa tudo o que o plano permite? Conta o que existe (`COUNT(*)` por `org_id`;
+ * usuários: só a equipe, `SQL_EQUIPE`).
  * O plano `interno` (a ness., cujos `max_projects`/`max_users` ficaram no default 3/5 da coluna) é
  * ilimitado. Organização inexistente ou limite nulo: atingido (falha fechada).
  */
 export async function limiteDoPlanoAtingido(db: D1Database, orgId: string, recurso: 'projetos' | 'usuarios'): Promise<boolean> {
-  const [coluna, tabela] = recurso === 'projetos' ? ['max_projects', 'projects'] : ['max_users', 'users'];
-  const r = await db.prepare(`SELECT o.plan, o.${coluna} AS max, (SELECT COUNT(*) FROM ${tabela} WHERE org_id = o.id) AS n
+  const contagem = recurso === 'projetos'
+    ? 'SELECT COUNT(*) FROM projects WHERE org_id = o.id'
+    : `SELECT COUNT(*) FROM users WHERE org_id = o.id AND ${SQL_EQUIPE}`;
+  const coluna = recurso === 'projetos' ? 'max_projects' : 'max_users';
+  const r = await db.prepare(`SELECT o.plan, o.${coluna} AS max, (${contagem}) AS n
     FROM organizations o WHERE o.id = ?`).bind(orgId).first<{ plan: string | null; max: number | null; n: number }>();
   if (!r) return true;
   if (r.plan === PLANO_INTERNO) return false;

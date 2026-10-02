@@ -10,3 +10,5 @@ ALTER TABLE organizations ADD COLUMN termo_versao TEXT;
 ALTER TABLE organizations ADD COLUMN logo_chave TEXT;
 CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(org_id);
+-- Prefixo de proposta único entre organizações. Parcial: NULL não conflita.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_organizations_prefixo ON organizations(prefixo_proposta) WHERE prefixo_proposta IS NOT NULL;

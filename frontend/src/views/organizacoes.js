@@ -116,7 +116,10 @@ function desenhar() {
             // a ness. opera a plataforma: não se suspende (o servidor também recusa)
             const status = o.id === ORG_NESS ? ''
                 : `<button type="button" class="btn btn-secondary" data-action="${susp ? '__orgReativar' : '__orgSuspender'}" data-args='["${id}"]'>${susp ? 'Reativar' : 'Suspender'}</button>`;
-            acoes = `<button type="button" class="btn btn-secondary" data-action="__orgEditar" data-args='["${id}"]'>Editar</button>${status}`;
+            // o administrador ainda não entrou: o convite pode ter se perdido
+            const convite = o.adminPendente && !susp
+                ? `<button type="button" class="btn btn-secondary" data-action="__orgReenviar" data-args='["${id}"]'>Reenviar convite</button>` : '';
+            acoes = `<button type="button" class="btn btn-secondary" data-action="__orgEditar" data-args='["${id}"]'>Editar</button>${convite}${status}`;
         }
         const termo = o.termoVersao ? `${escapeHTML(o.termoVersao)}<span class="org-meta">aceito em ${escapeHTML(data(o.termoAceitoEm))}</span>` : '<span class="org-vazio">sem registro</span>';
         return `<tr data-org="${id}">
@@ -156,6 +159,17 @@ async function renderOrganizacoes(c, h, a) {
     }
     desenhar();
 }
+
+// ——— reenviar o convite do administrador que ainda não entrou ———
+window.__orgReenviar = async (id) => {
+    try {
+        const r = await api('POST', `/api/v1/platform/orgs/${encodeURIComponent(id)}/reenviar-convite`);
+        if (r.emailEnviado === false) window.showToast('O e-mail falhou de novo. Tente mais tarde.', 'error');
+        else window.showToast('Convite reenviado com uma nova senha provisória');
+    } catch (e) {
+        window.showToast(e.message || 'Erro ao reenviar o convite', 'error');
+    }
+};
 
 // ——— suspender / reativar (confirmação na linha, sem confirm()) ———
 window.__orgSuspender = (id) => { if (id !== ORG_NESS) { confirmando = { id, status: 'Suspended' }; desenhar(); } };
@@ -262,7 +276,7 @@ window.__orgCriar = async () => {
     }
     // só os campos que a tela precisa: nada do corpo da resposta além disto chega ao DOM
     const aviso = r.emailEnviado === false
-        ? `<p class="org-aviso" role="alert">O convite NÃO foi enviado: o e-mail falhou. Peça a ${escapeHTML(corpo.adminNome)} que entre pela opção "Esqueci a senha" da tela de entrada, com o e-mail ${escapeHTML(r.adminEmail)}.</p>`
+        ? `<p class="org-aviso" role="alert">O convite para ${escapeHTML(r.adminEmail)} NÃO foi enviado: o e-mail falhou. Use "Reenviar convite" na linha da organização para tentar de novo.</p>`
         : `<p class="org-nota" role="status">Convite enviado para ${escapeHTML(r.adminEmail)}. O administrador troca a senha provisória no primeiro acesso.</p>`;
     $('modal-content').innerHTML = `<div class="org-form org-resultado" id="org-n-resultado">
         <h2 class="org-form-titulo">Organização criada</h2>

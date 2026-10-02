@@ -340,8 +340,12 @@ recusa migration pendente.
 comerciais: `ALTER` não aceita FK com default). O DEFAULT é o backfill: toda
 conta e todo projeto existentes passam a ser da ness. `organizations` ganha
 `termo_aceito_em`, `termo_versao` e `logo_chave`. Índices `idx_users_org` e
-`idx_projects_org`. Conferido em produção em 2026-10-02, só por leitura
-(`pragma_table_info`): nenhuma das cinco colunas existia.
+`idx_projects_org`, e o índice ÚNICO parcial `idx_organizations_prefixo`
+(`prefixo_proposta`, `WHERE prefixo_proposta IS NOT NULL`): violação vira 409
+na criação de organização e em `PUT /org/config`. Conferido em produção em
+2026-10-02, só por leitura (`pragma_table_info`): nenhuma das cinco colunas
+existia; e nenhum prefixo repetido entre organizações (`GROUP BY
+prefixo_proposta HAVING COUNT(*) > 1` vazio), senão o índice falharia.
 
 Depois de aplicar, a conferência é `SELECT COUNT(*) FROM users WHERE org_id <>
 'org_ness'` e o mesmo em `projects`: as duas têm de dar 0.

@@ -8684,7 +8684,11 @@
                   "papel_padrao": {
                     "default": "org_user",
                     "type": "string",
-                    "minLength": 1
+                    "enum": [
+                      "org_admin",
+                      "org_user",
+                      "client"
+                    ]
                   },
                   "ativo": {
                     "default": false,

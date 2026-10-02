@@ -14,6 +14,7 @@ describe('migration 0040 — multiconsultoria', () => {
     await execSql(`
       DROP INDEX IF EXISTS idx_users_org;
       DROP INDEX IF EXISTS idx_projects_org;
+      DROP INDEX IF EXISTS idx_organizations_prefixo;
       ALTER TABLE users DROP COLUMN org_id;
       ALTER TABLE projects DROP COLUMN org_id;
       ALTER TABLE organizations DROP COLUMN termo_aceito_em;
@@ -31,7 +32,7 @@ describe('migration 0040 — multiconsultoria', () => {
     expect(await colunas('users')).toContain('org_id');
     expect(await colunas('projects')).toContain('org_id');
     expect(await colunas('organizations')).toEqual(expect.arrayContaining(['termo_aceito_em', 'termo_versao', 'logo_chave']));
-    for (const n of ['idx_projects_org', 'idx_users_org']) {
+    for (const n of ['idx_projects_org', 'idx_users_org', 'idx_organizations_prefixo']) {
       expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
     }
     // Backfill: tudo o que existe hoje é da ness.
@@ -42,6 +43,10 @@ describe('migration 0040 — multiconsultoria', () => {
     expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM users`).first<{ n: number }>())!.n).toBe(2);
     // NOT NULL de verdade.
     await expect(env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, org_id) VALUES ('p3', 'C3', 'ISO 27001', 'controller', NULL)`).run()).rejects.toThrow(/NOT NULL/);
+
+    // Prefixo único entre organizações; NULL não conflita.
+    await env.DB.prepare(`INSERT INTO organizations (id, name, slug, prefixo_proposta) VALUES ('o1', 'O1', 'o1', 'PX'), ('o2', 'O2', 'o2', NULL), ('o3', 'O3', 'o3', NULL)`).run();
+    await expect(env.DB.prepare(`INSERT INTO organizations (id, name, slug, prefixo_proposta) VALUES ('o4', 'O4', 'o4', 'PX')`).run()).rejects.toThrow(/UNIQUE/);
 
     await applySchema(); // idempotente: confere que o schema canônico convive com o banco migrado
   }, 30_000);

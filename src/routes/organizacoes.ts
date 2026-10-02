@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, hashPassword, logAudit, erro500 } from '../helpers';
+import { genId, genToken, hashPassword, logAudit, erro500, rateLimitD1, invalidateUserSessions } from '../helpers';
 import { validateBody, criarOrgSchema, atualizarOrgSchema } from '../schemas';
-import { ORG_NESS } from '../services/organizacao';
+import { ORG_NESS, SQL_EQUIPE } from '../services/organizacao';
 import { enviarBoasVindas } from './users';
 
 /**
@@ -61,22 +61,30 @@ organizacoesApp.post('/', async (c) => {
       ]);
     } catch (e) {
       // corrida entre a conferência acima e o batch: o UNIQUE do banco decide
-      if (unico(e)) return c.json({ error: 'Slug ou e-mail já cadastrado' }, 409);
+      if (unico(e)) return c.json({ error: 'Slug, prefixo de proposta ou e-mail já cadastrado' }, 409);
       throw e;
     }
-    const emailEnviado = await enviarBoasVindas(c, b.adminEmail, b.adminNome, senha).catch(() => false);
+    const emailEnviado = await enviarBoasVindas(c, b.adminEmail, b.adminNome, senha, b.nome).catch(() => false);
     return c.json({ id, slug: b.slug, adminId, adminEmail: b.adminEmail, emailEnviado }, 201);
   } catch (e) { return erro500(c, 'Erro ao criar a organização', e); }
 });
 
-/** Lista com contagens (projetos, usuários, propostas por status). Nunca conteúdo. */
+/** Administrador da organização `o` que ainda não entrou (senha provisória pendente), ativo. */
+const ADMIN_PENDENTE = `org_id = o.id AND role = 'consultoria_admin' AND requires_password_change = 1 AND COALESCE(ativo, 1) <> 0`;
+
+/**
+ * Lista com contagens (projetos, usuários da EQUIPE — o que o `max_users` limita —, propostas por
+ * status) e `adminPendente` (o administrador ainda não entrou: a tela oferece "Reenviar convite").
+ * Nunca conteúdo.
+ */
 organizacoesApp.get('/', async (c) => {
   try {
     const db = c.env.DB;
     const [orgs, props] = await db.batch<any>([
       db.prepare(`SELECT o.id, o.name, o.slug, o.plan, o.status, o.max_projects, o.max_users, o.termo_aceito_em, o.termo_versao, o.created_at,
         (SELECT COUNT(*) FROM projects p WHERE p.org_id = o.id) AS projetos,
-        (SELECT COUNT(*) FROM users u WHERE u.org_id = o.id) AS usuarios
+        (SELECT COUNT(*) FROM users WHERE org_id = o.id AND ${SQL_EQUIPE}) AS usuarios,
+        EXISTS (SELECT 1 FROM users WHERE ${ADMIN_PENDENTE}) AS admin_pendente
         FROM organizations o ORDER BY o.created_at, o.id`),
       db.prepare('SELECT org_id, status, COUNT(*) AS n FROM propostas GROUP BY org_id, status'),
     ]);
@@ -86,6 +94,7 @@ organizacoesApp.get('/', async (c) => {
       id: o.id, nome: o.name, slug: o.slug, plano: o.plan, status: o.status,
       maxProjetos: o.max_projects, maxUsuarios: o.max_users, termoAceitoEm: o.termo_aceito_em, termoVersao: o.termo_versao,
       criadaEm: o.created_at, projetos: o.projetos, usuarios: o.usuarios, propostas: porOrg[o.id] ?? {},
+      adminPendente: !!o.admin_pendente,
     })));
   } catch (e) { return erro500(c, 'Erro ao listar as organizações', e); }
 });
@@ -107,4 +116,31 @@ organizacoesApp.put('/:id', async (c) => {
     await logAudit(db, 'org.atualizada', c.get('user').email, `Organização ${id} atualizada: ${JSON.stringify(b)}`);
     return c.json({ ok: true });
   } catch (e) { return erro500(c, 'Erro ao atualizar a organização', e); }
+});
+
+/*
+ * Reenvia o convite do administrador que ainda não entrou (o e-mail de boas-vindas falhou ou se
+ * perdeu): nova senha provisória (CSPRNG), `requires_password_change = 1`, sessões dele derrubadas e
+ * o mesmo e-mail. Quem já entrou usa "Esqueci a senha" (409). A senha nunca vai para a resposta, o
+ * log ou a trilha. 5 por hora por organização.
+ */
+organizacoesApp.post('/:id/reenviar-convite', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const db = c.env.DB;
+    const org = await db.prepare('SELECT name FROM organizations WHERE id = ?').bind(id).first<{ name: string }>();
+    if (!org) return c.json({ error: 'Organização não encontrada' }, 404);
+    if (!(await rateLimitD1(db, `reenviar_convite:${id}`, 5, 3600))) return c.json({ error: 'Muitos reenvios para esta organização; tente mais tarde' }, 429);
+    // O dono (quem a criação convidou) primeiro; senão o administrador pendente mais antigo.
+    const admin = await db.prepare(`SELECT u.id, u.email, u.name FROM organizations o JOIN users u ON u.org_id = o.id
+        WHERE o.id = ? AND u.role = 'consultoria_admin' AND u.requires_password_change = 1 AND COALESCE(u.ativo, 1) <> 0
+        ORDER BY (u.id = o.owner_id) DESC, u.created_at LIMIT 1`).bind(id).first<{ id: string; email: string; name: string }>();
+    if (!admin) return c.json({ error: 'O administrador já entrou: para recuperar o acesso, use "Esqueci a senha"' }, 409);
+    const senha = genToken().slice(0, 24); // 96 bits, como na criação
+    await db.prepare('UPDATE users SET password_hash = ?, requires_password_change = 1 WHERE id = ?').bind(await hashPassword(senha), admin.id).run();
+    await invalidateUserSessions(c.env.SESSIONS, admin.id);
+    await logAudit(db, 'org.convite_reenviado', c.get('user').email, `Convite do administrador ${admin.email} da organização ${id} reenviado`);
+    const emailEnviado = await enviarBoasVindas(c, admin.email, admin.name, senha, org.name).catch(() => false);
+    return c.json({ emailEnviado });
+  } catch (e) { return erro500(c, 'Erro ao reenviar o convite', e); }
 });
