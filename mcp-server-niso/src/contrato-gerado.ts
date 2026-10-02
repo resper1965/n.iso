@@ -54,6 +54,7 @@ export const ROTAS = {
   'POST /api/v1/public/policies/request-otp': { obrigatorios: ['email', 'project_id'] },
   'POST /api/v1/public/policies/verify-otp': { obrigatorios: ['email', 'otp', 'project_id'] },
   'POST /api/v1/public/sso/iniciar': { obrigatorios: ['email'] },
+  'POST /api/v1/servicos': { obrigatorios: [] },
   'PUT /api/v1/admin/users/{id}': { obrigatorios: [] },
   'PUT /api/v1/assets/{id}': { obrigatorios: ['name'] },
   'PUT /api/v1/audit-findings/{id}': { obrigatorios: [] },
@@ -78,6 +79,7 @@ export const ROTAS = {
   'PUT /api/v1/proposals/{id}': { obrigatorios: [] },
   'PUT /api/v1/risks/{id}': { obrigatorios: ['asset', 'threat'] },
   'PUT /api/v1/ropa/{id}': { obrigatorios: ['processing_purpose'] },
+  'PUT /api/v1/servicos/{id}': { obrigatorios: [] },
   'PUT /api/v1/training/{id}': { obrigatorios: ['employee_name', 'training_name'] },
   'PUT /api/v1/vendors/{id}': { obrigatorios: ['name'] },
 } as const;

@@ -10019,6 +10019,929 @@
         }
       }
     },
+    "/api/v1/servicos/{id}": {
+      "put": {
+        "operationId": "put_api_v1_servicos__id_",
+        "tags": [
+          "servicos"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nome": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "norma": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "descricao": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "premissas": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "exclusoes": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "const": "projeto"
+                      },
+                      "diasPorFaixa": {
+                        "type": "object",
+                        "properties": {
+                          "1": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "2": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "3": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "1",
+                          "2",
+                          "3"
+                        ]
+                      },
+                      "fases": {
+                        "minItems": 1,
+                        "maxItems": 15,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "nome": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "objetivo": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            "atividades": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 3000
+                            },
+                            "entregaveis": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 3000
+                            },
+                            "criterioAceite": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            "pct": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 100
+                            },
+                            "semanas": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 104
+                            }
+                          },
+                          "required": [
+                            "nome",
+                            "pct",
+                            "semanas"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "nome",
+                      "tipo",
+                      "diasPorFaixa",
+                      "fases"
+                    ]
+                  },
+                  {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "nome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "norma": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "descricao": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 3000
+                          },
+                          "premissas": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "exclusoes": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "tipo": {
+                            "type": "string",
+                            "const": "avulso"
+                          },
+                          "formaPreco": {
+                            "type": "string",
+                            "const": "fixo"
+                          },
+                          "valorFixo": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "entregaveis": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "criterioAceite": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "nome",
+                          "tipo",
+                          "formaPreco",
+                          "valorFixo",
+                          "entregaveis",
+                          "criterioAceite"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "nome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "norma": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "descricao": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 3000
+                          },
+                          "premissas": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "exclusoes": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "tipo": {
+                            "type": "string",
+                            "const": "avulso"
+                          },
+                          "formaPreco": {
+                            "type": "string",
+                            "const": "esforco"
+                          },
+                          "diasPorFaixa": {
+                            "type": "object",
+                            "properties": {
+                              "1": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "2": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "3": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "1",
+                              "2",
+                              "3"
+                            ]
+                          },
+                          "entregaveis": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "criterioAceite": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "nome",
+                          "tipo",
+                          "formaPreco",
+                          "diasPorFaixa",
+                          "entregaveis",
+                          "criterioAceite"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nome": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "norma": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "descricao": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "premissas": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "exclusoes": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "const": "recorrente"
+                      },
+                      "mensalidade": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "prazoMinimoMeses": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60
+                      },
+                      "inclusoMes": {
+                        "minItems": 1,
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      }
+                    },
+                    "required": [
+                      "nome",
+                      "tipo",
+                      "mensalidade",
+                      "prazoMinimoMeses",
+                      "inclusoMes"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Payload inválido — corpo recusado pelo schema, com `details` por campo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem sessão válida"
+          },
+          "403": {
+            "description": "Sessão válida, sem acesso ao recurso ou ao projeto"
+          },
+          "500": {
+            "description": "Erro de servidor. `request_id` correlaciona com o log estruturado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/servicos": {
+      "post": {
+        "operationId": "post_api_v1_servicos",
+        "tags": [
+          "servicos"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nome": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "norma": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "descricao": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "premissas": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "exclusoes": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "const": "projeto"
+                      },
+                      "diasPorFaixa": {
+                        "type": "object",
+                        "properties": {
+                          "1": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "2": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "3": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "1",
+                          "2",
+                          "3"
+                        ]
+                      },
+                      "fases": {
+                        "minItems": 1,
+                        "maxItems": 15,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "nome": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "objetivo": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            "atividades": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 3000
+                            },
+                            "entregaveis": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 3000
+                            },
+                            "criterioAceite": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            "pct": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 100
+                            },
+                            "semanas": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 104
+                            }
+                          },
+                          "required": [
+                            "nome",
+                            "pct",
+                            "semanas"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "nome",
+                      "tipo",
+                      "diasPorFaixa",
+                      "fases"
+                    ]
+                  },
+                  {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "nome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "norma": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "descricao": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 3000
+                          },
+                          "premissas": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "exclusoes": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "tipo": {
+                            "type": "string",
+                            "const": "avulso"
+                          },
+                          "formaPreco": {
+                            "type": "string",
+                            "const": "fixo"
+                          },
+                          "valorFixo": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "entregaveis": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "criterioAceite": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "nome",
+                          "tipo",
+                          "formaPreco",
+                          "valorFixo",
+                          "entregaveis",
+                          "criterioAceite"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "nome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "norma": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          "descricao": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 3000
+                          },
+                          "premissas": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "exclusoes": {
+                            "default": [],
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "tipo": {
+                            "type": "string",
+                            "const": "avulso"
+                          },
+                          "formaPreco": {
+                            "type": "string",
+                            "const": "esforco"
+                          },
+                          "diasPorFaixa": {
+                            "type": "object",
+                            "properties": {
+                              "1": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "2": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "3": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "1",
+                              "2",
+                              "3"
+                            ]
+                          },
+                          "entregaveis": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "criterioAceite": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "nome",
+                          "tipo",
+                          "formaPreco",
+                          "diasPorFaixa",
+                          "entregaveis",
+                          "criterioAceite"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nome": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "norma": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "descricao": {
+                        "default": "",
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "premissas": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "exclusoes": {
+                        "default": [],
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "const": "recorrente"
+                      },
+                      "mensalidade": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "prazoMinimoMeses": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60
+                      },
+                      "inclusoMes": {
+                        "minItems": 1,
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      }
+                    },
+                    "required": [
+                      "nome",
+                      "tipo",
+                      "mensalidade",
+                      "prazoMinimoMeses",
+                      "inclusoMes"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Payload inválido — corpo recusado pelo schema, com `details` por campo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem sessão válida"
+          },
+          "403": {
+            "description": "Sessão válida, sem acesso ao recurso ou ao projeto"
+          },
+          "500": {
+            "description": "Erro de servidor. `request_id` correlaciona com o log estruturado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/training/{id}": {
       "put": {
         "operationId": "put_api_v1_training__id_",
