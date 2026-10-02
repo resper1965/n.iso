@@ -29,4 +29,16 @@ describe('migration 0038 — propostas', () => {
     await execSql(migration0038);
     expect((await termos('org_ness'))?.t).toBe('meus termos');
   }, 30_000);
+
+  it('preenche só as chaves ausentes ou vazias: sobre e equipe preenchidos ficam, termos entra', async () => {
+    await applySchema();
+    await env.DB.prepare(`UPDATE organizations SET textos = '{"sobre":"Somos nós.","equipe":"Ana e Bia.","premissas":""}' WHERE id = 'org_ness'`).run();
+    await execSql(migration0038);
+    const r = await env.DB.prepare(`SELECT textos FROM organizations WHERE id = 'org_ness'`).first<{ textos: string }>();
+    const t = JSON.parse(r!.textos);
+    expect(t.sobre).toBe('Somos nós.');
+    expect(t.equipe).toBe('Ana e Bia.');
+    expect(t.termos).toContain('## Foro');
+    expect(t.premissas).toContain('ponto focal');
+  }, 30_000);
 });

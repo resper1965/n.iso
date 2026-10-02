@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { diaEmBrasilia } from '../src/routes/propostas';
 import { env } from 'cloudflare:test';
 import JSZip from 'jszip';
 import app from '../src/index';
@@ -308,6 +309,71 @@ describe('rotas /api/v1/propostas', () => {
     const xml = await (await JSZip.loadAsync(bytes)).file('word/document.xml')!.async('string');
     expect(xml).toContain('Premissa só desta proposta.');
     expect(xml).toContain(`Cópia de trabalho. Vale a versão ${g.numero} rev. 1 do n.iso, hash ${g.documento_hash.slice(0, 8)}.`);
+  }, 30_000);
+
+  it('editar o Objeto e depois acrescentar um serviço: o documento lista os dois; o texto editável não traz a lista', async () => {
+    const p = await criar({ escopo: 'Escopo original.', itens: [{ servicoId: srvProjeto }] });
+    let previa = await (await chamar('GET', `/api/v1/propostas/${p.id}/previa`, com)).json<any>();
+    expect(previa.textos.objeto).toBe('Escopo original.');
+    await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { secoesEditadas: { objeto: 'Objeto reescrito.', responsabilidades: 'Equipe enxuta.' } });
+    await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { itens: [{ servicoId: srvProjeto }, { servicoId: srvAvulso }] });
+    previa = await (await chamar('GET', `/api/v1/propostas/${p.id}/previa`, com)).json<any>();
+    const objeto = previa.conteudo.secoes.find((s: any) => s.id === 'objeto');
+    expect(objeto.blocos).toContainEqual({ t: 'lista', itens: ['Implementação ISO 27001 · ISO/IEC 27001', 'Treinamento LGPD'] });
+    expect(objeto.blocos).toContainEqual({ t: 'p', texto: 'Objeto reescrito.' });
+    expect(previa.textos.objeto).toBe('Objeto reescrito.');
+    expect(previa.textos.objeto).not.toContain('Serviços desta proposta');
+    const resp = previa.conteudo.secoes.find((s: any) => s.id === 'responsabilidades');
+    expect(resp.blocos.some((b: any) => b.t === 'tabela')).toBe(true);
+  }, 30_000);
+
+  it('PUT com itens numa proposta gerada: 409 e itens inalterados', async () => {
+    const p = await criar({ itens: [{ servicoId: srvAvulso }] });
+    expect((await gerar(p.id)).status).toBe(200);
+    const antes = (await ler(p.id)).itens;
+    const r = await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { itens: [{ servicoId: srvProjeto }, { servicoId: srvAvulso, descontoPct: 5 }] });
+    expect(r.status).toBe(409);
+    expect((await ler(p.id)).itens).toEqual(antes);
+  }, 30_000);
+
+  it('segundo gerar (409) não muda itens nem valor; a trilha tem uma única linha proposta.gerada', async () => {
+    const p = await criar({ itens: [{ servicoId: srvProjeto }] });
+    expect((await gerar(p.id)).status).toBe(200);
+    const antes = await ler(p.id);
+    // dado que mudaria o cálculo, se a segunda geração passasse
+    await env.DB.prepare('UPDATE proposta_itens SET dias = 1 WHERE proposta_id = ?').bind(p.id).run();
+    expect((await gerar(p.id)).status).toBe(409);
+    const depois = await ler(p.id);
+    expect(depois.itens.map((i: any) => i.valor)).toEqual(antes.itens.map((i: any) => i.valor));
+    expect(depois.total_projeto).toBe(antes.total_projeto);
+    const { n } = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'proposta.gerada' AND details LIKE ?`).bind(`Proposta ${p.id} %`).first<any>());
+    expect(n).toBe(1);
+  }, 30_000);
+
+  it('duas gerações simultâneas: uma só linha proposta.gerada', async () => {
+    const p = await criar({ itens: [{ servicoId: srvAvulso }] });
+    const rs = await Promise.all([gerar(p.id), gerar(p.id)]);
+    expect(rs.map((r) => r.status).sort()).toEqual([200, 409]);
+    const { n } = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'proposta.gerada' AND details LIKE ?`).bind(`Proposta ${p.id} %`).first<any>());
+    expect(n).toBe(1);
+  }, 30_000);
+
+  it('ano, emissão e validade no fuso de Brasília: 31/12 às 22h30 ainda é 2026 (em UTC já é 2027)', async () => {
+    const p = await criar();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-12-31T23:30:00Z'));
+      expect(diaEmBrasilia()).toBe('2026-12-31');
+      vi.setSystemTime(new Date('2027-01-01T01:30:00Z'));
+      expect(diaEmBrasilia()).toBe('2026-12-31');
+      // sessão criada no relógio falso, senão ela já nasceu expirada para ele
+      const r = await gerar(p.id, {}, await sessionFor({ id: 'u-com', email: 'com@ness.lat', role: 'comercial' }));
+      expect(r.status).toBe(200);
+      const g = await r.json<any>();
+      expect(g.numero).toMatch(/^NESS-2026-\d{3}$/);
+      expect(g.valida_ate).toBe('2027-01-30');
+      expect(await env.DB.prepare('SELECT documento_html FROM propostas WHERE id = ?').bind(p.id).first<any>().then((r: any) => r.documento_html)).toContain('31/12/2026');
+    } finally { vi.useRealTimers(); }
   }, 30_000);
 
   it('cada ato fica na trilha; a geração registra número e hash', async () => {

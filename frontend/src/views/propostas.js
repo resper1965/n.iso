@@ -21,7 +21,7 @@ const STATUS = {
 };
 const EDITAVEL = ['rascunho', 'aguardando_aprovacao'];
 const COM_REVISAO = ['gerada', 'enviada', 'visualizada'];
-const AJUDA = 'Texto simples: uma linha em branco separa parágrafos; linha iniciada por "- " vira item de lista; "## " vira subtítulo.';
+const AJUDA = 'Texto simples: uma linha em branco separa parágrafos; linha iniciada por "- " vira item de lista; "## " vira subtítulo. Tabelas, indicadores e a lista de serviços da proposta são automáticos e continuam no documento.';
 
 let ultimo = null;      // { c, h, a }
 let lista = [];

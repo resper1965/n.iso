@@ -12,9 +12,12 @@ const TITULO = 'Montserrat';
 const CORPO = 'Inter';
 const TEXTO = '44506A';
 
+/** Caractere de controle não existe em XML 1.0: o Word recusa o arquivo inteiro. A biblioteca só escapa < > &. */
+const limpo = (t: unknown) => String(t ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+
 /** Linhas por "\n" viram quebras de linha dentro do mesmo parágrafo. */
 function runs(texto: string, o: { bold?: boolean; color?: string; size?: number; font?: string } = {}): TextRun[] {
-  return String(texto ?? '').split('\n').map((l, i) => new TextRun({ text: l, break: i ? 1 : 0, font: o.font ?? CORPO, ...o }));
+  return limpo(texto).split('\n').map((l, i) => new TextRun({ text: l, break: i ? 1 : 0, font: o.font ?? CORPO, ...o }));
 }
 const par = (texto: string, o: Parameters<typeof runs>[1] = {}, extra: { spacing?: number } = {}) =>
   new Paragraph({ children: runs(texto, { color: TEXTO, ...o }), spacing: { after: extra.spacing ?? 120 } });
@@ -75,7 +78,7 @@ export async function renderizarDocx(c: ConteudoDocumento, rodape: string): Prom
 
   const nota = (t: string) => new Paragraph({ alignment: AlignmentType.LEFT, children: runs(t, { size: 16, color: '8A94A6' }) });
   const doc = new Document({
-    creator: c.org.nome, title: `Proposta ${numero} · ${cap.cliente}`,
+    creator: limpo(c.org.nome), title: limpo(`Proposta ${numero} · ${cap.cliente}`),
     styles: { default: { document: { run: { font: CORPO, size: 20 } } } },
     sections: [{
       footers: { default: new Footer({ children: [nota(rodape)] }) },

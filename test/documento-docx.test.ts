@@ -57,6 +57,16 @@ describe('renderizarDocx', () => {
     const { doc } = await xml(conteudo({ sobre: 'Texto reescrito pela consultoria.' }));
     expect(doc).toContain('Texto reescrito pela consultoria.');
   });
+  it('caractere de controle não corrompe o Word', async () => {
+    const bytes = await renderizarDocx(conteudo({ sumario: 'Antes\u000Cdepois\u0001.' }, 'Cli\u000Bente'), RODAPE);
+    const zip = await JSZip.loadAsync(bytes);
+    const ruim = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/;
+    const doc = await zip.file('word/document.xml')!.async('string');
+    expect(doc).toContain('Antesdepois.');
+    expect(doc).toContain('Cliente');
+    expect(doc).not.toMatch(ruim);
+    expect(await zip.file('docProps/core.xml')!.async('string')).not.toMatch(ruim);
+  });
   it('escapa < e & no XML', async () => {
     const { doc } = await xml(conteudo({ observacoes: 'a <b> & c' }, 'A & B <Ltda>'));
     expect(doc).toContain('a &lt;b&gt; &amp; c');

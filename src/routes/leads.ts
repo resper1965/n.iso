@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification, escapeHtml, somenteComercial, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
+import { orgDoUsuario } from '../services/organizacao';
 
 export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -24,8 +25,8 @@ leadsApp.post('/', async (c) => {
        cnpj, razao_social, nome_fantasia, natureza_juridica, porte, capital_social,
        cnae_fiscal, cnae_fiscal_descricao, data_inicio_atividade, situacao_cadastral,
        logradouro, numero, complemento, bairro, municipio, uf, cep,
-       telefone, qsa, cnpj_fetched_at, created_at)
-       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       telefone, qsa, cnpj_fetched_at, org_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       id, body.company_name, body.contact_name || null, body.contact_email || null, body.source || null,
       body.cnpj || null, body.razao_social || null, body.nome_fantasia || null,
@@ -35,7 +36,7 @@ leadsApp.post('/', async (c) => {
       body.logradouro || null, body.numero || null, body.complemento || null,
       body.bairro || null, body.municipio || null, body.uf || null, body.cep || null,
       body.telefone || null, body.qsa ? JSON.stringify(body.qsa) : null,
-      body.cnpj ? new Date().toISOString() : null
+      body.cnpj ? new Date().toISOString() : null, orgDoUsuario(c.get('user'))
     ).run();
 
     await logAudit(c.env.DB, 'lead.created', c.get('user')?.email ?? 'system', `Lead ${id} criado para ${body.company_name}`);
@@ -47,7 +48,7 @@ leadsApp.post('/', async (c) => {
 
 leadsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+    const { results } = await c.env.DB.prepare('SELECT * FROM leads WHERE org_id = ? ORDER BY created_at DESC').bind(orgDoUsuario(c.get('user'))).all();
     return c.json(results);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar leads', e);
@@ -101,9 +102,9 @@ leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
 leadsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ? AND org_id = ?').bind(id, orgDoUsuario(c.get('user'))).first();
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
-    
+
     const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ?').bind(id).all();
     const { results: proposals } = await c.env.DB.prepare('SELECT id, status, total_price, created_at FROM proposals WHERE lead_id = ?').bind(id).all();
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  textoParaBlocos, blocosParaTexto, montarConteudo, renderizarHtml, hashDocumento,
+  textoParaBlocos, blocosParaTexto, montarConteudo, textosEditaveis, renderizarHtml, hashDocumento,
   SECOES_EDITAVEIS, type DadosDocumento, type Bloco,
 } from '../src/services/documento-proposta';
 import { precoPadrao, type ConfigOrg } from '../src/services/organizacao';
@@ -83,8 +83,28 @@ describe('montarConteudo', () => {
     const c = montarConteudo(dados([projeto]), { objeto: 'Escopo reescrito.\n\n- item' });
     const s = c.secoes.find((x) => x.id === 'objeto')!;
     expect(s.editada).toBe(true);
-    expect(s.blocos).toEqual([{ t: 'p', texto: 'Escopo reescrito.' }, { t: 'lista', itens: ['item'] }]);
+    expect(s.blocos.slice(0, 2)).toEqual([{ t: 'p', texto: 'Escopo reescrito.' }, { t: 'lista', itens: ['item'] }]);
+    expect(JSON.stringify(s.blocos)).not.toContain('Plataforma SaaS.');
     expect(c.secoes.find((x) => x.id === 'termos')!.editada).toBe(false);
+  });
+  it('editar Responsabilidades mantém a tabela RACI', () => {
+    const s = montarConteudo(dados([projeto]), { responsabilidades: 'Equipe nossa.' }).secoes.find((x) => x.id === 'responsabilidades')!;
+    expect(s.editada).toBe(true);
+    expect(s.blocos.some((b) => b.t === 'tabela' && b.cab.includes('Consultoria'))).toBe(true);
+    expect(s.blocos).toContainEqual({ t: 'p', texto: 'Equipe nossa.' });
+  });
+  it('Objeto editado continua listando os serviços atuais, inclusive o acrescentado depois da edição', () => {
+    const s = montarConteudo(dados([projeto, avulso]), { objeto: 'Escopo reescrito.' }).secoes.find((x) => x.id === 'objeto')!;
+    expect(s.blocos).toContainEqual({ t: 'lista', itens: ['Implementação ISO 27001 · ISO/IEC 27001', 'Treinamento LGPD'] });
+  });
+  it('textosEditaveis traz só a parte editável (sem lista de serviços nem tabela)', () => {
+    const t = textosEditaveis(dados([projeto]), {});
+    expect(t.objeto).toBe('Plataforma SaaS.');
+    expect(t.sumario).toBe('A empresa quer certificar.');
+    expect(t.responsabilidades ?? '').not.toContain('Ponto focal');
+    expect(t.responsabilidades ?? '').not.toContain('Aprovar escopo');
+    expect(textosEditaveis(dados([projeto]), { objeto: 'Meu.' }).objeto).toBe('Meu.');
+    expect(t).not.toHaveProperty('investimento');
   });
   it('seção de dados não é afetada por editadas', () => {
     const d = dados([projeto]);

@@ -108,6 +108,15 @@ function quando(i: number, n: number): string {
 }
 
 export function montarConteudo(d: DadosDocumento, editadas: Partial<Record<SecaoId, string>>): ConteudoDocumento {
+  return montarTudo(d, editadas).conteudo;
+}
+
+/** Texto atual da parte editável de cada seção editável presente (sem tabelas nem listas geradas), para pré-preencher a edição. */
+export function textosEditaveis(d: DadosDocumento, editadas: Partial<Record<SecaoId, string>>): Partial<Record<SecaoId, string>> {
+  return montarTudo(d, editadas).textos;
+}
+
+function montarTudo(d: DadosDocumento, editadas: Partial<Record<SecaoId, string>>) {
   const o = d.org;
   const deOrg = (t: string) => (t ?? '').split('{org}').join(o.nome);
   const projetos = d.itens.filter((i) => i.servico.tipo === 'projeto');
@@ -192,16 +201,38 @@ export function montarConteudo(d: DadosDocumento, editadas: Partial<Record<Secao
   if (exclusoes.length) inv.push({ t: 'sub', texto: 'O que não está incluído' }, { t: 'lista', itens: exclusoes });
 
   const premissasOrg = textoParaBlocos(deOrg(o.textos.premissas));
-  const jaNaOrg = new Set(premissasOrg.flatMap((b) => (b.t === 'lista' ? b.itens : [])));
-  const premissasServicos = unicos(d.itens.flatMap((i) => i.servico.premissas)).filter((x) => !jaNaOrg.has(x));
   const dg = d.diagnostico;
   const comoTrab = textoParaBlocos(deOrg(o.textos.comoTrabalhamos));
   // o texto padrão da ness. começa repetindo o título da seção
   if (comoTrab[0]?.t === 'sub' && comoTrab[0].texto.toLowerCase() === TITULOS.como_trabalhamos.toLowerCase()) comoTrab.shift();
   const equipe = textoParaBlocos(deOrg(o.textos.equipe));
 
+  // Seção editável: [antes, texto, depois]. A edição troca só o texto; os blocos gerados ao
+  // redor (indicadores, RACI, lista de serviços, premissas dos serviços) vêm sempre dos dados atuais.
+  const ed = (id: SecaoId, gerado: Bloco[]): Bloco[] => (typeof editadas[id] === 'string' ? textoParaBlocos(editadas[id]!) : gerado);
+  const premissasTexto = ed('premissas', premissasOrg);
+  const jaNoTexto = new Set(premissasTexto.flatMap((b) => (b.t === 'lista' ? b.itens : [])));
+  const premissasServicos = unicos(d.itens.flatMap((i) => i.servico.premissas)).filter((x) => !jaNoTexto.has(x));
+  const editaveis: Partial<Record<SecaoId, [Bloco[], Bloco[], Bloco[]]>> = {
+    sumario: [[], ed('sumario', textoParaBlocos(d.textos.contexto)), [kpiBloco]],
+    objeto: [[], ed('objeto', textoParaBlocos(d.textos.escopo)), [
+      { t: 'sub', texto: 'Serviços desta proposta' },
+      { t: 'lista', itens: d.itens.map((i) => (i.servico.norma ? `${i.servico.nome} · ${i.servico.norma}` : i.servico.nome)) },
+    ]],
+    como_trabalhamos: [[], ed('como_trabalhamos', comoTrab), []],
+    responsabilidades: [[
+      { t: 'p', texto: 'R executa, A aprova e responde, C é consultado, I é informado.' },
+      { t: 'tabela', cab: ['Atividade', 'Direção', 'Ponto focal', 'Áreas', 'Consultoria'], linhas: RACI },
+    ], ed('responsabilidades', equipe.length ? [{ t: 'sub', texto: 'Equipe' }, ...equipe] : []), []],
+    sobre: [[], ed('sobre', textoParaBlocos(deOrg(o.textos.sobre))), []],
+    premissas: [[], premissasTexto, premissasServicos.length ? [{ t: 'lista', itens: premissasServicos }] : []],
+    termos: [[], ed('termos', textoParaBlocos(deOrg(o.textos.termos))), []],
+    observacoes: [[], ed('observacoes', textoParaBlocos(d.textos.observacoes)), []],
+  };
+  const junta = (id: SecaoId) => editaveis[id]!.flat();
+
   const candidatas: [SecaoId, boolean, Bloco[]][] = [
-    ['sumario', true, [...textoParaBlocos(d.textos.contexto), kpiBloco]],
+    ['sumario', true, junta('sumario')],
     ['diagnostico', !!dg, dg ? [
       { t: 'p', texto: `O diagnóstico avaliou as práticas em ${dg.maturidade.length} domínios. A barra mostra a maturidade de cada um, de 0% (inexistente) a 100% (implementado, documentado e verificado). O resultado coloca a empresa na faixa ${dg.faixaNome}.` },
       { t: 'barras', itens: dg.maturidade.map((m) => ({ rotulo: m.dominio, pct: m.pct })) },
@@ -210,45 +241,35 @@ export function montarConteudo(d: DadosDocumento, editadas: Partial<Record<Secao
       { t: 'p', texto: 'As lacunas abaixo saem das respostas do diagnóstico. Cada uma está ligada ao requisito que a auditoria vai verificar.' },
       { t: 'tabela', cab: ['Lacuna', 'Requisito', 'Impacto'], linhas: dg.lacunas.map((l) => [`${l.titulo}\n${l.acao}`, l.requisito, l.impacto]) },
     ] : []],
-    ['objeto', true, [
-      ...textoParaBlocos(d.textos.escopo),
-      { t: 'sub', texto: 'Serviços desta proposta' },
-      { t: 'lista', itens: d.itens.map((i) => (i.servico.norma ? `${i.servico.nome} · ${i.servico.norma}` : i.servico.nome)) },
-    ]],
-    ['como_trabalhamos', comProjeto && !desligada('como_trabalhamos'), comoTrab],
+    ['objeto', true, junta('objeto')],
+    ['como_trabalhamos', comProjeto && !desligada('como_trabalhamos'), junta('como_trabalhamos')],
     ['plano', true, plano],
     ['cronograma', comProjeto, [
       { t: 'p', texto: `${semanas(totalSemanas)} a partir da reunião de abertura, com as fases em sequência.` },
       { t: 'gantt', fases, semanas: totalSemanas },
     ]],
-    ['responsabilidades', comProjeto && !desligada('responsabilidades'), [
-      { t: 'p', texto: 'R executa, A aprova e responde, C é consultado, I é informado.' },
-      { t: 'tabela', cab: ['Atividade', 'Direção', 'Ponto focal', 'Áreas', 'Consultoria'], linhas: RACI },
-      ...(equipe.length ? [{ t: 'sub', texto: 'Equipe' } as Bloco, ...equipe] : []),
-    ]],
-    ['sobre', true, textoParaBlocos(deOrg(o.textos.sobre))],
+    ['responsabilidades', comProjeto && !desligada('responsabilidades'), junta('responsabilidades')],
+    ['sobre', true, junta('sobre')],
     ['investimento', true, inv],
-    ['premissas', true, [...premissasOrg, ...(premissasServicos.length ? [{ t: 'lista', itens: premissasServicos } as Bloco] : [])]],
-    ['termos', true, textoParaBlocos(deOrg(o.textos.termos))],
-    ['observacoes', true, textoParaBlocos(d.textos.observacoes)],
+    ['premissas', true, junta('premissas')],
+    ['termos', true, junta('termos')],
+    ['observacoes', true, junta('observacoes')],
     ['aceite', true, [{ t: 'p', texto: `Ao aceitar, ${d.cliente.nome} concorda com o escopo, o cronograma, o investimento e as condições desta proposta ${d.numero}${d.revisao > 1 ? ` rev. ${d.revisao}` : ''}, que passa a valer como contrato de prestação de serviços entre as partes.` }]],
   ];
 
   const secoes: Secao[] = [];
+  const textos: Partial<Record<SecaoId, string>> = {};
   let n = 0;
-  for (const [id, mostrar, gerados] of candidatas) {
-    if (!mostrar) continue;
-    const texto = SECOES_EDITAVEIS.includes(id) ? editadas[id] : undefined;
-    const editada = typeof texto === 'string';
-    // no sumário os indicadores são dados calculados: a edição troca só o texto
-    const blocos = editada ? [...textoParaBlocos(texto), ...(id === 'sumario' ? [kpiBloco] : [])] : gerados;
-    if (!blocos.length) continue;
+  for (const [id, mostrar, blocos] of candidatas) {
+    if (!mostrar || !blocos.length) continue;
     const titulo = TITULOS[id as keyof typeof TITULOS];
-    secoes.push({ id, numero: id === 'aceite' ? null : String(++n).padStart(2, '0'), titulo, blocos, editada });
+    const editavel = editaveis[id];
+    if (editavel) textos[id] = typeof editadas[id] === 'string' ? editadas[id] : blocosParaTexto(editavel[1]);
+    secoes.push({ id, numero: id === 'aceite' ? null : String(++n).padStart(2, '0'), titulo, blocos, editada: !!editavel && typeof editadas[id] === 'string' });
   }
 
   const nomes = d.itens.map((i) => i.servico.nome);
-  return {
+  const conteudo: ConteudoDocumento = {
     org: { nome: o.nome, cor: o.corDestaque, marcaNess: o.id === ORG_NESS, selo: o.seloNiso },
     numero: d.numero, revisao: d.revisao, emitidaEm: d.emitidaEm, validaAte: d.validaAte,
     capa: {
@@ -258,6 +279,7 @@ export function montarConteudo(d: DadosDocumento, editadas: Partial<Record<Secao
     },
     secoes,
   };
+  return { conteudo, textos };
 }
 
 // ── HTML ─────────────────────────────────────────────────────────────────────

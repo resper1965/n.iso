@@ -10,7 +10,7 @@ import type { Servico } from '../schemas';
 import { orgDoUsuario, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
 import { calcularItem, totais, descontoAcimaDoTeto, margem, type Faixa } from '../services/preco-proposta';
 import { diagnosticoDe, type Diagnostico } from '../services/diagnostico';
-import { montarConteudo, renderizarHtml, hashDocumento, blocosParaTexto, SECOES_EDITAVEIS } from '../services/documento-proposta';
+import { montarConteudo, textosEditaveis, renderizarHtml, hashDocumento, type DadosDocumento } from '../services/documento-proposta';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
 
@@ -77,30 +77,39 @@ function calcular(itens: Item[], cfg: ConfigOrg, dg: Diagnostico | null) {
 }
 type Calculo = ReturnType<typeof calcular>;
 
+// Os itens só mudam se a proposta ainda estiver editável, conferido dentro do mesmo batch:
+// uma geração que termine entre a leitura e o batch não deixa itens trocados atrás do documento.
+const AINDA_EDITAVEL = `EXISTS (SELECT 1 FROM propostas WHERE id = ? AND status IN ${EDITAVEIS})`;
 const stmtsItens = (db: D1Database, propostaId: string, itens: Item[], calc: Calculo) => [
-  db.prepare('DELETE FROM proposta_itens WHERE proposta_id = ?').bind(propostaId),
+  db.prepare(`DELETE FROM proposta_itens WHERE proposta_id = ? AND ${AINDA_EDITAVEL}`).bind(propostaId, propostaId),
   ...itens.map((i, k) => db.prepare(
     `INSERT INTO proposta_itens (id, proposta_id, ordem, servico_id, servico, dias, meses, valor_base, desconto_pct, valor, texto_cliente)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${AINDA_EDITAVEL}`
   ).bind(genId(), propostaId, k, i.servicoId, JSON.stringify(i.servico), i.dias ?? null, i.meses ?? null,
-    calc.calcs[k].valorBase, calc.calcs[k].descontoPct, calc.calcs[k].valor, i.textoCliente)),
+    calc.calcs[k].valorBase, calc.calcs[k].descontoPct, calc.calcs[k].valor, i.textoCliente, propostaId)),
 ];
 
 const isoDia = (d: Date) => d.toISOString().slice(0, 10);
+const FUSO_BR = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** Data de hoje (AAAA-MM-DD) no fuso de Brasília: o ano do número, a emissão e a validade saem daqui. */
+export const diaEmBrasilia = (agora = new Date()) => FUSO_BR.format(agora);
+const maisDias = (dia: string, n: number) => isoDia(new Date(Date.parse(`${dia}T00:00:00Z`) + n * 86_400_000));
 const cnpjBr = (s: string | null) => (s && /^\d{14}$/.test(s) ? s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : s ?? null);
 
 async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
   const lead = p.lead_id ? await db.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(p.lead_id).first<any>() : null;
-  const hoje = new Date();
-  const validaAte = isoDia(new Date(hoje.getTime() + p.validade_dias * 86_400_000));
-  const conteudo = montarConteudo({
-    org: cfg, numero, revisao: p.revisao, emitidaEm: isoDia(hoje), validaAte,
+  const hoje = diaEmBrasilia();
+  const validaAte = maisDias(hoje, p.validade_dias);
+  const dados: DadosDocumento = {
+    org: cfg, numero, revisao: p.revisao, emitidaEm: hoje, validaAte,
     cliente: { nome: p.cliente, cnpj: cnpjBr(lead?.cnpj ?? null), pessoas: calc.pessoas },
     textos: { contexto: p.contexto, escopo: p.escopo, observacoes: p.observacoes },
     itens: itens.map((i, k) => ({ servico: i.servico, calc: calc.calcs[k], textoCliente: i.textoCliente })),
     totais: calc.totais, pagamento: p.pagamento, diagnostico: dg,
-  }, JSON.parse(p.secoes_editadas || '{}'));
-  return { conteudo, html: renderizarHtml(conteudo), validaAte };
+  };
+  const editadas = JSON.parse(p.secoes_editadas || '{}');
+  const conteudo = montarConteudo(dados, editadas);
+  return { conteudo, html: renderizarHtml(conteudo), validaAte, textos: textosEditaveis(dados, editadas) };
 }
 
 async function saida(db: D1Database, orgId: string, id: string) {
@@ -210,11 +219,12 @@ propostasApp.put('/:id', async (c) => {
       stmts.push(...stmtsItens(db, id, itens, calc));
     }
     const nomes = Object.keys(cols);
-    // ponytail: a guarda de status vale para a linha da proposta; itens trocados numa corrida com o "gerar"
-    // não mudam o documento congelado. Trancar por versão (updated_at) se aparecer edição concorrente.
+    // A guarda de status vale para a proposta e, no mesmo batch, para os itens (stmtsItens):
+    // gerada entre a leitura e o batch, nada muda e a resposta é 409.
     stmts.unshift(db.prepare(`UPDATE propostas SET ${nomes.map((n) => `${n} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND org_id = ? AND status IN ${EDITAVEIS}`).bind(...Object.values(cols), id, orgId));
-    await db.batch(stmts);
+    const res = await db.batch(stmts);
+    if (!res[0].meta.changes) return c.json(JA_GERADA, 409);
     await logAudit(db, 'proposta.editada', user.email ?? 'system', `Proposta ${id} editada: ${Object.keys(b).join(', ') || 'nenhum campo'}`);
     return c.json(await saida(db, orgId, id));
   } catch (e) { return falha(c, e, 'Erro ao editar a proposta'); }
@@ -229,10 +239,9 @@ propostasApp.get('/:id/previa', async (c) => {
     const cfg = await lerConfigOrg(db, orgId);
     const itens = await itensDe(db, p.id);
     const dg = await diagnosticoDaProposta(db, p.assessment_id);
-    const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, new Date().getFullYear(), cfg.proximoNumero);
-    const { conteudo, html } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
-    // texto atual de cada seção editável presente, para a tela pré-preencher a edição (seção ausente: sem chave)
-    const textos = Object.fromEntries(conteudo.secoes.filter((s) => SECOES_EDITAVEIS.includes(s.id)).map((s) => [s.id, blocosParaTexto(s.blocos)]));
+    const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, Number(diaEmBrasilia().slice(0, 4)), cfg.proximoNumero);
+    const { conteudo, html, textos } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
+    // só a parte editável de cada seção editável presente, para a tela pré-preencher (seção ausente: sem chave)
     return c.json({ conteudo, html, textos });
   } catch (e) { return falha(c, e, 'Erro ao montar a prévia'); }
 });
@@ -261,7 +270,7 @@ propostasApp.post('/:id/gerar', async (c) => {
     if (!cfg.textos.termos.trim()) return c.json({ error: 'A organização não tem termos e condições: configure-os antes de gerar' }, 409);
 
     // Número: a revisão mantém o da original; senão o manual (validado) ou o próximo da sequência.
-    const ano = new Date().getFullYear();
+    const ano = Number(diaEmBrasilia().slice(0, 4));
     let proximo: number | null = null;
     if (p.numero) {
       if (v.data.numero !== undefined && v.data.numero !== p.numero) return c.json({ error: `A revisão mantém o número ${p.numero}` }, 400);
@@ -286,6 +295,9 @@ propostasApp.post('/:id/gerar', async (c) => {
     // Tudo num batch (transação): sem número reservado à toa se algo falhar. Duas gerações
     // simultâneas com o mesmo número esbarram no índice único (org_id, numero, revisao) e uma leva 409.
     // Os passos depois do primeiro só valem se a proposta de fato foi gerada por esta chamada.
+    // Duas gerações simultâneas do mesmo conteúdo chegam ao mesmo hash, então o hash não distingue
+    // quem gerou: a trilha usa changes() logo depois do UPDATE (0 se esta chamada não gerou). Os
+    // demais passos ficam no hash: se ele bate, os valores gravados seriam os mesmos.
     const feito = 'EXISTS (SELECT 1 FROM propostas WHERE id = ? AND documento_hash = ?)';
     const stmts = [
       db.prepare(`UPDATE propostas SET numero = ?, status = 'gerada', total_projeto = ?, mensalidade = ?, memoria = ?, margem = ?,
@@ -293,11 +305,11 @@ propostasApp.post('/:id/gerar', async (c) => {
         WHERE id = ? AND org_id = ? AND status IN ${EDITAVEIS}`)
         .bind(numero, calc.totais.totalProjeto, calc.totais.mensalidade, JSON.stringify(calc.memoria), JSON.stringify(calc.margem),
           JSON.stringify(conteudo), html, hash, validaAte, p.id, orgId),
-      ...itens.map((i, k) => db.prepare('UPDATE proposta_itens SET valor_base = ?, desconto_pct = ?, valor = ? WHERE id = ?')
-        .bind(calc.calcs[k].valorBase, calc.calcs[k].descontoPct, calc.calcs[k].valor, i.id)),
       db.prepare(`INSERT INTO audit_logs (id, action, actor, details, justification, ip_address, project_id, created_at)
-        SELECT ?, 'proposta.gerada', ?, ?, '', '', NULL, datetime('now') WHERE ${feito}`)
-        .bind(genId(), user.email ?? 'system', `Proposta ${p.id} gerada: ${numero} rev. ${p.revisao}, hash ${hash}`, p.id, hash),
+        SELECT ?, 'proposta.gerada', ?, ?, '', '', NULL, datetime('now') WHERE changes() > 0`)
+        .bind(genId(), user.email ?? 'system', `Proposta ${p.id} gerada: ${numero} rev. ${p.revisao}, hash ${hash}`),
+      ...itens.map((i, k) => db.prepare(`UPDATE proposta_itens SET valor_base = ?, desconto_pct = ?, valor = ? WHERE id = ? AND ${feito}`)
+        .bind(calc.calcs[k].valorBase, calc.calcs[k].descontoPct, calc.calcs[k].valor, i.id, p.id, hash)),
     ];
     if (proximo !== null) {
       stmts.push(db.prepare(`UPDATE organizations SET proximo_numero = MAX(proximo_numero, ?) WHERE id = ? AND ${feito}`).bind(proximo, orgId, p.id, hash));
