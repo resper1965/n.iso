@@ -492,7 +492,9 @@ export const configOrgSchema = z.object({
   proximoNumero: z.number().int().min(1).optional(),
   preco: z.object({
     diaria: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
-    porte: z.array(z.object({ maxPessoas: z.number().int().positive().nullable(), fator: z.number().min(0.5).max(5) })).min(1).max(8).optional(),
+    porte: z.array(z.object({ maxPessoas: z.number().int().positive().nullable(), fator: z.number().min(0.5).max(5) })).min(1).max(8)
+      .refine((fs) => fs.every((f, i) => (i === fs.length - 1 ? f.maxPessoas === null : f.maxPessoas !== null && (i === 0 || f.maxPessoas > fs[i - 1].maxPessoas!))),
+        'Porte: o limite de pessoas precisa crescer a cada faixa, e só a última faixa (sem limite) fica em branco').optional(),
     tetoDesconto: z.number().min(0).max(50).optional(),
     custoInterno: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
     overheadPct: z.number().min(0).max(1).optional(),
@@ -518,8 +520,9 @@ const fase = z.object({
   criterioAceite: z.string().trim().max(1000).default(''),
   pct: z.number().positive().max(100),
   semanas: z.number().int().positive().max(104),
-});
-const diasPorFaixa = z.object({ '1': z.number().positive(), '2': z.number().positive(), '3': z.number().positive() });
+}).strict();
+const dias = z.number().positive().max(2000);
+const diasPorFaixa = z.object({ '1': dias, '2': dias, '3': dias }).strict();
 const servicoBase = {
   nome: z.string().trim().min(1).max(160),
   norma: z.string().trim().max(80).default(''),
@@ -530,18 +533,18 @@ const servicoBase = {
 export const servicoSchema = z.discriminatedUnion('tipo', [
   z.object({ ...servicoBase, tipo: z.literal('projeto'), diasPorFaixa,
     fases: z.array(fase).min(1).max(15)
-      .refine((fs) => Math.abs(fs.reduce((s, f) => s + f.pct, 0) - 100) < 0.01, 'A soma do % das fases precisa ser 100') }),
+      .refine((fs) => Math.abs(fs.reduce((s, f) => s + f.pct, 0) - 100) < 0.01, 'A soma do % das fases precisa ser 100') }).strict(),
   // O zod recusa dois membros com o mesmo literal 'avulso' na união discriminada
   // (e z.union não expõe o discriminador), então o avulso é uma união discriminada
   // aninhada por formaPreco.
   z.discriminatedUnion('formaPreco', [
-    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('fixo'), valorFixo: z.number().positive(),
-      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }),
+    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('fixo'), valorFixo: z.number().positive().max(10_000_000),
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }).strict(),
     z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('esforco'), diasPorFaixa,
-      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }),
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }).strict(),
   ]),
-  z.object({ ...servicoBase, tipo: z.literal('recorrente'), mensalidade: z.number().positive(),
-    prazoMinimoMeses: z.number().int().min(1).max(60), inclusoMes: listaCurta.min(1) }),
+  z.object({ ...servicoBase, tipo: z.literal('recorrente'), mensalidade: z.number().positive().max(10_000_000),
+    prazoMinimoMeses: z.number().int().min(1).max(60), inclusoMes: listaCurta.min(1) }).strict(),
 ]);
 /** O que o cliente da API envia. */
 export type ServicoEntrada = z.input<typeof servicoSchema>;

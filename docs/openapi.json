@@ -10089,22 +10089,26 @@
                         "properties": {
                           "1": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           },
                           "2": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           },
                           "3": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           }
                         },
                         "required": [
                           "1",
                           "2",
                           "3"
-                        ]
+                        ],
+                        "additionalProperties": false
                       },
                       "fases": {
                         "minItems": 1,
@@ -10153,7 +10157,8 @@
                             "nome",
                             "pct",
                             "semanas"
-                          ]
+                          ],
+                          "additionalProperties": false
                         }
                       }
                     },
@@ -10162,7 +10167,8 @@
                       "tipo",
                       "diasPorFaixa",
                       "fases"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   {
                     "oneOf": [
@@ -10214,7 +10220,8 @@
                           },
                           "valorFixo": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000000
                           },
                           "entregaveis": {
                             "minItems": 1,
@@ -10239,7 +10246,8 @@
                           "valorFixo",
                           "entregaveis",
                           "criterioAceite"
-                        ]
+                        ],
+                        "additionalProperties": false
                       },
                       {
                         "type": "object",
@@ -10292,22 +10300,26 @@
                             "properties": {
                               "1": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               },
                               "2": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               },
                               "3": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               }
                             },
                             "required": [
                               "1",
                               "2",
                               "3"
-                            ]
+                            ],
+                            "additionalProperties": false
                           },
                           "entregaveis": {
                             "minItems": 1,
@@ -10332,7 +10344,8 @@
                           "diasPorFaixa",
                           "entregaveis",
                           "criterioAceite"
-                        ]
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -10380,7 +10393,8 @@
                       },
                       "mensalidade": {
                         "type": "number",
-                        "exclusiveMinimum": 0
+                        "exclusiveMinimum": 0,
+                        "maximum": 10000000
                       },
                       "prazoMinimoMeses": {
                         "type": "integer",
@@ -10404,7 +10418,8 @@
                       "mensalidade",
                       "prazoMinimoMeses",
                       "inclusoMes"
-                    ]
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -10546,22 +10561,26 @@
                         "properties": {
                           "1": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           },
                           "2": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           },
                           "3": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 2000
                           }
                         },
                         "required": [
                           "1",
                           "2",
                           "3"
-                        ]
+                        ],
+                        "additionalProperties": false
                       },
                       "fases": {
                         "minItems": 1,
@@ -10610,7 +10629,8 @@
                             "nome",
                             "pct",
                             "semanas"
-                          ]
+                          ],
+                          "additionalProperties": false
                         }
                       }
                     },
@@ -10619,7 +10639,8 @@
                       "tipo",
                       "diasPorFaixa",
                       "fases"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   {
                     "oneOf": [
@@ -10671,7 +10692,8 @@
                           },
                           "valorFixo": {
                             "type": "number",
-                            "exclusiveMinimum": 0
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000000
                           },
                           "entregaveis": {
                             "minItems": 1,
@@ -10696,7 +10718,8 @@
                           "valorFixo",
                           "entregaveis",
                           "criterioAceite"
-                        ]
+                        ],
+                        "additionalProperties": false
                       },
                       {
                         "type": "object",
@@ -10749,22 +10772,26 @@
                             "properties": {
                               "1": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               },
                               "2": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               },
                               "3": {
                                 "type": "number",
-                                "exclusiveMinimum": 0
+                                "exclusiveMinimum": 0,
+                                "maximum": 2000
                               }
                             },
                             "required": [
                               "1",
                               "2",
                               "3"
-                            ]
+                            ],
+                            "additionalProperties": false
                           },
                           "entregaveis": {
                             "minItems": 1,
@@ -10789,7 +10816,8 @@
                           "diasPorFaixa",
                           "entregaveis",
                           "criterioAceite"
-                        ]
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -10837,7 +10865,8 @@
                       },
                       "mensalidade": {
                         "type": "number",
-                        "exclusiveMinimum": 0
+                        "exclusiveMinimum": 0,
+                        "maximum": 10000000
                       },
                       "prazoMinimoMeses": {
                         "type": "integer",
@@ -10861,7 +10890,8 @@
                       "mensalidade",
                       "prazoMinimoMeses",
                       "inclusoMes"
-                    ]
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }

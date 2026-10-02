@@ -40,14 +40,18 @@ export function deLinha(r: any): Servico {
   return (r.forma_preco === 'fixo' ? { ...avulso, valorFixo: r.valor_fixo } : { ...avulso, diasPorFaixa: lista(r.dias_por_faixa) }) as Servico;
 }
 
-async function inserir(db: D1Database, orgId: string, s: Entrada, ativo: boolean): Promise<string> {
+function stmtInserir(db: D1Database, orgId: string, s: Entrada, ativo: boolean): { id: string; stmt: D1PreparedStatement } {
   const id = genId();
   const cols = { id, org_id: orgId, ...paraColunas(s), ativo: ativo ? 1 : 0 };
   const nomes = Object.keys(cols);
-  await db.prepare(`INSERT INTO servicos (${nomes.join(', ')}) VALUES (${nomes.map(() => '?').join(', ')})`)
-    .bind(...Object.values(cols)).run();
-  return id;
+  const stmt = db.prepare(`INSERT INTO servicos (${nomes.join(', ')}) VALUES (${nomes.map(() => '?').join(', ')})`).bind(...Object.values(cols));
+  return { id, stmt };
 }
+const inserir = async (db: D1Database, orgId: string, s: Entrada, ativo: boolean): Promise<string> => {
+  const { id, stmt } = stmtInserir(db, orgId, s, ativo);
+  await stmt.run();
+  return id;
+};
 
 const achar = (db: D1Database, orgId: string, id: string) =>
   db.prepare('SELECT * FROM servicos WHERE id = ? AND org_id = ?').bind(id, orgId).first<any>();
@@ -74,10 +78,9 @@ servicosApp.post('/semear-padrao', async (c) => {
     const orgId = orgDoUsuario(user);
     const ja = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM servicos WHERE org_id = ?').bind(orgId).first<{ n: number }>();
     if (ja && ja.n > 0) return c.json({ error: 'A organização já tem serviços no catálogo' }, 409);
-    // ponytail: checar e inserir não é atômico; duas semeaduras simultâneas duplicariam. Só platform_admin chega aqui.
-    for (const s of catalogoInicialNess()) {
-      await inserir(c.env.DB, orgId, servicoSchema.parse(s), s.ativo !== false);
-    }
+    // Os INSERTs vão num batch (tudo ou nada). ponytail: o COUNT acima e o batch não são atômicos entre si;
+    // duas semeaduras simultâneas duplicariam. Só platform_admin chega aqui; fechar com INSERT ... WHERE NOT EXISTS se virar problema.
+    await c.env.DB.batch(catalogoInicialNess().map(({ ativo, ...s }) => stmtInserir(c.env.DB, orgId, servicoSchema.parse(s), ativo !== false).stmt));
     await logAudit(c.env.DB, 'servico.semeado', user.email ?? 'system', `Catálogo inicial semeado na organização ${orgId}`);
     const { results } = await c.env.DB.prepare('SELECT * FROM servicos WHERE org_id = ? ORDER BY created_at, nome').bind(orgId).all<any>();
     return c.json(results.map(deLinha), 201);

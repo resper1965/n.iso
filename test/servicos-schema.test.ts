@@ -32,4 +32,12 @@ describe('servicoSchema', () => {
   it('recusa tipo desconhecido', () => {
     expect(servicoSchema.safeParse({ nome: 'x', tipo: 'pacote' }).success).toBe(false);
   });
+  it('recusa campo estranho (projeto com valorFixo) e valor sem teto (mensalidade 1e9)', () => {
+    expect(servicoSchema.safeParse({ nome: 'x', tipo: 'projeto', diasPorFaixa: dias, fases: [fase('A', 100)], valorFixo: 5 }).success).toBe(false);
+    expect(servicoSchema.safeParse({ nome: 'x', tipo: 'recorrente', mensalidade: 1e9, prazoMinimoMeses: 12, inclusoMes: ['a'] }).success).toBe(false);
+    const comum = { nome: 'x', tipo: 'avulso', entregaveis: ['e'], criterioAceite: 'ok' };
+    expect(servicoSchema.safeParse({ ...comum, formaPreco: 'fixo', valorFixo: 1e9 }).success).toBe(false);
+    expect(servicoSchema.safeParse({ ...comum, formaPreco: 'fixo', valorFixo: 500, ativo: true }).success).toBe(false);
+    expect(servicoSchema.safeParse({ ...comum, formaPreco: 'esforco', diasPorFaixa: { ...dias, '3': 5000 } }).success).toBe(false);
+  });
 });

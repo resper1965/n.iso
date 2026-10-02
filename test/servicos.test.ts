@@ -40,7 +40,7 @@ describe('catálogo de serviços', () => {
   });
 
   it('o catálogo inicial passa no servicoSchema', () => {
-    expect(catalogoInicialNess().every((s) => servicoSchema.safeParse(s).success)).toBe(true);
+    expect(catalogoInicialNess().every(({ ativo, ...s }) => servicoSchema.safeParse(s).success)).toBe(true);
   });
 
   it('comercial cria, lista e lê o serviço igual ao enviado', async () => {
@@ -59,8 +59,10 @@ describe('catálogo de serviços', () => {
       expect((await chamar('GET', '/api/v1/servicos', h)).status).toBe(403);
       expect((await chamar('POST', '/api/v1/servicos', h, avulso)).status).toBe(403);
     }
-    expect((await comoAgente('GET', '/api/v1/servicos')).status).toBe(403);
-    expect((await comoAgente('POST', '/api/v1/servicos', avulso)).status).toBe(403);
+    for (const r of [await comoAgente('GET', '/api/v1/servicos'), await comoAgente('POST', '/api/v1/servicos', avulso)]) {
+      expect(r.status).toBe(403);
+      expect((await r.json<any>()).error).toMatch(/fora do alcance do agente/);
+    }
   }, 30_000);
 
   it('corpo inválido (fases somando 90) → 400 com details', async () => {
@@ -120,6 +122,19 @@ describe('catálogo de serviços', () => {
       expect(semeados.find((s) => s.nome === 'Manutenção do SGSI').ativo).toBe(false);
       expect((await chamar('POST', '/api/v1/servicos/semear-padrao', adm)).status).toBe(409);
       expect((await chamar('GET', '/api/v1/servicos', comercial).then((x) => x.json<any[]>()))).toHaveLength(3);
+    }, 30_000);
+
+    it('falha no meio da semeadura: 500 e nenhum serviço gravado; sem o gatilho, semeia', async () => {
+      await env.DB.prepare('DELETE FROM servicos').run();
+      const segundo = catalogoInicialNess()[1].nome;
+      await env.DB.prepare(`CREATE TRIGGER falha_semeadura BEFORE INSERT ON servicos WHEN NEW.nome = '${segundo.replace(/'/g, "''")}' BEGIN SELECT RAISE(ABORT, 'semeadura falhou'); END`).run();
+      try {
+        expect((await chamar('POST', '/api/v1/servicos/semear-padrao', adm)).status).toBe(500);
+        expect((await env.DB.prepare('SELECT count(*) AS n FROM servicos').first<{ n: number }>())!.n).toBe(0);
+      } finally {
+        await env.DB.prepare('DROP TRIGGER falha_semeadura').run();
+      }
+      expect((await chamar('POST', '/api/v1/servicos/semear-padrao', adm)).status).toBe(201);
     }, 30_000);
 
     it('a implementação semeada tem 7 fases somando 100 e dias 45/90/160', async () => {
