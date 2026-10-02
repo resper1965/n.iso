@@ -219,4 +219,11 @@ describe('schema contract (real D1)', () => {
     const ness = await env.DB.prepare(`SELECT name, prefixo_proposta, proximo_numero FROM organizations WHERE id = 'org_ness'`).first<any>();
     expect(ness).toEqual({ name: 'ness.', prefixo_proposta: 'NESS', proximo_numero: 1 });
   });
+  it('servicos existe e o CHECK recusa tipo desconhecido', async () => {
+    const t = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='servicos'").first();
+    expect(t).toBeTruthy();
+    await expect(
+      env.DB.prepare(`INSERT INTO servicos (id, org_id, nome, tipo) VALUES ('s1', 'org_ness', 'x', 'pacote')`).run()
+    ).rejects.toThrow();
+  });
 });
