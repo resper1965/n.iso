@@ -1,7 +1,8 @@
 // Propostas (fatia 3 do sistema de propostas). Rotas: /api/v1/propostas. Os corpos enviados são
 // os de propostaCriarSchema / propostaEditarSchema / propostaGerarSchema (src/schemas/domain.ts),
 // todos .strict(): chave a mais é 400. Preço, memória e margem vêm do servidor; a tela só mostra.
-// O fluxo antigo (proposals, commercial.js) continua em outras telas até a fatia 4.
+// Fatia 4: na ficha da proposta gerada, envio por e-mail, link para copiar, revogação e aceite
+// manual (propostaEnviarSchema / propostaAceiteManualSchema), e o que o cliente respondeu.
 import { S } from '../state.js';
 import { api, API_BASE } from '../api.js';
 import { escapeHTML } from '../ui.js';
@@ -21,6 +22,8 @@ const STATUS = {
 };
 const EDITAVEL = ['rascunho', 'aguardando_aprovacao'];
 const COM_REVISAO = ['gerada', 'enviada', 'visualizada'];
+const ENVIAVEL = COM_REVISAO;                 // envio, link e aceite manual: as mesmas da revisão
+const COM_LINK = ['enviada', 'visualizada'];   // só aí existe link para revogar
 const AJUDA = 'Texto simples: uma linha em branco separa parágrafos; linha iniciada por "- " vira item de lista; "## " vira subtítulo. Tabelas, indicadores e a lista de serviços da proposta são automáticos e continuam no documento.';
 
 let ultimo = null;      // { c, h, a }
@@ -77,6 +80,7 @@ function desenharLista() {
             : `<span class="prp-vazio">sem número</span>${p.revisao > 1 ? ` <span class="prp-rev">rev. ${escapeHTML(p.revisao)}</span>` : ''}`;
         const acoes = [
             `<button type="button" class="btn btn-secondary" data-action="__prpAbrir" data-args='${args(p.id)}'>Abrir</button>`,
+            ENVIAVEL.includes(p.status) ? `<button type="button" class="btn btn-secondary" data-action="__prpEnviar" data-args='${args(p.id)}'>Enviar ao cliente</button>` : '',
             COM_REVISAO.includes(p.status) ? `<button type="button" class="btn btn-secondary" data-action="__prpRevisao" data-args='${args(p.id)}'>Nova revisão</button>` : '',
             EDITAVEL.includes(p.status) ? '' : `<button type="button" class="btn btn-secondary" data-action="__prpDocumento" data-args='${args(p.id)}'>Ver documento</button>`,
         ].join('');
@@ -117,7 +121,11 @@ async function carregarLista() {
 async function renderPropostas(c, h, a) {
     ultimo = { c, h, a };
     prop = null;
-    await carregarLista();
+    // vindo de uma notificação (link /propostas/:id): abre a ficha dela
+    const alvo = S.propostaAbrir;
+    S.propostaAbrir = null;
+    if (alvo) await window.__prpAbrir(alvo);
+    else await carregarLista();
 }
 
 // ——— assistente ———
@@ -512,6 +520,7 @@ async function abrirDocumento(p) {
                     <button type="button" class="btn btn-primary" data-action="__prpImprimir">Imprimir / PDF</button>
                 </div>
             </div>
+            ${fichaEnvio(p)}
             <p class="prp-dica">O que vale para o aceite é este documento, congelado na geração. O Word é cópia de trabalho.</p>
             <iframe id="prp-documento" class="prp-frame prp-frame-doc" title="Documento da proposta" sandbox="allow-same-origin allow-modals"></iframe>
         </div>`;
@@ -520,6 +529,188 @@ async function abrirDocumento(p) {
         $('prp-documento').srcdoc = await r.text();
     } catch (e) { window.showToast(e.message || 'Erro ao ler o documento', 'error'); }
 }
+
+// ——— envio, link e resposta do cliente (fatia 4) ———
+const FUSO = 'America/Sao_Paulo';
+/** Instante do banco (CURRENT_TIMESTAMP em UTC, sem fuso, ou ISO) em DD/MM/AAAA HH:MM de Brasília. */
+function quando(s) {
+    if (!s) return '';
+    const t = String(s);
+    const d = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(t) ? t.replace(' ', 'T') + 'Z' : t);
+    return isNaN(d) ? t : new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d).replace(',', '');
+}
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function fichaEnvio(p) {
+    const dado = (rotulo, valor) => (valor ? `<dt>${rotulo}</dt><dd>${valor}</dd>` : '');
+    const acoes = ENVIAVEL.includes(p.status) ? `<div class="prp-acoes prp-envio-acoes">
+            <button type="button" class="btn btn-primary" data-action="__prpEnviar" data-args='${args(p.id)}'>Enviar ao cliente</button>
+            <button type="button" class="btn btn-secondary" data-action="__prpCopiarLink" aria-describedby="prp-link-dica">Copiar link</button>
+            ${COM_LINK.includes(p.status) ? '<button type="button" class="btn btn-secondary" data-action="__prpRevogarLink">Revogar link</button>' : ''}
+            <button type="button" class="btn btn-secondary" data-action="__prpAceiteManual">Marcar como aceita (papel)</button>
+        </div>
+        <p class="prp-dica" id="prp-link-dica">Enviar ou copiar gera um link novo: o anterior deixa de valer. O cliente abre sem conta, pelo link.</p>
+        <div id="prp-link" aria-live="polite"></div>` : '';
+    const envio = dado('Enviada', p.enviada_em ? `${escapeHTML(quando(p.enviada_em))}${p.enviada_para ? ` para ${escapeHTML(p.enviada_para)}` : ''}` : '')
+        + dado('Visualizada', escapeHTML(quando(p.visualizada_em)));
+    const ajuste = p.ajuste_mensagem ? `<div class="prp-ajuste" role="note">
+            <h3 class="prp-sub">Pedido de ajuste do cliente</h3>
+            <p class="prp-resposta-texto">${escapeHTML(p.ajuste_mensagem)}</p>
+            <p class="prp-dica">Para atender, crie uma nova revisão: ao ser gerada, ela substitui esta e precisa de um envio novo.</p>
+        </div>` : '';
+    const recusa = p.status === 'recusada' ? `<div class="prp-recusa" role="note">
+            <h3 class="prp-sub">Recusada pelo cliente</h3>
+            <p class="prp-resposta-texto">${p.recusa_motivo ? `Motivo: ${escapeHTML(p.recusa_motivo)}` : 'Sem motivo informado.'}</p>
+        </div>` : '';
+    const aceite = p.status === 'aceita' ? `<div class="prp-fechamento">
+            <h3 class="prp-sub">Aceita</h3>
+            <dl class="prp-ficha-dados">
+                ${dado('Aceite', `${escapeHTML(quando(p.aceite_em))} por ${escapeHTML(p.aceite_nome)}${p.aceite_cargo ? `, ${escapeHTML(p.aceite_cargo)}` : ''}${p.aceite_email ? ` (${escapeHTML(p.aceite_email)})` : ''}`)}
+                ${dado('Origem', p.aceite_origem === 'manual' ? 'registro manual do comercial' : 'link, pelo cliente')}
+                ${dado('Comprovante', escapeHTML(p.aceite_comprovante))}
+                ${dado('Contrato', `<span class="prp-id">${escapeHTML(p.contrato_id)}</span>`)}
+                <dt>Projeto</dt><dd>${p.projeto_id
+                    ? `<span class="prp-id">${escapeHTML(p.projeto_id)}</span> <button type="button" class="btn btn-secondary" data-action="__prpAbrirProjeto" data-args='${args(p.projeto_id)}'>Abrir o projeto</button>`
+                    : '<span class="prp-vazio">sem projeto: a proposta só tem serviços recorrentes</span>'}</dd>
+            </dl>
+        </div>` : '';
+    if (!acoes && !envio && !ajuste && !recusa && !aceite) return '';
+    return `<section class="prp-envio" aria-label="Envio e resposta do cliente">
+            ${acoes}
+            ${envio ? `<dl class="prp-ficha-dados">${envio}</dl>` : ''}
+            ${ajuste}${recusa}${aceite}
+        </section>`;
+}
+
+/** Relê a proposta e redesenha a ficha. */
+async function recarregarFicha(id = docAberto.id) {
+    await abrirDocumento(await api('GET', `/api/v1/propostas/${encodeURIComponent(id)}`));
+}
+
+function campoModal(id, rotulo, o = {}) {
+    const f = `prp-${id}`;
+    const ent = o.area
+        ? `<textarea class="form-input" id="${f}" rows="${o.linhas || 3}" maxlength="${o.max}" aria-describedby="${f}-erro"${o.placeholder ? ` placeholder="${escapeHTML(o.placeholder)}"` : ''}>${escapeHTML(o.valor || '')}</textarea>`
+        : `<input class="form-input" id="${f}" type="${o.tipo || 'text'}" maxlength="${o.max}" value="${escapeHTML(o.valor || '')}" aria-describedby="${f}-erro">`;
+    return `<div class="form-group"><label class="form-label" for="${f}">${escapeHTML(rotulo)}</label>${ent}<p class="prp-erro" id="${f}-erro" role="alert"></p></div>`;
+}
+
+/** Marca (ou limpa) o erro de cada campo; devolve true se nenhum falhou e foca o primeiro que falhou. */
+function conferir(regras) {
+    let primeiro = null;
+    for (const [id, msg] of regras) {
+        $(`${id}-erro`).textContent = msg || '';
+        if (msg) { $(id).setAttribute('aria-invalid', 'true'); primeiro ??= id; } else $(id).removeAttribute('aria-invalid');
+    }
+    if (primeiro) $(primeiro).focus();
+    return !primeiro;
+}
+const tamanho = (v, min, max, rotulo) => (v.length < min || v.length > max ? `${rotulo}: de ${min} a ${max} caracteres.` : '');
+
+/** Envio do modal: botão travado durante a chamada, erro do servidor no slot do modal. */
+async function enviarModal(botaoId, erroId, fn) {
+    const b = $(botaoId);
+    if (b.disabled) return;
+    b.disabled = true;
+    $(erroId).textContent = '';
+    try { await fn(); } catch (e) { $(erroId).textContent = e.message || 'Erro ao enviar'; } finally { if ($(botaoId)) $(botaoId).disabled = false; }
+}
+
+window.__prpEnviar = async (id) => {
+    try {
+        const p = docAberto?.id === id ? docAberto : await api('GET', `/api/v1/propostas/${encodeURIComponent(id)}`);
+        docAberto = p;
+        window.openModal(`
+            <form id="prp-env-form" class="prp-modal" data-action-submit="__prpEnviarConfirmar" data-prevent novalidate>
+                <h3 class="prp-modal-titulo">Enviar ao cliente</h3>
+                <p class="prp-nota">A proposta ${escapeHTML(p.numero)} rev. ${escapeHTML(p.revisao)} sai por e-mail com um link pessoal. Quando o cliente responder ao e-mail, a resposta chega a você.</p>
+                ${campoModal('env-email', 'E-mail do cliente', { tipo: 'email', max: 200, valor: p.enviada_para })}
+                ${campoModal('env-mensagem', 'Mensagem (opcional)', { area: true, max: 2000, linhas: 4 })}
+                <p class="prp-erro" id="prp-env-erro" role="alert"></p>
+                <div class="prp-modal-rodape">
+                    <button type="button" class="btn btn-secondary" data-action="forceCloseModal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="prp-env-enviar">Enviar</button>
+                </div>
+            </form>`);
+        $('prp-env-email').focus();
+    } catch (e) { window.showToast(e.message || 'Erro ao abrir a proposta', 'error'); }
+};
+
+window.__prpEnviarConfirmar = () => {
+    const email = val('prp-env-email').trim();
+    const mensagem = val('prp-env-mensagem').trim();
+    if (!conferir([['prp-env-email', EMAIL.test(email) ? '' : 'Informe um e-mail válido.']])) return;
+    const naFicha = !!$('prp-documento');
+    return enviarModal('prp-env-enviar', 'prp-env-erro', async () => {
+        const p = await api('POST', `/api/v1/propostas/${encodeURIComponent(docAberto.id)}/enviar`, mensagem ? { email, mensagem } : { email });
+        window.forceCloseModal();
+        window.showToast(`Proposta enviada para ${email}`);
+        if (naFicha) await abrirDocumento(p); else await carregarLista();
+    });
+};
+
+// O token só existe nesta resposta (o banco guarda o hash): a URL aparece agora e some no próximo desenho.
+window.__prpCopiarLink = async () => {
+    let url;
+    try {
+        ({ url } = await api('POST', `/api/v1/propostas/${encodeURIComponent(docAberto.id)}/link`));
+    } catch (e) { window.showToast(e.message || 'Erro ao gerar o link', 'error'); return; }
+    let copiado = false;
+    try { await navigator.clipboard.writeText(url); copiado = true; } catch { /* sem permissão: fica o campo para copiar à mão */ }
+    // o status pode ter ido de gerada a enviada: redesenha a ficha e só então mostra a URL
+    await recarregarFicha().catch(() => {});
+    const slot = $('prp-link');
+    if (!slot) return;
+    slot.innerHTML = `<div class="prp-link-novo">
+            <p class="prp-nota">${copiado ? 'Link copiado.' : 'Não foi possível copiar sozinho: copie o link abaixo.'} O link anterior deixou de valer. Este endereço não aparece de novo; se precisar, gere outro.</p>
+            <label class="prp-sr" for="prp-link-url">Link da proposta</label>
+            <input class="form-input prp-link-url" id="prp-link-url" type="text" readonly value="${escapeHTML(url)}">
+        </div>`;
+};
+
+window.__prpRevogarLink = async () => {
+    try {
+        await api('POST', `/api/v1/propostas/${encodeURIComponent(docAberto.id)}/revogar-link`);
+        window.showToast('Link revogado: o cliente não abre mais a proposta pelo link enviado');
+        await recarregarFicha();
+    } catch (e) { window.showToast(e.message || 'Erro ao revogar o link', 'error'); }
+};
+
+window.__prpAceiteManual = () => {
+    window.openModal(`
+        <form id="prp-ac-form" class="prp-modal" data-action-submit="__prpAceiteConfirmar" data-prevent novalidate>
+            <h3 class="prp-modal-titulo">Marcar como aceita (papel)</h3>
+            <p class="prp-nota">Para o aceite que chegou fora do link, como contrato assinado ou e-mail do cliente. Registrar fecha a venda: cria o contrato e, se houver serviço de projeto, o projeto.</p>
+            ${campoModal('ac-nome', 'Nome de quem aceitou', { max: 120 })}
+            ${campoModal('ac-cargo', 'Cargo', { max: 120 })}
+            ${campoModal('ac-email', 'E-mail', { tipo: 'email', max: 200 })}
+            ${campoModal('ac-comprovante', 'Comprovante', { area: true, max: 1000, linhas: 3, placeholder: 'ex.: contrato assinado em 02/10, arquivo contrato-cliente.pdf' })}
+            <p class="prp-erro" id="prp-ac-erro" role="alert"></p>
+            <div class="prp-modal-rodape">
+                <button type="button" class="btn btn-secondary" data-action="forceCloseModal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="prp-ac-enviar">Registrar o aceite</button>
+            </div>
+        </form>`);
+    $('prp-ac-nome').focus();
+};
+
+window.__prpAceiteConfirmar = () => {
+    const [nome, cargo, email, comprovante] = ['nome', 'cargo', 'email', 'comprovante'].map((c) => val(`prp-ac-${c}`).trim());
+    if (!conferir([
+        ['prp-ac-nome', tamanho(nome, 2, 120, 'Nome')],
+        ['prp-ac-cargo', tamanho(cargo, 2, 120, 'Cargo')],
+        ['prp-ac-email', EMAIL.test(email) ? '' : 'Informe um e-mail válido.'],
+        ['prp-ac-comprovante', tamanho(comprovante, 3, 1000, 'Comprovante')],
+    ])) return;
+    return enviarModal('prp-ac-enviar', 'prp-ac-erro', async () => {
+        await api('POST', `/api/v1/propostas/${encodeURIComponent(docAberto.id)}/aceite-manual`, { nome, cargo, email, comprovante });
+        window.forceCloseModal();
+        window.showToast('Aceite registrado: contrato criado');
+        await recarregarFicha();
+    });
+};
+
+window.__prpAbrirProjeto = (id) => window.navigate('project-detail', { currentProject: { id } });
 
 window.__prpDocumento = async (id) => {
     try { await abrirDocumento(await api('GET', `/api/v1/propostas/${encodeURIComponent(id)}`)); } catch (e) { window.showToast(e.message || 'Erro ao abrir o documento', 'error'); }
