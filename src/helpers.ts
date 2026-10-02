@@ -175,6 +175,21 @@ export async function consultorDesignado(db: D1Database, email: string, projectI
 }
 
 /**
+ * Quem cria um projeto (`POST /projects`, `POST /assessments/:id/convert`) sendo consultor fica
+ * designado nele, senão perde acesso ao que acabou de criar. Devolve o INSERT para entrar no MESMO
+ * `db.batch` da criação do projeto (falhou a designação, o projeto não nasce órfão), ou `null` para
+ * os demais papéis: `platform_admin` já vê tudo e não polui a governança. Uma linha só.
+ */
+export function designacaoDoCriador(db: D1Database, user: { role?: string; email?: string; name?: string } | null | undefined, projectId: string): D1PreparedStatement | null {
+  if (!user?.email || !ehConsultor(user)) return null;
+  return db.prepare(
+    `INSERT INTO project_governance (project_id, name, email, role_category, job_title)
+     SELECT ?, ?, ?, 'consultor', 'Consultor'
+      WHERE NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`
+  ).bind(projectId, user.name || user.email, user.email, projectId, user.email);
+}
+
+/**
  * Cache por requisição: o objeto `user` nasce a cada requisição (JSON.parse da sessão, ou montado
  * para chave/agente), então a chave fraca morre com ela. Evita repetir a consulta quando o
  * middleware e o handler checam o mesmo projeto.

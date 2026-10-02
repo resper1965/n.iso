@@ -146,6 +146,40 @@ describe('quem cria o projeto sendo consultor fica designado nele (D5)', () => {
     expect(total!.n).toBe(0);
   });
 
+  describe('converter assessment em projeto segue a mesma regra', () => {
+    const converter = async (h: Record<string, string>, assessment: string) => {
+      await env.DB.prepare(`INSERT INTO assessments (id, client_name) VALUES (?, 'Convertido')`).bind(assessment).run();
+      const r = await chamar('POST', `/api/v1/assessments/${assessment}/convert`, h);
+      return { status: r.status, id: (await r.json<any>()).project_id as string };
+    };
+
+    it('consultor que converte fica designado numa única linha e alcança o projeto novo', async () => {
+      const { status, id } = await converter(cons, 'as-cons');
+      expect(status).toBe(201);
+      expect(await linhas(id)).toEqual([{ name: 'Criador', email: 'Criador@Ness.lat', role_category: 'consultor', job_title: 'Consultor' }]);
+      expect((await chamar('GET', `/api/v1/projects/${id}/risks`, cons)).status).toBe(200);
+    });
+
+    it('platform_admin que converte não ganha linha', async () => {
+      const { status, id } = await converter(admin, 'as-admin');
+      expect(status).toBe(201);
+      expect(await linhas(id)).toEqual([]);
+    });
+
+    it('se a designação falha, nem projeto nem conversão ficam gravados', async () => {
+      await env.DB.prepare(`CREATE TRIGGER falha_designacao_conv BEFORE INSERT ON project_governance BEGIN SELECT RAISE(ABORT, 'designacao falhou'); END`).run();
+      try {
+        const antes = await env.DB.prepare(`SELECT count(*) AS n FROM projects`).first<{ n: number }>();
+        const { status } = await converter(cons, 'as-orfao');
+        expect(status).toBe(500);
+        expect((await env.DB.prepare(`SELECT count(*) AS n FROM projects`).first<{ n: number }>())!.n).toBe(antes!.n);
+        expect((await env.DB.prepare(`SELECT converted_project_id FROM assessments WHERE id = 'as-orfao'`).first<any>()).converted_project_id).toBeNull();
+      } finally {
+        await env.DB.prepare(`DROP TRIGGER falha_designacao_conv`).run();
+      }
+    });
+  });
+
   it('criação e designação são atômicas: se a designação falha, o projeto não fica órfão', async () => {
     await env.DB.prepare(`CREATE TRIGGER falha_designacao BEFORE INSERT ON project_governance BEGIN SELECT RAISE(ABORT, 'designacao falhou'); END`).run();
     try {

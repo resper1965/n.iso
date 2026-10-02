@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, ehConsultor, PROJETOS_DO_CONSULTOR_SQL } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, ehConsultor, PROJETOS_DO_CONSULTOR_SQL, designacaoDoCriador } from '../helpers';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -327,20 +327,13 @@ projectsApp.post('/', async (c) => {
       body.standards ?? 'ISO 27001',
       body.org_role ?? ''
     );
-    // D5: o consultor só alcança projeto em que está designado; quem cria fica designado no que
-    // criou, no MESMO batch (falhou a designação, o projeto não nasce órfão). Uma linha só.
-    // platform_admin já vê tudo e não polui a governança.
-    const consultor = ehConsultor(user);
-    const designa = consultor && c.env.DB.prepare(
-      `INSERT INTO project_governance (project_id, name, email, role_category, job_title)
-       SELECT ?, ?, ?, 'consultor', 'Consultor'
-        WHERE NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`
-    ).bind(id, user.name || user.email, user.email, id, user.email);
+    // D5: consultor que cria fica designado no projeto, no mesmo batch.
+    const designa = designacaoDoCriador(c.env.DB, user, id);
     await c.env.DB.batch(designa ? [cria, designa] : [cria]);
 
     await seedPhases(c.env.DB, id);
     await logAudit(c.env.DB, 'project.created', user?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
-    if (consultor) {
+    if (designa) {
       await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${id} que criou`, '', '', id);
     }
 
