@@ -16,7 +16,7 @@ const GESTORES = new Set(['consultor', 'platform_admin', 'org_admin', 'consultor
  * pode ser transferido, e a conta do cliente vai junto); equipe, de `users.org_id`. Cliente sem
  * projeto não tem organização (NULL): só o platform_admin o gere. Grafias legadas de cliente incluídas.
  */
-const ORG_DA_CONTA_SQL = `CASE WHEN u.role IN ('org_admin', 'org_user', 'client', 'user', 'client_admin')
+const ORG_DA_CONTA_SQL = `CASE WHEN u.role IN ('org_admin', 'org_user', 'client', 'user', 'client_admin', 'employee')
   THEN (SELECT p.org_id FROM projects p WHERE p.id = u.client_project_id) ELSE u.org_id END`;
 
 usersApp.get('/', async (c) => {

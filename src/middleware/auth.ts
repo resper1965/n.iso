@@ -254,6 +254,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+    // `employee`: grafia antiga de conta de cliente (há uma em produção, de 22/07/2026). Sem este mapa
+    // ela virava papel desconhecido e, com o corte de acesso por papel, perdia o projeto do próprio cliente.
+    else if (user.role === 'employee') user.role = 'org_user';
     // Só CLIENTE é preso a projeto por `client_project_id`. Em conta de equipe (ou papel
     // desconhecido) o campo não vale nada, e rota que o lê direto (portal do cliente) não pode
     // obedecê-lo. Os helpers de acesso também o ignoram (`ehPapelCliente`): defesa em profundidade.
