@@ -67,10 +67,19 @@ const PAPEIS_DO_ADMIN_CONSULTORIA = new Set([...PAPEIS_CLIENTE_GERIVEIS, ...PAPE
 const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefined) =>
   quem.role !== 'platform_admin' && !(ehAdminDaOrg(quem) ? PAPEIS_DO_ADMIN_CONSULTORIA : PAPEIS_CLIENTE_GERIVEIS).has(papel ?? '');
 const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
+const EQUIPE_SEM_PROJETO = { error: 'Conta de equipe não se prende a projeto' };
 
 /** Organização de um projeto; `null` se não existe. */
 const orgDoProjeto = async (db: D1Database, projectId: string | null | undefined) =>
   projectId ? (await db.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id ?? null : null;
+/**
+ * A organização ficaria sem administrador ativo se este saísse? (O alvo é um `consultoria_admin` dela.)
+ * O `platform_admin` não passa por aqui: ele reprovisiona.
+ */
+const ultimoAdminDaOrg = async (db: D1Database, orgId: string | null) =>
+  ((await db.prepare(`SELECT COUNT(*) AS n FROM users WHERE org_id = ? AND role = 'consultoria_admin' AND COALESCE(ativo, 1) <> 0`)
+    .bind(orgId ?? '').first<{ n: number }>())?.n ?? 0) <= 1;
+const ULTIMO_ADMIN = { error: 'A organização precisa de ao menos um administrador ativo' };
 /** Conta de outra organização para o `consultoria_admin`: 404, sem revelar que existe. */
 const NAO_ENCONTRADO = { error: 'Usuário não encontrado' };
 
@@ -120,6 +129,9 @@ usersApp.post('/', async (c) => {
     if (!valid.success) return valid.response;
     const { email, password, name, role, client_project_id } = valid.data;
 
+    // Conta de equipe não tem `client_project_id`: o acesso dela vem da organização. Aceitar o
+    // campo deixava o consultoria_admin da org B prender um comercial a projeto da ness.
+    if (!PAPEIS_CLIENTE_GERIVEIS.has(role) && client_project_id) return c.json(EQUIPE_SEM_PROJETO, 400);
     if (soPlatformAdmin(admin, role)) return c.json(recusaPapelInterno, 403);
     if (await consultorForaDoProjeto(c.env.DB, admin, client_project_id)) return c.json(recusaProjeto, 403);
 
@@ -177,12 +189,26 @@ usersApp.put('/:id', async (c) => {
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
+    // Papel e projeto como ficarão depois da edição.
+    const papelFinal: string = role ?? user.role;
+    const ficaCliente = PAPEIS_CLIENTE_GERIVEIS.has(papelFinal);
+    if (!ficaCliente && client_project_id) return c.json(EQUIPE_SEM_PROJETO, 400);
+    const projetoFinal = client_project_id !== undefined ? client_project_id : user.client_project_id;
     if (ehAdminDaOrg(admin)) {
       const minha = orgDoUsuario(admin);
       if (user.org !== minha) return c.json(NAO_ENCONTRADO, 404);
-      // Não move a conta para projeto de outra organização.
-      if (client_project_id && await orgDoProjeto(c.env.DB, client_project_id) !== minha) {
+      // Conta que fica (ou vira) cliente: o projeto tem de ser da organização dele, inclusive na
+      // troca de papel de equipe para cliente sem mandar o projeto.
+      if (ficaCliente && (!projetoFinal || await orgDoProjeto(c.env.DB, projetoFinal) !== minha)) {
         return c.json({ error: 'Forbidden: projeto fora da sua organização' }, 403);
+      }
+      // A senha de outro administrador da consultoria só o dono (pelo fluxo de senha) ou o
+      // platform_admin trocam: senão um administrador toma a conta do outro.
+      if (password && user.role === 'consultoria_admin') {
+        return c.json({ error: 'Forbidden: a senha de um administrador da consultoria só ele mesmo troca' }, 403);
+      }
+      if (user.role === 'consultoria_admin' && papelFinal !== 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, minha)) {
+        return c.json(ULTIMO_ADMIN, 409);
       }
     }
 
@@ -228,6 +254,9 @@ usersApp.put('/:id', async (c) => {
     if (client_project_id !== undefined) {
       updates.push('client_project_id = ?');
       values.push(admin.role === 'org_admin' ? (admin.client_project_id || null) : (client_project_id || null));
+    } else if (!ficaCliente && user.client_project_id) {
+      // Cliente que vira equipe solta o projeto: conta de equipe não se prende a projeto.
+      updates.push('client_project_id = NULL');
     }
     if (password !== undefined && password !== '') {
       const hash = await hashPassword(password);
@@ -247,7 +276,10 @@ usersApp.put('/:id', async (c) => {
       }
       if (password !== undefined && password !== '') await revogarAgentesPorTrocaDeSenha(c.env.DB, id);
 
-      await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${id} atualizado`);
+      // Quais CAMPOS mudaram, nunca o valor (a senha, menos ainda).
+      const campos = [password ? 'senha' : '', role !== undefined ? 'papel' : '', email !== undefined ? 'email' : '',
+        name !== undefined ? 'nome' : '', client_project_id !== undefined ? 'projeto' : ''].filter(Boolean);
+      await logAudit(c.env.DB, 'user.updated', admin.email, `Usuário ${id} atualizado: ${campos.join(', ') || 'nenhum campo'}`);
     }
 
     return c.json({ ok: true, message: 'Usuário atualizado com sucesso' });
@@ -270,6 +302,9 @@ usersApp.delete('/:id', async (c) => {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
     if (ehAdminDaOrg(admin) && user.org !== orgDoUsuario(admin)) return c.json(NAO_ENCONTRADO, 404);
+    if (ehAdminDaOrg(admin) && user.role === 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, user.org)) {
+      return c.json(ULTIMO_ADMIN, 409);
+    }
 
     if (soPlatformAdmin(admin, user.role)) return c.json(recusaPapelInterno, 403);
     if (await consultorForaDoProjeto(c.env.DB, admin, user.client_project_id)) return c.json(recusaProjeto, 403);

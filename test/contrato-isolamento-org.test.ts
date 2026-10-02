@@ -88,6 +88,18 @@ const CRIA_COM_REFERENCIA: Record<string, (alvo: Org) => unknown> = {
   'POST /api/v1/mcp/execute': (a) => ({ tool: 'check_control_compliance', arguments: { project_id: a.proj, control_id: a.rec } }),
 };
 
+/**
+ * Corpos ADICIONAIS com referência alheia (a mesma rota com outro corpo), mais o PUT na conta da
+ * PRÓPRIA organização tentando prendê-la a projeto alheio. Revisão final da fatia 5, B1: conta de
+ * equipe presa a projeto de outra organização entrava com acesso total a ele.
+ */
+const REFERENCIA_ALHEIA_EXTRA: [string, (p: { de: Org; alheio: Org }) => string, (p: { de: Org; alheio: Org }) => unknown][] = [
+  ['POST', () => '/api/v1/users', (p) => ({ email: `novo-${crypto.randomUUID()}@x.com`, password: SENHA, name: 'N', role: 'comercial', client_project_id: p.alheio.proj })],
+  ['POST', () => '/api/v1/admin/users', (p) => ({ email: `novo-${crypto.randomUUID()}@x.com`, password: SENHA, name: 'N', role: 'consultor', client_project_id: p.alheio.proj })],
+  ['PUT', (p) => `/api/v1/users/${p.de.m}-com`, (p) => ({ client_project_id: p.alheio.proj })],
+  ['PUT', (p) => `/api/v1/users/${p.de.m}-cli`, (p) => ({ role: 'comercial', client_project_id: p.alheio.proj })],
+];
+
 /** Rota sem parâmetro, não GET, que não recebe nem devolve recurso de outra organização. */
 const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/auth/setup': 'bootstrap do primeiro admin, por SETUP_KEY; sem sessão',
@@ -345,6 +357,21 @@ describe('contrato de isolamento entre organizações', () => {
       }
     }
     expect(aceitou, `criaram com referência de outra organização:\n  ${aceitou.join('\n  ')}`).toEqual([]);
+  }, 120_000);
+
+  it('conta de equipe não se prende a projeto alheio (POST e PUT /users, corpos extras)', async () => {
+    const aceitou: string[] = [];
+    for (const p of PRINCIPAIS) {
+      for (const [metodo, caminho, corpo] of REFERENCIA_ALHEIA_EXTRA) {
+        const res = await chamar(p, metodo, caminho(p), corpo(p));
+        if (res.status < 400 || res.status >= 500) aceitou.push(`${res.status} ${metodo} ${caminho(p)}  [${p.nome}]`);
+      }
+    }
+    expect(aceitou, `prenderam conta a projeto de outra organização:\n  ${aceitou.join('\n  ')}`).toEqual([]);
+    const { results } = await env.DB.prepare(
+      `SELECT u.id FROM users u JOIN projects p ON p.id = u.client_project_id WHERE p.org_id <> u.org_id OR u.role NOT IN ('org_admin', 'org_user', 'client')`
+    ).all();
+    expect(results).toEqual([]);
   }, 120_000);
 
   it('listas e respostas: nenhuma rota GET traz dado da organização alheia', async () => {

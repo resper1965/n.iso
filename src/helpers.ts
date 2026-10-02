@@ -180,6 +180,14 @@ export function podeAdministrarOrg(user: { role?: string; org_id?: string | null
   return ehAdminDaOrg(user) && orgDoUsuario(user) === orgId;
 }
 
+/**
+ * Papéis de CLIENTE: os ÚNICOS cujo acesso a projeto vem de `client_project_id` (a chave de API e o
+ * agente entram como `client`). Equipe e papel desconhecido nunca usam esse ramo: uma conta de equipe
+ * com `client_project_id` gravado (de outra organização, por exemplo) não ganha acesso por ele.
+ */
+export const PAPEIS_CLIENTE = new Set(['org_admin', 'org_user', 'client']);
+export const ehPapelCliente = (user: { role?: string } | null | undefined) => PAPEIS_CLIENTE.has(user?.role ?? '');
+
 /** Papéis de equipe cujo escopo é a organização (`users.org_id`), não o `client_project_id`. */
 export const PAPEIS_EQUIPE_ORG = new Set(['consultor', 'consultant', 'comercial', 'consultoria_admin']);
 
@@ -254,15 +262,15 @@ const ehEquipeDeProjeto = (user: AtorAutorizado | null | undefined) => ehConsult
 /**
  * Subconsulta dos projetos que o usuário enxerga numa listagem, para `<coluna> IN (${sql})` com
  * `bind` como único parâmetro; `null` = todos (só o `platform_admin`). Consultor: os designados na
- * própria organização; `consultoria_admin`: todos os da organização. Qualquer outro papel (inclusive
- * o comercial, que não trabalha em projeto) cai no próprio `client_project_id`, e sem ele em `''`,
- * que não casa com nada.
+ * própria organização; `consultoria_admin`: todos os da organização; cliente: o próprio
+ * `client_project_id`. Qualquer outro papel (o comercial, que não trabalha em projeto, e papel
+ * desconhecido) recebe `''`, que não casa com nada, MESMO com `client_project_id` gravado.
  */
 export function projetosVisiveis(user: AtorAutorizado | null | undefined): { sql: string; bind: string } | null {
   if (user?.role === 'platform_admin') return null;
   if (ehConsultor(user)) return { sql: PROJETOS_DO_CONSULTOR_SQL, bind: user?.email ?? '' };
   if (ehAdminDaOrg(user)) return { sql: PROJETOS_DA_ORG_SQL, bind: orgDoUsuario(user) ?? '' };
-  return { sql: 'SELECT ?', bind: user?.client_project_id ?? '' };
+  return { sql: 'SELECT ?', bind: ehPapelCliente(user) ? user?.client_project_id ?? '' : '' };
 }
 
 const ALLOWED_TABLES = [
@@ -285,7 +293,7 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
     if (row?.project_id && await equipeAlcanca(db, user, row.project_id)) return true;
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
-  if (!row || row.project_id !== user.client_project_id) {
+  if (!ehPapelCliente(user) || !row || !row.project_id || row.project_id !== user.client_project_id) {
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
   return true;
@@ -294,12 +302,14 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 /**
  * Garante que o usuário tem acesso ao projeto. `platform_admin` alcança todos; consultor, só os
  * projetos da própria organização em que está designado na governança (D5); `consultoria_admin`,
- * todos os da própria organização; demais papéis, o seu client_project_id (chave de API e agente
- * entram assim, presos a um projeto: herdam a organização dele). Lança em caso de negação.
+ * todos os da própria organização; papéis de CLIENTE, o seu client_project_id (chave de API e agente
+ * entram assim, presos a um projeto: herdam a organização dele). Qualquer outro papel (comercial,
+ * desconhecido) nega, mesmo com `client_project_id` gravado. Lança em caso de negação.
  */
 export async function requireProjectAccess(db: D1Database, user: AtorAutorizado, projectId: string): Promise<true> {
   if (user.role === 'platform_admin') return true;
-  if (ehEquipeDeProjeto(user) ? await equipeAlcanca(db, user, projectId) : user.client_project_id === projectId) return true;
+  if (ehEquipeDeProjeto(user) ? await equipeAlcanca(db, user, projectId)
+    : ehPapelCliente(user) && !!projectId && user.client_project_id === projectId) return true;
   throw new ForbiddenError('Forbidden: No access to this project');
 }
 

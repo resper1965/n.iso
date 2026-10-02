@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
+import { sha256Hex, sessionRevoked, SESSION_TTL_SEC, ehPapelCliente } from '../helpers';
 import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
@@ -254,6 +254,10 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+    // Só CLIENTE é preso a projeto por `client_project_id`. Em conta de equipe (ou papel
+    // desconhecido) o campo não vale nada, e rota que o lê direto (portal do cliente) não pode
+    // obedecê-lo. Os helpers de acesso também o ignoram (`ehPapelCliente`): defesa em profundidade.
+    if (user.role !== 'platform_admin' && !ehPapelCliente(user)) user.client_project_id = null;
 
     // Sessão aberta antes da suspensão da organização morre na requisição seguinte (o login já
     // recusa). Uma consulta só para equipe de fora da ness.; o agente tem a mesma regra em
