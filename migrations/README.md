@@ -332,3 +332,25 @@ da mesma proposta). Conferido em produção em 2026-10-02, só por leitura
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0040 — multiconsultoria (fatia 5, 2026-10-02)
+
+`ALTER TABLE ... ADD COLUMN`: `users.org_id` e `projects.org_id`, ambos
+`TEXT NOT NULL DEFAULT 'org_ness'` e sem `REFERENCES` (como nas tabelas
+comerciais: `ALTER` não aceita FK com default). O DEFAULT é o backfill: toda
+conta e todo projeto existentes passam a ser da ness. `organizations` ganha
+`termo_aceito_em`, `termo_versao` e `logo_chave`. Índices `idx_users_org` e
+`idx_projects_org`, e o índice ÚNICO parcial `idx_organizations_prefixo`
+(`prefixo_proposta`, `WHERE prefixo_proposta IS NOT NULL`): violação vira 409
+na criação de organização e em `PUT /org/config`. Conferido em produção em
+2026-10-02, só por leitura (`pragma_table_info`): nenhuma das cinco colunas
+existia; e nenhum prefixo repetido entre organizações (`GROUP BY
+prefixo_proposta HAVING COUNT(*) > 1` vazio), senão o índice falharia.
+
+Depois de aplicar, a conferência é `SELECT COUNT(*) FROM users WHERE org_id <>
+'org_ness'` e o mesmo em `projects`: as duas têm de dar 0.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.

@@ -1,4 +1,5 @@
 import { log, requestId, resumoErro } from './observability';
+import { orgDoUsuario } from './services/organizacao';
 
 /**
  * Negação de acesso — um TIPO, não um prefixo de mensagem.
@@ -150,6 +151,8 @@ export interface AtorAutorizado {
   /** Só o consultor precisa: é por ele que a designação na governança é procurada. */
   email?: string;
   client_project_id?: string | null;
+  /** Organização da equipe (sessão, gravada no login; migration 0040). Ausente em sessão antiga. */
+  org_id?: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -160,14 +163,50 @@ const PAPEIS_CONSULTOR = new Set(['consultor', 'consultant']);
 export const ehConsultor = (user: { role?: string } | null | undefined) => PAPEIS_CONSULTOR.has(user?.role ?? '');
 
 /**
+ * Administrador de uma consultoria (multiconsultoria, fatia 5): alcança TODO projeto da própria
+ * organização, sem designação. NÃO é o `org_admin`, que administra a empresa-CLIENTE.
+ */
+const PAPEIS_ADMIN_CONSULTORIA = new Set(['consultoria_admin']);
+export const ehAdminDaOrg = (user: { role?: string } | null | undefined) => PAPEIS_ADMIN_CONSULTORIA.has(user?.role ?? '');
+
+/**
+ * Pode administrar a organização `orgId` (configuração comercial, catálogo, aprovação de desconto)?
+ * O `platform_admin`, qualquer uma; o `consultoria_admin`, só a dele (a da sessão, nunca a do
+ * `X-Org-Id`, que ele não escolhe). Ninguém mais. Organização vazia nega.
+ */
+export function podeAdministrarOrg(user: { role?: string; org_id?: string | null } | null | undefined, orgId: string | null | undefined): boolean {
+  if (!user || !orgId) return false;
+  if (user.role === 'platform_admin') return true;
+  return ehAdminDaOrg(user) && orgDoUsuario(user) === orgId;
+}
+
+/**
+ * Papéis de CLIENTE: os ÚNICOS cujo acesso a projeto vem de `client_project_id` (a chave de API e o
+ * agente entram como `client`). Equipe e papel desconhecido nunca usam esse ramo: uma conta de equipe
+ * com `client_project_id` gravado (de outra organização, por exemplo) não ganha acesso por ele.
+ */
+export const PAPEIS_CLIENTE = new Set(['org_admin', 'org_user', 'client']);
+export const ehPapelCliente = (user: { role?: string } | null | undefined) => PAPEIS_CLIENTE.has(user?.role ?? '');
+
+/** Papéis de equipe cujo escopo é a organização (`users.org_id`), não o `client_project_id`. */
+export const PAPEIS_EQUIPE_ORG = new Set(['consultor', 'consultant', 'comercial', 'consultoria_admin']);
+
+/**
  * Ids dos projetos em que o e-mail (o único `?`) consta como `consultor` na governança, com a conta
- * ativa. ÚNICA definição de "designado": a usam a checagem por projeto (humano e agente, via
- * `consultorDesignado`) e as listagens entre projetos (`projetosVisiveis`). Comparação sem caixa: a
- * governança é digitada à mão.
+ * ativa E o projeto na MESMA organização da conta (`projects.org_id = users.org_id`, multiconsultoria):
+ * e-mail de uma consultoria digitado na governança de projeto de outra não dá acesso. ÚNICA definição
+ * de "designado": a usam a checagem por projeto (humano e agente, via `consultorDesignado`) e as
+ * listagens entre projetos (`projetosVisiveis`). Comparação sem caixa: a governança é digitada à mão.
+ * A organização vem do BANCO (`users.org_id`), não da sessão: é a mesma regra para o agente, que não
+ * tem sessão.
  */
 export const PROJETOS_DO_CONSULTOR_SQL = `SELECT g.project_id FROM project_governance g
   JOIN users u ON lower(u.email) = lower(g.email)
+  JOIN projects p ON p.id = g.project_id AND p.org_id = u.org_id
   WHERE lower(g.email) = lower(?) AND g.role_category = 'consultor' AND COALESCE(u.ativo, 1) <> 0`;
+
+/** Projetos de uma organização (o único `?`): o alcance do `consultoria_admin`. */
+const PROJETOS_DA_ORG_SQL = 'SELECT id FROM projects WHERE org_id = ?';
 
 /** O consultor está designado neste projeto? Erro de banco propaga: o chamador decide negar. */
 export async function consultorDesignado(db: D1Database, email: string, projectId: string): Promise<boolean> {
@@ -195,29 +234,43 @@ export function designacaoDoCriador(db: D1Database, user: { role?: string; email
  * middleware e o handler checam o mesmo projeto.
  * ponytail: WeakMap em vez de `c.set` porque `requireResourceAccess` não recebe o contexto (50 chamadores).
  */
+// A chave continua (objeto do usuário, projeto): papel, e-mail e organização vivem no objeto, então
+// o mesmo par sempre tem a mesma resposta dentro da requisição.
 const designacaoPorRequisicao = new WeakMap<object, Map<string, boolean>>();
 
-async function consultorAlcanca(db: D1Database, user: AtorAutorizado, projectId: string): Promise<boolean> {
+/**
+ * A equipe (consultor designado, ou `consultoria_admin` da organização do projeto) alcança o projeto?
+ * Só para esses papéis; os demais não passam por aqui.
+ */
+async function equipeAlcanca(db: D1Database, user: AtorAutorizado, projectId: string): Promise<boolean> {
   let porProjeto = designacaoPorRequisicao.get(user);
   if (!porProjeto) designacaoPorRequisicao.set(user, (porProjeto = new Map()));
   let ok = porProjeto.get(projectId);
   if (ok === undefined) {
-    // Falha fechada: erro na consulta é "não designado".
-    ok = await consultorDesignado(db, user.email ?? '', projectId).catch(() => false);
+    // Falha fechada: erro na consulta é "não alcança".
+    ok = ehAdminDaOrg(user)
+      ? await db.prepare(`${PROJETOS_DA_ORG_SQL} AND id = ?`).bind(orgDoUsuario(user) ?? '', projectId).first().then((r) => !!r).catch(() => false)
+      : await consultorDesignado(db, user.email ?? '', projectId).catch(() => false);
     porProjeto.set(projectId, ok);
   }
   return ok;
 }
 
+/** Papéis cujo acesso a projeto é decidido por `equipeAlcanca`. */
+const ehEquipeDeProjeto = (user: AtorAutorizado | null | undefined) => ehConsultor(user) || ehAdminDaOrg(user);
+
 /**
  * Subconsulta dos projetos que o usuário enxerga numa listagem, para `<coluna> IN (${sql})` com
- * `bind` como único parâmetro; `null` = todos (só o `platform_admin`). Qualquer outro papel cai no
- * próprio `client_project_id`, e sem ele em `''`, que não casa com nada.
+ * `bind` como único parâmetro; `null` = todos (só o `platform_admin`). Consultor: os designados na
+ * própria organização; `consultoria_admin`: todos os da organização; cliente: o próprio
+ * `client_project_id`. Qualquer outro papel (o comercial, que não trabalha em projeto, e papel
+ * desconhecido) recebe `''`, que não casa com nada, MESMO com `client_project_id` gravado.
  */
 export function projetosVisiveis(user: AtorAutorizado | null | undefined): { sql: string; bind: string } | null {
   if (user?.role === 'platform_admin') return null;
   if (ehConsultor(user)) return { sql: PROJETOS_DO_CONSULTOR_SQL, bind: user?.email ?? '' };
-  return { sql: 'SELECT ?', bind: user?.client_project_id ?? '' };
+  if (ehAdminDaOrg(user)) return { sql: PROJETOS_DA_ORG_SQL, bind: orgDoUsuario(user) ?? '' };
+  return { sql: 'SELECT ?', bind: ehPapelCliente(user) ? user?.client_project_id ?? '' : '' };
 }
 
 const ALLOWED_TABLES = [
@@ -234,13 +287,13 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   if (user.role === 'platform_admin') return true;
 
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
-  // Consultor: o projeto do recurso tem de ser um em que ele está designado. Recurso inexistente
-  // ou sem projeto nega (antes passava direto para o handler).
-  if (ehConsultor(user)) {
-    if (row?.project_id && await consultorAlcanca(db, user, row.project_id)) return true;
+  // Equipe: o projeto do recurso tem de ser um que ela alcança (designação ou administração, sempre
+  // na própria organização). Recurso inexistente ou sem projeto nega (antes passava direto).
+  if (ehEquipeDeProjeto(user)) {
+    if (row?.project_id && await equipeAlcanca(db, user, row.project_id)) return true;
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
-  if (!row || row.project_id !== user.client_project_id) {
+  if (!ehPapelCliente(user) || !row || !row.project_id || row.project_id !== user.client_project_id) {
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
   return true;
@@ -248,12 +301,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 
 /**
  * Garante que o usuário tem acesso ao projeto. `platform_admin` alcança todos; consultor, só os
- * projetos em que está designado na governança (D5); demais papéis, o seu client_project_id.
- * Lança em caso de negação (fail-closed).
+ * projetos da própria organização em que está designado na governança (D5); `consultoria_admin`,
+ * todos os da própria organização; papéis de CLIENTE, o seu client_project_id (chave de API e agente
+ * entram assim, presos a um projeto: herdam a organização dele). Qualquer outro papel (comercial,
+ * desconhecido) nega, mesmo com `client_project_id` gravado. Lança em caso de negação.
  */
 export async function requireProjectAccess(db: D1Database, user: AtorAutorizado, projectId: string): Promise<true> {
   if (user.role === 'platform_admin') return true;
-  if (ehConsultor(user) ? await consultorAlcanca(db, user, projectId) : user.client_project_id === projectId) return true;
+  if (ehEquipeDeProjeto(user) ? await equipeAlcanca(db, user, projectId)
+    : ehPapelCliente(user) && !!projectId && user.client_project_id === projectId) return true;
   throw new ForbiddenError('Forbidden: No access to this project');
 }
 
@@ -347,8 +403,12 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
   return null;
 }
 
-/** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
-const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
+/**
+ * Papéis de EQUIPE (de consultoria, não de cliente) que passam por `somenteNess`. O nome é anterior à
+ * multiconsultoria: desde a fatia 5 vale para a equipe de qualquer organização, inclusive o
+ * `consultoria_admin`, e o corte por organização vem de `exigirOrg`/`requireProjectAccess`.
+ */
+const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin', 'consultoria_admin']);
 
 /**
  * O usuário é da equipe ness. (e não de um cliente)?
@@ -401,7 +461,8 @@ export async function somenteNess(
  * `somenteNess`: o consultor é da ness., mas entrega a adequação — não vende.
  * O assessment (diagnóstico) segue em `somenteNess`, porque é trabalho dele.
  */
-const PAPEIS_COMERCIAL = new Set(['platform_admin', 'comercial']);
+// `consultoria_admin`: o funil e o catálogo da PRÓPRIA organização (as rotas cortam por `exigirOrg`).
+const PAPEIS_COMERCIAL = new Set(['platform_admin', 'comercial', 'consultoria_admin']);
 
 export function ehComercial(user: { role?: string | null } | null | undefined): boolean {
   return PAPEIS_COMERCIAL.has(user?.role ?? '');

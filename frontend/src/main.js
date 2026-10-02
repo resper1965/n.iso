@@ -19,6 +19,7 @@ import './views/admin.js';
 import './views/conectar-agente.js';
 import './views/catalogo.js';
 import './views/config-comercial.js';
+import './views/organizacoes.js';
 import './views/propostas.js';
 import './views/trocar-senha.js';
 import './views/ai.js';

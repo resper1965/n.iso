@@ -79,8 +79,10 @@ export async function sessionFor(user: Record<string, unknown>): Promise<Record<
   // inatividade. Sem eles a fixture produzia uma sessão de formato que o login
   // nunca emite — e que o middleware, com razão, recusa.
   // Quem quiser testar sessão velha passa o próprio `seen`.
+  // `org_id`: o login grava `users.org_id` (NOT NULL, default `org_ness`) em toda sessão, e sessão de
+  // equipe sem ele depois de `SESSAO_COM_ORG_DESDE` é negada. Sessão LEGADA: passe `org_id: undefined`.
   const agora = Date.now();
-  const sessao = { iat: agora, seen: agora, ...user };
+  const sessao = { iat: agora, seen: agora, org_id: 'org_ness', ...user };
   await env.SESSIONS.put(`session_${id}`, JSON.stringify(sessao));
   return { Authorization: `Bearer ${id}` };
 }

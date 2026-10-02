@@ -4,13 +4,14 @@
 // e nunca é remontado; mudança depois da geração só por revisão.
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { ehComercial, genId, genToken, sha256Hex, escapeHtml, sendEmail, logAudit, erro500 } from '../helpers';
+import { ehComercial, podeAdministrarOrg, genId, genToken, sha256Hex, escapeHtml, sendEmail, logAudit, erro500 } from '../helpers';
 import { validateBody, propostaCriarSchema, propostaEditarSchema, propostaGerarSchema, propostaEnviarSchema, propostaAceiteManualSchema } from '../schemas';
 import type { Servico } from '../schemas';
-import { orgDoUsuario, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
+import { exigirOrg, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
 import { calcularItem, totais, descontoAcimaDoTeto, margem, type Faixa } from '../services/preco-proposta';
 import { diagnosticoDe, type Diagnostico } from '../services/diagnostico';
 import { montarConteudo, textosEditaveis, renderizarHtml, hashDocumento, type DadosDocumento } from '../services/documento-proposta';
+import { logoComoDataUri } from '../services/logo-org';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
 import { fecharVenda, consultorValido } from '../services/fechar-venda';
@@ -18,7 +19,7 @@ import { fecharVenda, consultorValido } from '../services/fechar-venda';
 export const propostasApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /** O documento não leva script nem recurso externo além das fontes. Aplicado em index.ts, por fora do secureHeaders. */
-export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com";
+export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:";
 
 const NEGADO = { error: 'Forbidden: Área comercial restrita ao comercial da ness.' };
 const EDITAVEIS = `('rascunho', 'aguardando_aprovacao')`;
@@ -97,7 +98,7 @@ export const diaEmBrasilia = (agora = new Date()) => FUSO_BR.format(agora);
 const maisDias = (dia: string, n: number) => isoDia(new Date(Date.parse(`${dia}T00:00:00Z`) + n * 86_400_000));
 const cnpjBr = (s: string | null) => (s && /^\d{14}$/.test(s) ? s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : s ?? null);
 
-async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
+async function montar(db: D1Database, storage: R2Bucket, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
   const lead = p.lead_id ? await db.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(p.lead_id).first<any>() : null;
   const hoje = diaEmBrasilia();
   const validaAte = maisDias(hoje, p.validade_dias);
@@ -107,6 +108,8 @@ async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], cal
     textos: { contexto: p.contexto, escopo: p.escopo, observacoes: p.observacoes },
     itens: itens.map((i, k) => ({ servico: i.servico, calc: calc.calcs[k], textoCliente: i.textoCliente })),
     totais: calc.totais, pagamento: p.pagamento, diagnostico: dg,
+    // o logo entra como data: URI, então o documento gerado não depende do R2 nem de troca posterior
+    logo: await logoComoDataUri(storage, cfg.logoChave, cfg.id),
   };
   const editadas = JSON.parse(p.secoes_editadas || '{}');
   const conteudo = montarConteudo(dados, editadas);
@@ -136,20 +139,21 @@ propostasApp.use('*', async (c, next) => {
   if (!ehComercial(c.get('user'))) return c.json(NEGADO, 403);
   await next();
 });
+propostasApp.use('*', exigirOrg);
 
 propostasApp.get('/', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
       `SELECT id, numero, revisao, status, cliente, lead_id, total_projeto, mensalidade, created_at, updated_at, gerada_em, valida_ate,
        token_hash IS NOT NULL AS tem_link FROM propostas WHERE org_id = ? ORDER BY created_at DESC, rowid DESC`
-    ).bind(orgDoUsuario(c.get('user'))).all<any>();
+    ).bind(c.get('orgId')).all<any>();
     return c.json(results.map((r) => ({ ...r, tem_link: !!r.tem_link })));
   } catch (e) { return erro500(c, 'Erro ao listar as propostas', e); }
 });
 
 propostasApp.get('/:id', async (c) => {
   try {
-    const orgId = orgDoUsuario(c.get('user'));
+    const orgId = c.get('orgId');
     if (!(await achar(c.env.DB, orgId, c.req.param('id')))) return c.json(NAO_ACHADA, 404);
     return c.json(await saida(c.env.DB, orgId, c.req.param('id')));
   } catch (e) { return erro500(c, 'Erro ao ler a proposta', e); }
@@ -162,7 +166,7 @@ propostasApp.post('/', async (c) => {
     if (!v.success) return v.response;
     const b = v.data;
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const lead = await db.prepare('SELECT id, company_name, razao_social FROM leads WHERE id = ? AND org_id = ?').bind(b.leadId, orgId).first<any>();
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
     await conferirConsultor(db, orgId, b.consultorEmail);
@@ -194,7 +198,7 @@ propostasApp.put('/:id', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const id = c.req.param('id');
     const p = await achar(db, orgId, id);
     if (!p) return c.json(NAO_ACHADA, 404);
@@ -243,14 +247,14 @@ propostasApp.put('/:id', async (c) => {
 propostasApp.get('/:id/previa', async (c) => {
   try {
     const db = c.env.DB;
-    const orgId = orgDoUsuario(c.get('user'));
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     const cfg = await lerConfigOrg(db, orgId);
     const itens = await itensDe(db, p.id);
     const dg = await diagnosticoDaProposta(db, p.assessment_id);
     const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, Number(diaEmBrasilia().slice(0, 4)), cfg.proximoNumero);
-    const { conteudo, html, textos } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
+    const { conteudo, html, textos } = await montar(db, c.env.STORAGE, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
     // só a parte editável de cada seção editável presente, para a tela pré-preencher (seção ausente: sem chave)
     return c.json({ conteudo, html, textos });
   } catch (e) { return falha(c, e, 'Erro ao montar a prévia'); }
@@ -261,7 +265,7 @@ propostasApp.post('/:id/gerar', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!['rascunho', 'aguardando_aprovacao'].includes(p.status)) return c.json(JA_GERADA, 409);
@@ -304,7 +308,7 @@ propostasApp.post('/:id/gerar', async (c) => {
       proximo = cfg.proximoNumero + 1;
     }
 
-    const { conteudo, html, validaAte } = await montar(db, cfg, p, itens, calc, dg, numero);
+    const { conteudo, html, validaAte } = await montar(db, c.env.STORAGE, cfg, p, itens, calc, dg, numero);
     const hash = await hashDocumento(html);
     // Tudo num batch (transação): sem número reservado à toa se algo falhar. Duas gerações
     // simultâneas com o mesmo número esbarram no índice único (org_id, numero, revisao) e uma leva 409.
@@ -345,9 +349,9 @@ propostasApp.post('/:id/gerar', async (c) => {
 propostasApp.post('/:id/aprovar-desconto', async (c) => {
   try {
     const user = c.get('user');
-    if (user?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador aprova desconto acima do teto' }, 403);
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
+    if (!podeAdministrarOrg(user, orgId)) return c.json({ error: 'Forbidden: só o administrador da organização aprova desconto acima do teto' }, 403);
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (p.status !== 'aguardando_aprovacao') return c.json({ error: 'A proposta não está aguardando aprovação de desconto' }, 409);
@@ -362,7 +366,7 @@ propostasApp.post('/:id/revisao', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     // visualizada entra com o link do cliente (fatia 4): "pedir ajuste" chega depois de ver;
@@ -393,7 +397,7 @@ propostasApp.post('/:id/revisao', async (c) => {
 
 propostasApp.get('/:id/docx', async (c) => {
   try {
-    const p = await achar(c.env.DB, orgDoUsuario(c.get('user')), c.req.param('id'));
+    const p = await achar(c.env.DB, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!p.documento_conteudo) return c.json({ error: 'A proposta ainda não foi gerada' }, 409);
     const rodape = `Cópia de trabalho. Vale a versão ${p.numero} rev. ${p.revisao} do n.iso, hash ${String(p.documento_hash).slice(0, 8)}.`;
@@ -411,7 +415,7 @@ propostasApp.get('/:id/docx', async (c) => {
 
 propostasApp.get('/:id/documento', async (c) => {
   try {
-    const p = await achar(c.env.DB, orgDoUsuario(c.get('user')), c.req.param('id'));
+    const p = await achar(c.env.DB, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!p.documento_html) return c.json({ error: 'A proposta ainda não foi gerada' }, 409);
     // o HTML gravado, nunca remontado
@@ -457,7 +461,7 @@ propostasApp.post('/:id/enviar', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const p = await achar(db, orgDoUsuario(user), c.req.param('id'));
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!ENVIAVEL.includes(p.status)) return c.json(NAO_ENVIAVEL(p.status), 409);
     if (vencida(p)) return c.json(VENCIDA, 409);
@@ -483,7 +487,7 @@ propostasApp.post('/:id/link', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const p = await achar(db, orgDoUsuario(user), c.req.param('id'));
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!ENVIAVEL.includes(p.status)) return c.json(NAO_ENVIAVEL(p.status), 409);
     if (vencida(p)) return c.json(VENCIDA, 409);
@@ -499,7 +503,7 @@ propostasApp.post('/:id/revogar-link', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const p = await achar(db, orgDoUsuario(user), c.req.param('id'));
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     await db.prepare('UPDATE propostas SET token_hash = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND org_id = ?').bind(p.id, p.org_id).run();
     await logAudit(db, 'proposta.link_revogado', user.email ?? 'system', `Link da proposta ${p.id} (${p.numero} rev. ${p.revisao}) revogado`);
@@ -510,7 +514,7 @@ propostasApp.post('/:id/revogar-link', async (c) => {
 propostasApp.post('/:id/aceite-manual', async (c) => {
   try {
     const user = c.get('user');
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const id = c.req.param('id');
     if (!(await achar(c.env.DB, orgId, id))) return c.json(NAO_ACHADA, 404);
     const v = await validateBody(c, propostaAceiteManualSchema);

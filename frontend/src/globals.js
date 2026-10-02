@@ -465,7 +465,8 @@ window.doLogout = function doLogout() {
         // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
         // chamava doLogout de novo.
         clearInterval(window._notifPoll);
-        S.token = null; S.user = null; S.activeProject = null;
+        S.token = null; S.user = null; S.activeProject = null; S.orgAtuacao = null;
+        try { sessionStorage.removeItem('niso_orgAtuacao'); } catch { /* sem storage */ }
         localStorage.removeItem('niso_token');
         localStorage.removeItem('niso_user');
         localStorage.removeItem('niso_activeProject');
@@ -767,6 +768,7 @@ window.updateHeaderUser = function updateHeaderUser() {
                 if (S.user.role === 'platform_admin' || S.user.role === 'admin') roleText = 'Administrador';
                 else if (S.user.role === 'consultor' || S.user.role === 'consultant') roleText = 'Consultor';
                 else if (S.user.role === 'comercial') roleText = 'Comercial';
+                else if (S.user.role === 'consultoria_admin') roleText = 'Admin da consultoria';
                 else if (S.user.role === 'org_admin') roleText = 'Gestor do Cliente';
                 else if (S.user.role === 'org_user') roleText = 'Colaborador do Cliente';
                 else if (S.user.role === 'client') roleText = 'Cliente';
@@ -840,14 +842,18 @@ window.updateHeaderUser = function updateHeaderUser() {
                 groupSystem.style.maxHeight = '';
             }
             if (navAuditTrail) navAuditTrail.style.display = '';
-            // Configurações é a tabela de preços (custo interno, margem): comercial.
-            if (navSettings) navSettings.style.display = window.ehComercial() ? '' : 'none';
+            // Configurações é a tabela de preços (custo interno, margem) da ness. (somenteOrgNess no
+            // servidor): comercial e platform_admin, não o administrador de outra consultoria.
+            if (navSettings) navSettings.style.display = window.ehComercial() && S.user.role !== 'consultoria_admin' ? '' : 'none';
+            // Organizações: exclusivo do platform_admin (rotas /platform/orgs).
+            const navOrgs = document.getElementById('nav-organizacoes');
+            if (navOrgs) navOrgs.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
             // API Keys: exclusivo do Platform Admin (nem consultor vê).
             if (navApiKeys) navApiKeys.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
             const navConectar = document.getElementById('nav-conectar-agente');
             if (navConectar) navConectar.style.display = (S.user && (S.user.role === 'consultor' || S.user.role === 'consultant')) ? '' : 'none';
             if (navUsers) {
-                const canSeeUsers = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+                const canSeeUsers = S.user && ['platform_admin', 'admin', 'consultor', 'consultant', 'consultoria_admin'].includes(S.user.role);
                 navUsers.style.display = canSeeUsers ? '' : 'none';
                 const navUsersText = navUsers.querySelector('.sidebar-nav-text');
                 if (navUsersText) navUsersText.textContent = 'Usuários';
@@ -869,6 +875,9 @@ window.updateHeaderUser = function updateHeaderUser() {
                 if (rotulo) rotulo.style.display = 'none';
             });
         }
+
+        // Seletor de organização e faixa "Atuando em": só o platform_admin (views/organizacoes.js).
+        if (window.atualizarSeletorOrg) window.atualizarSeletorOrg();
     }
 
 window.loadNotifications = async function loadNotifications() {
@@ -1141,7 +1150,7 @@ window.doInviteClient = async function doInviteClient(projectId) {
 
 // Espelho de `ehComercial` (src/helpers.ts). Só decide o que MOSTRAR; quem
 // barra de verdade é o servidor.
-window.ehComercial = function ehComercial() { return !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'comercial')); }
+window.ehComercial = function ehComercial() { return !!(S.user && ['platform_admin', 'comercial', 'consultoria_admin'].includes(S.user.role)); }
 
 // Leads são do comercial (somenteComercial no servidor): para os demais papéis
 // não pede — evita o 403 a cada login do consultor.

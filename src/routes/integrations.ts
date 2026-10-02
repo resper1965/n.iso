@@ -243,6 +243,8 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
   await requireResourceAccess(c.env.DB, 'webhooks', id, c.get('user'));
   const webhook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(id).first() as any;
   if (!webhook) return c.json({ error: 'Webhook not found' }, 404);
+  // Webhook inativo (a transferência de projeto desativa os da origem: URL e segredo são dela) não dispara.
+  if (webhook.status !== 'Active') return c.json({ error: 'Webhook inativo: cadastre um novo' }, 409);
 
   if (!isValidWebhookUrl(webhook.url)) {
     return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);

@@ -297,7 +297,7 @@ describe('rotas /api/v1/propostas', () => {
     const doc = await chamar('GET', `/api/v1/propostas/${p.id}/documento`, com);
     expect(doc.status).toBe(200);
     expect(doc.headers.get('Content-Type')).toMatch(/^text\/html/);
-    expect(doc.headers.get('Content-Security-Policy')).toBe("default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com");
+    expect(doc.headers.get('Content-Security-Policy')).toBe("default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:");
     expect(await doc.text()).toContain('Premissa só desta proposta.');
 
     const w = await chamar('GET', `/api/v1/propostas/${p.id}/docx`, com);

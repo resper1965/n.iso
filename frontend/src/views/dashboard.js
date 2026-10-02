@@ -5,7 +5,7 @@ import { navigate, render } from '../router.js';
 
 // Espelho de `ehComercial` (src/helpers.ts): o funil de leads é do comercial.
 // Local, e não `window.ehComercial`, para a view não depender da ordem de carga.
-const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'comercial'));
+const ehComercial = () => !!(S.user && ['platform_admin', 'comercial', 'consultoria_admin'].includes(S.user.role));
 
     async function renderDashboard(c, h, a) {
         h.textContent = 'Dashboard Executivo';

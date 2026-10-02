@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 import { genId, logAudit, somenteComercial, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
+import { exigirOrg, somenteOrgNess } from '../services/organizacao';
 
 export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -16,6 +17,9 @@ export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables 
 // e a rota respondia 404 para todo mundo. Hoje ela deriva o vínculo de
 // `projects.assessment_id`, e o filtro é o projeto do próprio usuário.
 proposalsApp.use('*', somenteComercial);
+proposalsApp.use('*', exigirOrg);
+// A precificação antiga mora em `settings`, global e sem organização: é da ness.
+proposalsApp.use('/config/*', somenteOrgNess);
 
 
 proposalsApp.post('/', async (c) => {
@@ -25,13 +29,19 @@ proposalsApp.post('/', async (c) => {
     const body = v.data as any;
     if (!body.lead_id || !body.assessment_id) return c.json({ error: 'lead_id e assessment_id obrigatórios' }, 400);
 
+    const orgId = c.get('orgId');
+    // O lead e o assessment têm de ser da organização: senão a proposta pendura em registro alheio.
+    const lead = await c.env.DB.prepare('SELECT 1 FROM leads WHERE id = ? AND org_id = ?').bind(body.lead_id, orgId).first();
+    const assessment = await c.env.DB.prepare('SELECT 1 FROM assessments WHERE id = ? AND org_id = ?').bind(body.assessment_id, orgId).first();
+    if (!lead || !assessment) return c.json({ error: 'Lead ou assessment não encontrado' }, 404);
+
     const id = genId();
     await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, content_html, created_at)
-       VALUES (?, ?, ?, 'Draft', ?, ?, datetime('now'))`
-    ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html).run();
+      `INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, content_html, org_id, created_at)
+       VALUES (?, ?, ?, 'Draft', ?, ?, ?, datetime('now'))`
+    ).bind(id, body.lead_id, body.assessment_id, body.total_price, body.content_html, orgId).run();
 
-    await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Proposal', body.lead_id).run();
+    await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ? AND org_id = ?').bind('Proposal', body.lead_id, orgId).run();
 
     return c.json({ id, status: 'Draft' }, 201);
   } catch (e: any) {
@@ -74,9 +84,10 @@ proposalsApp.get('/', async (c) => {
     const { results } = await c.env.DB.prepare(
       `SELECT p.id, p.lead_id, p.assessment_id, p.status, p.total_price, p.created_at, p.approved_at,
               l.company_name, l.razao_social, l.cnpj
-       FROM proposals p LEFT JOIN leads l ON p.lead_id = l.id
+       FROM proposals p LEFT JOIN leads l ON p.lead_id = l.id AND l.org_id = p.org_id
+       WHERE p.org_id = ?
        ORDER BY p.created_at DESC`
-    ).all();
+    ).bind(c.get('orgId')).all();
     return c.json(results || []);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar propostas', e);
@@ -86,7 +97,7 @@ proposalsApp.get('/', async (c) => {
 proposalsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first();
+    const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
     return c.json(proposal);
   } catch (e: any) {
@@ -102,7 +113,7 @@ proposalsApp.put('/:id', async (c) => {
     const body = v.data as any;
     // A aprovação pelo painel criava contrato e projeto por conta própria; agora é o aceite da proposta.
     if (body.status === 'Signed') return c.json({ error: 'A aprovação pelo painel foi substituída pelo aceite da proposta' }, 410);
-    const proposal = await c.env.DB.prepare('SELECT id FROM proposals WHERE id = ?').bind(id).first();
+    const proposal = await c.env.DB.prepare('SELECT id FROM proposals WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
 
     const updates: string[] = [];
@@ -125,7 +136,8 @@ proposalsApp.put('/:id', async (c) => {
 proposalsApp.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await c.env.DB.prepare('DELETE FROM proposals WHERE id = ?').bind(id).run();
+    const r = await c.env.DB.prepare('DELETE FROM proposals WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).run();
+    if (!r.meta?.changes) return c.json({ error: 'Proposta não encontrada' }, 404);
     await logAudit(c.env.DB, 'proposal.deleted', c.get('user')?.email ?? 'system', `Proposta ${id} excluída`);
     return c.json({ ok: true });
   } catch (e: any) {

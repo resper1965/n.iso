@@ -2,7 +2,7 @@
 // (1) a lista mostra número/revisão, cliente, status em pílula e totais; (2) o assistente percorre
 // os 5 passos e envia corpos no formato exato dos schemas .strict() (propostaCriar/Editar/Gerar);
 // (3) desconto acima do teto avisa antes de gerar; (4) o 409 do servidor aparece na tela;
-// (5) aguardando aprovação: botão só para platform_admin; (6) documento em iframe srcdoc e Word
+// (5) aguardando aprovação: botão só para platform_admin e consultoria_admin; (6) documento em iframe srcdoc e Word
 // baixado com o token; (7) nada inline e todo valor escapado.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -255,12 +255,12 @@ describe('assistente', () => {
     expect(document.querySelector('[data-action="__prpAprovar"]')).toBeNull();
   });
 
-  it('platform_admin vê "Aprovar desconto" e aprova pela API', async () => {
+  it.each(['platform_admin', 'consultoria_admin'])('%s vê "Aprovar desconto" e aprova pela API', async (papel) => {
     servidor({
       'GET /api/v1/propostas/p3': proposta({ id: 'p3', status: 'aguardando_aprovacao' }),
       'POST /api/v1/propostas/p3/aprovar-desconto': () => json(proposta({ id: 'p3', status: 'rascunho' })),
     });
-    await monta('platform_admin');
+    await monta(papel);
     await clica('__prpAbrir', ['p3']);
     await clica('__prpAprovar');
     expect(chamadas('POST', '/api/v1/propostas/p3/aprovar-desconto')).toHaveLength(1);
@@ -292,6 +292,20 @@ describe('documento', () => {
     await vi.waitFor(() => expect(clique, `erro mostrado: ${JSON.stringify(window.showToast.mock.calls)}`).toHaveBeenCalled());
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(clique.mock.instances[0].download).toBe('NESS-2026-001-rev2.docx');
+  });
+
+  it('platform_admin atuando em outra organização: o documento (fetch direto) leva o X-Org-Id', async () => {
+    servidor({
+      'GET /api/v1/propostas/p1': proposta({ id: 'p1', status: 'gerada', numero: 'ALFA-2026-001', revisao: 1 }),
+      'GET /api/v1/propostas/p1/documento': () => new Response('<html><body>Doc</body></html>', { headers: { 'content-type': 'text/html' } }),
+    });
+    S.orgAtuacao = 'org_alfa';
+    try {
+      await monta('platform_admin');
+      await clica('__prpDocumento', ['p1']);
+      expect(chamadas('GET', '/api/v1/propostas/p1/documento')[0][1].headers['X-Org-Id']).toBe('org_alfa');
+      expect(chamadas('GET', '/api/v1/propostas').every(([, o]) => o.headers['X-Org-Id'] === 'org_alfa')).toBe(true);
+    } finally { S.orgAtuacao = null; }
   });
 });
 
