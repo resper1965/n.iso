@@ -593,3 +593,17 @@ export const propostaAceiteManualSchema = z.object({
   email: z.string().trim().email().max(200),
   comprovante: z.string().trim().min(3).max(1000),
 }).strict();
+
+// Rotas públicas do cliente (fatia 4). O token vai no corpo, nunca no caminho nem na query (o log
+// de requisição grava o caminho). Sem regex de formato: token malformado cai no mesmo 404 do desconhecido.
+const tokenProposta = z.string().min(1).max(200);
+export const propostaTokenSchema = z.object({ token: tokenProposta }).strict();
+export const propostaAceiteLinkSchema = z.object({
+  token: tokenProposta,
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  poderes: z.literal(true),
+}).strict();
+export const propostaRecusaSchema = z.object({ token: tokenProposta, motivo: z.string().trim().max(1000).optional() }).strict();
+export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z.string().trim().min(1).max(2000) }).strict();
