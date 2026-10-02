@@ -21,6 +21,12 @@ assessmentsApp.use('*', async (c, next) => {
   return somenteNess(c, next);
 });
 
+/** Preço é do comercial: quem não é, recebe a linha sem nenhuma coluna `pricing_*`. */
+function semPreco<T extends Record<string, unknown>>(row: T, user: { role?: string | null } | null | undefined): T {
+  if (ehComercial(user)) return row;
+  return Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('pricing_'))) as T;
+}
+
 /** Traduz respostas do assessment para as chaves esperadas pelo SCORE_MAP */
 function mapAnswerToScore(field: string, value: string): string {
   if (!value) return value;
@@ -203,7 +209,8 @@ assessmentsApp.get('/', async (c) => {
     const { results } = await c.env.DB.prepare(
       'SELECT * FROM assessments ORDER BY created_at DESC'
     ).all();
-    return c.json(results);
+    const user = c.get('user');
+    return c.json(results.map((r) => semPreco(r, user)));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar assessments', e);
   }
@@ -220,7 +227,7 @@ assessmentsApp.get('/:id', async (c) => {
     ).bind(id).first<{ answered_blocks: number }>();
 
     return c.json({
-      ...assessment,
+      ...semPreco(assessment, c.get('user')),
       answered_blocks: progress?.answered_blocks ?? 0,
       total_blocks: 10,
     });

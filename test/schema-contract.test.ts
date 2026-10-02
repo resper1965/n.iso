@@ -207,4 +207,16 @@ describe('schema contract (real D1)', () => {
       expect(colunas).toContain(c);
     }
   });
+  it('organizations e tabelas comerciais trazem as colunas da organização', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['cnpj', 'cor_destaque', 'selo_niso', 'prefixo_proposta', 'proximo_numero', 'config_preco', 'textos', 'secoes_desligadas']) {
+      expect(await colunas('organizations'), c).toContain(c);
+    }
+    for (const t of ['leads', 'assessments', 'proposals', 'contracts']) {
+      expect(await colunas(t), t).toContain('org_id');
+    }
+    const ness = await env.DB.prepare(`SELECT name, prefixo_proposta, proximo_numero FROM organizations WHERE id = 'org_ness'`).first<any>();
+    expect(ness).toEqual({ name: 'ness.', prefixo_proposta: 'NESS', proximo_numero: 1 });
+  });
 });

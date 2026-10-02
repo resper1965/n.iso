@@ -74,7 +74,11 @@ CREATE TABLE IF NOT EXISTS leads (
     cnpj_fetched_at DATETIME,
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Organização dona do registro (spec do sistema de propostas, seção 8).
+    -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
+    -- precisa ser o mesmo aqui e na migration 0036.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
 
 CREATE TABLE IF NOT EXISTS proposals (
@@ -85,7 +89,11 @@ CREATE TABLE IF NOT EXISTS proposals (
     content_html TEXT, -- Printable HTML proposal
     total_price REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    approved_at DATETIME
+    approved_at DATETIME,
+    -- Organização dona do registro (spec do sistema de propostas, seção 8).
+    -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
+    -- precisa ser o mesmo aqui e na migration 0036.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
@@ -95,7 +103,11 @@ CREATE TABLE IF NOT EXISTS contracts (
     status TEXT DEFAULT 'Pending', -- Pending, Signed
     document_r2_key TEXT,
     signed_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Organização dona do registro (spec do sistema de propostas, seção 8).
+    -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
+    -- precisa ser o mesmo aqui e na migration 0036.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
 
 -- ═══════════════════════════════════════════════
@@ -114,7 +126,11 @@ CREATE TABLE IF NOT EXISTS assessments (
     access_token TEXT,
     pricing_override REAL,
     pricing_desconto REAL,
-    pricing_notas TEXT
+    pricing_notas TEXT,
+    -- Organização dona do registro (spec do sistema de propostas, seção 8).
+    -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
+    -- precisa ser o mesmo aqui e na migration 0036.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
 
 CREATE TABLE IF NOT EXISTS assessment_answers (
@@ -630,8 +646,21 @@ CREATE TABLE IF NOT EXISTS organizations (
     owner_id TEXT,
     logo_url TEXT,
     status TEXT DEFAULT 'Active',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    cnpj TEXT,
+    cor_destaque TEXT DEFAULT '#00ade8',
+    selo_niso INTEGER NOT NULL DEFAULT 1,
+    prefixo_proposta TEXT,
+    proximo_numero INTEGER NOT NULL DEFAULT 1,
+    -- JSON validado por configOrgSchema (src/schemas/domain.ts). Texto cru,
+    -- escapado só na hora de virar HTML.
+    config_preco TEXT,
+    textos TEXT,
+    secoes_desligadas TEXT
 );
+
+INSERT OR IGNORE INTO organizations (id, name, slug, plan, status, prefixo_proposta, proximo_numero)
+VALUES ('org_ness', 'ness.', 'ness', 'interno', 'Active', 'NESS', 1);
 
 CREATE TABLE IF NOT EXISTS certification_tracking (
     id TEXT PRIMARY KEY,
