@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
-import { applySchema, sessionFor, pedir } from './helpers/d1';
+import { applySchema, sessionFor, pedir, designarConsultor } from './helpers/d1';
 
 /**
  * Papéis internos da ness. que só o `platform_admin` atribui: o próprio
@@ -86,11 +86,12 @@ describe('Papéis internos só por platform_admin', () => {
     expect(linha!.role).toBe('comercial');
   });
 
-  it('consultor segue criando usuário de cliente', async () => {
+  it('consultor segue criando usuário de cliente do projeto em que está designado', async () => {
     // Sessão nova: o caso da autopromoção acima revoga as sessões do consultor.
     const consultor = json(await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' }));
     await env.DB.prepare(`INSERT OR IGNORE INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
       .bind('p-1', 'Cliente', 'ISO 27001', 'controller', 'Active').run();
+    await designarConsultor('cons@ness.lat', 'p-1');
     const res = await req('/api/v1/users', {
       method: 'POST', headers: consultor,
       body: JSON.stringify({ email: 'cli@cliente.com', password: 'senha-forte-123', name: 'Cli', role: 'org_user', client_project_id: 'p-1' }),

@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 
 describe('PUT /controls/:id — owner gravável', () => {
   let headers: Record<string, string>;
@@ -23,6 +23,7 @@ describe('PUT /controls/:id — owner gravável', () => {
       `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, ciso_approved_by, ceo_approved_by)
        VALUES ('c1','pr1','ISO 27001:2022','A.5.1 Políticas','Texto vigente','In Progress',3,'DPO Fulano','CEO Beltrano')`
     ).run();
+    await designarConsultor('consultor@ness.io', 'pr1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 
@@ -78,6 +79,7 @@ describe('PATCH /projects/:id/controls — reatribuição de owner em lote', () 
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c2','pr1','ISO 27001:2022','A.5.2','João')`).run();
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c3','pr1','ISO 27001:2022','A.5.3','Ana')`).run();
     await env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, owner) VALUES ('c4','pr2','ISO 27001:2022','A.5.1','João')`).run();
+    await designarConsultor('consultor@ness.io', 'pr1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'consultor@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 

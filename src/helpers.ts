@@ -147,7 +147,77 @@ export async function createNotification(
  */
 export interface AtorAutorizado {
   role?: string;
+  /** Só o consultor precisa: é por ele que a designação na governança é procurada. */
+  email?: string;
   client_project_id?: string | null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  CONSULTOR — alcança só os projetos em que está designado (D5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PAPEIS_CONSULTOR = new Set(['consultor', 'consultant']);
+export const ehConsultor = (user: { role?: string } | null | undefined) => PAPEIS_CONSULTOR.has(user?.role ?? '');
+
+/**
+ * Ids dos projetos em que o e-mail (o único `?`) consta como `consultor` na governança, com a conta
+ * ativa. ÚNICA definição de "designado": a usam a checagem por projeto (humano e agente, via
+ * `consultorDesignado`) e as listagens entre projetos (`projetosVisiveis`). Comparação sem caixa: a
+ * governança é digitada à mão.
+ */
+export const PROJETOS_DO_CONSULTOR_SQL = `SELECT g.project_id FROM project_governance g
+  JOIN users u ON lower(u.email) = lower(g.email)
+  WHERE lower(g.email) = lower(?) AND g.role_category = 'consultor' AND COALESCE(u.ativo, 1) <> 0`;
+
+/** O consultor está designado neste projeto? Erro de banco propaga: o chamador decide negar. */
+export async function consultorDesignado(db: D1Database, email: string, projectId: string): Promise<boolean> {
+  return !!(await db.prepare(`${PROJETOS_DO_CONSULTOR_SQL} AND g.project_id = ?`).bind(email, projectId).first());
+}
+
+/**
+ * Quem cria um projeto (`POST /projects`, `POST /assessments/:id/convert`) sendo consultor fica
+ * designado nele, senão perde acesso ao que acabou de criar. Devolve o INSERT para entrar no MESMO
+ * `db.batch` da criação do projeto (falhou a designação, o projeto não nasce órfão), ou `null` para
+ * os demais papéis: `platform_admin` já vê tudo e não polui a governança. Uma linha só.
+ */
+export function designacaoDoCriador(db: D1Database, user: { role?: string; email?: string; name?: string } | null | undefined, projectId: string): D1PreparedStatement | null {
+  if (!user?.email || !ehConsultor(user)) return null;
+  return db.prepare(
+    `INSERT INTO project_governance (project_id, name, email, role_category, job_title)
+     SELECT ?, ?, ?, 'consultor', 'Consultor'
+      WHERE NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`
+  ).bind(projectId, user.name || user.email, user.email, projectId, user.email);
+}
+
+/**
+ * Cache por requisição: o objeto `user` nasce a cada requisição (JSON.parse da sessão, ou montado
+ * para chave/agente), então a chave fraca morre com ela. Evita repetir a consulta quando o
+ * middleware e o handler checam o mesmo projeto.
+ * ponytail: WeakMap em vez de `c.set` porque `requireResourceAccess` não recebe o contexto (50 chamadores).
+ */
+const designacaoPorRequisicao = new WeakMap<object, Map<string, boolean>>();
+
+async function consultorAlcanca(db: D1Database, user: AtorAutorizado, projectId: string): Promise<boolean> {
+  let porProjeto = designacaoPorRequisicao.get(user);
+  if (!porProjeto) designacaoPorRequisicao.set(user, (porProjeto = new Map()));
+  let ok = porProjeto.get(projectId);
+  if (ok === undefined) {
+    // Falha fechada: erro na consulta é "não designado".
+    ok = await consultorDesignado(db, user.email ?? '', projectId).catch(() => false);
+    porProjeto.set(projectId, ok);
+  }
+  return ok;
+}
+
+/**
+ * Subconsulta dos projetos que o usuário enxerga numa listagem, para `<coluna> IN (${sql})` com
+ * `bind` como único parâmetro; `null` = todos (só o `platform_admin`). Qualquer outro papel cai no
+ * próprio `client_project_id`, e sem ele em `''`, que não casa com nada.
+ */
+export function projetosVisiveis(user: AtorAutorizado | null | undefined): { sql: string; bind: string } | null {
+  if (user?.role === 'platform_admin') return null;
+  if (ehConsultor(user)) return { sql: PROJETOS_DO_CONSULTOR_SQL, bind: user?.email ?? '' };
+  return { sql: 'SELECT ?', bind: user?.client_project_id ?? '' };
 }
 
 const ALLOWED_TABLES = [
@@ -161,9 +231,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   if (!ALLOWED_TABLES.includes(table)) {
     throw new Error('Invalid table');
   }
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
+  if (user.role === 'platform_admin') return true;
 
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
+  // Consultor: o projeto do recurso tem de ser um em que ele está designado. Recurso inexistente
+  // ou sem projeto nega (antes passava direto para o handler).
+  if (ehConsultor(user)) {
+    if (row?.project_id && await consultorAlcanca(db, user, row.project_id)) return true;
+    throw new ForbiddenError('Forbidden: No access to this resource');
+  }
   if (!row || row.project_id !== user.client_project_id) {
     throw new ForbiddenError('Forbidden: No access to this resource');
   }
@@ -171,13 +247,13 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 }
 
 /**
- * Garante que o usuário tem acesso ao projeto. Papéis de staff (consultor/
- * platform_admin/consultant) têm acesso total; demais papéis são restritos ao
- * seu client_project_id. Lança em caso de negação (fail-closed).
+ * Garante que o usuário tem acesso ao projeto. `platform_admin` alcança todos; consultor, só os
+ * projetos em que está designado na governança (D5); demais papéis, o seu client_project_id.
+ * Lança em caso de negação (fail-closed).
  */
-export function requireProjectAccess(user: AtorAutorizado, projectId: string): true {
-  if (user.role === 'consultor' || user.role === 'platform_admin' || user.role === 'consultant') return true;
-  if (user.client_project_id === projectId) return true;
+export async function requireProjectAccess(db: D1Database, user: AtorAutorizado, projectId: string): Promise<true> {
+  if (user.role === 'platform_admin') return true;
+  if (ehConsultor(user) ? await consultorAlcanca(db, user, projectId) : user.client_project_id === projectId) return true;
   throw new ForbiddenError('Forbidden: No access to this project');
 }
 
@@ -286,9 +362,10 @@ const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
  * tenants. Invertida, a lista desconhecida cai no ramo escopado, que é o lado
  * seguro de errar.
  *
- * É o mesmo conjunto que `requireResourceAccess` e `requireProjectAccess` já
- * usam acima — deliberadamente a mesma fonte, para não haver duas definições
- * de "staff" que possam divergir.
+ * "Equipe ness." NÃO quer dizer "vê todos os projetos": desde a D5 o consultor
+ * só alcança os projetos em que está designado (`requireProjectAccess`,
+ * `requireResourceAccess`, `projetosVisiveis`). Listagem entre projetos usa
+ * `projetosVisiveis`, não esta função.
  */
 export function ehEquipeNess(user: { role?: string } | undefined | null): boolean {
   return !!user && PAPEIS_NESS.has(user.role ?? '');

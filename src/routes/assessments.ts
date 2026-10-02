@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500, designacaoDoCriador } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
@@ -456,10 +456,17 @@ assessmentsApp.post('/:id/convert', async (c) => {
     const standards = answerMap.get('target_standard') ?? 'ISO 27001';
     const orgRole = answerMap.get('data_role') ?? '';
 
-    await c.env.DB.prepare(
+    const user = c.get('user');
+    const cria = c.env.DB.prepare(
       `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
-    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id).run();
+    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id);
+    // D5: consultor que converte fica designado no projeto novo, no mesmo batch.
+    const designa = designacaoDoCriador(c.env.DB, user, projectId);
+    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
+    if (designa) {
+      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${projectId} que converteu`, '', '', projectId);
+    }
 
     await seedPhases(c.env.DB, projectId);
 
