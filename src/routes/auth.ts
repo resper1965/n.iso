@@ -60,6 +60,10 @@ export async function registrarFalhaLogin(
  *
  * O nome do fornecedor fica aqui, na implementação; a interface não o menciona.
  */
+/** `users.org_id` da conta (sessão recarimbada leva o campo do banco, não o da sessão antiga). */
+const orgIdDoBanco = async (c: any, id: string): Promise<string | null> =>
+  (await c.env.DB.prepare('SELECT org_id FROM users WHERE id = ?').bind(id).first())?.org_id ?? null;
+
 async function desafioResolvido(c: any, token: string | undefined, ip: string): Promise<boolean> {
   const secret = c.env.TURNSTILE_SECRET_KEY;
   if (!secret) return true;
@@ -251,7 +255,9 @@ authApp.post('/login', async (c) => {
     // o teto absoluto de 24 h continua sendo o `expirationTtl` abaixo, que a
     // renovação NÃO estica: é ele que garante a revalidação diária.
     const agora = Date.now();
-    const sessao = { ...user, iat: agora, seen: agora, ...(exigeMfa ? { mfa_pending: true } : {}) };
+    // `org_id` explícito (users.org_id, NOT NULL): sessão de equipe sem ele é negada depois de
+    // `SESSAO_COM_ORG_DESDE`.
+    const sessao = { ...user, org_id: user.org_id, iat: agora, seen: agora, ...(exigeMfa ? { mfa_pending: true } : {}) };
     await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     
@@ -297,7 +303,8 @@ authApp.post('/reset-password-first', async (c) => {
     const sessionId = c.get('sessionId');
     if (sessionId) {
       const agora = Date.now();
-      const renovada = JSON.stringify({ ...user, iat: agora, seen: agora });
+      // `iat` novo exige `org_id` (corte de `SESSAO_COM_ORG_DESDE`): a sessão antiga pode não tê-lo.
+      const renovada = JSON.stringify({ ...user, org_id: await orgIdDoBanco(c, user.id), iat: agora, seen: agora });
       await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
       await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
     }
@@ -440,7 +447,8 @@ authApp.post('/change-password', async (c) => {
     const sessionId = c.get('sessionId');
     if (sessionId) {
       const agora = Date.now();
-      const renovada = JSON.stringify({ ...user, iat: agora, seen: agora });
+      // `iat` novo exige `org_id` (corte de `SESSAO_COM_ORG_DESDE`): a sessão antiga pode não tê-lo.
+      const renovada = JSON.stringify({ ...user, org_id: await orgIdDoBanco(c, user.id), iat: agora, seen: agora });
       await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
       await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
     }

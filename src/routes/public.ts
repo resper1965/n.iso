@@ -329,6 +329,9 @@ publicApp.get('/sso/callback', async (c) => {
       name: claims.name ?? usuario.email,
       role: usuario.role,
       client_project_id: usuario.client_project_id,
+      // Toda sessão nasce com `org_id` (lido do banco): sem ele, sessão nova cai no corte de
+      // `SESSAO_COM_ORG_DESDE` (services/organizacao.ts).
+      org_id: usuario.org_id,
       iat: Date.now(),
     };
     await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });

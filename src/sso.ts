@@ -1,6 +1,7 @@
 import { decryptSecret } from './secret-crypto';
 import { log } from './observability';
 import type { Bindings } from './index';
+import { PAPEIS_SSO } from './schemas/auth';
 
 /**
  * SSO por OIDC, por tenant (item 4.1 do `enterprise-grade-plan.md`).
@@ -290,14 +291,18 @@ export async function trocarCodigo(
   return { id_token: json.id_token };
 }
 
-/** Papéis que o provisionamento automático NUNCA atribui. */
-const PAPEIS_PROIBIDOS_NO_SSO = new Set(['consultor', 'consultant', 'platform_admin', 'admin']);
+/**
+ * LISTA DE PERMISSÃO dos papéis que o provisionamento automático atribui: só de cliente. Era lista
+ * de NEGAÇÃO (consultor, platform_admin), e `consultoria_admin`/`comercial` — papéis criados depois
+ * — passavam. Papel novo nasce fora daqui.
+ */
+const PAPEIS_PERMITIDOS_NO_SSO = new Set<string>(PAPEIS_SSO);
 
-export function papelValidoParaSso(papel: string): boolean {
-  return !PAPEIS_PROIBIDOS_NO_SSO.has(papel);
+export function papelValidoParaSso(papel: string | null | undefined): boolean {
+  return PAPEIS_PERMITIDOS_NO_SSO.has(papel ?? '');
 }
 
-export type Provisionado = { id: string; email: string; role: string; client_project_id: string; criado: boolean };
+export type Provisionado = { id: string; email: string; role: string; client_project_id: string; org_id: string; criado: boolean };
 
 /**
  * Encontra ou cria a conta (JIT).
@@ -318,10 +323,14 @@ export async function provisionar(
   const email = claims.email!.toLowerCase().trim();
 
   const existente = await env.DB.prepare(
-    'SELECT id, email, role, client_project_id FROM users WHERE email = ?'
-  ).bind(email).first<{ id: string; email: string; role: string; client_project_id: string | null }>();
+    'SELECT id, email, role, client_project_id, org_id FROM users WHERE email = ?'
+  ).bind(email).first<{ id: string; email: string; role: string; client_project_id: string | null; org_id: string }>();
 
   if (existente) {
+    // Conta de equipe (ou papel desconhecido) não entra por SSO de tenant, nem com projeto gravado.
+    if (!papelValidoParaSso(existente.role)) {
+      throw new Error('Esta conta não é de cliente. Login por SSO recusado.');
+    }
     if (existente.client_project_id && existente.client_project_id !== cfg.project_id) {
       throw new Error('Esta conta pertence a outro cliente. Login por SSO recusado.');
     }
@@ -337,17 +346,21 @@ export async function provisionar(
     throw new Error(`papel_padrao inválido para SSO: ${cfg.papel_padrao}`);
   }
 
+  // A conta de cliente é da organização do PROJETO (sem isto, o default da coluna a punha na org_ness).
+  const projeto = await env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(cfg.project_id).first<{ org_id: string }>();
+  if (!projeto?.org_id) throw new Error('Projeto do SSO não encontrado.');
+
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   // `password_hash` é NOT NULL. Grava-se um marcador que não é hash de senha
   // nenhuma — a conta existe, mas não tem senha para verificar, e o caminho de
   // login por senha falha por não bater com formato de hash algum.
   await env.DB.prepare(
-    `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES (?,?,?,?,?,?)`
-  ).bind(id, email, 'sso:sem-senha-local', claims.name ?? email.split('@')[0], cfg.papel_padrao, cfg.project_id).run();
+    `INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id) VALUES (?,?,?,?,?,?,?)`
+  ).bind(id, email, 'sso:sem-senha-local', claims.name ?? email.split('@')[0], cfg.papel_padrao, cfg.project_id, projeto.org_id).run();
 
   log('info', { msg: 'sso_provisionamento', projeto: cfg.project_id, papel: cfg.papel_padrao });
 
-  return { id, email, role: cfg.papel_padrao, client_project_id: cfg.project_id, criado: true };
+  return { id, email, role: cfg.papel_padrao, client_project_id: cfg.project_id, org_id: projeto.org_id, criado: true };
 }
 
 /** Decifra o `client_secret` guardado. */

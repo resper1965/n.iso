@@ -67,6 +67,9 @@ export const ssoInicioSchema = z.object({
  * montado a partir dele, e um issuer com query produziria uma URL que o IdP não
  * reconhece — falha confusa em vez de erro claro na hora de configurar.
  */
+/** Papéis que o SSO de tenant pode atribuir: só de cliente. */
+export const PAPEIS_SSO = ['org_admin', 'org_user', 'client'] as const;
+
 export const ssoConfigSchema = z.object({
   issuer: z.string().url().refine(
     (u) => { try { const x = new URL(u); return x.protocol === 'https:' && !x.search && !x.hash; } catch { return false; } },
@@ -75,6 +78,9 @@ export const ssoConfigSchema = z.object({
   client_id: z.string().min(1, 'client_id é obrigatório'),
   client_secret: z.string().min(1, 'client_secret é obrigatório'),
   dominios: z.string().min(3, 'informe ao menos um domínio de e-mail'),
-  papel_padrao: z.string().min(1).default('org_user'),
+  // LISTA DE PERMISSÃO: o SSO de um tenant só cria conta de CLIENTE. Era `z.string()` livre, e
+  // um `consultoria_admin` configurava `papel_padrao: 'consultoria_admin'` no projeto dele e o
+  // login federado criava administrador de consultoria (na org_ness, pelo default da coluna).
+  papel_padrao: z.enum(PAPEIS_SSO, 'papel_padrao precisa ser org_admin, org_user ou client').default('org_user'),
   ativo: z.coerce.boolean().default(false),
 });

@@ -99,7 +99,7 @@ projectsApp.put('/:projectId/sso', somenteNess, async (c) => {
     // Papel de staff atribuído por provisionamento automático transformaria
     // "quem tem e-mail do domínio" em "quem administra a plataforma".
     if (!papelValidoParaSso(body.papel_padrao)) {
-      return c.json({ error: `papel_padrao não pode ser papel de plataforma: ${body.papel_padrao}` }, 400);
+      return c.json({ error: `papel_padrao precisa ser papel de cliente (org_admin, org_user ou client)` }, 400);
     }
 
     const chaveCripto = (c.env as any).TOKEN_ENC_KEY as string | undefined;

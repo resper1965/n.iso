@@ -16,14 +16,25 @@ const PAPEIS_EQUIPE = new Set(['consultor', 'consultant', 'comercial', 'consulto
  *   A organização do cliente é a do projeto dele, não `users.org_id`.
  */
 export function orgDoUsuario(
-  user: { role?: string | null; org_id?: string | null } | null | undefined,
+  user: { role?: string | null; org_id?: string | null; iat?: number | null } | null | undefined,
   cabecalhoOrg?: string | null,
 ): string | null {
   const role = user?.role ?? '';
   if (PAPEIS_PLATAFORMA.has(role)) return cabecalhoOrg?.trim() || ORG_NESS;
-  if (PAPEIS_EQUIPE.has(role)) return user?.org_id || ORG_NESS;
+  if (PAPEIS_EQUIPE.has(role)) {
+    if (user?.org_id) return user.org_id;
+    // Sem `org_id`: só a sessão LEGADA (emitida antes do deploy) vale como ness. Sessão nova sem o
+    // campo é caminho de criação de sessão que o esqueceu: nega, em vez de pôr a conta na ness.
+    return (user?.iat ?? 0) >= SESSAO_COM_ORG_DESDE ? null : ORG_NESS;
+  }
   return null;
 }
+
+/**
+ * Desde quando toda sessão nasce com `org_id` (login, SSO, primeiro acesso, troca de senha; o MFA e a
+ * renovação copiam a sessão). Sessão de equipe sem o campo emitida a partir daqui é negada.
+ */
+export const SESSAO_COM_ORG_DESDE = Date.parse('2026-10-03T00:00:00Z');
 
 export const SEM_ORG = { error: 'Organização não identificada' } as const;
 
