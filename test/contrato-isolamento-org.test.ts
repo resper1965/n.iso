@@ -120,6 +120,7 @@ const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/projects/admin/encrypt-tokens': 'manutenção global, só platform_admin',
   'POST /api/v1/legal/accept': 'aceite de documento legal (catálogo global) pela própria conta',
   'POST /api/v1/legal/documents': 'publica documento legal global, só platform_admin',
+  'POST /api/v1/platform/orgs': 'cria organização: só platform_admin (403 para toda a equipe)',
 };
 
 /** Colunas com CHECK de enum: o PRAGMA não expõe o CHECK. */
@@ -275,17 +276,20 @@ describe('contrato de isolamento entre organizações', () => {
   });
 
   it('cada principal está autenticado e alcança o que é da PRÓPRIA organização', async () => {
-    const proprio: Record<string, [string, string]> = {
-      consultor: ['GET', '/api/v1/projects/:p/risks'],
-      comercial: ['GET', '/api/v1/servicos/:r'],
-      consultoria_admin: ['GET', '/api/v1/projects/:p/risks'],
-      agente: ['GET', '/api/v1/projects/:p/risks'],
-      'chave-api': ['GET', '/api/v1/projects/:p/risks'],
+    // consultoria_admin (tarefa 4): projeto E área comercial da organização dele, para a varredura o
+    // exercitar nos dois lados do corte.
+    const proprio: Record<string, string[]> = {
+      consultor: ['/api/v1/projects/:p/risks'],
+      comercial: ['/api/v1/servicos/:r'],
+      consultoria_admin: ['/api/v1/projects/:p/risks', '/api/v1/servicos/:r', '/api/v1/leads/:r', '/api/v1/org/config'],
+      agente: ['/api/v1/projects/:p/risks'],
+      'chave-api': ['/api/v1/projects/:p/risks'],
     };
     for (const p of PRINCIPAIS) {
-      const [metodo, molde] = proprio[p.nome.split('@')[0]];
-      const res = await chamar(p, metodo, molde.replace(':p', p.de.proj).replace(':r', p.de.rec));
-      expect(res.status, `${p.nome}: ${await res.clone().text()}`).toBe(200);
+      for (const molde of proprio[p.nome.split('@')[0]]) {
+        const res = await chamar(p, 'GET', molde.replace(':p', p.de.proj).replace(':r', p.de.rec));
+        expect(res.status, `${p.nome} ${molde}: ${await res.clone().text()}`).toBe(200);
+      }
     }
   });
 

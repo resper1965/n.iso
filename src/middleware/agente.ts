@@ -43,7 +43,9 @@ export async function concessaoValida(
       WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
         AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')
         -- multiconsultoria: o projeto tem de ser da organização do consultor da concessão
-        AND p.org_id = u.org_id`
+        AND p.org_id = u.org_id
+        -- organização suspensa derruba o agente da equipe dela (a ness. não é suspensa)
+        AND (u.org_id = 'org_ness' OR EXISTS (SELECT 1 FROM organizations o WHERE o.id = u.org_id AND o.status = 'Active'))`
   ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string; project_name: string }>();
   if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) return null;
 
@@ -65,6 +67,7 @@ export const CABECALHO_CONFIRMADO = 'X-Agente-Confirmado';
 /** Terceiro campo opcional: só estes métodos são recusados (GET /projects segue valendo, escopado). */
 const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/(users|admin\/users)(\/|$)/, 'gestão de usuários'],
+  [/^\/api\/v1\/platform(\/|$)/, 'administração da plataforma (organizações)'],
   [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
   [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/org(\/|$)/, 'área comercial'],

@@ -508,6 +508,28 @@ export const configOrgSchema = z.object({
   secoesDesligadas: z.array(z.enum(['como_trabalhamos', 'responsabilidades'])).max(2).optional(),
 }).strict();
 
+// Provisionamento de organização (fatia 5): só o platform_admin. A organização nasce com a
+// configuração padrão e SEM termos comerciais (o administrador dela escreve os dele); o termo de uso
+// da consultoria é registrado pela versão e pela data do aceite.
+export const criarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120),
+  slug: z.string().regex(/^[a-z0-9-]{3,40}$/, 'Slug com 3 a 40 letras minúsculas, números ou hífen'),
+  prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números'),
+  cnpj: z.string().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').optional(),
+  adminEmail: z.string().trim().email('E-mail inválido').max(254),
+  adminNome: z.string().trim().min(1).max(120),
+  maxProjetos: z.number().int().min(1).max(10000),
+  maxUsuarios: z.number().int().min(1).max(10000),
+  termoVersao: z.string().trim().min(1).max(60),
+}).strict();
+
+export const atualizarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120).optional(),
+  maxProjetos: z.number().int().min(1).max(10000).optional(),
+  maxUsuarios: z.number().int().min(1).max(10000).optional(),
+  status: z.enum(['Active', 'Suspended']).optional(),
+}).strict().refine((o) => Object.keys(o).length > 0, 'Nada a alterar');
+
 // ---------------------------------------------------------------------------
 // Catálogo de serviços (spec do sistema de propostas, seção 3)
 // ---------------------------------------------------------------------------

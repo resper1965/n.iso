@@ -164,11 +164,21 @@ export const ehConsultor = (user: { role?: string } | null | undefined) => PAPEI
 
 /**
  * Administrador de uma consultoria (multiconsultoria, fatia 5): alcança TODO projeto da própria
- * organização, sem designação. O valor `consultoria_admin` só passa a ser aceito na criação de
- * usuário na Tarefa 4; o tratamento já fica aqui para nascer cortado por organização.
+ * organização, sem designação. NÃO é o `org_admin`, que administra a empresa-CLIENTE.
  */
 const PAPEIS_ADMIN_CONSULTORIA = new Set(['consultoria_admin']);
-export const ehAdminConsultoria = (user: { role?: string } | null | undefined) => PAPEIS_ADMIN_CONSULTORIA.has(user?.role ?? '');
+export const ehAdminDaOrg = (user: { role?: string } | null | undefined) => PAPEIS_ADMIN_CONSULTORIA.has(user?.role ?? '');
+
+/**
+ * Pode administrar a organização `orgId` (configuração comercial, catálogo, aprovação de desconto)?
+ * O `platform_admin`, qualquer uma; o `consultoria_admin`, só a dele (a da sessão, nunca a do
+ * `X-Org-Id`, que ele não escolhe). Ninguém mais. Organização vazia nega.
+ */
+export function podeAdministrarOrg(user: { role?: string; org_id?: string | null } | null | undefined, orgId: string | null | undefined): boolean {
+  if (!user || !orgId) return false;
+  if (user.role === 'platform_admin') return true;
+  return ehAdminDaOrg(user) && orgDoUsuario(user) === orgId;
+}
 
 /** Papéis de equipe cujo escopo é a organização (`users.org_id`), não o `client_project_id`. */
 export const PAPEIS_EQUIPE_ORG = new Set(['consultor', 'consultant', 'comercial', 'consultoria_admin']);
@@ -230,7 +240,7 @@ async function equipeAlcanca(db: D1Database, user: AtorAutorizado, projectId: st
   let ok = porProjeto.get(projectId);
   if (ok === undefined) {
     // Falha fechada: erro na consulta é "não alcança".
-    ok = ehAdminConsultoria(user)
+    ok = ehAdminDaOrg(user)
       ? await db.prepare(`${PROJETOS_DA_ORG_SQL} AND id = ?`).bind(orgDoUsuario(user) ?? '', projectId).first().then((r) => !!r).catch(() => false)
       : await consultorDesignado(db, user.email ?? '', projectId).catch(() => false);
     porProjeto.set(projectId, ok);
@@ -239,7 +249,7 @@ async function equipeAlcanca(db: D1Database, user: AtorAutorizado, projectId: st
 }
 
 /** Papéis cujo acesso a projeto é decidido por `equipeAlcanca`. */
-const ehEquipeDeProjeto = (user: AtorAutorizado | null | undefined) => ehConsultor(user) || ehAdminConsultoria(user);
+const ehEquipeDeProjeto = (user: AtorAutorizado | null | undefined) => ehConsultor(user) || ehAdminDaOrg(user);
 
 /**
  * Subconsulta dos projetos que o usuário enxerga numa listagem, para `<coluna> IN (${sql})` com
@@ -251,7 +261,7 @@ const ehEquipeDeProjeto = (user: AtorAutorizado | null | undefined) => ehConsult
 export function projetosVisiveis(user: AtorAutorizado | null | undefined): { sql: string; bind: string } | null {
   if (user?.role === 'platform_admin') return null;
   if (ehConsultor(user)) return { sql: PROJETOS_DO_CONSULTOR_SQL, bind: user?.email ?? '' };
-  if (ehAdminConsultoria(user)) return { sql: PROJETOS_DA_ORG_SQL, bind: orgDoUsuario(user) ?? '' };
+  if (ehAdminDaOrg(user)) return { sql: PROJETOS_DA_ORG_SQL, bind: orgDoUsuario(user) ?? '' };
   return { sql: 'SELECT ?', bind: user?.client_project_id ?? '' };
 }
 
@@ -383,8 +393,12 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
   return null;
 }
 
-/** Papéis internos da ness. — os únicos que enxergam o funil comercial. */
-const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin']);
+/**
+ * Papéis de EQUIPE (de consultoria, não de cliente) que passam por `somenteNess`. O nome é anterior à
+ * multiconsultoria: desde a fatia 5 vale para a equipe de qualquer organização, inclusive o
+ * `consultoria_admin`, e o corte por organização vem de `exigirOrg`/`requireProjectAccess`.
+ */
+const PAPEIS_NESS = new Set(['consultor', 'consultant', 'platform_admin', 'consultoria_admin']);
 
 /**
  * O usuário é da equipe ness. (e não de um cliente)?
@@ -437,7 +451,8 @@ export async function somenteNess(
  * `somenteNess`: o consultor é da ness., mas entrega a adequação — não vende.
  * O assessment (diagnóstico) segue em `somenteNess`, porque é trabalho dele.
  */
-const PAPEIS_COMERCIAL = new Set(['platform_admin', 'comercial']);
+// `consultoria_admin`: o funil e o catálogo da PRÓPRIA organização (as rotas cortam por `exigirOrg`).
+const PAPEIS_COMERCIAL = new Set(['platform_admin', 'comercial', 'consultoria_admin']);
 
 export function ehComercial(user: { role?: string | null } | null | undefined): boolean {
   return PAPEIS_COMERCIAL.has(user?.role ?? '');

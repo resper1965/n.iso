@@ -223,10 +223,11 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * digest; comparar só metadado seria teatro, porque quem reescreve o objeto
  * reescreve o metadado junto.
  *
- * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
+ * Restrita à equipe da ness. (`somenteOrgNess`: a cadeia é da plataforma inteira, e a equipe de
+ * outra consultoria, inclusive o consultoria_admin, não a lê): o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteNess, exigirOrg, somenteOrgNess, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);

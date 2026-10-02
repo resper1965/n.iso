@@ -20,7 +20,8 @@ beforeAll(async () => {
   await applySchema();
   const d = env.DB;
   await d.batch([
-    d.prepare(`INSERT INTO organizations (id, name, slug) VALUES ('org_b', 'Consultoria B', 'consultoria-b')`),
+    // limites altos: este arquivo prova o corte por organização, não o plano (organizacoes.test.ts)
+    d.prepare(`INSERT INTO organizations (id, name, slug, max_projects, max_users) VALUES ('org_b', 'Consultoria B', 'consultoria-b', 100, 100)`),
     d.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES
       ('p-ness','Cliente N','ISO 27001','controller','Active','org_ness'),
       ('p-b','Cliente B','ISO 27001','controller','Active','org_b'),
@@ -246,7 +247,7 @@ describe('usuários: cada organização gere só as suas contas', () => {
     const novo = (email: string, role: string, client_project_id?: string) =>
       chamar('POST', '/api/v1/users', S.ab, { email, password: 'Senha-forte-123!', name: 'N', role, client_project_id });
     expect((await novo('pa2@b.lat', 'platform_admin')).status).toBe(403);
-    expect((await novo('admin2@b.lat', 'admin')).status).toBe(403);
+    expect((await novo('admin2@b.lat', 'admin')).status).toBe(400); // grafia legada: fora do enum de papéis
     expect((await novo('cli2@x.com', 'org_admin', 'p-ness')).status).toBe(403);
   });
 
@@ -262,10 +263,10 @@ describe('usuários: cada organização gere só as suas contas', () => {
     expect(await criar(S.pa, 'cli5@x.com', 'org_user', 'p-b')).toBe('org_b');
     expect(await criar({ ...S.pa, 'X-Org-Id': 'org_b' }, 'cons5@b.lat', 'consultor')).toBe('org_b');
     expect(await criar(S.pa, 'cons6@ness.lat', 'consultor')).toBe('org_ness');
-    // o corpo não escolhe organização
+    // o corpo não escolhe organização: desde a tarefa 4 o schema é estrito, e `org_id` no corpo é 400
     const r = await chamar('POST', '/api/v1/users', S.ab, { email: 'cons7@b.lat', password: 'Senha-forte-123!', name: 'N', role: 'consultor', org_id: 'org_ness' });
-    expect(r.status).toBe(201);
-    expect((await env.DB.prepare(`SELECT org_id FROM users WHERE email='cons7@b.lat'`).first<any>()).org_id).toBe('org_b');
+    expect(r.status).toBe(400);
+    expect(await env.DB.prepare(`SELECT org_id FROM users WHERE email='cons7@b.lat'`).first<any>()).toBeNull();
   });
 });
 

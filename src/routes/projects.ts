@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador } from '../helpers';
-import { resolverOrg, SEM_ORG } from '../services/organizacao';
+import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -320,6 +320,9 @@ projectsApp.post('/', async (c) => {
     // existir). Cliente e papel desconhecido não têm organização: 403, falha fechada.
     const orgId = await resolverOrg(c);
     if (!orgId) return c.json(SEM_ORG, 403);
+    // Criação MANUAL respeita o plano; a do aceite de proposta (fecharVenda) passa e vai para a trilha.
+    // ponytail: COUNT e INSERT não são atômicos; duas criações simultâneas no limite passam as duas.
+    if (await limiteDoPlanoAtingido(c.env.DB, orgId, 'projetos')) return c.json(LIMITE_PROJETOS, 409);
     const cria = c.env.DB.prepare(
       `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, org_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`

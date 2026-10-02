@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, SESSION_TTL_SEC, erro500 } from '../helpers';
+import { equipeDeOrgSuspensa, ORG_SUSPENSA } from '../services/organizacao';
 
 /** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
 export function clientIp(c: any): string {
@@ -211,6 +212,10 @@ authApp.post('/login', async (c) => {
     if (user.ativo === 0) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
+
+    // Equipe de consultoria SUSPENSA não entra. Aqui a mensagem diz o motivo: a senha já foi
+    // provada, então não revela nada a quem sonda, e a pessoa precisa saber com quem falar.
+    if (await equipeDeOrgSuspensa(c.env.DB, user)) return c.json(ORG_SUSPENSA, 403);
 
     // Credencial correta zera a contagem: a janela existe para tentativa
     // seguida de erro, não para punir quem errou uma vez ontem.

@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, ehAdminConsultoria, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL, PAPEIS_EQUIPE_ORG } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, ehAdminDaOrg, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL, PAPEIS_EQUIPE_ORG } from '../helpers';
 import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
-import { orgDoUsuario, resolverOrg, SEM_ORG } from '../services/organizacao';
+import { orgDoUsuario, resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_USUARIOS } from '../services/organizacao';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -27,7 +27,7 @@ usersApp.get('/', async (c) => {
   
   try {
     let stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC');
-    if (ehAdminConsultoria(user)) {
+    if (ehAdminDaOrg(user)) {
       // Todas as contas da organização (equipe e clientes dos projetos dela), nenhuma de fora.
       stmt = c.env.DB.prepare(`SELECT u.id, u.email, u.name, u.role, u.client_project_id, u.created_at FROM users u WHERE ${ORG_DA_CONTA_SQL} = ? ORDER BY u.created_at DESC`).bind(orgDoUsuario(user) ?? '');
     } else if (user.role === 'org_admin') {
@@ -65,7 +65,7 @@ const PAPEIS_CLIENTE_GERIVEIS = new Set(['org_admin', 'org_user', 'client']);
  */
 const PAPEIS_DO_ADMIN_CONSULTORIA = new Set([...PAPEIS_CLIENTE_GERIVEIS, ...PAPEIS_EQUIPE_ORG]);
 const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefined) =>
-  quem.role !== 'platform_admin' && !(ehAdminConsultoria(quem) ? PAPEIS_DO_ADMIN_CONSULTORIA : PAPEIS_CLIENTE_GERIVEIS).has(papel ?? '');
+  quem.role !== 'platform_admin' && !(ehAdminDaOrg(quem) ? PAPEIS_DO_ADMIN_CONSULTORIA : PAPEIS_CLIENTE_GERIVEIS).has(papel ?? '');
 const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
 
 /** Organização de um projeto; `null` se não existe. */
@@ -82,6 +82,32 @@ const NAO_ENCONTRADO = { error: 'Usuário não encontrado' };
 const consultorForaDoProjeto = async (db: D1Database, quem: { role?: string; email?: string }, projectId: string | null | undefined) =>
   ehConsultor(quem) && !(projectId && await consultorDesignado(db, quem.email ?? '', projectId));
 const recusaProjeto = { error: 'Forbidden: consultor só gere usuários dos projetos em que está designado' };
+
+/**
+ * Convite de primeiro acesso: e-mail com a senha provisória (a conta nasce com
+ * `requires_password_change = 1`, então ela vale para UM login). Único caminho de boas-vindas: o
+ * `POST /users` e o provisionamento de organização (`routes/organizacoes.ts`) usam este. Devolve se o
+ * provedor aceitou; a senha nunca vai para log (`sendEmail` só registra destinatário e assunto).
+ */
+export function enviarBoasVindas(c: any, email: string, name: string, password: string): Promise<boolean> {
+  const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao n.iso!</h2>
+        <p>Olá, <strong>${escapeHtml(name)}</strong>,</p>
+        <p>Você foi convidado a acessar o portal de GRC da <strong>ness.</strong></p>
+        <p>Aqui estão suas credenciais temporárias para o primeiro acesso:</p>
+        <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 0.95rem;">
+          <strong>E-mail:</strong> ${escapeHtml(email)}<br/>
+          <strong>Senha Temporária:</strong> ${escapeHtml(password)}
+        </div>
+        <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
+        <p style="margin-top: 25px;">
+          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no n.iso</a>
+        </p>
+      </div>
+    `;
+  return sendEmail(c, email, 'Seu acesso ao n.iso', emailHtml);
+}
 
 usersApp.post('/', async (c) => {
   const admin = c.get('user');
@@ -110,11 +136,12 @@ usersApp.post('/', async (c) => {
     // platform_admin escolhe com X-Org-Id). Ninguém escolhe a organização pelo corpo.
     const ehCliente = PAPEIS_CLIENTE_GERIVEIS.has(targetRole);
     const orgCriador = await resolverOrg(c);
-    if (ehAdminConsultoria(admin) && ehCliente && (!targetProject || await orgDoProjeto(c.env.DB, targetProject) !== orgCriador)) {
+    if (ehAdminDaOrg(admin) && ehCliente && (!targetProject || await orgDoProjeto(c.env.DB, targetProject) !== orgCriador)) {
       return c.json({ error: 'Forbidden: projeto fora da sua organização' }, 403);
     }
     const orgNovo = ehCliente ? (await orgDoProjeto(c.env.DB, targetProject)) ?? orgCriador : orgCriador;
     if (!orgNovo) return c.json(SEM_ORG, 403);
+    if (await limiteDoPlanoAtingido(c.env.DB, orgNovo, 'usuarios')) return c.json(LIMITE_USUARIOS, 409);
 
     const id = genId();
     const hash = await hashPassword(password);
@@ -125,23 +152,7 @@ usersApp.post('/', async (c) => {
 
     await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${targetRole}`);
 
-    const emailHtml = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
-        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0;">Bem-vindo ao n.iso!</h2>
-        <p>Olá, <strong>${escapeHtml(name)}</strong>,</p>
-        <p>Você foi convidado a acessar o portal de GRC da <strong>ness.</strong></p>
-        <p>Aqui estão suas credenciais temporárias para o primeiro acesso:</p>
-        <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 0.95rem;">
-          <strong>E-mail:</strong> ${escapeHtml(email)}<br/>
-          <strong>Senha Temporária:</strong> ${escapeHtml(password)}
-        </div>
-        <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
-        <p style="margin-top: 25px;">
-          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no n.iso</a>
-        </p>
-      </div>
-    `;
-    await sendEmail(c, email, 'Seu acesso ao n.iso', emailHtml);
+    await enviarBoasVindas(c, email, name, password);
 
     return c.json({ id, email, name, role: targetRole, client_project_id: targetProject }, 201);
   } catch (e: any) {
@@ -166,7 +177,7 @@ usersApp.put('/:id', async (c) => {
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
-    if (ehAdminConsultoria(admin)) {
+    if (ehAdminDaOrg(admin)) {
       const minha = orgDoUsuario(admin);
       if (user.org !== minha) return c.json(NAO_ENCONTRADO, 404);
       // Não move a conta para projeto de outra organização.
@@ -209,7 +220,7 @@ usersApp.put('/:id', async (c) => {
       updates.push('role = ?');
       values.push(role);
       // Conta que vira equipe fica na organização de quem a gere (a de cliente segue o projeto).
-      if (ehAdminConsultoria(admin)) {
+      if (ehAdminDaOrg(admin)) {
         updates.push('org_id = ?');
         values.push(orgDoUsuario(admin));
       }
@@ -258,7 +269,7 @@ usersApp.delete('/:id', async (c) => {
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
-    if (ehAdminConsultoria(admin) && user.org !== orgDoUsuario(admin)) return c.json(NAO_ENCONTRADO, 404);
+    if (ehAdminDaOrg(admin) && user.org !== orgDoUsuario(admin)) return c.json(NAO_ENCONTRADO, 404);
 
     if (soPlatformAdmin(admin, user.role)) return c.json(recusaPapelInterno, 403);
     if (await consultorForaDoProjeto(c.env.DB, admin, user.client_project_id)) return c.json(recusaProjeto, 403);

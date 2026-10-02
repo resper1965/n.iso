@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { ehComercial, logAudit, erro500 } from '../helpers';
+import { ehComercial, podeAdministrarOrg, logAudit, erro500 } from '../helpers';
 import { validateBody, configOrgSchema } from '../schemas';
 import { lerConfigOrg, exigirOrg, formatarNumeroProposta, mesclarPreco } from '../services/organizacao';
 
@@ -17,15 +17,21 @@ organizacaoApp.get('/config', async (c) => {
   } catch (e) { return erro500(c, 'Erro ao ler a configuração da organização', e); }
 });
 
-// O administrador de cada consultoria entra na fatia 5; até lá, só platform_admin grava.
+// Grava: o platform_admin (qualquer organização, por X-Org-Id) e o consultoria_admin (só a dele).
 organizacaoApp.put('/config', async (c) => {
   try {
     const user = c.get('user');
-    if (user?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador da plataforma altera a configuração' }, 403);
+    const orgId = c.get('orgId');
+    if (!podeAdministrarOrg(user, orgId)) return c.json({ error: 'Forbidden: só o administrador da organização altera a configuração' }, 403);
     const v = await validateBody(c, configOrgSchema);
     if (!v.success) return v.response;
     const b = v.data;
-    const orgId = c.get('orgId');
+    // O prefixo é o "nome" da organização no número da proposta: único entre organizações, como no
+    // provisionamento (uma consultoria não emite proposta NESS-2026-001).
+    if (b.prefixoProposta && await c.env.DB.prepare('SELECT 1 FROM organizations WHERE upper(prefixo_proposta) = ? AND id <> ?')
+      .bind(b.prefixoProposta, orgId).first()) {
+      return c.json({ error: 'Prefixo de proposta já usado por outra organização' }, 409);
+    }
     const atual = await lerConfigOrg(c.env.DB, orgId);
     const novo = {
       nome: b.nome ?? atual.nome,

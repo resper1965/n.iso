@@ -30,10 +30,11 @@ describe('Papéis internos só por platform_admin', () => {
     admin = json(await sessionFor({ id: 'u-adm', email: 'adm@ness.lat', role: 'platform_admin' }));
   });
 
-  for (const papel of ['platform_admin', 'admin', 'comercial']) {
+  // `admin` (grafia legada) nem é papel aceito pelo schema desde a fatia 5: 400 antes da guarda.
+  for (const [papel, status] of [['platform_admin', 403], ['admin', 400], ['comercial', 403]] as const) {
     it(`consultor NÃO cria usuário ${papel}`, async () => {
       const res = await req('/api/v1/users', { method: 'POST', headers: consultor, body: novo(`x-${papel}@x.com`, papel) });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(status);
       const criado = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(`x-${papel}@x.com`).first();
       expect(criado, 'o usuário foi criado apesar do 403').toBeNull();
     });

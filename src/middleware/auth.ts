@@ -8,6 +8,7 @@ import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 import { resolverAgente, acaoDestrutiva } from './agente';
 import { logAudit } from '../helpers';
 import { alvoDaExclusao } from '../trilha-exclusao';
+import { equipeDeOrgSuspensa, ORG_SUSPENSA } from '../services/organizacao';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -253,6 +254,11 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+
+    // Sessão aberta antes da suspensão da organização morre na requisição seguinte (o login já
+    // recusa). Uma consulta só para equipe de fora da ness.; o agente tem a mesma regra em
+    // `concessaoValida`, e a chave de API é de cliente (presa a projeto).
+    if (await equipeDeOrgSuspensa(c.env.DB, user)) return c.json(ORG_SUSPENSA, 403);
   }
 
   // Documento legal MATERIAL pendente barra o acesso até o aceite — muda base

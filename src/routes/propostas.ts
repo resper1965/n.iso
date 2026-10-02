@@ -4,7 +4,7 @@
 // e nunca é remontado; mudança depois da geração só por revisão.
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { ehComercial, genId, genToken, sha256Hex, escapeHtml, sendEmail, logAudit, erro500 } from '../helpers';
+import { ehComercial, podeAdministrarOrg, genId, genToken, sha256Hex, escapeHtml, sendEmail, logAudit, erro500 } from '../helpers';
 import { validateBody, propostaCriarSchema, propostaEditarSchema, propostaGerarSchema, propostaEnviarSchema, propostaAceiteManualSchema } from '../schemas';
 import type { Servico } from '../schemas';
 import { exigirOrg, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
@@ -346,9 +346,9 @@ propostasApp.post('/:id/gerar', async (c) => {
 propostasApp.post('/:id/aprovar-desconto', async (c) => {
   try {
     const user = c.get('user');
-    if (user?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador aprova desconto acima do teto' }, 403);
     const db = c.env.DB;
     const orgId = c.get('orgId');
+    if (!podeAdministrarOrg(user, orgId)) return c.json({ error: 'Forbidden: só o administrador da organização aprova desconto acima do teto' }, 403);
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (p.status !== 'aguardando_aprovacao') return c.json({ error: 'A proposta não está aguardando aprovação de desconto' }, 409);

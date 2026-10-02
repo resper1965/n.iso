@@ -60,6 +60,40 @@ export async function somenteOrgNess(c: any, next: () => Promise<void>) {
   await next();
 }
 
+/** Plano da ness. (`organizations.plan`): sem limite de projetos nem de usuários. */
+export const PLANO_INTERNO = 'interno';
+
+/**
+ * A organização já usa tudo o que o plano permite? Conta o que existe (`COUNT(*)` por `org_id`).
+ * O plano `interno` (a ness., cujos `max_projects`/`max_users` ficaram no default 3/5 da coluna) é
+ * ilimitado. Organização inexistente ou limite nulo: atingido (falha fechada).
+ */
+export async function limiteDoPlanoAtingido(db: D1Database, orgId: string, recurso: 'projetos' | 'usuarios'): Promise<boolean> {
+  const [coluna, tabela] = recurso === 'projetos' ? ['max_projects', 'projects'] : ['max_users', 'users'];
+  const r = await db.prepare(`SELECT o.plan, o.${coluna} AS max, (SELECT COUNT(*) FROM ${tabela} WHERE org_id = o.id) AS n
+    FROM organizations o WHERE o.id = ?`).bind(orgId).first<{ plan: string | null; max: number | null; n: number }>();
+  if (!r) return true;
+  if (r.plan === PLANO_INTERNO) return false;
+  return r.max == null || r.n >= r.max;
+}
+export const LIMITE_PROJETOS = { error: 'Limite de projetos do plano atingido' } as const;
+export const LIMITE_USUARIOS = { error: 'Limite de usuários do plano atingido' } as const;
+
+/**
+ * A equipe (consultor, comercial, consultoria_admin) de organização `Suspended` não autentica nem
+ * usa sessão aberta. Uma consulta só quando o usuário é de equipe e NÃO é da ness. (a ness. não é
+ * suspensa: `PUT /platform/orgs` recusa); platform_admin e cliente não passam por aqui (o cliente
+ * final não é "da consultoria"). Organização inexistente ou com status diferente de `Active`: bloqueia.
+ */
+export async function equipeDeOrgSuspensa(db: D1Database, user: { role?: string | null; org_id?: string | null } | null | undefined): Promise<boolean> {
+  if (!PAPEIS_EQUIPE.has(user?.role ?? '')) return false;
+  const org = orgDoUsuario(user);
+  if (!org || org === ORG_NESS) return false;
+  const r = await db.prepare('SELECT status FROM organizations WHERE id = ?').bind(org).first<{ status: string | null }>();
+  return r?.status !== 'Active';
+}
+export const ORG_SUSPENSA = { error: 'Organização suspensa: o acesso da equipe está bloqueado. Fale com o administrador da plataforma.' } as const;
+
 export type SecaoDesligavel = 'como_trabalhamos' | 'responsabilidades';
 type PorFaixa = Record<'1' | '2' | '3', number>;
 
