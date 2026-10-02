@@ -2,16 +2,17 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { ehComercial, logAudit, erro500 } from '../helpers';
 import { validateBody, configOrgSchema } from '../schemas';
-import { lerConfigOrg, orgDoUsuario, formatarNumeroProposta, mesclarPreco } from '../services/organizacao';
+import { lerConfigOrg, exigirOrg, formatarNumeroProposta, mesclarPreco } from '../services/organizacao';
 
 export const organizacaoApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+organizacaoApp.use('*', exigirOrg);
 
 // Configuração carrega custo interno e margem: nem leitura para quem não é do comercial.
 organizacaoApp.get('/config', async (c) => {
   try {
     const user = c.get('user');
     if (!ehComercial(user)) return c.json({ error: 'Forbidden: Área comercial restrita ao comercial da ness.' }, 403);
-    const cfg = await lerConfigOrg(c.env.DB, orgDoUsuario(user));
+    const cfg = await lerConfigOrg(c.env.DB, c.get('orgId'));
     return c.json({ ...cfg, sugestaoNumero: formatarNumeroProposta(cfg.prefixoProposta, new Date().getFullYear(), cfg.proximoNumero) });
   } catch (e) { return erro500(c, 'Erro ao ler a configuração da organização', e); }
 });
@@ -24,7 +25,7 @@ organizacaoApp.put('/config', async (c) => {
     const v = await validateBody(c, configOrgSchema);
     if (!v.success) return v.response;
     const b = v.data;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const atual = await lerConfigOrg(c.env.DB, orgId);
     const novo = {
       nome: b.nome ?? atual.nome,

@@ -28,8 +28,12 @@ CREATE TABLE IF NOT EXISTS users (
     -- existindo — a trilha referencia o e-mail dela, e apagar reescreveria o
     -- passado — mas não autentica. DEFAULT 1: nada muda para quem já existe.
     ativo INTEGER NOT NULL DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Consultoria a que a conta de equipe pertence (migration 0040). Para o
+    -- usuário de cliente NÃO vale: a organização dele é a do projeto.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
+CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
 
 -- ═══════════════════════════════════════════════
 -- STREAM A: CRM & PRÉ-SALES (Leads, Proposals, Contracts)
@@ -203,8 +207,12 @@ CREATE TABLE IF NOT EXISTS projects (
     language TEXT DEFAULT 'pt-BR',
     repository_url TEXT,
     repository_token TEXT,
-    proposta_id TEXT
+    proposta_id TEXT,
+    -- Consultoria dona do projeto (migration 0040). Sem REFERENCES, como nas
+    -- tabelas comerciais: ALTER TABLE não aceita FK com default.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
+CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(org_id);
 
 CREATE TABLE IF NOT EXISTS project_phases (
     id TEXT PRIMARY KEY,
@@ -666,7 +674,12 @@ CREATE TABLE IF NOT EXISTS organizations (
     -- escapado só na hora de virar HTML.
     config_preco TEXT,
     textos TEXT,
-    secoes_desligadas TEXT
+    secoes_desligadas TEXT,
+    -- Termo de uso da consultoria (migration 0040): data do aceite e versão.
+    termo_aceito_em DATETIME,
+    termo_versao TEXT,
+    -- Chave do logo no R2 (migration 0040).
+    logo_chave TEXT
 );
 
 INSERT OR IGNORE INTO organizations (id, name, slug, plan, status, prefixo_proposta, proximo_numero, textos)

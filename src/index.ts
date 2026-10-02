@@ -129,7 +129,11 @@ export type Variables = {
     iat?: number;
     /** Última atividade vista pelo middleware; relógio da expiração por inatividade. */
     seen?: number;
+    /** `users.org_id`, gravado pelo login (migration 0040). Ausente em sessão anterior a ela. */
+    org_id?: string;
   };
+  /** Organização da requisição, resolvida por `exigirOrg` (services/organizacao.ts). */
+  orgId: string;
 };
 
 

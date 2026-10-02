@@ -2,9 +2,46 @@ import { DEFAULT_FINANCIAL_MODEL, SCOPE_MULTIPLIERS } from './pricing';
 
 export const ORG_NESS = 'org_ness';
 
-// ponytail: uma organização só até a fatia 5 (multi-consultoria); aqui entra users.org_id
-export function orgDoUsuario(_user: { role?: string } | undefined): string {
-  return ORG_NESS;
+const PAPEIS_PLATAFORMA = new Set(['platform_admin', 'admin']);
+/** Equipe de uma consultoria: a organização vem de `users.org_id`, gravado na sessão pelo login. */
+const PAPEIS_EQUIPE = new Set(['consultor', 'consultant', 'comercial', 'consultoria_admin']);
+
+/**
+ * Organização em que o usuário age; `null` = nega (403). Falha fechada:
+ * - `platform_admin` (e `admin` legado): o cabeçalho `X-Org-Id`, se houver; senão `org_ness`.
+ *   A existência da organização pedida é conferida por `exigirOrg`, que tem o banco.
+ * - equipe: `org_id` da sessão; sessão anterior à 0040 (sem o campo) = `org_ness`, porque toda
+ *   conta de equipe existente antes dela é da ness. O cabeçalho é IGNORADO.
+ * - cliente (`org_admin`, `org_user`, `client`) e papel desconhecido: `null`, com ou sem `org_id`.
+ *   A organização do cliente é a do projeto dele, não `users.org_id`.
+ */
+export function orgDoUsuario(
+  user: { role?: string | null; org_id?: string | null } | null | undefined,
+  cabecalhoOrg?: string | null,
+): string | null {
+  const role = user?.role ?? '';
+  if (PAPEIS_PLATAFORMA.has(role)) return cabecalhoOrg?.trim() || ORG_NESS;
+  if (PAPEIS_EQUIPE.has(role)) return user?.org_id || ORG_NESS;
+  return null;
+}
+
+export const SEM_ORG = { error: 'Organização não identificada' } as const;
+
+/**
+ * Middleware: resolve a organização da requisição em `c.get('orgId')` ou responde 403. O
+ * `X-Org-Id` do `platform_admin` só vale se a organização existe (inexistente → 403, não 400:
+ * um caminho só de recusa).
+ */
+export async function exigirOrg(c: any, next: () => Promise<void>) {
+  const cabecalho = c.req.header('X-Org-Id');
+  let orgId = orgDoUsuario(c.get('user'), cabecalho);
+  if (orgId && cabecalho?.trim() === orgId) {
+    const existe = await c.env.DB.prepare('SELECT 1 FROM organizations WHERE id = ?').bind(orgId).first();
+    if (!existe) orgId = null;
+  }
+  if (!orgId) return c.json(SEM_ORG, 403);
+  c.set('orgId', orgId);
+  await next();
 }
 
 export type SecaoDesligavel = 'como_trabalhamos' | 'responsabilidades';

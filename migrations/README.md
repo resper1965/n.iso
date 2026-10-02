@@ -332,3 +332,21 @@ da mesma proposta). Conferido em produção em 2026-10-02, só por leitura
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0040 — multiconsultoria (fatia 5, 2026-10-02)
+
+`ALTER TABLE ... ADD COLUMN`: `users.org_id` e `projects.org_id`, ambos
+`TEXT NOT NULL DEFAULT 'org_ness'` e sem `REFERENCES` (como nas tabelas
+comerciais: `ALTER` não aceita FK com default). O DEFAULT é o backfill: toda
+conta e todo projeto existentes passam a ser da ness. `organizations` ganha
+`termo_aceito_em`, `termo_versao` e `logo_chave`. Índices `idx_users_org` e
+`idx_projects_org`. Conferido em produção em 2026-10-02, só por leitura
+(`pragma_table_info`): nenhuma das cinco colunas existia.
+
+Depois de aplicar, a conferência é `SELECT COUNT(*) FROM users WHERE org_id <>
+'org_ness'` e o mesmo em `projects`: as duas têm de dar 0.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.

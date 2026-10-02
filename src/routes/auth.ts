@@ -188,7 +188,7 @@ authApp.post('/login', async (c) => {
     }
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
+      'SELECT id, email, name, role, client_project_id, org_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
-import { orgDoUsuario } from '../services/organizacao';
+import { exigirOrg } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
 export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -20,6 +20,9 @@ assessmentsApp.use('*', async (c, next) => {
   if (ehComercial(c.get('user'))) return next();
   return somenteNess(c, next);
 });
+// Organização da equipe (multiconsultoria): sem ela, 403. As rotas públicas não têm sessão.
+assessmentsApp.use('*', (c, next) =>
+  c.req.path.startsWith('/api/v1/assessments/public/') ? next() : exigirOrg(c, next));
 
 /** Preço é do comercial: quem não é, recebe a linha sem nenhuma coluna `pricing_*`. */
 function semPreco<T extends Record<string, unknown>>(row: T, user: { role?: string | null } | null | undefined): T {
@@ -145,7 +148,7 @@ assessmentsApp.post('/', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, org_id, created_at)
        VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
-    ).bind(id, body.lead_id || null, body.client_name, accessToken, orgDoUsuario(c.get('user'))).run();
+    ).bind(id, body.lead_id || null, body.client_name, accessToken, c.get('orgId')).run();
 
     if (body.lead_id) {
       await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
@@ -208,7 +211,7 @@ assessmentsApp.get('/', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
       'SELECT * FROM assessments WHERE org_id = ? ORDER BY created_at DESC'
-    ).bind(orgDoUsuario(c.get('user'))).all();
+    ).bind(c.get('orgId')).all();
     const user = c.get('user');
     return c.json(results.map((r) => semPreco(r, user)));
   } catch (e: any) {
@@ -219,7 +222,7 @@ assessmentsApp.get('/', async (c) => {
 assessmentsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ? AND org_id = ?').bind(id, orgDoUsuario(c.get('user'))).first();
+    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const progress = await c.env.DB.prepare(
