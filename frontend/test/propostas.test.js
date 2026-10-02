@@ -287,8 +287,9 @@ describe('documento', () => {
     expect(document.querySelector('[data-action="__prpImprimir"]').textContent).toContain('Imprimir / PDF');
     await clica('__prpWord');
     expect(chamadas('GET', '/api/v1/propostas/p1/docx')[0][1].headers.Authorization).toBe('Bearer tok-123');
+    // `r.blob()` leva mais ciclos sob cobertura (CI): espera a condição, não um número fixo de ticks.
+    await vi.waitFor(() => expect(clique).toHaveBeenCalled());
     expect(URL.createObjectURL).toHaveBeenCalled();
-    expect(clique).toHaveBeenCalled();
     expect(clique.mock.instances[0].download).toBe('NESS-2026-001-rev2.docx');
   });
 });
