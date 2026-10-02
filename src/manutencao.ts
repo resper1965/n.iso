@@ -17,16 +17,16 @@ import type { Bindings } from './index';
  */
 
 /**
- * Maior janela de rate limit em uso hoje (`routes/auth.ts`: 300 s).
+ * Maior janela de rate limit em uso hoje (`routes/public-propostas.ts`: 600 s).
  *
  * A purga precisa deste número porque a linha de `rate_limits` é REAPROVEITADA:
  * não há TTL, e apagar uma linha de janela ABERTA zeraria o contador de quem
  * está sendo limitado naquele instante — exatamente o oposto do que a tabela
- * existe para fazer. O teto abaixo é ~2000× esta janela, então nenhuma linha
+ * existe para fazer. O teto abaixo é ~1000× esta janela, então nenhuma linha
  * viva é alcançada. Se alguém usar `rateLimitD1` com janela maior que esta,
  * atualize as duas constantes juntas.
  */
-const MAIOR_JANELA_SEG = 300;
+const MAIOR_JANELA_SEG = 600;
 
 /** Linha de rate limit parada há mais de 7 dias não tem contador vivo a proteger. */
 const PURGA_RATE_LIMIT_SEG = 7 * 24 * 60 * 60;

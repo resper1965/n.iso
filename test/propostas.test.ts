@@ -376,6 +376,67 @@ describe('rotas /api/v1/propostas', () => {
     } finally { vi.useRealTimers(); }
   }, 30_000);
 
+  // ——— revisão final da fatia 4 ———
+  const publica = (acao: string, corpo: unknown) => app.fetch(new Request(`http://localhost/api/v1/public/propostas/${acao}`, {
+    method: 'POST', headers: { ...json, 'CF-Connecting-IP': '10.77.0.1' }, body: JSON.stringify(corpo),
+  }), workerEnv() as any);
+  const contaDoNumero = async (tabela: string, numero: string) => (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ${tabela} t JOIN propostas p ON p.id = t.proposta_id WHERE p.numero = ?`).bind(numero).first<any>()).n;
+
+  it('rev. 1 enviada, rev. 2 em rascunho, cliente aceita a rev. 1: a rev. 2 não gera nem fecha outra venda', async () => {
+    const p = await criar({ itens: [{ servicoId: srvProjeto }] });
+    const g = await (await gerar(p.id)).json<any>();
+    const { url } = await (await chamar('POST', `/api/v1/propostas/${p.id}/link`, com)).json<any>();
+    const rev = await (await chamar('POST', `/api/v1/propostas/${p.id}/revisao`, com)).json<any>();
+    expect(rev.status).toBe('rascunho');
+    const ac = await publica('aceitar', { token: url.split('#')[1], nome: 'Maria Cliente', cargo: 'Diretora', email: 'maria@cliente.com', poderes: true });
+    expect(ac.status, await ac.clone().text()).toBe(200);
+    expect((await ler(rev.id)).status).toBe('substituida');
+    // mesmo voltando a rascunho (dado antigo), gerar a revisão de um número já aceito é 409
+    await env.DB.prepare(`UPDATE propostas SET status = 'rascunho' WHERE id = ?`).bind(rev.id).run();
+    const gr = await gerar(rev.id);
+    expect(gr.status).toBe(409);
+    expect(await gr.json()).toEqual({ error: 'Esta proposta já foi aceita em outra revisão' });
+    expect((await ler(rev.id)).status).toBe('rascunho');
+    // forçada a enviada no banco: o aceite dela é ja_fechada, sem contrato nem projeto novos
+    await env.DB.prepare(`UPDATE propostas SET status = 'enviada' WHERE id = ?`).bind(rev.id).run();
+    const am = await chamar('POST', `/api/v1/propostas/${rev.id}/aceite-manual`, com, { nome: 'Ana Souza', cargo: 'CEO', email: 'ana@c.com', comprovante: 'Contrato assinado' });
+    expect(am.status).toBe(409);
+    expect(await contaDoNumero('contracts', g.numero)).toBe(1);
+    expect(await contaDoNumero('projects', g.numero)).toBe(1);
+    expect((await ler(rev.id)).status).toBe('enviada');
+  }, 60_000);
+
+  it('expirada ganha revisão, e a revisão gerada a substitui', async () => {
+    const p = await criar();
+    expect((await gerar(p.id)).status).toBe(200);
+    await env.DB.prepare(`UPDATE propostas SET status = 'expirada' WHERE id = ?`).bind(p.id).run();
+    const r = await chamar('POST', `/api/v1/propostas/${p.id}/revisao`, com);
+    expect(r.status, await r.clone().text()).toBe(201);
+    const rev = await r.json<any>();
+    expect((await gerar(rev.id)).status).toBe(200);
+    expect((await ler(p.id)).status).toBe('substituida');
+  }, 60_000);
+
+  it('consultorEmail: só consultor ativo (sem diferença de caixa); senão 400', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, ativo) VALUES ('u-cons-off','off@ness.lat','x','Off','consultor',0)`),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-com-db','vendas@ness.lat','x','Vendas','comercial')`),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-consultant','en@ness.lat','x','En','consultant')`),
+    ]);
+    for (const email of ['ninguem@ness.lat', 'off@ness.lat', 'vendas@ness.lat']) {
+      const r = await chamar('POST', '/api/v1/propostas', com, { leadId: 'lead-sem', itens: [], consultorEmail: email });
+      expect(r.status, email).toBe(400);
+      expect((await r.json<any>()).error, email).toMatch(/consultor/i);
+    }
+    const p = await criar({ consultorEmail: 'CONS@ness.lat' });
+    expect(p.consultor_email).toBe('CONS@ness.lat');
+    expect((await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { consultorEmail: 'off@ness.lat' })).status).toBe(400);
+    expect((await ler(p.id)).consultor_email).toBe('CONS@ness.lat');
+    expect((await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { consultorEmail: 'en@ness.lat' })).status).toBe(200);
+    expect((await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { consultorEmail: null })).status).toBe(200);
+  }, 60_000);
+
   it('cada ato fica na trilha; a geração registra número e hash', async () => {
     const { results } = await env.DB.prepare(`SELECT action, details FROM audit_logs WHERE action LIKE 'proposta.%'`).all<any>();
     const acoes = results.map((r) => r.action);

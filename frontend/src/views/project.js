@@ -72,15 +72,6 @@ const ISO_GUIDELINES = {
         } catch(e) { alert('Erro ao carregar projeto'); }
     }
 
-    async function promoteToProject(id) {
-        if (!confirm('Deseja converter este assessment em um projeto ativo?')) return;
-        try {
-            await api('POST', `/api/v1/assessments/${id}/convert`);
-            alert('Projeto criado com sucesso!');
-            navigate('projects');
-        } catch(e) { alert('Erro: ' + e.message); }
-    }
-
     async function renderProjectDetail(c, h, a) {
         let p = S.currentProject || S.activeProject;
         if (!p || !p.id) {
@@ -1452,7 +1443,6 @@ const ISO_GUIDELINES = {
 
 window.renderProjects = renderProjects;
 window.openProjectDetail = openProjectDetail;
-window.promoteToProject = promoteToProject;
 window.renderProjectDetail = renderProjectDetail;
 window.openPhaseDetail = openPhaseDetail;
 window.wsUploadEvidence = wsUploadEvidence;

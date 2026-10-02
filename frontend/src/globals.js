@@ -992,6 +992,9 @@ window.handleNotificationClick = async function handleNotificationClick(id) {
             } else if (parts[1] === 'proposals') {
                 const proposalId = parts[2];
                 navigate('proposals', { currentProposalId: proposalId });
+            } else if (parts[1] === 'propostas') {
+                // notificações da proposta (visualizada, recusada, ajuste): a tela de Propostas abre a ficha
+                navigate('proposals', { propostaAbrir: parts[2] || null });
             } else if (parts[1] === 'assessments') {
                 const assessmentId = parts[2];
                 navigate('assessments', { currentAssessmentId: assessmentId });

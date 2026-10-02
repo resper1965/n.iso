@@ -506,11 +506,14 @@ export async function rateLimitD1(db: D1Database, key: string, max: number, wind
   return (row?.count ?? 1) <= max;
 }
 
-/** Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log */
-export async function sendEmail(c: any, to: string, subject: string, html: string): Promise<boolean> {
+/**
+ * Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log
+ * (dev) só com destinatário e assunto: o corpo leva link de convite, código e token de proposta.
+ */
+export async function sendEmail(c: any, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
   const apiKey = c.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}\nConteúdo: ${html}`);
+    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}`);
     return true;
   }
   try {
@@ -521,10 +524,11 @@ export async function sendEmail(c: any, to: string, subject: string, html: strin
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'n.iso <noreply@ness.com.br>',
+        from: opcoes?.from ?? 'n.iso <noreply@ness.com.br>',
         to: [to],
         subject: subject,
-        html: html
+        html: html,
+        ...(opcoes?.replyTo ? { reply_to: opcoes.replyTo } : {}),
       })
     });
     if (!res.ok) {

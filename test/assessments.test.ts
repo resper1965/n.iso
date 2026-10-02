@@ -179,7 +179,7 @@ describe('Funil de assessment', () => {
     });
   });
 
-  describe('conversão em projeto', () => {
+  describe('conversão em projeto (aposentada)', () => {
     async function comRespostas() {
       const { corpo } = await criar('Cliente Convertido');
       await pedir(worker, `/api/v1/assessments/${corpo.id}/block/1`, {
@@ -196,37 +196,41 @@ describe('Funil de assessment', () => {
       return corpo.id;
     }
 
-    it('cria o projeto com os dados do questionário E semeia as fases', async () => {
-      // Projeto sem fases é projeto que abre vazio na tela do cliente — falha
-      // que não gera erro nenhum e só aparece no primeiro acesso dele.
+    it('POST /convert é 410 e NÃO cria projeto nem marca o levantamento como convertido', async () => {
+      // O projeto nasce do aceite da proposta (fecharVenda). Este caminho criava projeto em dobro.
       const id = await comRespostas();
+      const antes = await env.DB.prepare('SELECT count(*) AS n FROM projects').first<{ n: number }>();
       const res = await pedir(worker, `/api/v1/assessments/${id}/convert`, { method: 'POST', headers: staff });
-      expect(res.status, await res.clone().text()).toBe(201);
-      const { project_id } = await res.json<any>();
-
-      const projeto = await env.DB.prepare('SELECT client_name, sector, standards, assessment_id FROM projects WHERE id = ?')
-        .bind(project_id).first<any>();
-      expect(projeto.client_name).toBe('Cliente Convertido');
-      expect(projeto.sector).toBe('Fintech');
-      expect(projeto.assessment_id, 'o vínculo com o assessment não foi gravado').toBe(id);
-
-      const { results: fases } = await env.DB.prepare('SELECT id FROM project_phases WHERE project_id = ?')
-        .bind(project_id).all();
-      expect(fases!.length, 'o projeto nasceu sem fases').toBeGreaterThan(0);
+      expect(res.status).toBe(410);
+      expect((await res.json<any>()).error).toContain('aceite da proposta');
+      expect((await env.DB.prepare('SELECT count(*) AS n FROM projects').first<{ n: number }>())!.n).toBe(antes!.n);
+      const a = await env.DB.prepare('SELECT status, converted_project_id FROM assessments WHERE id = ?').bind(id).first<any>();
+      expect(a.converted_project_id).toBeNull();
+      expect(a.status).not.toBe('converted');
     });
 
-    it('converter duas vezes é 409, e não cria projeto novo', async () => {
+    it('a segunda chamada e o id inexistente também respondem 410, sem projeto', async () => {
       const id = await comRespostas();
       await pedir(worker, `/api/v1/assessments/${id}/convert`, { method: 'POST', headers: staff });
-      const segunda = await pedir(worker, `/api/v1/assessments/${id}/convert`, { method: 'POST', headers: staff });
-      expect(segunda.status).toBe(409);
-
+      expect((await pedir(worker, `/api/v1/assessments/${id}/convert`, { method: 'POST', headers: staff })).status).toBe(410);
+      expect((await pedir(worker, '/api/v1/assessments/nao-existe/convert', { method: 'POST', headers: staff })).status).toBe(410);
       const { results } = await env.DB.prepare('SELECT id FROM projects WHERE assessment_id = ?').bind(id).all();
-      expect(results, 'a segunda conversão criou um projeto duplicado').toHaveLength(1);
+      expect(results).toHaveLength(0);
     });
 
-    it('assessment inexistente é 404', async () => {
-      expect((await pedir(worker, '/api/v1/assessments/nao-existe/convert', { method: 'POST', headers: staff })).status).toBe(404);
+    it('Aprovar proposta pelo painel também saiu: /sign não existe e PUT status Signed é 410, sem contrato nem projeto', async () => {
+      const { corpo } = await criar('Cliente da proposta');
+      await env.DB.prepare(`INSERT INTO leads (id, company_name) VALUES ('lead-aprov', 'Cliente da proposta')`).run();
+      await env.DB.prepare(`INSERT INTO proposals (id, lead_id, assessment_id, status, total_price, content_html) VALUES ('prop-aprov', 'lead-aprov', ?, 'Sent', 1, 'x')`).bind(corpo.id).run();
+      const cont = () => env.DB.prepare('SELECT (SELECT count(*) FROM contracts) AS c, (SELECT count(*) FROM projects) AS p').first<any>();
+      const antes = await cont();
+      const sign = await pedir(worker, '/api/v1/proposals/prop-aprov/sign', { method: 'POST', headers: await comercialSessao(), body: '{}' });
+      expect([404, 410]).toContain(sign.status);
+      const put = await pedir(worker, '/api/v1/proposals/prop-aprov', { method: 'PUT', headers: await comercialSessao(), body: JSON.stringify({ status: 'Signed' }) });
+      expect(put.status).toBe(410);
+      expect((await put.json<any>()).error).toContain('aceite da proposta');
+      expect((await env.DB.prepare(`SELECT status FROM proposals WHERE id = 'prop-aprov'`).first<any>()).status).toBe('Sent');
+      expect(await cont()).toEqual(antes);
     });
   });
 
