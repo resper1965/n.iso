@@ -67,6 +67,7 @@ const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/org(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/servicos(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/propostas(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/projects\/[^/]+\/(sso|security-policy|scim-token|api-keys|webhooks)(\/|$)/, 'configuração de segurança do cliente'],
   [/^\/api\/v1\/webhooks(\/|$)/, 'configuração de segurança do cliente'],
   // O principal do agente carrega o users.id REAL do consultor: rotas de "minha conta" agiriam sobre ele.
