@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500, designacaoDoCriador } from '../helpers';
+import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { orgDoUsuario } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
@@ -446,45 +445,6 @@ assessmentsApp.post('/:id/generate-proposal', somenteComercial, async (c) => {
   }
 });
 
-assessmentsApp.post('/:id/convert', async (c) => {
-  try {
-    const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
-    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
-    if (assessment.converted_project_id) return c.json({ error: 'Assessment já foi convertido', project_id: assessment.converted_project_id }, 409);
-
-    const { results: answers } = await c.env.DB.prepare(
-      'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
-    ).bind(id).all<{ question_key: string; answer: string }>();
-
-    const answerMap = new Map((answers ?? []).map((a) => [a.question_key, a.answer]));
-    const projectId = genId();
-    const sector = answerMap.get('sector') ?? '';
-    const scope = answerMap.get('scope_type') ?? '';
-    const standards = answerMap.get('target_standard') ?? 'ISO 27001';
-    const orgRole = answerMap.get('data_role') ?? '';
-
-    const user = c.get('user');
-    const cria = c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
-    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id);
-    // D5: consultor que converte fica designado no projeto novo, no mesmo batch.
-    const designa = designacaoDoCriador(c.env.DB, user, projectId);
-    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
-    if (designa) {
-      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${projectId} que converteu`, '', '', projectId);
-    }
-
-    await seedPhases(c.env.DB, projectId);
-
-    await c.env.DB.prepare(
-      `UPDATE assessments SET status = 'converted', converted_project_id = ?, completed_at = datetime('now') WHERE id = ?`
-    ).bind(projectId, id).run();
-
-    await logAudit(c.env.DB, 'assessment.converted', c.get('user')?.email ?? 'system', `Assessment ${id} convertido em projeto ${projectId}`);
-    return c.json({ ok: true, project_id: projectId }, 201);
-  } catch (e: any) {
-    return erro500(c, 'Falha ao converter assessment', e);
-  }
-});
+// O projeto nasce do aceite da proposta (fecharVenda); este caminho criava projeto em dobro.
+assessmentsApp.post('/:id/convert', (c) =>
+  c.json({ error: 'Converter levantamento em projeto foi substituído pelo aceite da proposta (tela Propostas)' }, 410));

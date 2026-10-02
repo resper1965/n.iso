@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, somenteComercial, erro500 } from '../helpers';
+import { genId, logAudit, somenteComercial, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
-import { PHASE_TITLES } from '../constants';
 import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
 
 export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -101,6 +100,8 @@ proposalsApp.put('/:id', async (c) => {
     const v = await validateBody(c, proposalUpdateSchema);
     if (!v.success) return v.response;
     const body = v.data as any;
+    // A aprovação pelo painel criava contrato e projeto por conta própria; agora é o aceite da proposta.
+    if (body.status === 'Signed') return c.json({ error: 'A aprovação pelo painel foi substituída pelo aceite da proposta' }, 410);
     const proposal = await c.env.DB.prepare('SELECT id FROM proposals WHERE id = ?').bind(id).first();
     if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
 
@@ -129,55 +130,5 @@ proposalsApp.delete('/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao excluir proposta', e);
-  }
-});
-
-proposalsApp.post('/:id/sign', async (c) => {
-  try {
-    const id = c.req.param('id');
-    const proposal = await c.env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(id).first<any>();
-    if (!proposal) return c.json({ error: 'Proposta não encontrada' }, 404);
-    if (proposal.status === 'Signed') return c.json({ error: 'Proposta já assinada' }, 400);
-
-    await c.env.DB.prepare(
-      "UPDATE proposals SET status = 'Signed', approved_at = datetime('now') WHERE id = ?"
-    ).bind(id).run();
-
-    const contractId = genId();
-    await c.env.DB.prepare(
-      `INSERT INTO contracts (id, proposal_id, lead_id, status, signed_at, created_at)
-       VALUES (?, ?, ?, 'Signed', datetime('now'), datetime('now'))`
-    ).bind(contractId, id, proposal.lead_id).run();
-
-    if (proposal.lead_id) {
-      await c.env.DB.prepare("UPDATE leads SET status = 'Won', updated_at = datetime('now') WHERE id = ?").bind(proposal.lead_id).run();
-    }
-
-    await logAudit(c.env.DB, 'proposal.signed', c.get('user')?.email ?? 'system', `Proposta ${id} assinada. Contrato ${contractId} criado.`);
-
-    const projectId = genId();
-    const leadData = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(proposal.lead_id).first<any>();
-
-    await c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, '', '', 'ISO 27001:2022', 'Controlador', 'Active', ?, datetime('now'))`
-    ).bind(projectId, leadData?.company_name || 'Cliente', proposal.assessment_id || '').run();
-
-    for (let i = 0; i <= 40; i++) {
-      const phaseId = genId();
-      const status = i === 0 ? 'in_progress' : 'pending';
-      await c.env.DB.prepare(
-        `INSERT INTO project_phases (id, project_id, phase_number, title, status, created_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`
-      ).bind(phaseId, projectId, i, PHASE_TITLES[i] || `Fase ${i + 1}`, status).run();
-    }
-
-    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${projectId} criado automaticamente com 41 fases a partir da proposta ${id}.`);
-
-    await createNotification(c.env.DB, 'contract_signed', `Contrato assinado: ${leadData?.company_name || 'Cliente'}`, `Projeto criado automaticamente com 41 fases.`, c.get('user')?.id, `/projects/${projectId}`);
-
-    return c.json({ ok: true, contract_id: contractId, project_id: projectId, proposal_status: 'Signed', lead_status: 'Won' });
-  } catch (e: any) {
-    return erro500(c, 'Falha ao assinar proposta', e);
   }
 });

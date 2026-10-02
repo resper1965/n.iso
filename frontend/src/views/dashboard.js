@@ -106,7 +106,6 @@ const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.us
                     {
                         label: 'Ações', align: 'right', render: (row) => `
                             <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openAssessmentDetail" data-args='["${row.id}"]'>Ver</button>
-                            ${ehComercial() ? `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>` : ''}
                         `
                     }
                 ],
