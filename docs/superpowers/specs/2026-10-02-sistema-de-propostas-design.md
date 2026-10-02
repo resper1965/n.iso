@@ -111,13 +111,16 @@ Resultado esperado: avulso com 5–6 páginas, implementação completa com ~15,
 
 ### 5.2 Onde o comercial escreve
 
-Quatro campos livres em lugares fixos: **contexto do cliente** (sumário), **escopo**, **texto por serviço** e **observações**. Nada além disso é editável no documento.
+Quatro campos livres em lugares fixos: **contexto do cliente** (sumário), **escopo**, **texto por serviço** e **observações**.
+
+**Atualização de 2026-10-02 (decisão do dono):** além disso, as seções de **texto** do documento (sumário, objeto e escopo, como trabalhamos, responsabilidades, sobre, premissas, termos, observações) podem ser **reescritas por proposta**, em texto simples. As seções de **dados** (capa, diagnóstico, lacunas, investimento, cronograma, aceite) continuam calculadas e não editáveis.
 
 ### 5.3 Geração e formato
 
 - Montado **no servidor**, a partir de dados validados, com escape de todo texto de usuário (`escapeHtml`). Gravado inteiro (HTML) com o hash SHA-256. É o que o cliente vê e aceita.
 - Papel branco, A4, capa, cabeçalho com número e página, rodapé com validade. Títulos em Montserrat, texto em Inter; a cor da organização só em linhas e títulos.
 - PDF pela impressão do navegador. PDF no servidor (Browser Rendering) fica para quando for preciso anexar em e-mail.
+- **Word (.docx) como cópia de trabalho** (decisão do dono, 2026-10-02), gerado do mesmo conteúdo congelado. O que vale para o aceite é sempre a versão do n.iso com o hash; o rodapé do Word diz isso.
 
 ## 6. Envio, aceite e fechamento
 
@@ -212,8 +215,8 @@ Este spec usa a organização desde o início (ness. = nº 1), mesmo antes de ou
 | Pendência | Quem | Bloqueia |
 |---|---|---|
 | Revisar a diária e os dias por faixa da ness. (dias × diária dá valores bem acima da tabela atual) | comercial da ness. | 2 |
-| Revisão jurídica dos termos padrão (sigilo de 5 anos, incidente em 48 h, rescisão com 30 dias, propriedade, foro) | advogado | 3 |
-| Conferir as referências da ISO/IEC 27701:2025 nas lacunas (`GAPS` usa numeração da edição antiga, ex. "A.1.2.4") | quem tiver a norma | 3 |
+| ~~Revisão dos termos padrão~~ — **feita pelo dono** (prévia aprovada, 2026-10-02); viram os termos iniciais da ness. | — | — |
+| ~~Referências da 27701 nas lacunas~~ — analisadas em 2026-10-02: numeração 2025 certa, controles errados (RoPA citava consentimento; direitos do titular citavam A.8.8 da 27001). Corrigidas na fatia 3 contra `src/data/iso27701-2025.ts`; uma conferência final na norma comprada é recomendada | — | — |
 | Termo de uso das consultorias declarando o acesso administrativo da ness. | advogado | 5 |
 | Remetente de e-mail: confirmar domínio de envio (`noreply@ness.com.br` × `noreply@ness.lat`, divergentes no código) | ness. | 4 |
 
