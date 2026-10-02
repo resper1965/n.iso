@@ -219,6 +219,19 @@ describe('schema contract (real D1)', () => {
     const ness = await env.DB.prepare(`SELECT name, prefixo_proposta, proximo_numero FROM organizations WHERE id = 'org_ness'`).first<any>();
     expect(ness).toEqual({ name: 'ness.', prefixo_proposta: 'NESS', proximo_numero: 1 });
   });
+  it('multiconsultoria (0040): org_id em users e projects, termo e logo em organizations, índices', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name, "notnull", dflt_value FROM pragma_table_info('${t}')`).all<any>()).results;
+    for (const t of ['users', 'projects']) {
+      const c = (await colunas(t)).find((r: any) => r.name === 'org_id');
+      expect(c, t).toMatchObject({ notnull: 1, dflt_value: "'org_ness'" });
+    }
+    const org = (await colunas('organizations')).map((r: any) => r.name);
+    for (const c of ['termo_aceito_em', 'termo_versao', 'logo_chave']) expect(org, c).toContain(c);
+    for (const n of ['idx_projects_org', 'idx_users_org']) {
+      expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
+    }
+  });
   it('servicos existe e o CHECK recusa tipo desconhecido', async () => {
     const t = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='servicos'").first();
     expect(t).toBeTruthy();

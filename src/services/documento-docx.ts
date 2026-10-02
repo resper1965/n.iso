@@ -3,9 +3,24 @@
 // versão do n.iso com o hash, e o rodapé diz isso. A biblioteca escapa o XML; aqui só vai texto.
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, PageBreak, Footer,
-  HeadingLevel, AlignmentType,
+  HeadingLevel, AlignmentType, ImageRun,
 } from 'docx';
 import { dataBr, type Bloco, type ConteudoDocumento } from './documento-proposta';
+import { bytesDoDataUri, dimensoes } from './logo-org';
+
+/** Logo na capa, dentro de 240 x 80 px, mantendo a proporção. URI ruim ou bytes que não são PNG/JPEG: sem logo. */
+function logoRun(uri: string | undefined, nome: string): ImageRun | null {
+  const img = bytesDoDataUri(uri);
+  if (!img) return null;
+  const d = dimensoes(img.tipo, img.bytes) ?? { w: 240, h: 80 };
+  const k = Math.min(240 / Math.max(d.w, 1), 80 / Math.max(d.h, 1));
+  return new ImageRun({
+    type: img.tipo, data: img.bytes,
+    transformation: { width: Math.max(1, Math.round(d.w * k)), height: Math.max(1, Math.round(d.h * k)) },
+    // id fixo: a biblioteca usa um contador global, e o Word da mesma proposta sairia diferente a cada download
+    altText: { name: 'logo', description: nome, title: nome, id: '1' },
+  });
+}
 
 const COR_PADRAO = '00ADE8';
 const TITULO = 'Montserrat';
@@ -51,8 +66,9 @@ export async function renderizarDocx(c: ConteudoDocumento, rodape: string): Prom
   const numero = `${c.numero}${c.revisao > 1 ? ` rev. ${c.revisao}` : ''}`;
   const linhaCapa = (rotulo: string, valor: string) => par(`${rotulo}: ${valor}`, { size: 22 });
 
+  const logo = logoRun(c.org.logo, limpo(c.org.nome));
   const capa: Paragraph[] = [
-    new Paragraph({ spacing: { after: 1800 }, children: runs(c.org.marcaNess ? 'ness.' : c.org.nome, { bold: true, font: TITULO, size: 44, color: '0F172A' }) }),
+    new Paragraph({ spacing: { after: 1800 }, children: logo ? [logo] : runs(c.org.marcaNess ? 'ness.' : c.org.nome, { bold: true, font: TITULO, size: 44, color: '0F172A' }) }),
     par(`PROPOSTA COMERCIAL · ${numero}`, { bold: true, color: '0F172A', size: 18, font: TITULO }),
     new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 300 }, children: runs(cap.titulo, { bold: true, font: TITULO, size: 56, color: '0F172A' }) }),
     par(`Preparada para ${cap.cliente}`, { size: 24 }),

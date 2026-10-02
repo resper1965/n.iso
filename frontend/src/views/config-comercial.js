@@ -1,7 +1,8 @@
 // Configuração comercial da organização (GET/PUT /api/v1/org/config). O comercial só lê; quem grava
-// é o platform_admin (o servidor recusa o resto, a tela só espelha: campos readonly, sem Salvar).
+// é o platform_admin ou o consultoria_admin (o servidor recusa o resto, a tela só espelha: campos
+// readonly, sem Salvar). O logo (GET/POST /api/v1/org/logo) é binário: fetch direto, fora do api().
 import { S } from '../state.js';
-import { api } from '../api.js';
+import { api, API_BASE, cabecalhosAuth } from '../api.js';
 import { escapeHTML } from '../ui.js';
 
 const FAIXAS = { 1: 'Foundation', 2: 'Standard', 3: 'Enterprise' };
@@ -14,6 +15,12 @@ const SECOES = [['como_trabalhamos', 'Como trabalhamos'], ['responsabilidades', 
 let ultimo = null;
 let cfg = null;
 let podeEditar = false;
+let logoAtualUrl = null;     // Blob URL do logo gravado
+let logoNovoUrl = null;      // Blob URL da pré-visualização do arquivo escolhido
+let logoArquivo = null;
+
+const LOGO_TIPOS = ['image/png', 'image/jpeg'];
+const LOGO_MAX = 200 * 1024;   // o mesmo LOGO_MAX_BYTES do servidor
 
 const $ = (id) => document.getElementById(id);
 const val = (id) => ($(id) ? $(id).value : '');
@@ -72,8 +79,9 @@ function desenhar() {
         campo(`preco-${nome}-${n}`, `${rotulo}, ${FAIXAS[n]}`, obj[n], { tipo: 'number' })).join('')}</div>`;
 
     c.innerHTML = `
+        ${blocoLogo()}
         <form id="cfg-form" class="cfg fade-in" data-action-submit="__cfgSalvar" data-arg-event data-prevent novalidate>
-            ${podeEditar ? '' : '<p class="cfg-nota" role="note">Somente leitura: quem altera a configuração é o administrador da plataforma.</p>'}
+            ${podeEditar ? '' : '<p class="cfg-nota" role="note">Somente leitura: quem altera a configuração é o administrador da organização.</p>'}
 
             <section class="cfg-bloco" aria-labelledby="cfg-t-id">
                 <h2 class="cfg-titulo" id="cfg-t-id">Identidade</h2>
@@ -130,11 +138,12 @@ function desenhar() {
             ${podeEditar ? '<div class="cfg-rodape"><button type="submit" class="btn btn-primary" id="cfg-salvar">Salvar</button></div>' : ''}
         </form>`;
     window.__cfgPrevia();
+    carregarLogo();
 }
 
 async function renderConfigComercial(c, h, a) {
     ultimo = { c, h, a };
-    podeEditar = S.user?.role === 'platform_admin';
+    podeEditar = S.user?.role === 'platform_admin' || S.user?.role === 'consultoria_admin';
     try {
         cfg = await api('GET', '/api/v1/org/config');
     } catch (e) {
@@ -228,6 +237,101 @@ window.__cfgSalvar = async () => {
     } catch (e) {
         mostrarErros(e.body?.details, e.message || 'Erro ao salvar a configuração');
         botao.disabled = false;
+    }
+};
+
+// ——— logo ———
+const soltar = (u) => { if (u) URL.revokeObjectURL?.(u); return null; };
+
+function blocoLogo() {
+    logoNovoUrl = soltar(logoNovoUrl);
+    logoArquivo = null;
+    const envio = podeEditar ? `
+        <div class="form-group">
+            <label class="form-label" for="cfg-logo-arquivo">Novo logo</label>
+            <input class="form-input" id="cfg-logo-arquivo" type="file" accept="image/png,image/jpeg" aria-describedby="cfg-logo-regras cfg-logo-arquivo-erro" data-action-change="__cfgLogoEscolher" data-arg-el>
+            <p class="cfg-dica" id="cfg-logo-regras">PNG ou JPEG, até 200 KB. SVG não é aceito. O logo entra nas propostas geradas a partir de agora; as já geradas não mudam.</p>
+            <p class="cfg-erro" id="cfg-logo-arquivo-erro" role="alert"></p>
+        </div>
+        <div class="cfg-logo-novo" id="cfg-logo-novo" hidden>
+            <span class="cfg-sub">Pré-visualização (ainda não enviado)</span>
+            <img class="cfg-logo-img" id="cfg-logo-previa" alt="Pré-visualização do novo logo">
+            <button type="button" class="btn btn-primary" id="cfg-logo-enviar" data-action="__cfgLogoEnviar">Enviar logo</button>
+        </div>` : '';
+    return `<section class="cfg-bloco cfg-logo fade-in" aria-labelledby="cfg-t-logo">
+        <h2 class="cfg-titulo" id="cfg-t-logo">Logo</h2>
+        <div class="cfg-logo-atual" id="cfg-logo-atual"><p class="cfg-nota">Carregando o logo...</p></div>
+        ${envio}
+    </section>`;
+}
+
+async function carregarLogo() {
+    const caixa = $('cfg-logo-atual');
+    if (!caixa) return;
+    logoAtualUrl = soltar(logoAtualUrl);
+    let r = null;
+    try {
+        r = await fetch(API_BASE + '/api/v1/org/logo', { headers: cabecalhosAuth(), signal: AbortSignal.timeout(30000) });
+        if (r.ok) logoAtualUrl = URL.createObjectURL(await r.blob());
+    } catch { r = null; /* rede ou navegador sem Blob URL: cai no aviso, nunca em rejeição solta */ }
+    if (logoAtualUrl) {
+        caixa.innerHTML = `<img class="cfg-logo-img" id="cfg-logo-img" src="${escapeHTML(logoAtualUrl)}" alt="Logo atual da organização">`;
+    } else {
+        caixa.innerHTML = `<p class="cfg-nota" id="cfg-logo-sem">${r && r.status === 404
+            ? 'A organização ainda não tem logo: as propostas mostram o nome em texto.'
+            : 'Não foi possível carregar o logo.'}</p>`;
+    }
+}
+
+function erroLogo(msg) {
+    const p = $('cfg-logo-arquivo-erro');
+    if (p) p.textContent = msg;
+    const i = $('cfg-logo-arquivo');
+    if (i) msg ? i.setAttribute('aria-invalid', 'true') : i.removeAttribute('aria-invalid');
+}
+
+// Conferência no cliente só poupa a viagem: quem decide é o servidor (bytes mágicos e teto).
+window.__cfgLogoEscolher = (input) => {
+    erroLogo('');
+    logoNovoUrl = soltar(logoNovoUrl);
+    logoArquivo = null;
+    $('cfg-logo-novo').hidden = true;
+    const f = input.files?.[0];
+    if (!f) return;
+    if (!LOGO_TIPOS.includes(f.type)) return erroLogo('Formato não aceito: envie PNG ou JPEG.');
+    if (f.size > LOGO_MAX) return erroLogo(`Arquivo de ${Math.ceil(f.size / 1024)} KB: o limite é 200 KB.`);
+    logoArquivo = f;
+    logoNovoUrl = URL.createObjectURL(f);
+    $('cfg-logo-previa').src = logoNovoUrl;
+    $('cfg-logo-novo').hidden = false;
+};
+
+window.__cfgLogoEnviar = async () => {
+    if (!podeEditar || !logoArquivo) return;
+    const botao = $('cfg-logo-enviar');
+    botao.disabled = true;
+    erroLogo('');
+    try {
+        const r = await fetch(API_BASE + '/api/v1/org/logo', {
+            method: 'POST', body: logoArquivo,
+            headers: { ...cabecalhosAuth(), 'Content-Type': logoArquivo.type },
+            signal: AbortSignal.timeout(30000),
+        });
+        if (!r.ok) {
+            let msg = '';
+            try { msg = (await r.json()).error; } catch { /* corpo não é JSON */ }
+            botao.disabled = false;
+            return erroLogo(msg || `Erro ${r.status} ao enviar o logo.`);
+        }
+        window.showToast('Logo atualizado');
+        $('cfg-logo-arquivo').value = '';
+        logoNovoUrl = soltar(logoNovoUrl);
+        logoArquivo = null;
+        $('cfg-logo-novo').hidden = true;
+        await carregarLogo();
+    } catch {
+        botao.disabled = false;
+        erroLogo('Falha de rede ao enviar o logo.');
     }
 };
 

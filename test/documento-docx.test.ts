@@ -74,3 +74,30 @@ describe('renderizarDocx', () => {
     expect(doc).not.toContain('<b>');
   });
 });
+
+describe('renderizarDocx: logo', () => {
+  const PNG_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const midias = async (c: ReturnType<typeof conteudo>) => {
+    const z = await JSZip.loadAsync(await renderizarDocx(c, RODAPE));
+    return Object.keys(z.files).filter((f) => f.startsWith('word/media/') && !z.files[f].dir);
+  };
+
+  it('com logo: zip válido, imagem em word/media e referenciada no document.xml', async () => {
+    const c = conteudo();
+    c.org.logo = PNG_URI;
+    const { bytes, doc } = await xml(c);
+    expect(String.fromCharCode(bytes[0], bytes[1])).toBe('PK');
+    expect(await midias(c)).toHaveLength(1);
+    expect(doc).toMatch(/<w:drawing>/);
+    expect(doc).toMatch(/r:embed="/);
+  });
+
+  it('sem logo ou com data: URI ruim: sem imagem, e não quebra', async () => {
+    expect(await midias(conteudo())).toEqual([]);
+    for (const ruim of ['data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,AAAA" x', 'data:image/png;base64,PHN2Zz4=']) {
+      const c = conteudo();
+      c.org.logo = ruim;
+      expect(await midias(c), ruim).toEqual([]);
+    }
+  });
+});

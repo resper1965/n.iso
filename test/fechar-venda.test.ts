@@ -185,6 +185,31 @@ describe('fecharVenda', () => {
     expect((await db().prepare('SELECT status FROM propostas WHERE id = ?').bind(id).first<any>()).status).toBe('enviada');
   });
 
+  it('o projeto nasce na organização da proposta (multiconsultoria)', async () => {
+    await db().prepare(`INSERT OR IGNORE INTO organizations (id, name, slug) VALUES ('org_b', 'B', 'b')`).run();
+    const { id } = await proposta({ org: 'org_b', consultor: null });
+    const r = await fecharVenda(db(), entrada(id, { orgId: 'org_b' }));
+    if (!r.ok) throw new Error('fechamento falhou');
+    expect((await db().prepare('SELECT org_id FROM projects WHERE id = ?').bind(r.projetoId).first<any>()).org_id).toBe('org_b');
+  });
+
+  it('limite de projetos do plano: o aceite NÃO falha (o cliente já aceitou); a trilha registra org.limite_excedido', async () => {
+    await db().batch([
+      db().prepare(`INSERT INTO organizations (id, name, slug, max_projects) VALUES ('org_lim', 'Lim', 'lim', 1)`),
+      db().prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES ('p-lim','X','ISO 27001','controller','Active','org_lim')`),
+    ]);
+    const { id } = await proposta({ org: 'org_lim', consultor: null });
+    const r = await fecharVenda(db(), entrada(id, { orgId: 'org_lim' }));
+    if (!r.ok) throw new Error('fechamento falhou');
+    expect(await conta(`SELECT COUNT(*) n FROM projects WHERE org_id = 'org_lim'`)).toBe(2);
+    const t = await db().prepare(`SELECT project_id, details FROM audit_logs WHERE action = 'org.limite_excedido' AND project_id = ?`).bind(r.projetoId).first<any>();
+    expect(t?.details).toContain('org_lim');
+    // ness. (plano interno): sem trilha de limite
+    const n = await fecharVenda(db(), entrada((await proposta({ consultor: null })).id));
+    if (!n.ok) throw new Error('fechamento falhou');
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'org.limite_excedido' AND project_id = ?`, n.projetoId)).toBe(0);
+  });
+
   it('sem consultor na proposta: aceite manual de consultor o designa; de comercial, ninguém', async () => {
     const a = await proposta({ consultor: null });
     const ra = await fecharVenda(db(), entrada(a.id, { origem: 'manual', atorEmail: 'cons2@ness.lat' }));
