@@ -34,7 +34,7 @@ export     function navigate(view, data) {
         if (S.view === 'dashboard') renderDashboard(c, h, a);
         else if (S.view === 'leads') renderLeads(c, h, a);
         else if (S.view === 'assessments') renderAssessments(c, h, a);
-        else if (S.view === 'proposals') renderProposals(c, h, a);
+        else if (S.view === 'proposals') renderPropostas(c, h, a);  // fatia 3; o fluxo antigo (renderProposals) sai na fatia 4
         else if (S.view === 'projects') renderProjects(c, h, a);
         else if (S.view === 'monitor') renderMonitor(c, h, a);
         else if (S.view === 'assets') renderAssets(c, h, a);
