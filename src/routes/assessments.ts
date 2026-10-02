@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
-import { orgDoUsuario } from '../services/organizacao';
+import { exigirOrg, ORG_NESS } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
 export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -20,6 +20,24 @@ assessmentsApp.use('*', async (c, next) => {
   if (ehComercial(c.get('user'))) return next();
   return somenteNess(c, next);
 });
+// Organização da equipe (multiconsultoria): sem ela, 403. As rotas públicas não têm sessão.
+assessmentsApp.use('*', (c, next) =>
+  c.req.path.startsWith('/api/v1/assessments/public/') ? next() : exigirOrg(c, next));
+// Toda rota por id confere a organização ANTES do handler: id de outra organização é 404 (não 403,
+// que revelaria a existência). Um lugar só, para nenhuma rota nova esquecer o filtro.
+// Os dois caminhos aposentados (410) não tocam dado nenhum: respondem igual para qualquer id.
+const APOSENTADAS = /\/(convert|generate-proposal)$/;
+const daOrganizacao = async (c: any, next: () => Promise<void>) => {
+  const id = c.req.param('id');
+  if (id === 'public' || APOSENTADAS.test(c.req.path)) return next();
+  const achado = await c.env.DB.prepare('SELECT 1 FROM assessments WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
+  if (!achado) return c.json({ error: 'Assessment não encontrado' }, 404);
+  await next();
+};
+// Preço é do comercial: o papel é conferido ANTES da existência (consultor ouve 403, não 404).
+assessmentsApp.use('/:id/pricing', somenteComercial);
+assessmentsApp.use('/:id', daOrganizacao);
+assessmentsApp.use('/:id/*', daOrganizacao);
 
 /** Preço é do comercial: quem não é, recebe a linha sem nenhuma coluna `pricing_*`. */
 function semPreco<T extends Record<string, unknown>>(row: T, user: { role?: string | null } | null | undefined): T {
@@ -140,15 +158,18 @@ assessmentsApp.post('/', async (c) => {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
 
+    if (body.lead_id && !(await c.env.DB.prepare('SELECT 1 FROM leads WHERE id = ? AND org_id = ?').bind(body.lead_id, c.get('orgId')).first())) {
+      return c.json({ error: 'Lead não encontrado' }, 404);
+    }
     const id = genId();
     const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
     await c.env.DB.prepare(
       `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, org_id, created_at)
        VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
-    ).bind(id, body.lead_id || null, body.client_name, accessToken, orgDoUsuario(c.get('user'))).run();
+    ).bind(id, body.lead_id || null, body.client_name, accessToken, c.get('orgId')).run();
 
     if (body.lead_id) {
-      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
+      await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ? AND org_id = ?').bind('Assessment', body.lead_id, c.get('orgId')).run();
     }
 
     await logAudit(c.env.DB, 'assessment.created', c.get('user')?.email ?? 'system', `Assessment ${id} criado para ${body.client_name}`);
@@ -208,7 +229,7 @@ assessmentsApp.get('/', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
       'SELECT * FROM assessments WHERE org_id = ? ORDER BY created_at DESC'
-    ).bind(orgDoUsuario(c.get('user'))).all();
+    ).bind(c.get('orgId')).all();
     const user = c.get('user');
     return c.json(results.map((r) => semPreco(r, user)));
   } catch (e: any) {
@@ -219,7 +240,7 @@ assessmentsApp.get('/', async (c) => {
 assessmentsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ? AND org_id = ?').bind(id, orgDoUsuario(c.get('user'))).first();
+    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const progress = await c.env.DB.prepare(
@@ -335,7 +356,10 @@ assessmentsApp.get('/:id/pricing', somenteComercial, async (c) => {
     for (const a of answers) ansMap[a.question_key] = a.answer;
 
     const pricingAnswers = buildPricingAnswers(ansMap);
-    const configRow = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
+    // `settings.pricing_config` é a tabela antiga da ness. (global): outra organização calcula com o padrão.
+    const configRow = c.get('orgId') === ORG_NESS
+      ? await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>()
+      : null;
     const configOverrides = configRow ? JSON.parse(configRow.value) : undefined;
     const pricing = calculatePricing(pricingAnswers, configOverrides);
     return c.json(pricing);
@@ -354,7 +378,7 @@ assessmentsApp.put('/:id', async (c) => {
     if (body.client_name) { updates.push('client_name = ?'); values.push(body.client_name); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ? AND org_id = ?`).bind(...values, c.get('orgId')).run();
     await logAudit(c.env.DB, 'assessment.updated', c.get('user')?.email ?? 'system', `Assessment ${id} atualizado: ${updates.join(', ')}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -373,7 +397,7 @@ assessmentsApp.put('/:id/pricing', somenteComercial, async (c) => {
     if (body.notas !== undefined) { updates.push('pricing_notas = ?'); values.push(body.notas || null); }
     if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
     values.push(id);
-    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    await c.env.DB.prepare(`UPDATE assessments SET ${updates.join(', ')} WHERE id = ? AND org_id = ?`).bind(...values, c.get('orgId')).run();
     await logAudit(c.env.DB, 'assessment.pricing_override', c.get('user')?.email ?? 'system', `Pricing ajustado no assessment ${id}`);
     return c.json({ ok: true });
   } catch (e: any) {

@@ -12,8 +12,10 @@ import { sessaoApp } from './routes/auth';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
+import { funilApp } from './routes/funil';
 import { proposalsApp } from './routes/proposals';
 import { organizacaoApp } from './routes/organizacao';
+import { organizacoesApp } from './routes/organizacoes';
 import { servicosApp } from './routes/servicos';
 import { propostasApp, CSP_DOCUMENTO } from './routes/propostas';
 import { assessmentsApp } from './routes/assessments';
@@ -129,7 +131,11 @@ export type Variables = {
     iat?: number;
     /** Última atividade vista pelo middleware; relógio da expiração por inatividade. */
     seen?: number;
+    /** `users.org_id`, gravado pelo login (migration 0040). Ausente em sessão anterior a ela. */
+    org_id?: string;
   };
+  /** Organização da requisição, resolvida por `exigirOrg` (services/organizacao.ts). */
+  orgId: string;
 };
 
 
@@ -341,8 +347,11 @@ app.route('/api/v1/auth/mfa', mfaApp);
 app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
+app.route('/api/v1/funil', funilApp);
 app.route('/api/v1/proposals', proposalsApp);
 app.route('/api/v1/org', organizacaoApp);
+// Organizações (consultorias): só platform_admin (fatia 5).
+app.route('/api/v1/platform/orgs', organizacoesApp);
 app.route('/api/v1/servicos', servicosApp);
 app.route('/api/v1/propostas', propostasApp);
 app.route('/api/v1/assessments', assessmentsApp);

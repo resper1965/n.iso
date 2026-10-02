@@ -18,9 +18,9 @@ export interface PropsAgente {
 const REFACA = 'Acesso do agente revogado, expirado ou sem designação no projeto: refaça o login no cliente MCP.';
 
 /**
- * A concessão vale agora? Não revogada, não expirada, consultor ativo e AINDA
- * designado na governança do projeto. Única fonte da regra: o handler /mcp a
- * consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
+ * A concessão vale agora? Não revogada, não expirada, consultor ativo, projeto da
+ * MESMA organização do consultor e AINDA designado na governança do projeto.
+ * Única fonte da regra: o handler /mcp a consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
  * o resolverAgente a cada chamada interna.
  */
 /**
@@ -41,7 +41,11 @@ export async function concessaoValida(
        JOIN users u ON u.id = ac.user_id
        JOIN projects p ON p.id = ac.project_id
       WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
-        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')`
+        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')
+        -- multiconsultoria: o projeto tem de ser da organização do consultor da concessão
+        AND p.org_id = u.org_id
+        -- organização suspensa derruba o agente da equipe dela (a ness. não é suspensa)
+        AND (u.org_id = 'org_ness' OR EXISTS (SELECT 1 FROM organizations o WHERE o.id = u.org_id AND o.status = 'Active'))`
   ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string; project_name: string }>();
   if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) return null;
 
@@ -63,8 +67,9 @@ export const CABECALHO_CONFIRMADO = 'X-Agente-Confirmado';
 /** Terceiro campo opcional: só estes métodos são recusados (GET /projects segue valendo, escopado). */
 const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/(users|admin\/users)(\/|$)/, 'gestão de usuários'],
+  [/^\/api\/v1\/platform(\/|$)/, 'administração da plataforma (organizações)'],
   [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
-  [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/(assessments|leads|proposals|funil)(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/org(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/servicos(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/propostas(\/|$)/, 'área comercial'],

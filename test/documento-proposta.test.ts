@@ -267,3 +267,44 @@ describe('SECOES_EDITAVEIS', () => {
     expect(SECOES_EDITAVEIS).toEqual(['sumario', 'objeto', 'como_trabalhamos', 'responsabilidades', 'sobre', 'premissas', 'termos', 'observacoes']);
   });
 });
+
+describe('logo da organização no documento', () => {
+  const PNG_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const fixo = () => montarConteudo(dados([projeto, avulso]), {});
+
+  it('sem logo: o HTML é o mesmo de antes da tarefa 6 (hash fixado antes da mudança)', async () => {
+    const c = fixo();
+    expect(c.org).not.toHaveProperty('logo');
+    expect(await hashDocumento(renderizarHtml(c))).toBe('3d126e0397e705c4fee5c63f81ea12845f3ab73d3c84404744a92321036d6119');
+  });
+
+  it('com logo: <img class="logo"> na capa e no cabeçalho, alt escapado, data: URI exato, CSS só quando há logo', () => {
+    const c = montarConteudo(dados([projeto], { org: org({ id: 'org_x', nome: 'Ponte "<b>" & Cia' }), logo: PNG_URI }), {});
+    expect(c.org.logo).toBe(PNG_URI);
+    const html = renderizarHtml(c);
+    const imgs = html.match(/<img [^>]*>/g) ?? [];
+    expect(imgs).toHaveLength(2);
+    for (const i of imgs) expect(i).toBe(`<img class="logo" alt="Ponte &quot;&lt;b&gt;&quot; &amp; Cia" src="${PNG_URI}">`);
+    expect(html).toMatch(/img\.logo\s*\{[^}]*max-height/);
+    expect(renderizarHtml(fixo())).not.toContain('img.logo');
+  });
+
+  it('data: URI malformado ou de outro tipo: ignora o logo (HTML idêntico ao sem logo)', () => {
+    const sem = renderizarHtml(fixo());
+    for (const ruim of [
+      'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+',
+      'data:image/png;base64,AAAA" onerror="alert(1)',
+      'data:image/png;base64,',
+      'data:image/gif;base64,R0lGODlh',
+      'https://evil.example/logo.png',
+      'javascript:alert(1)',
+      ` ${PNG_URI}`,
+      `${PNG_URI}\n<script>`,
+      'data:image/png;base64,AAAA====',
+    ]) {
+      const c = fixo();
+      (c.org as any).logo = ruim;
+      expect(renderizarHtml(c), ruim).toBe(sem);
+    }
+  });
+});

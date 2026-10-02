@@ -78,7 +78,9 @@ governanceApp.get('/projects/:id/governance', async (c) => {
  * pessoa, e rebaixar o papel) e remover. Os demais papéis seguem livres.
  * O isolamento entre projetos já vem do `projectAccessMiddleware`.
  */
-const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin']);
+// `consultoria_admin`: só chega aqui em projeto da PRÓPRIA organização (`projectAccessMiddleware` →
+// `requireProjectAccess`), e e-mail de outra organização na governança não dá acesso (D5 com org).
+const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin', 'consultoria_admin']);
 
 async function mexeEmConsultor(db: D1Database, projectId: string, memberId: string | undefined, novoPapel?: string): Promise<boolean> {
   if (novoPapel === 'consultor') return true;
@@ -88,7 +90,7 @@ async function mexeEmConsultor(db: D1Database, projectId: string, memberId: stri
   return atual?.role_category === 'consultor';
 }
 
-const recusaDesignacao = { error: 'Forbidden: designar consultor é do platform_admin ou do administrador do cliente' };
+const recusaDesignacao = { error: 'Forbidden: designar consultor é do platform_admin, do administrador da consultoria ou do administrador do cliente' };
 
 governanceApp.post('/projects/:id/governance', async (c) => {
   try {

@@ -17,14 +17,15 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             const leads = await api('GET', '/api/v1/leads').catch(() => []);
             const leadsArr = Array.isArray(leads) ? leads : [];
             
-            const totalLeads = leadsArr.length;
-            const newLeads = leadsArr.filter(l => l.status === 'new' || l.status === 'qualificado').length;
-            const proposalLeads = leadsArr.filter(l => l.status === 'proposta_enviada' || l.status === 'ganho').length;
-
+            // Status reais do banco (leads.status): New, Assessment, Proposal, Won, Lost.
+            const conta = (s) => leadsArr.filter(l => (l.status || 'New') === s).length;
             const statsHtml = window.renderStatCards([
-                { label: 'Total de Oportunidades', value: totalLeads, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
-                { label: 'Leads Qualificados', value: newLeads, color: '#34c759', subtext: 'Prontos para assessment' },
-                { label: 'Propostas em Negociação', value: proposalLeads, color: '#ffcc00', subtext: 'Contratos em pré-vendas' }
+                { label: 'Total de Oportunidades', value: leadsArr.length, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
+                { label: 'Novos', value: conta('New'), color: '#34c759', subtext: 'Ainda sem diagnóstico' },
+                { label: 'Em diagnóstico', value: conta('Assessment'), color: '#34c759', subtext: 'Assessment em andamento' },
+                { label: 'Com proposta', value: conta('Proposal'), color: '#ffcc00', subtext: 'Contratos em pré-vendas' },
+                { label: 'Ganhos', value: conta('Won'), color: '#34c759', subtext: 'Proposta aceita' },
+                { label: 'Perdidos', value: conta('Lost'), color: '#ef4444', subtext: 'Recusados ou encerrados' }
             ]);
 
             const tableHtml = window.renderDataTable(
@@ -33,20 +34,79 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                     `<strong>${escapeHTML(l.company_name || l.razao_social || 'Sem nome')}</strong>`,
                     escapeHTML(l.contact_name || l.email || '---'),
                     escapeHTML(l.cnpj || l.porte || '---'),
-                    window.renderStatusBadge(l.status || 'new', l.status === 'ganho' ? 'success' : 'info'),
+                    window.renderStatusBadge(l.status || 'New', l.status === 'Won' ? 'success' : l.status === 'Lost' ? 'danger' : 'info'),
                     `<button class="btn btn-ghost btn-sm" data-action="openLeadDetail" data-args='["${l.id}"]'>Ver Detalhes &rarr;</button>`
                 ]),
                 { emptyState: 'Nenhum lead comercial cadastrado no momento.' }
             );
 
+            // Preço e motivo de perda: só quem a rota /funil admite (consultor comum leva 403).
+            const funil = PAPEIS_FUNIL.includes(S.user?.role) ? `
+                <section class="fn-bloco" id="fn-funil" aria-labelledby="fn-titulo">
+                    <h2 class="fn-titulo" id="fn-titulo">Funil</h2>
+                    <form class="fn-periodo" id="fn-form" data-action-submit="__fnAplicar" data-arg-event data-prevent novalidate>
+                        <div class="fn-campo"><label class="fn-rotulo" for="fn-de">De</label><input class="form-input" type="date" id="fn-de"></div>
+                        <div class="fn-campo"><label class="fn-rotulo" for="fn-ate">Até</label><input class="form-input" type="date" id="fn-ate"></div>
+                        <button class="btn btn-primary btn-sm" type="submit">Aplicar</button>
+                    </form>
+                    <p class="fn-erro" id="fn-erro" role="alert"></p>
+                    <div id="fn-corpo"><div class="loading"></div></div>
+                </section>` : '';
+
             c.innerHTML = `
                 ${statsHtml}
                 ${tableHtml}
+                ${funil}
             `;
+            if (funil) carregarFunil('');
         } catch (e) {
             c.innerHTML = '<div class="error">Erro ao carregar leads: ' + escapeHTML(e.message) + '</div>';
         }
     }
+
+    const PAPEIS_FUNIL = ['platform_admin', 'comercial', 'consultoria_admin'];
+    const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const ROTULO_PROPOSTA = { rascunho: 'Rascunho', aguardando_aprovacao: 'Aguardando aprovação', gerada: 'Gerada', enviada: 'Enviada', visualizada: 'Visualizada', aceita: 'Aceita', recusada: 'Recusada', expirada: 'Expirada', substituida: 'Substituída' };
+
+    async function carregarFunil(consulta) {
+        const corpo = document.getElementById('fn-corpo');
+        const erro = document.getElementById('fn-erro');
+        if (!corpo) return;
+        erro.textContent = '';
+        try {
+            const f = await api('GET', '/api/v1/funil' + consulta);
+            document.getElementById('fn-de').value = f.periodo.de;
+            document.getElementById('fn-ate').value = f.periodo.ate;
+            const cartoes = window.renderStatCards([
+                { label: 'Pipeline: projeto', value: brl(f.pipeline.totalProjeto), subtext: `${f.pipeline.propostas} proposta(s) em aberto` },
+                { label: 'Pipeline: mensalidade', value: brl(f.pipeline.mensalidade), subtext: 'Recorrente, não somado ao projeto' },
+                { label: 'Ganho: projeto', value: brl(f.ganho.totalProjeto), color: '#34c759', subtext: `${f.ganho.propostas} aceita(s) no período` },
+                { label: 'Ganho: mensalidade', value: brl(f.ganho.mensalidade), color: '#34c759', subtext: 'Recorrente' },
+                { label: 'Ciclo médio', value: f.cicloMedioDias == null ? '---' : `${String(f.cicloMedioDias).replace('.', ',')} dias`, subtext: 'Lead criado até aceite' }
+            ]);
+            const tabela = (cols, rows, vazio) => window.renderDataTable(cols, rows, { emptyState: vazio, dense: true });
+            corpo.innerHTML = `
+                ${cartoes}
+                <div class="fn-tabelas">
+                    <div><h3 class="fn-sub">Conversão</h3>${tabela(['Etapa', { label: 'Leads', align: 'right' }, { label: '% da anterior', align: 'right' }],
+                        f.conversao.map(e => [escapeHTML(e.etapa), String(e.leads), `${String(e.percentualDaAnterior).replace('.', ',')}%`]), 'Sem dados no período.')}</div>
+                    <div><h3 class="fn-sub">Motivos de perda</h3>${tabela(['Motivo', { label: 'Propostas', align: 'right' }],
+                        f.perdas.map(p => [escapeHTML(p.motivo), String(p.quantidade)]), 'Nenhuma proposta recusada no período.')}</div>
+                    <div><h3 class="fn-sub">Propostas por status</h3>${tabela(['Status', { label: 'Propostas', align: 'right' }],
+                        Object.entries(f.propostasPorStatus).map(([s, n]) => [escapeHTML(ROTULO_PROPOSTA[s] || s), String(n)]), 'Sem propostas.')}</div>
+                </div>`;
+        } catch (e) {
+            corpo.innerHTML = '';
+            erro.textContent = e.message || 'Não foi possível carregar o funil.';
+        }
+    }
+
+    window.__fnAplicar = () => {
+        const de = document.getElementById('fn-de').value;
+        const ate = document.getElementById('fn-ate').value;
+        const q = new URLSearchParams({ ...(de && { de }), ...(ate && { ate }) }).toString();
+        return carregarFunil(q ? '?' + q : '');
+    };
 
     async function deleteLead(id) {
         if (!confirm('Deseja excluir este lead permanentemente?')) return;

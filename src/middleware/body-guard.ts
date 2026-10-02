@@ -41,10 +41,10 @@ function temChavePerigosa(valor: unknown, profundidade = 0): boolean {
  * teto não protegia nada: a memória já teria sido consumida quando a checagem
  * rodasse. Aqui o stream morre no primeiro byte além do limite.
  *
- * Devolve `null` quando estourou.
+ * Devolve `null` quando estourou. Também usado pelo upload binário do logo da organização.
  */
-async function lerComTeto(req: Request, max: number): Promise<string | null> {
-  if (!req.body) return '';
+export async function lerBytesComTeto(req: Request, max: number): Promise<Uint8Array | null> {
+  if (!req.body) return new Uint8Array(0);
   const leitor = req.body.getReader();
   const partes: Uint8Array[] = [];
   let total = 0;
@@ -62,7 +62,12 @@ async function lerComTeto(req: Request, max: number): Promise<string | null> {
   const buf = new Uint8Array(total);
   let off = 0;
   for (const p of partes) { buf.set(p, off); off += p.byteLength; }
-  return new TextDecoder().decode(buf);
+  return buf;
+}
+
+async function lerComTeto(req: Request, max: number): Promise<string | null> {
+  const bytes = await lerBytesComTeto(req, max);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
 export const bodyGuard = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {

@@ -1,13 +1,14 @@
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
+import { sha256Hex, sessionRevoked, SESSION_TTL_SEC, ehPapelCliente } from '../helpers';
 import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 import { resolverAgente, acaoDestrutiva } from './agente';
 import { logAudit } from '../helpers';
 import { alvoDaExclusao } from '../trilha-exclusao';
+import { equipeDeOrgSuspensa, ORG_SUSPENSA } from '../services/organizacao';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -253,6 +254,18 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+    // `employee`: grafia antiga de conta de cliente (há uma em produção, de 22/07/2026). Sem este mapa
+    // ela virava papel desconhecido e, com o corte de acesso por papel, perdia o projeto do próprio cliente.
+    else if (user.role === 'employee') user.role = 'org_user';
+    // Só CLIENTE é preso a projeto por `client_project_id`. Em conta de equipe (ou papel
+    // desconhecido) o campo não vale nada, e rota que o lê direto (portal do cliente) não pode
+    // obedecê-lo. Os helpers de acesso também o ignoram (`ehPapelCliente`): defesa em profundidade.
+    if (user.role !== 'platform_admin' && !ehPapelCliente(user)) user.client_project_id = null;
+
+    // Sessão aberta antes da suspensão da organização morre na requisição seguinte (o login já
+    // recusa). Uma consulta só para equipe de fora da ness.; o agente tem a mesma regra em
+    // `concessaoValida`, e a chave de API é de cliente (presa a projeto).
+    if (await equipeDeOrgSuspensa(c.env.DB, user)) return c.json(ORG_SUSPENSA, 403);
   }
 
   // Documento legal MATERIAL pendente barra o acesso até o aceite — muda base
