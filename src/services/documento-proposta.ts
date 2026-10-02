@@ -74,10 +74,10 @@ export function blocosParaTexto(blocos: Bloco[]): string {
 
 // ── Modelo de seções ─────────────────────────────────────────────────────────
 
-const TITULOS: Record<Exclude<SecaoId, 'capa' | 'sobre'>, string> = {
+const TITULOS: Record<Exclude<SecaoId, 'capa'>, string> = {
   sumario: 'Sumário executivo', diagnostico: 'O que o diagnóstico mostrou', lacunas: 'Lacunas prioritárias',
   objeto: 'Objeto e escopo', como_trabalhamos: 'Como trabalhamos', plano: 'Plano de trabalho',
-  cronograma: 'Cronograma', responsabilidades: 'Responsabilidades e equipe', investimento: 'Investimento',
+  cronograma: 'Cronograma', responsabilidades: 'Responsabilidades e equipe', sobre: 'Sobre nós', investimento: 'Investimento',
   premissas: 'Premissas', termos: 'Termos e condições', observacoes: 'Observações', aceite: 'Aceite',
 };
 
@@ -243,7 +243,7 @@ export function montarConteudo(d: DadosDocumento, editadas: Partial<Record<Secao
     // no sumário os indicadores são dados calculados: a edição troca só o texto
     const blocos = editada ? [...textoParaBlocos(texto), ...(id === 'sumario' ? [kpiBloco] : [])] : gerados;
     if (!blocos.length) continue;
-    const titulo = id === 'sobre' ? `Sobre ${o.nome}` : TITULOS[id as keyof typeof TITULOS];
+    const titulo = TITULOS[id as keyof typeof TITULOS];
     secoes.push({ id, numero: id === 'aceite' ? null : String(++n).padStart(2, '0'), titulo, blocos, editada });
   }
 

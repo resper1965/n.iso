@@ -249,7 +249,8 @@ describe('schema contract (real D1)', () => {
     const r = await env.DB.prepare(`SELECT textos FROM organizations WHERE id = 'org_ness'`).first<any>();
     const t = JSON.parse(r.textos);
     expect(t.termos).toContain('## Foro');
-    expect(t.termos).toContain('{org}');
+    expect(t.termos).toContain('## Obrigações da ness.');
+    expect(JSON.stringify(t)).not.toMatch(/\{org\}|de ness\./);
     expect(t.pagamentoPadrao).toBe('40/30/30');
     for (const k of ['sobre', 'comoTrabalhamos', 'premissas']) expect(t[k].length, k).toBeGreaterThan(50);
   });

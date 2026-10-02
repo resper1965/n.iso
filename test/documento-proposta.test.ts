@@ -129,6 +129,7 @@ describe('montarConteudo', () => {
     const termos = c.secoes.find((s) => s.id === 'termos')!;
     expect(termos.blocos[0]).toEqual({ t: 'sub', texto: 'Obrigações de ness.' });
     expect(JSON.stringify(c)).not.toContain('{org}');
+    expect(c.secoes.find((s) => s.id === 'sobre')!.titulo).toBe('Sobre nós');
   });
   it('recorrente mostra "por mês"; projeto + recorrente mostra os dois totais separados', () => {
     const html = renderizarHtml(montarConteudo(dados([recorrente], { diagnostico: null }), {}));
