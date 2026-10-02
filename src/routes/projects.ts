@@ -314,7 +314,8 @@ projectsApp.post('/', async (c) => {
     }
 
     const id = genId();
-    await c.env.DB.prepare(
+    const user = c.get('user');
+    const cria = c.env.DB.prepare(
       `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
     ).bind(
@@ -325,10 +326,23 @@ projectsApp.post('/', async (c) => {
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
       body.org_role ?? ''
-    ).run();
+    );
+    // D5: o consultor só alcança projeto em que está designado; quem cria fica designado no que
+    // criou, no MESMO batch (falhou a designação, o projeto não nasce órfão). Uma linha só.
+    // platform_admin já vê tudo e não polui a governança.
+    const consultor = ehConsultor(user);
+    const designa = consultor && c.env.DB.prepare(
+      `INSERT INTO project_governance (project_id, name, email, role_category, job_title)
+       SELECT ?, ?, ?, 'consultor', 'Consultor'
+        WHERE NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`
+    ).bind(id, user.name || user.email, user.email, id, user.email);
+    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
 
     await seedPhases(c.env.DB, id);
-    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    await logAudit(c.env.DB, 'project.created', user?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    if (consultor) {
+      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${id} que criou`, '', '', id);
+    }
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
   } catch (e: any) {
