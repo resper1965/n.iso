@@ -48,9 +48,14 @@ export function precoPadrao(): ConfigPreco {
 
 const TEXTOS_VAZIOS: TextosOrg = { sobre: '', comoTrabalhamos: '', equipe: '', termos: '', premissas: '', pagamentoPadrao: '' };
 
-function json<T>(s: string | null | undefined, vazio: T): T {
+/** NULL ou vazio = organização nova, vale o padrão. Qualquer outra coisa que não seja o formato esperado falha fechado. */
+function json<T>(s: string | null | undefined, vazio: T, orgId: string, coluna: string): T {
   if (!s) return vazio;
-  try { return JSON.parse(s) as T; } catch { return vazio; }
+  const corrompida = () => new Error(`Configuração da organização ${orgId} corrompida: ${coluna}`);
+  let v: unknown;
+  try { v = JSON.parse(s); } catch { throw corrompida(); }
+  if (Array.isArray(vazio) !== Array.isArray(v) || v === null || typeof v !== 'object') throw corrompida();
+  return v as T;
 }
 
 /** Mescla campo a campo (um nível de objeto aninhado), como o mergeConfig do pricing. */
@@ -74,9 +79,9 @@ export async function lerConfigOrg(db: D1Database, orgId: string): Promise<Confi
     seloNiso: r.selo_niso !== 0,
     prefixoProposta: r.prefixo_proposta ?? '',
     proximoNumero: r.proximo_numero ?? 1,
-    preco: mesclarPreco(precoPadrao(), json(r.config_preco, {})),
-    textos: { ...TEXTOS_VAZIOS, ...json<Partial<TextosOrg>>(r.textos, {}) },
-    secoesDesligadas: json<SecaoDesligavel[]>(r.secoes_desligadas, []),
+    preco: mesclarPreco(precoPadrao(), json(r.config_preco, {}, orgId, 'config_preco')),
+    textos: { ...TEXTOS_VAZIOS, ...json<Partial<TextosOrg>>(r.textos, {}, orgId, 'textos') },
+    secoesDesligadas: json<SecaoDesligavel[]>(r.secoes_desligadas, [], orgId, 'secoes_desligadas'),
   };
 }
 

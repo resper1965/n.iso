@@ -92,6 +92,31 @@ describe('configuração da organização', () => {
     expect(t?.actor).toBe('adm@ness.lat');
   });
 
+  it.each([
+    ['config_preco', '{quebrado'],
+    ['config_preco', '[1,2]'],
+    ['textos', 'nao e json'],
+    ['secoes_desligadas', '{"a":1}'],
+  ])('coluna %s corrompida (%s): lerConfigOrg rejeita e o GET responde 500', async (coluna, valor) => {
+    await env.DB.prepare(`UPDATE organizations SET ${coluna} = ? WHERE id = 'org_ness'`).bind(valor).run();
+    try {
+      await expect(lerConfigOrg(env.DB, 'org_ness')).rejects.toThrow(/corrompida/);
+      const r = await chamar('GET', '/api/v1/org/config', comercial);
+      expect(r.status).toBe(500);
+      expect(JSON.stringify(await r.json())).not.toContain(coluna);
+    } finally {
+      await env.DB.prepare(`UPDATE organizations SET ${coluna} = NULL WHERE id = 'org_ness'`).run();
+    }
+  });
+
+  it('colunas NULL ou vazias dão os padrões (organização recém-criada)', async () => {
+    await env.DB.prepare(`UPDATE organizations SET config_preco = NULL, textos = '', secoes_desligadas = NULL WHERE id = 'org_ness'`).run();
+    const c = await lerConfigOrg(env.DB, 'org_ness');
+    expect(c.preco.tetoDesconto).toBe(15);
+    expect(c.textos.sobre).toBe('');
+    expect(c.secoesDesligadas).toEqual([]);
+  });
+
   it('organização ausente: lerConfigOrg falha fechado', async () => {
     await expect(lerConfigOrg(env.DB, 'org_inexistente')).rejects.toThrow(/não configurada/);
   });
