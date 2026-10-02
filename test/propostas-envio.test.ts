@@ -20,7 +20,7 @@ async function proposta(o: { status?: string; org?: string; validaAte?: string }
     db().prepare(`INSERT INTO leads (id, company_name, cnpj, status, org_id) VALUES (?, 'Cliente', ?, 'Proposal', ?)`).bind(`l-${id}`, `1122233${String(1000000 + seq)}`, o.org ?? 'org_ness'),
     db().prepare(`INSERT INTO propostas (id, org_id, lead_id, numero, status, cliente, total_projeto, mensalidade, documento_html, documento_hash, valida_ate, criada_por)
       VALUES (?, ?, ?, ?, ?, 'Cliente Ltda.', 8200, 0, '<p>doc</p>', 'h', ?, 'com@ness.lat')`)
-      .bind(id, o.org ?? 'org_ness', `l-${id}`, `NESS-2026-${seq}`, o.status ?? 'gerada', o.validaAte ?? '2026-12-31'),
+      .bind(id, o.org ?? 'org_ness', `l-${id}`, `NESS-2026-${seq}`, o.status ?? 'gerada', o.validaAte ?? '2099-12-31'),
     db().prepare(`INSERT INTO proposta_itens (id, proposta_id, ordem, servico, valor) VALUES (?, ?, 0, ?, 8200)`)
       .bind(`${id}-i`, id, JSON.stringify({ nome: 'Treinamento LGPD', norma: '', tipo: 'avulso', descricao: '', premissas: [], exclusoes: [], formaPreco: 'fixo', valorFixo: 8200, entregaveis: ['x'], criterioAceite: 'ok' })),
   ]);
@@ -101,7 +101,7 @@ describe('envio, link e aceite manual', () => {
     expect(e.reply_to).toBe('com@ness.lat');
     expect(e.from).toMatch(/^[^<>"\r\n]+ via n\.iso <noreply@ness\.com\.br>$/);
     expect(e.html).toContain(`https://niso.ness.com.br/proposta#${t}`);
-    expect(e.html).toContain('31/12/2026');
+    expect(e.html).toContain('31/12/2099');
     expect(e.html).toContain('Ver e responder a proposta');
     expect(e.html).not.toContain('<b>Oi</b>');
     expect(e.html).toContain('&lt;b&gt;Oi&lt;/b&gt;');
