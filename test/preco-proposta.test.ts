@@ -64,6 +64,28 @@ describe('calcularItem', () => {
   });
 });
 
+describe('recorrente: sem arredondar ao milhar', () => {
+  const rec = (m: number, nome = 'Manutenção do SGSI') => ({ ...recorrente, nome, mensalidade: m }) as Servico;
+  it('mensalidade 3.333 x 12', () => {
+    const r = calcularItem(rec(3333), { meses: 12 }, preco, '2', null);
+    expect(r).toMatchObject({ mensalidade: 3333, valor: 39996, valorBase: 39996 });
+    expect(totais([r]).mensalidade).toBe(3333);
+  });
+  it('desconto 10% arredonda a mensalidade em reais', () => {
+    const r = calcularItem(rec(3333), { meses: 12, descontoPct: 10 }, preco, '2', null);
+    expect(r.mensalidade).toBe(3000);
+    expect(r.valor).toBe(36000);
+    expect(totais([r]).mensalidade).toBe(3000);
+  });
+  it('memória', () => {
+    expect(calcularItem(rec(4000), { meses: 12 }, preco, '2', null).memoria).toBe('Manutenção do SGSI: R$ 4.000/mês × 12 meses = R$ 48.000');
+    expect(calcularItem(rec(4000), { meses: 12, descontoPct: 10 }, preco, '2', null).memoria).toBe('Manutenção do SGSI: R$ 4.000/mês → desconto 10% → R$ 3.600/mês × 12 meses = R$ 43.200');
+  });
+  it('mensalidade só existe em recorrente', () => {
+    expect(calcularItem(fixo, {}, preco, '1', null).mensalidade).toBeNull();
+  });
+});
+
 describe('totais, teto e margem', () => {
   const it1 = calcularItem(projeto, {}, preco, '2', null);
   const it2 = calcularItem(recorrente, { meses: 12 }, preco, '2', null);

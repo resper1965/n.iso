@@ -9,6 +9,8 @@ export interface ItemCalculado {
   /** Dias já multiplicados pelo fator de porte (base do custo na margem). Nulo em fixo e recorrente. */
   dias: number | null; meses: number | null;
   natureza: 'projeto' | 'mensal';
+  /** Mensalidade efetiva em reais inteiros (com desconto). Só em recorrente. */
+  mensalidade: number | null;
   memoria: string;
 }
 
@@ -28,16 +30,20 @@ export function calcularItem(s: Servico, a: AjusteItem, preco: ConfigPreco, faix
   const descontoPct = a.descontoPct ?? 0;
   if (!(descontoPct >= 0 && descontoPct <= 100)) throw new Error('Desconto deve estar entre 0% e 100%');
 
-  let valorBase: number, dias: number | null = null, meses: number | null = null;
-  let natureza: ItemCalculado['natureza'] = 'projeto';
-  let calculo: string;
   if (s.tipo === 'recorrente') {
-    meses = a.meses ?? s.prazoMinimoMeses;
-    if (meses < s.prazoMinimoMeses) throw new Error(`O prazo mínimo de "${s.nome}" é ${s.prazoMinimoMeses} meses`);
-    valorBase = s.mensalidade * meses;
-    natureza = 'mensal';
-    calculo = `${meses} meses × ${brl(s.mensalidade)} = ${brl(valorBase)}`;
-  } else if (s.tipo === 'avulso' && s.formaPreco === 'fixo') {
+    const m = a.meses ?? s.prazoMinimoMeses;
+    if (m < s.prazoMinimoMeses) throw new Error(`O prazo mínimo de "${s.nome}" é ${s.prazoMinimoMeses} meses`);
+    // Recorrente não sobe ao milhar: a mensalidade efetiva é arredondada em reais.
+    const mensalidade = Math.round(s.mensalidade * (1 - descontoPct / 100));
+    const valor = mensalidade * m;
+    const desc = descontoPct > 0 ? ` → desconto ${num(descontoPct)}% → ${brl(mensalidade)}/mês` : '';
+    return { valorBase: s.mensalidade * m, descontoPct, valor, dias: null, meses: m, natureza: 'mensal', mensalidade,
+      memoria: `${s.nome}: ${brl(s.mensalidade)}/mês${desc} × ${m} meses = ${brl(valor)}` };
+  }
+
+  let valorBase: number, dias: number | null = null;
+  let calculo: string;
+  if (s.tipo === 'avulso' && s.formaPreco === 'fixo') {
     valorBase = s.valorFixo;
     calculo = `valor fixo ${brl(valorBase)}`;
   } else {
@@ -53,13 +59,12 @@ export function calcularItem(s: Servico, a: AjusteItem, preco: ConfigPreco, faix
   const valor = Math.ceil(liquido / 1000) * 1000;
   const desc = descontoPct > 0 ? ` → desconto ${num(descontoPct)}% → ${brl(valor)}` : valor !== valorBase ? ` → ${brl(valor)}` : '';
   const memoria = `${s.nome}, ${NOME_FAIXA[faixa]}: ${calculo}${desc}`;
-  return { valorBase, descontoPct, valor, dias, meses, natureza, memoria };
+  return { valorBase, descontoPct, valor, dias, meses: null, natureza: 'projeto', mensalidade: null, memoria };
 }
 
 export function totais(itens: ItemCalculado[]) {
   const soma = (n: ItemCalculado['natureza']) => itens.filter((i) => i.natureza === n).reduce((t, i) => t + i.valor, 0);
-  // Recorrente: o valor do item é mensalidade × meses; a mensalidade é esse valor por mês.
-  const mensalidade = itens.filter((i) => i.natureza === 'mensal').reduce((t, i) => t + i.valor / (i.meses ?? 1), 0);
+  const mensalidade = itens.reduce((t, i) => t + (i.mensalidade ?? 0), 0);
   return { totalProjeto: soma('projeto'), mensalidade };
 }
 
