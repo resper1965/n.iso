@@ -10,7 +10,7 @@ import type { Servico } from '../schemas';
 import { orgDoUsuario, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
 import { calcularItem, totais, descontoAcimaDoTeto, margem, type Faixa } from '../services/preco-proposta';
 import { diagnosticoDe, type Diagnostico } from '../services/diagnostico';
-import { montarConteudo, renderizarHtml, hashDocumento } from '../services/documento-proposta';
+import { montarConteudo, renderizarHtml, hashDocumento, blocosParaTexto, SECOES_EDITAVEIS } from '../services/documento-proposta';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
 
@@ -231,7 +231,9 @@ propostasApp.get('/:id/previa', async (c) => {
     const dg = await diagnosticoDaProposta(db, p.assessment_id);
     const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, new Date().getFullYear(), cfg.proximoNumero);
     const { conteudo, html } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
-    return c.json({ conteudo, html });
+    // texto atual de cada seção editável presente, para a tela pré-preencher a edição (seção ausente: sem chave)
+    const textos = Object.fromEntries(conteudo.secoes.filter((s) => SECOES_EDITAVEIS.includes(s.id)).map((s) => [s.id, blocosParaTexto(s.blocos)]));
+    return c.json({ conteudo, html, textos });
   } catch (e) { return falha(c, e, 'Erro ao montar a prévia'); }
 });
 

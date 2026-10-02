@@ -145,6 +145,18 @@ describe('rotas /api/v1/propostas', () => {
     expect((await ler(p.id)).status).toBe('rascunho');
   }, 30_000);
 
+  it('prévia devolve o texto de cada seção editável presente, para a tela pré-preencher', async () => {
+    const p = await criar({ contexto: 'A empresa cresce.\n\n- vende para bancos' }); // avulso sozinho: sem "Como trabalhamos"
+    await chamar('PUT', `/api/v1/propostas/${p.id}`, com, { secoesEditadas: { sobre: 'Primeiro.\n\n- item um\n- item dois' } });
+    const previa = await (await chamar('GET', `/api/v1/propostas/${p.id}/previa`, com)).json<any>();
+    // o sumário é o contexto em texto simples; os indicadores (dados) não entram no texto
+    expect(previa.textos.sumario).toBe('A empresa cresce.\n\n- vende para bancos');
+    expect(previa.textos.sobre).toBe('Primeiro.\n\n- item um\n- item dois');
+    expect(previa.textos).not.toHaveProperty('como_trabalhamos');
+    expect(previa.textos).not.toHaveProperty('investimento');
+    expect(Object.keys(previa.textos).every((k) => (SECOES_EDITAVEIS as string[]).includes(k))).toBe(true);
+  }, 30_000);
+
   it('Review 1: desconto acima do teto não chega a gerada sem aprovação do platform_admin', async () => {
     const p = await criar({ itens: [{ servicoId: srvAvulso, descontoPct: 20 }] });
     let r = await gerar(p.id);
