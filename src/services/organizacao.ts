@@ -27,20 +27,36 @@ export function orgDoUsuario(
 
 export const SEM_ORG = { error: 'Organização não identificada' } as const;
 
+/** `orgDoUsuario` da requisição, com o `X-Org-Id` do `platform_admin` conferido no banco; `null` = nega. */
+export async function resolverOrg(c: any): Promise<string | null> {
+  const cabecalho = c.req.header('X-Org-Id');
+  const orgId = orgDoUsuario(c.get('user'), cabecalho);
+  if (orgId && cabecalho?.trim() === orgId) {
+    const existe = await c.env.DB.prepare('SELECT 1 FROM organizations WHERE id = ?').bind(orgId).first();
+    if (!existe) return null;
+  }
+  return orgId;
+}
+
 /**
  * Middleware: resolve a organização da requisição em `c.get('orgId')` ou responde 403. O
  * `X-Org-Id` do `platform_admin` só vale se a organização existe (inexistente → 403, não 400:
  * um caminho só de recusa).
  */
 export async function exigirOrg(c: any, next: () => Promise<void>) {
-  const cabecalho = c.req.header('X-Org-Id');
-  let orgId = orgDoUsuario(c.get('user'), cabecalho);
-  if (orgId && cabecalho?.trim() === orgId) {
-    const existe = await c.env.DB.prepare('SELECT 1 FROM organizations WHERE id = ?').bind(orgId).first();
-    if (!existe) orgId = null;
-  }
+  const orgId = await resolverOrg(c);
   if (!orgId) return c.json(SEM_ORG, 403);
   c.set('orgId', orgId);
+  await next();
+}
+
+/**
+ * Middleware, depois de `exigirOrg`: só a organização da ness. Para o que é global e anterior à
+ * multiconsultoria e não tem `org_id` (a tabela `settings` com a precificação antiga da ness.):
+ * outra consultoria não lê nem grava o custo interno da ness.
+ */
+export async function somenteOrgNess(c: any, next: () => Promise<void>) {
+  if (c.get('orgId') !== ORG_NESS) return c.json({ error: 'Forbidden: configuração exclusiva da ness.' }, 403);
   await next();
 }
 

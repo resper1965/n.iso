@@ -1,21 +1,36 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL } from '../helpers';
+import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, ehAdminConsultoria, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL, PAPEIS_EQUIPE_ORG } from '../helpers';
 import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
+import { orgDoUsuario, resolverOrg, SEM_ORG } from '../services/organizacao';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 
+/** Quem gere usuários. O `consultoria_admin` (Tarefa 4 cria o valor) gere os da própria organização. */
+const GESTORES = new Set(['consultor', 'platform_admin', 'org_admin', 'consultoria_admin']);
+
+/*
+ * Organização de uma conta (multiconsultoria): cliente é da organização do PROJETO dele (o projeto
+ * pode ser transferido, e a conta do cliente vai junto); equipe, de `users.org_id`. Cliente sem
+ * projeto não tem organização (NULL): só o platform_admin o gere. Grafias legadas de cliente incluídas.
+ */
+const ORG_DA_CONTA_SQL = `CASE WHEN u.role IN ('org_admin', 'org_user', 'client', 'user', 'client_admin')
+  THEN (SELECT p.org_id FROM projects p WHERE p.id = u.client_project_id) ELSE u.org_id END`;
+
 usersApp.get('/', async (c) => {
   const user = c.get('user');
-  if (user.role !== 'consultor' && user.role !== 'platform_admin' && user.role !== 'org_admin') {
+  if (!GESTORES.has(user.role)) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
   
   try {
     let stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users ORDER BY created_at DESC');
-    if (user.role === 'org_admin') {
+    if (ehAdminConsultoria(user)) {
+      // Todas as contas da organização (equipe e clientes dos projetos dela), nenhuma de fora.
+      stmt = c.env.DB.prepare(`SELECT u.id, u.email, u.name, u.role, u.client_project_id, u.created_at FROM users u WHERE ${ORG_DA_CONTA_SQL} = ? ORDER BY u.created_at DESC`).bind(orgDoUsuario(user) ?? '');
+    } else if (user.role === 'org_admin') {
       stmt = c.env.DB.prepare('SELECT id, email, name, role, client_project_id, created_at FROM users WHERE client_project_id = ? ORDER BY created_at DESC').bind(user.client_project_id || '');
     } else if (ehConsultor(user)) {
       // D5: só as contas de cliente dos projetos em que o consultor está designado.
@@ -44,9 +59,20 @@ usersApp.get('/', async (c) => {
  * (ou de um colega) e entrava na conta. Três portas para a mesma escalada.
  */
 const PAPEIS_CLIENTE_GERIVEIS = new Set(['org_admin', 'org_user', 'client']);
+/*
+ * O `consultoria_admin` gere também a equipe da PRÓPRIA organização (consultor, comercial e outro
+ * administrador dela), nunca `platform_admin`/`admin`: isso continua só do platform_admin.
+ */
+const PAPEIS_DO_ADMIN_CONSULTORIA = new Set([...PAPEIS_CLIENTE_GERIVEIS, ...PAPEIS_EQUIPE_ORG]);
 const soPlatformAdmin = (quem: { role?: string }, papel: string | null | undefined) =>
-  quem.role !== 'platform_admin' && !PAPEIS_CLIENTE_GERIVEIS.has(papel ?? '');
+  quem.role !== 'platform_admin' && !(ehAdminConsultoria(quem) ? PAPEIS_DO_ADMIN_CONSULTORIA : PAPEIS_CLIENTE_GERIVEIS).has(papel ?? '');
 const recusaPapelInterno = { error: 'Forbidden: contas da ness. são geridas pelo platform_admin' };
+
+/** Organização de um projeto; `null` se não existe. */
+const orgDoProjeto = async (db: D1Database, projectId: string | null | undefined) =>
+  projectId ? (await db.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id ?? null : null;
+/** Conta de outra organização para o `consultoria_admin`: 404, sem revelar que existe. */
+const NAO_ENCONTRADO = { error: 'Usuário não encontrado' };
 
 /*
  * D5: o consultor só gere conta de cliente de projeto em que está designado. Sem isto ele criava
@@ -59,7 +85,7 @@ const recusaProjeto = { error: 'Forbidden: consultor só gere usuários dos proj
 
 usersApp.post('/', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+  if (!GESTORES.has(admin.role)) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
 
@@ -80,12 +106,22 @@ usersApp.post('/', async (c) => {
       }
     }
 
+    // A organização da conta nova: cliente herda a do projeto; equipe, a de quem cria (o
+    // platform_admin escolhe com X-Org-Id). Ninguém escolhe a organização pelo corpo.
+    const ehCliente = PAPEIS_CLIENTE_GERIVEIS.has(targetRole);
+    const orgCriador = await resolverOrg(c);
+    if (ehAdminConsultoria(admin) && ehCliente && (!targetProject || await orgDoProjeto(c.env.DB, targetProject) !== orgCriador)) {
+      return c.json({ error: 'Forbidden: projeto fora da sua organização' }, 403);
+    }
+    const orgNovo = ehCliente ? (await orgDoProjeto(c.env.DB, targetProject)) ?? orgCriador : orgCriador;
+    if (!orgNovo) return c.json(SEM_ORG, 403);
+
     const id = genId();
     const hash = await hashPassword(password);
-    
+
     await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role, client_project_id, requires_password_change) VALUES (?, ?, ?, ?, ?, ?, 1)`
-    ).bind(id, email, hash, name, targetRole, targetProject || null).run();
+      `INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id, requires_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+    ).bind(id, email, hash, name, targetRole, targetProject || null, orgNovo).run();
 
     await logAudit(c.env.DB, 'user.created', admin.email, `Usuário ${email} criado como ${targetRole}`);
 
@@ -116,7 +152,7 @@ usersApp.post('/', async (c) => {
 
 usersApp.put('/:id', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+  if (!GESTORES.has(admin.role)) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
 
@@ -126,9 +162,17 @@ usersApp.put('/:id', async (c) => {
     if (!v.success) return v.response;
     const { name, email, role, client_project_id, password } = v.data;
     
-    const user = await c.env.DB.prepare('SELECT id, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
+    const user = await c.env.DB.prepare(`SELECT u.id, u.role, u.client_project_id, ${ORG_DA_CONTA_SQL} AS org FROM users u WHERE u.id = ?`).bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
+    }
+    if (ehAdminConsultoria(admin)) {
+      const minha = orgDoUsuario(admin);
+      if (user.org !== minha) return c.json(NAO_ENCONTRADO, 404);
+      // Não move a conta para projeto de outra organização.
+      if (client_project_id && await orgDoProjeto(c.env.DB, client_project_id) !== minha) {
+        return c.json({ error: 'Forbidden: projeto fora da sua organização' }, 403);
+      }
     }
 
     // O ALVO precisa ser de cliente (senão é tomada de conta: trocar a senha de
@@ -164,6 +208,11 @@ usersApp.put('/:id', async (c) => {
     if (role !== undefined) {
       updates.push('role = ?');
       values.push(role);
+      // Conta que vira equipe fica na organização de quem a gere (a de cliente segue o projeto).
+      if (ehAdminConsultoria(admin)) {
+        updates.push('org_id = ?');
+        values.push(orgDoUsuario(admin));
+      }
     }
     if (client_project_id !== undefined) {
       updates.push('client_project_id = ?');
@@ -199,16 +248,17 @@ usersApp.put('/:id', async (c) => {
 
 usersApp.delete('/:id', async (c) => {
   const admin = c.get('user');
-  if (admin.role !== 'consultor' && admin.role !== 'platform_admin' && admin.role !== 'org_admin') {
+  if (!GESTORES.has(admin.role)) {
     return c.json({ error: 'Unauthorized' }, 403);
   }
 
   const id = c.req.param('id');
   try {
-    const user = await c.env.DB.prepare('SELECT id, email, role, client_project_id FROM users WHERE id = ?').bind(id).first() as any;
+    const user = await c.env.DB.prepare(`SELECT u.id, u.email, u.role, u.client_project_id, ${ORG_DA_CONTA_SQL} AS org FROM users u WHERE u.id = ?`).bind(id).first() as any;
     if (!user) {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
+    if (ehAdminConsultoria(admin) && user.org !== orgDoUsuario(admin)) return c.json(NAO_ENCONTRADO, 404);
 
     if (soPlatformAdmin(admin, user.role)) return c.json(recusaPapelInterno, 403);
     if (await consultorForaDoProjeto(c.env.DB, admin, user.client_project_id)) return c.json(recusaProjeto, 403);

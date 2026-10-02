@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, ehConsultor, PROJETOS_DO_CONSULTOR_SQL, designacaoDoCriador } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador } from '../helpers';
+import { resolverOrg, SEM_ORG } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
@@ -315,9 +316,13 @@ projectsApp.post('/', async (c) => {
 
     const id = genId();
     const user = c.get('user');
+    // O projeto nasce na organização de quem cria (o platform_admin escolhe com X-Org-Id, que precisa
+    // existir). Cliente e papel desconhecido não têm organização: 403, falha fechada.
+    const orgId = await resolverOrg(c);
+    if (!orgId) return c.json(SEM_ORG, 403);
     const cria = c.env.DB.prepare(
-      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
+      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, org_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
     ).bind(
       id,
       body.project_name ?? '',
@@ -325,7 +330,8 @@ projectsApp.post('/', async (c) => {
       body.sector ?? '',
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
-      body.org_role ?? ''
+      body.org_role ?? '',
+      orgId
     );
     // D5: consultor que cria fica designado no projeto, no mesmo batch.
     const designa = designacaoDoCriador(c.env.DB, user, id);
@@ -356,9 +362,11 @@ projectsApp.get('/', async (c) => {
       return c.json(project ? [redactProject(project)] : []);
     }
 
-    // Consultor: só os projetos em que está designado (D5).
-    const { results } = await (ehConsultor(user)
-      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${PROJETOS_DO_CONSULTOR_SQL}) ORDER BY created_at DESC`).bind(user.email)
+    // Consultor: os designados na própria organização (D5); consultoria_admin: os da organização;
+    // só o platform_admin vê todos. Comercial e papel desconhecido: nenhum.
+    const v = projetosVisiveis(user);
+    const { results } = await (v
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${v.sql}) ORDER BY created_at DESC`).bind(v.bind)
       : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')).all();
     return c.json((results ?? []).map(redactProject));
   } catch (e: any) {

@@ -185,6 +185,14 @@ describe('fecharVenda', () => {
     expect((await db().prepare('SELECT status FROM propostas WHERE id = ?').bind(id).first<any>()).status).toBe('enviada');
   });
 
+  it('o projeto nasce na organização da proposta (multiconsultoria)', async () => {
+    await db().prepare(`INSERT OR IGNORE INTO organizations (id, name, slug) VALUES ('org_b', 'B', 'b')`).run();
+    const { id } = await proposta({ org: 'org_b', consultor: null });
+    const r = await fecharVenda(db(), entrada(id, { orgId: 'org_b' }));
+    if (!r.ok) throw new Error('fechamento falhou');
+    expect((await db().prepare('SELECT org_id FROM projects WHERE id = ?').bind(r.projetoId).first<any>()).org_id).toBe('org_b');
+  });
+
   it('sem consultor na proposta: aceite manual de consultor o designa; de comercial, ninguém', async () => {
     const a = await proposta({ consultor: null });
     const ra = await fecharVenda(db(), entrada(a.id, { origem: 'manual', atorEmail: 'cons2@ness.lat' }));
