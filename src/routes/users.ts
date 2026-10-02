@@ -73,12 +73,13 @@ const EQUIPE_SEM_PROJETO = { error: 'Conta de equipe não se prende a projeto' }
 const orgDoProjeto = async (db: D1Database, projectId: string | null | undefined) =>
   projectId ? (await db.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id ?? null : null;
 /**
- * A organização ficaria sem administrador ativo se este saísse? (O alvo é um `consultoria_admin` dela.)
- * O `platform_admin` não passa por aqui: ele reprovisiona.
+ * A organização ficaria sem administrador ativo se o alvo (um `consultoria_admin` dela) saísse?
+ * Conta os OUTROS administradores ativos: apagar um inativo não é problema. O `platform_admin` não
+ * passa por aqui: ele reprovisiona.
  */
-const ultimoAdminDaOrg = async (db: D1Database, orgId: string | null) =>
-  ((await db.prepare(`SELECT COUNT(*) AS n FROM users WHERE org_id = ? AND role = 'consultoria_admin' AND COALESCE(ativo, 1) <> 0`)
-    .bind(orgId ?? '').first<{ n: number }>())?.n ?? 0) <= 1;
+const ultimoAdminDaOrg = async (db: D1Database, orgId: string | null, alvoId: string) =>
+  ((await db.prepare(`SELECT COUNT(*) AS n FROM users WHERE org_id = ? AND role = 'consultoria_admin' AND COALESCE(ativo, 1) <> 0 AND id <> ?`)
+    .bind(orgId ?? '', alvoId).first<{ n: number }>())?.n ?? 0) === 0;
 const ULTIMO_ADMIN = { error: 'A organização precisa de ao menos um administrador ativo' };
 /** Conta de outra organização para o `consultoria_admin`: 404, sem revelar que existe. */
 const NAO_ENCONTRADO = { error: 'Usuário não encontrado' };
@@ -207,7 +208,7 @@ usersApp.put('/:id', async (c) => {
       if (password && user.role === 'consultoria_admin') {
         return c.json({ error: 'Forbidden: a senha de um administrador da consultoria só ele mesmo troca' }, 403);
       }
-      if (user.role === 'consultoria_admin' && papelFinal !== 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, minha)) {
+      if (user.role === 'consultoria_admin' && papelFinal !== 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, minha, id)) {
         return c.json(ULTIMO_ADMIN, 409);
       }
     }
@@ -302,7 +303,7 @@ usersApp.delete('/:id', async (c) => {
       return c.json({ error: 'Usuário não encontrado' }, 404);
     }
     if (ehAdminDaOrg(admin) && user.org !== orgDoUsuario(admin)) return c.json(NAO_ENCONTRADO, 404);
-    if (ehAdminDaOrg(admin) && user.role === 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, user.org)) {
+    if (ehAdminDaOrg(admin) && user.role === 'consultoria_admin' && await ultimoAdminDaOrg(c.env.DB, user.org, id)) {
       return c.json(ULTIMO_ADMIN, 409);
     }
 

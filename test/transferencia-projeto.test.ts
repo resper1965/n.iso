@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { hashPassword } from '../src/helpers';
+import { hashPassword, sha256Hex } from '../src/helpers';
 import { transferirProjeto, MSG_CORRIDA } from '../src/services/transferencia-projeto';
 import { applySchema, workerEnv, sessionFor } from './helpers/d1';
 
@@ -60,7 +60,7 @@ beforeAll(async () => {
       ('u-cb','cb@b.lat',?,'CB','consultor',NULL,'org_b',1),
       ('u-cli','cli@cliente.lat',?,'Cli','org_admin','p-t1','org_ness',1)`).bind(h, h, h, h, h, h, h),
   ]);
-  for (const p of ['p-t1', 'p-t2', 'p-t3', 'p-t4', 'p-t5', 'p-t6']) await semearProjeto(p);
+  for (const p of ['p-t1', 'p-t2', 'p-t3', 'p-t4', 'p-t5', 'p-t6', 'p-t7']) await semearProjeto(p);
   // venda que originou p-t1: fica com a ness. (quem vendeu)
   await d.batch([
     d.prepare(`INSERT INTO leads (id, company_name, status, org_id) VALUES ('l-t1', 'Lead', 'Won', 'org_ness')`),
@@ -130,6 +130,39 @@ describe('POST /api/v1/platform/projects/:id/transferir', () => {
     // a venda fica com quem vendeu
     expect((await um('SELECT org_id FROM propostas WHERE id = ?', 'pr-t1'))?.org_id).toBe('org_ness');
     expect((await um('SELECT org_id FROM contracts WHERE id = ?', 'ct-t1'))?.org_id).toBe('org_ness');
+  });
+
+  it('revisão final, I3: chaves de API, webhooks, SSO e SCIM que a origem configurou saem de cena no mesmo batch', async () => {
+    const d = env.DB;
+    await d.batch([
+      d.prepare(`INSERT INTO api_keys (id, project_id, key_hash, name, permissions, status) VALUES
+        ('k-t7', 'p-t7', ?, 'Chave da origem', 'write', 'Active'), ('k-t7-velha', 'p-t7', ?, 'Já revogada', 'write', 'Revoked')`)
+        .bind(await sha256Hex('chave-origem-t7'), await sha256Hex('chave-velha-t7')),
+      d.prepare(`INSERT INTO webhooks (id, project_id, url, events, secret, status) VALUES ('w-t7', 'p-t7', 'https://origem.lat/hook', '[]', 's', 'Active')`),
+      d.prepare(`INSERT INTO project_sso (project_id, issuer, client_id, client_secret, dominios, papel_padrao, ativo) VALUES ('p-t7', 'https://idp.origem.lat', 'c', 'v1:x', 'cliente.lat', 'org_user', 1)`),
+      d.prepare(`INSERT INTO project_scim (project_id, token_hash, ativo) VALUES ('p-t7', ?, 1)`).bind(await sha256Hex('scim-t7')),
+    ]);
+    // antes: a chave de escrita da origem autentica
+    expect((await chamar('GET', '/api/v1/projects/p-t7/risks', { 'X-API-Key': 'chave-origem-t7' })).status).toBe(200);
+
+    const r = await transferir('p-t7', { orgDestinoId: 'org_b', motivo: MOTIVO }, S.pa);
+    const body = await r.json<any>();
+    expect(r.status, JSON.stringify(body)).toBe(200);
+    expect(body).toMatchObject({ chavesRevogadas: 1, webhooksDesativados: 1, ssoDesativado: true, scimRevogado: true });
+
+    expect(await um('SELECT status FROM api_keys WHERE id = ?', 'k-t7')).toEqual({ status: 'Revoked' });
+    expect(await um('SELECT status FROM webhooks WHERE id = ?', 'w-t7')).toEqual({ status: 'Inactive' });
+    expect(await um('SELECT ativo, atualizado_por FROM project_sso WHERE project_id = ?', 'p-t7')).toEqual({ ativo: 0, atualizado_por: 'pa@ness.lat' });
+    expect(await um('SELECT ativo FROM project_scim WHERE project_id = ?', 'p-t7')).toEqual({ ativo: 0 });
+    // depois: a chave não autentica, o SCIM não entra e o webhook não dispara
+    expect((await chamar('GET', '/api/v1/projects/p-t7/risks', { 'X-API-Key': 'chave-origem-t7' })).status).toBe(401);
+    expect((await chamar('GET', '/scim/v2/Users', { Authorization: 'Bearer scim-t7' })).status).toBe(401);
+    expect((await chamar('POST', '/api/v1/webhooks/test/w-t7', S.ab)).status).toBe(409);
+
+    const t = await um<any>(`SELECT details FROM audit_logs WHERE action = 'projeto.transferido' AND project_id = ?`, 'p-t7');
+    for (const trecho of ['chaves de API revogadas: 1', 'webhooks desativados: 1', 'SSO desativado: sim', 'SCIM revogado: sim']) {
+      expect(t.details).toContain(trecho);
+    }
   });
 
   it('repetição, destino inexistente ou suspenso e projeto inexistente: recusa sem efeito', async () => {

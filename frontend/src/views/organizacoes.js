@@ -412,6 +412,7 @@ function desenharConfirmacao(erro) {
             <li>O projeto passa para ${destino}</li>
             <li>Os consultores de ${origem} perdem o acesso ao projeto na hora.</li>
             <li>Os agentes conectados ao projeto são desconectados.</li>
+            <li>Chaves de API, webhooks, SSO e SCIM do projeto são desativados: o administrador da organização de destino precisa reconfigurá-los.</li>
             <li>Propostas e contratos continuam com ${origemFim}</li>
             <li>Os usuários do cliente continuam entrando normalmente.</li>
         </ul>

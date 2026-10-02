@@ -308,6 +308,8 @@ describe('transferir projeto', () => {
     expect(t).toContain('O projeto passa para ness.');
     expect(t).toContain('Os consultores de Alfa Consultoria perdem o acesso');
     expect(t).toContain('Os agentes conectados ao projeto são desconectados');
+    expect(t).toContain('Chaves de API, webhooks, SSO e SCIM do projeto são desativados');
+    expect(t).toContain('precisa reconfigurá-los');
     expect(t).toContain('Propostas e contratos continuam com Alfa Consultoria');
     expect(chamadas('POST', '/transferir')).toHaveLength(0);
     await clica('__orgTConfirmar');
