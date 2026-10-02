@@ -79,11 +79,20 @@ describe('lista', () => {
     expect(chamadas('POST')[0][0]).toContain('/api/v1/servicos/s2/arquivar');
   });
 
-  it('catálogo vazio: só platform_admin vê "Carregar catálogo inicial"', async () => {
+  it('catálogo vazio: platform_admin e consultoria_admin veem "Carregar catálogo inicial"', async () => {
     let c = await monta('platform_admin', []);
     expect(c.textContent).toContain('Carregar catálogo inicial');
+    c = await monta('consultoria_admin', []);
+    expect(c.querySelector('[data-action="__catSemear"]')).toBeTruthy();
     c = await monta('comercial', []);
     expect(c.textContent).not.toContain('Carregar catálogo inicial');
+  });
+
+  it('consultoria_admin cria, edita e arquiva (botões de gravação presentes)', async () => {
+    const c = await monta('consultoria_admin');
+    expect(c.querySelector('[data-action="__catNovo"]')).toBeTruthy();
+    expect(c.querySelector('[data-action="__catEditar"]')).toBeTruthy();
+    expect(c.querySelector('[data-action="__catArquivar"]')).toBeTruthy();
   });
 });
 

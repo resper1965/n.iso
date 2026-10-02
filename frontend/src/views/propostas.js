@@ -4,7 +4,7 @@
 // Fatia 4: na ficha da proposta gerada, envio por e-mail, link para copiar, revogação e aceite
 // manual (propostaEnviarSchema / propostaAceiteManualSchema), e o que o cliente respondeu.
 import { S } from '../state.js';
-import { api, API_BASE } from '../api.js';
+import { api, API_BASE, cabecalhosAuth } from '../api.js';
 import { escapeHTML } from '../ui.js';
 
 const PASSOS = ['Cliente', 'Serviços', 'Ajustes', 'Número e condições', 'Revisar documento'];
@@ -47,7 +47,8 @@ const valor = (n) => (Number(n) > 0 ? brl(n) : '—');
 const cnpjBr = (s) => (s && /^\d{14}$/.test(s) ? s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : s || '');
 const args = (...v) => escapeHTML(JSON.stringify(v));
 const teto = () => Number(cfg?.preco?.tetoDesconto ?? 0);
-const ehAdmin = () => S.user?.role === 'platform_admin';
+// Aprova desconto: o platform_admin e o administrador da consultoria (podeAdministrarOrg no servidor).
+const ehAdmin = () => S.user?.role === 'platform_admin' || S.user?.role === 'consultoria_admin';
 
 /** Desconto que a geração vai mandar para aprovação. */
 export const acimaDoTeto = (desconto, limite) => Number(desconto) > Number(limite);
@@ -59,8 +60,7 @@ function pilula(status) {
 
 // O documento e o Word não são JSON: fetch direto, com o token da sessão como o api.js faz.
 async function buscar(caminho) {
-    const headers = S.token ? { Authorization: `Bearer ${S.token}` } : {};
-    const r = await fetch(API_BASE + caminho, { headers, signal: AbortSignal.timeout(30000) });
+    const r = await fetch(API_BASE + caminho, { headers: cabecalhosAuth(), signal: AbortSignal.timeout(30000) });
     if (!r.ok) {
         let msg = '';
         try { msg = (await r.json()).error; } catch { /* corpo não é JSON */ }
@@ -292,7 +292,7 @@ function bannerAprovacao() {
     return ehAdmin()
         ? `<div class="prp-aprovacao" role="status"><p>Desconto acima do teto de ${escapeHTML(teto())}%: a proposta aguarda a sua aprovação.</p>
             <button type="button" class="btn btn-primary" data-action="__prpAprovar">Aprovar desconto</button></div>`
-        : `<div class="prp-aprovacao" role="status"><p>Desconto acima do teto de ${escapeHTML(teto())}%: a proposta aguarda a aprovação do administrador da plataforma. Reduza o desconto ou espere a aprovação para gerar.</p></div>`;
+        : `<div class="prp-aprovacao" role="status"><p>Desconto acima do teto de ${escapeHTML(teto())}%: a proposta aguarda a aprovação do administrador da organização. Reduza o desconto ou espere a aprovação para gerar.</p></div>`;
 }
 
 function desenharAssistente() {

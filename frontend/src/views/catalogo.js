@@ -1,4 +1,4 @@
-// Catálogo de serviços (comercial e platform_admin). Rotas: /api/v1/servicos. O corpo enviado é o
+// Catálogo de serviços (comercial, consultoria_admin e platform_admin). Rotas: /api/v1/servicos. O corpo enviado é o
 // do `servicoSchema` (src/schemas/domain.ts): união por `tipo`; o avulso se divide por `formaPreco`.
 import { S } from '../state.js';
 import { api } from '../api.js';
@@ -32,7 +32,8 @@ function desenhar() {
     const { c, h, a } = ultimo;
     h.textContent = 'Catálogo de serviços';
     a.innerHTML = '';
-    const admin = S.user?.role === 'platform_admin';
+    // carregar o catálogo inicial: quem administra a organização (podeAdministrarOrg no servidor)
+    const admin = S.user?.role === 'platform_admin' || S.user?.role === 'consultoria_admin';
     const visiveis = servicos.filter((s) => arquivados || s.ativo);
 
     const linhasHtml = visiveis.map((s) => {
@@ -61,7 +62,7 @@ function desenhar() {
                <p class="cat-nota">O catálogo está vazio.</p>
                ${admin
                    ? '<button type="button" class="btn btn-primary" data-action="__catSemear">Carregar catálogo inicial</button>'
-                   : '<p class="cat-nota">Peça ao administrador da plataforma para carregar o catálogo inicial.</p>'}
+                   : '<p class="cat-nota">Peça ao administrador da organização para carregar o catálogo inicial.</p>'}
            </div>`
         : '';
 
