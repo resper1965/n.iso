@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Proposta comercial</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/proposta.css">
+  <!-- Página do cliente para ler e responder a proposta. Sem script inline (CSP script-src 'self'):
+       tudo está em /proposta.js. O token vem no fragmento (#...), que o navegador não envia ao servidor. -->
+  <script src="/proposta.js" defer></script>
+</head>
+<body>
+  <header class="pp-topo">
+    <div class="pp-topo-int">
+      <span class="pp-org" id="pp-org">Proposta comercial</span>
+      <span class="pp-meta" id="pp-meta"></span>
+      <button type="button" class="pp-ir" id="pp-ir" hidden>Ir para a resposta</button>
+    </div>
+  </header>
+
+  <main class="pp-main" id="pp-main">
+    <section class="pp-estado" id="pp-estado" role="status" aria-live="polite">
+      <h1 class="pp-estado-titulo" id="pp-estado-titulo" tabindex="-1">Carregando a proposta...</h1>
+      <p class="pp-estado-texto" id="pp-estado-texto"></p>
+    </section>
+
+    <div class="pp-proposta" id="pp-proposta" hidden>
+      <h1 class="pp-sr" id="pp-titulo">Proposta</h1>
+      <iframe class="pp-doc" id="pp-doc" title="Documento da proposta" sandbox="allow-same-origin"></iframe>
+
+      <section class="pp-resposta" id="pp-resposta" aria-labelledby="pp-resposta-titulo">
+        <h2 class="pp-resposta-titulo" id="pp-resposta-titulo" tabindex="-1">Sua resposta</h2>
+        <p class="pp-nota">Leia o documento acima. Você pode aceitar, recusar ou pedir um ajuste ao comercial.</p>
+        <p class="pp-aviso" id="pp-aviso" role="status" hidden></p>
+
+        <div class="pp-opcoes">
+          <button type="button" class="pp-opcao" id="pp-op-aceitar" aria-expanded="false" aria-controls="pp-painel-aceitar">Aceitar</button>
+          <button type="button" class="pp-opcao" id="pp-op-ajuste" aria-expanded="false" aria-controls="pp-painel-ajuste">Pedir ajuste</button>
+          <button type="button" class="pp-opcao" id="pp-op-recusar" aria-expanded="false" aria-controls="pp-painel-recusar">Recusar</button>
+        </div>
+
+        <form class="pp-painel" id="pp-painel-aceitar" novalidate hidden>
+          <h3 class="pp-painel-titulo">Aceitar a proposta</h3>
+          <p class="pp-nota">Junto com o aceite registramos o nome, o cargo, o e-mail, a data, a hora, o endereço IP e a versão do documento que você leu.</p>
+          <div class="pp-campo">
+            <label class="pp-rotulo" for="pp-nome">Nome completo</label>
+            <input class="pp-input" id="pp-nome" name="nome" type="text" autocomplete="name" maxlength="120" aria-describedby="pp-nome-erro">
+            <p class="pp-erro" id="pp-nome-erro" role="alert"></p>
+          </div>
+          <div class="pp-campo">
+            <label class="pp-rotulo" for="pp-cargo">Cargo</label>
+            <input class="pp-input" id="pp-cargo" name="cargo" type="text" autocomplete="organization-title" maxlength="120" aria-describedby="pp-cargo-erro">
+            <p class="pp-erro" id="pp-cargo-erro" role="alert"></p>
+          </div>
+          <div class="pp-campo">
+            <label class="pp-rotulo" for="pp-email">E-mail</label>
+            <input class="pp-input" id="pp-email" name="email" type="email" autocomplete="email" maxlength="200" aria-describedby="pp-email-erro">
+            <p class="pp-erro" id="pp-email-erro" role="alert"></p>
+          </div>
+          <div class="pp-campo">
+            <div class="pp-caixa">
+              <input id="pp-poderes" name="poderes" type="checkbox" aria-describedby="pp-poderes-erro">
+              <label for="pp-poderes">Tenho poderes para contratar em nome da empresa.</label>
+            </div>
+            <p class="pp-erro" id="pp-poderes-erro" role="alert"></p>
+          </div>
+          <p class="pp-erro" id="pp-aceitar-erro" role="alert"></p>
+          <div class="pp-rodape">
+            <button type="submit" class="pp-btn pp-btn-primario" id="pp-aceitar-enviar">Aceitar a proposta</button>
+          </div>
+        </form>
+
+        <form class="pp-painel" id="pp-painel-ajuste" novalidate hidden>
+          <h3 class="pp-painel-titulo">Pedir ajuste</h3>
+          <p class="pp-nota">Diga o que precisa mudar. O comercial recebe a mensagem e envia uma nova versão.</p>
+          <div class="pp-campo">
+            <label class="pp-rotulo" for="pp-mensagem">Mensagem</label>
+            <textarea class="pp-input" id="pp-mensagem" name="mensagem" rows="5" maxlength="2000" aria-describedby="pp-mensagem-erro"></textarea>
+            <p class="pp-erro" id="pp-mensagem-erro" role="alert"></p>
+          </div>
+          <p class="pp-erro" id="pp-ajuste-erro" role="alert"></p>
+          <div class="pp-rodape">
+            <button type="submit" class="pp-btn pp-btn-primario" id="pp-ajuste-enviar">Enviar pedido de ajuste</button>
+          </div>
+        </form>
+
+        <form class="pp-painel" id="pp-painel-recusar" novalidate hidden>
+          <h3 class="pp-painel-titulo">Recusar a proposta</h3>
+          <div class="pp-campo">
+            <label class="pp-rotulo" for="pp-motivo">Motivo (opcional)</label>
+            <textarea class="pp-input" id="pp-motivo" name="motivo" rows="4" maxlength="1000"></textarea>
+          </div>
+          <div class="pp-rodape" id="pp-recusar-passo1">
+            <button type="submit" class="pp-btn" id="pp-recusar-pedir">Recusar a proposta</button>
+          </div>
+          <div class="pp-confirma" id="pp-recusar-passo2" hidden>
+            <p class="pp-confirma-texto" id="pp-recusar-pergunta" tabindex="-1">Confirma a recusa? Depois de recusada, a proposta não pode ser aceita por este link.</p>
+            <div class="pp-rodape">
+              <button type="button" class="pp-btn" id="pp-recusar-voltar">Voltar</button>
+              <button type="button" class="pp-btn pp-btn-perigo" id="pp-recusar-confirmar">Confirmar a recusa</button>
+            </div>
+          </div>
+          <p class="pp-erro" id="pp-recusar-erro" role="alert"></p>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer class="pp-rodape-pagina">
+    <p>Link pessoal: não o encaminhe. Dúvidas, fale com quem enviou a proposta.</p>
+  </footer>
+</body>
+</html>

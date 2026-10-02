@@ -51,7 +51,7 @@ const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.us
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Aprovação da proposta comercial baseada no escopo mapeado e assinatura digital para início da adequação.</p>
                             </div>
                             <div style="text-align:right">
-                                ${proposalStatus === 'Approved' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Assinado</span>' : S.clientProposalId ? '<a class="btn btn-primary" href="/api/v1/assessments/' + S.clientAssessmentId + '/generate-proposal" target="_blank" style="text-decoration:none; display:inline-block">Revisar e Assinar</a>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Assessment</span>'}
+                                ${proposalStatus === 'Approved' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Assinado</span>' : S.clientProposalId ? '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Proposta enviada pelo comercial</span>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Assessment</span>'}
                             </div>
                         </div>
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
@@ -106,7 +106,6 @@ const ehComercial = () => !!(S.user && (S.user.role === 'platform_admin' || S.us
                     {
                         label: 'Ações', align: 'right', render: (row) => `
                             <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openAssessmentDetail" data-args='["${row.id}"]'>Ver</button>
-                            ${ehComercial() ? `<button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>` : ''}
                         `
                     }
                 ],

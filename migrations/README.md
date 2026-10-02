@@ -316,3 +316,19 @@ não existiam e `textos` da `org_ness` era `NULL`.
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0039 — envio, aceite e contrato da proposta (fatia 4, 2026-10-02)
+
+`ALTER TABLE ... ADD COLUMN` em três tabelas existentes: `propostas` (token_hash,
+envio, visualização, aceite, recusa, ajuste, `contrato_id`, `projeto_id`),
+`contracts` (`proposta_id`, `documento_hash`, valores, `servicos`, `projeto_id`)
+e `projects` (`proposta_id`), mais os índices únicos parciais `idx_propostas_token`
+e `idx_contracts_proposta` (este último é a última defesa contra dois contratos
+da mesma proposta). Conferido em produção em 2026-10-02, só por leitura
+(`pragma_table_info`): nenhuma das colunas novas existia nas três tabelas.
+`ALTER ADD COLUMN` com `CHECK` (`aceite_origem`) é aceito pelo SQLite do D1.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.

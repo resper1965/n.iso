@@ -107,8 +107,17 @@ CREATE TABLE IF NOT EXISTS contracts (
     -- Organização dona do registro (spec do sistema de propostas, seção 8).
     -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
     -- precisa ser o mesmo aqui e na migration 0036.
-    org_id TEXT NOT NULL DEFAULT 'org_ness'
+    org_id TEXT NOT NULL DEFAULT 'org_ness',
+    -- Contrato novo, gerado pelo aceite da proposta (fatia 4). Sem FK: proposal_id acima aponta para a tabela antiga.
+    proposta_id TEXT,
+    documento_hash TEXT,
+    valor_projeto REAL,
+    mensalidade REAL,
+    prazo_minimo_meses INTEGER,
+    servicos TEXT,
+    projeto_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_proposta ON contracts(proposta_id) WHERE proposta_id IS NOT NULL;
 
 -- ═══════════════════════════════════════════════
 -- STREAM B: ASSESSMENT PRE-SALES
@@ -193,7 +202,8 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     language TEXT DEFAULT 'pt-BR',
     repository_url TEXT,
-    repository_token TEXT
+    repository_token TEXT,
+    proposta_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS project_phases (
@@ -1081,8 +1091,26 @@ CREATE TABLE IF NOT EXISTS propostas (
     valida_ate DATE,
     criada_por TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Envio e aceite (fatia 4). Só o hash do token é guardado, nunca o token.
+    token_hash TEXT,
+    link_gerado_em DATETIME,
+    enviada_em DATETIME,
+    enviada_para TEXT,
+    visualizada_em DATETIME,
+    aceite_nome TEXT,
+    aceite_cargo TEXT,
+    aceite_email TEXT,
+    aceite_ip TEXT,
+    aceite_em DATETIME,
+    aceite_origem TEXT CHECK (aceite_origem IS NULL OR aceite_origem IN ('link', 'manual')),
+    aceite_comprovante TEXT,
+    recusa_motivo TEXT,
+    ajuste_mensagem TEXT,
+    contrato_id TEXT,
+    projeto_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_propostas_token ON propostas(token_hash) WHERE token_hash IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_propostas_numero ON propostas(org_id, numero, revisao);
 CREATE INDEX IF NOT EXISTS idx_propostas_org ON propostas(org_id, status);
 

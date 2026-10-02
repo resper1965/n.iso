@@ -17,6 +17,9 @@ describe('migration 0038 — propostas', () => {
     for (const n of ['idx_propostas_numero', 'idx_propostas_org', 'idx_proposta_itens']) {
       expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
     }
+    // A 0038 deixa propostas no formato antigo (sem as colunas da 0039): devolve o schema canônico aos outros testes.
+    await execSql('DROP TABLE proposta_itens; DROP TABLE propostas;');
+    await applySchema();
   }, 30_000);
 
   it('preenche os termos da ness. quando vazios e não sobrescreve os já preenchidos', async () => {
