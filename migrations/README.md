@@ -300,3 +300,19 @@ não nulo, e `schema.sql` e migration precisam do mesmo DDL.
 Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote`
 → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to
 apply") → merge, porque `deploy.yml` recusa migration pendente.
+
+---
+
+## 0038 — tabelas da proposta (propostas, fatia 3, 2026-10-02)
+
+Cria `propostas` e `proposta_itens` (tabelas novas, com índices) e preenche
+`organizations.textos` da `org_ness` com os textos iniciais (sobre, como
+trabalhamos, premissas, termos, pagamento) só nas chaves ausentes ou vazias:
+`json_patch` com o que já existe vencendo, então nada que a consultoria já
+escreveu é sobrescrito e `termos` sempre fica preenchido. Conferido em produção em 2026-10-02, só por leitura: as duas tabelas
+não existiam e `textos` da `org_ness` era `NULL`.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.

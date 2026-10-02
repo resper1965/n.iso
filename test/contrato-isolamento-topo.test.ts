@@ -224,6 +224,7 @@ const CORPOS: Record<string, unknown> = {
 const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   legal_documents: { classification: 'comum' },
   servicos: { tipo: 'avulso' },
+  propostas: { status: 'rascunho' },
 };
 
 async function semearTenantAlheio(id: string, projeto: string): Promise<void> {

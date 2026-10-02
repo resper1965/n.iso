@@ -3,6 +3,7 @@ import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500, designacaoDoCriador } from '../helpers';
 import { calculatePricing } from '../services/pricing';
+import { orgDoUsuario } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
 
 export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -143,9 +144,9 @@ assessmentsApp.post('/', async (c) => {
     const id = genId();
     const accessToken = crypto.randomUUID().replace(/-/g, '').substring(0, 24);
     await c.env.DB.prepare(
-      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, created_at)
-       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, datetime('now'))`
-    ).bind(id, body.lead_id || null, body.client_name, accessToken).run();
+      `INSERT INTO assessments (id, lead_id, client_name, status, complexity, access_token, org_id, created_at)
+       VALUES (?, ?, ?, 'in_progress', 'unknown', ?, ?, datetime('now'))`
+    ).bind(id, body.lead_id || null, body.client_name, accessToken, orgDoUsuario(c.get('user'))).run();
 
     if (body.lead_id) {
       await c.env.DB.prepare('UPDATE leads SET status = ? WHERE id = ?').bind('Assessment', body.lead_id).run();
@@ -207,8 +208,8 @@ assessmentsApp.post('/public/:token/answers', async (c) => {
 assessmentsApp.get('/', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
-      'SELECT * FROM assessments ORDER BY created_at DESC'
-    ).all();
+      'SELECT * FROM assessments WHERE org_id = ? ORDER BY created_at DESC'
+    ).bind(orgDoUsuario(c.get('user'))).all();
     const user = c.get('user');
     return c.json(results.map((r) => semPreco(r, user)));
   } catch (e: any) {
@@ -219,7 +220,7 @@ assessmentsApp.get('/', async (c) => {
 assessmentsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first();
+    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ? AND org_id = ?').bind(id, orgDoUsuario(c.get('user'))).first();
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
 
     const progress = await c.env.DB.prepare(

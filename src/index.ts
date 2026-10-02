@@ -15,6 +15,7 @@ import { leadsApp } from './routes/leads';
 import { proposalsApp } from './routes/proposals';
 import { organizacaoApp } from './routes/organizacao';
 import { servicosApp } from './routes/servicos';
+import { propostasApp, CSP_DOCUMENTO } from './routes/propostas';
 import { assessmentsApp } from './routes/assessments';
 import { projectsApp } from './routes/projects';
 import { controlsApp } from './routes/controls';
@@ -144,6 +145,14 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // CSP nenhum. Os mesmos cabecalhos vivem em `frontend/public/_headers`, e
 // `test/cabecalhos-assets.test.ts` falha se os dois divergirem. Mudou aqui, muda
 // la.
+// O documento congelado da proposta sai com CSP próprio, mais estreito que o do app (sem script
+// nenhum). Registrado ANTES do secureHeaders porque ele sobrescreve o cabeçalho na volta; este
+// roda por fora e põe o do documento por último.
+app.use('/api/v1/propostas/:id/documento', async (c, next) => {
+  await next();
+  if (c.res.ok) c.res.headers.set('Content-Security-Policy', CSP_DOCUMENTO);
+});
+
 app.use('*', secureHeaders({
   // 1 ano, o minimo exigido para elegibilidade a lista de preload do HSTS.
   // Nao emitimos a diretiva `preload`: entrar na lista e um caminho so de ida
@@ -332,6 +341,7 @@ app.route('/api/v1/leads', leadsApp);
 app.route('/api/v1/proposals', proposalsApp);
 app.route('/api/v1/org', organizacaoApp);
 app.route('/api/v1/servicos', servicosApp);
+app.route('/api/v1/propostas', propostasApp);
 app.route('/api/v1/assessments', assessmentsApp);
 app.route('/api/v1/projects', projectsApp);
 app.route('/api/v1/projects/:projectId/readiness-check', readinessApp);

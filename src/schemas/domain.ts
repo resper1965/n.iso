@@ -550,3 +550,34 @@ export const servicoSchema = z.discriminatedUnion('tipo', [
 export type ServicoEntrada = z.input<typeof servicoSchema>;
 /** O que a API devolve. */
 export type Servico = z.infer<typeof servicoSchema> & { id: string; orgId: string; ativo: boolean };
+
+// ---------------------------------------------------------------------------
+// Proposta (spec do sistema de propostas, seções 4 e 5)
+// ---------------------------------------------------------------------------
+/** Cópia de SECOES_EDITAVEIS (documento-proposta.ts); test/propostas.test.ts confere que são iguais. */
+export const SECOES_EDITAVEIS_SCHEMA = ['sumario', 'objeto', 'como_trabalhamos', 'responsabilidades', 'sobre', 'premissas', 'termos', 'observacoes'] as const;
+const textoLivre = z.string().max(10_000);
+const itemProposta = z.object({
+  servicoId: z.string().min(1).max(64),
+  dias: z.number().positive().max(2000).optional(),
+  meses: z.number().int().min(1).max(120).optional(),
+  descontoPct: z.number().min(0).max(100).optional(),
+  textoCliente: z.string().max(5000).optional(),
+}).strict();
+const camposProposta = {
+  itens: z.array(itemProposta).max(30).optional(),
+  contexto: textoLivre.optional(),
+  escopo: textoLivre.optional(),
+  observacoes: textoLivre.optional(),
+  validadeDias: z.number().int().min(1).max(365).optional(),
+  pagamento: z.string().trim().min(1).max(500).optional(),
+  consultorEmail: z.string().trim().email().max(200).nullable().optional(),
+};
+export const propostaCriarSchema = z.object({ leadId: z.string().min(1).max(64), ...camposProposta }).strict();
+export const propostaEditarSchema = z.object({
+  ...camposProposta,
+  // null restaura o texto padrão da seção
+  secoesEditadas: z.object(Object.fromEntries(SECOES_EDITAVEIS_SCHEMA.map((id) => [id, z.string().max(30_000).nullable().optional()]))).strict().optional(),
+}).strict();
+// Sem trim: espaço no número é erro, não algo a consertar em silêncio. O formato fino (prefixo da organização) é conferido na rota.
+export const propostaGerarSchema = z.object({ numero: z.string().max(40).optional() }).strict();
