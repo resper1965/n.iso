@@ -505,3 +505,45 @@ export const configOrgSchema = z.object({
   }).partial().optional(),
   secoesDesligadas: z.array(z.enum(['como_trabalhamos', 'responsabilidades'])).max(2).optional(),
 }).strict();
+
+// ---------------------------------------------------------------------------
+// Catálogo de serviços (spec do sistema de propostas, seção 3)
+// ---------------------------------------------------------------------------
+const listaCurta = z.array(z.string().trim().min(1).max(500)).max(40);
+const fase = z.object({
+  nome: z.string().trim().min(1).max(120),
+  objetivo: z.string().trim().max(1000).default(''),
+  atividades: z.string().trim().max(3000).default(''),
+  entregaveis: z.string().trim().max(3000).default(''),
+  criterioAceite: z.string().trim().max(1000).default(''),
+  pct: z.number().positive().max(100),
+  semanas: z.number().int().positive().max(104),
+});
+const diasPorFaixa = z.object({ '1': z.number().positive(), '2': z.number().positive(), '3': z.number().positive() });
+const servicoBase = {
+  nome: z.string().trim().min(1).max(160),
+  norma: z.string().trim().max(80).default(''),
+  descricao: z.string().trim().max(3000).default(''),
+  premissas: listaCurta.default([]),
+  exclusoes: listaCurta.default([]),
+};
+export const servicoSchema = z.discriminatedUnion('tipo', [
+  z.object({ ...servicoBase, tipo: z.literal('projeto'), diasPorFaixa,
+    fases: z.array(fase).min(1).max(15)
+      .refine((fs) => Math.abs(fs.reduce((s, f) => s + f.pct, 0) - 100) < 0.01, 'A soma do % das fases precisa ser 100') }),
+  // O zod recusa dois membros com o mesmo literal 'avulso' na união discriminada
+  // (e z.union não expõe o discriminador), então o avulso é uma união discriminada
+  // aninhada por formaPreco.
+  z.discriminatedUnion('formaPreco', [
+    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('fixo'), valorFixo: z.number().positive(),
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }),
+    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('esforco'), diasPorFaixa,
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }),
+  ]),
+  z.object({ ...servicoBase, tipo: z.literal('recorrente'), mensalidade: z.number().positive(),
+    prazoMinimoMeses: z.number().int().min(1).max(60), inclusoMes: listaCurta.min(1) }),
+]);
+/** O que o cliente da API envia. */
+export type ServicoEntrada = z.input<typeof servicoSchema>;
+/** O que a API devolve. */
+export type Servico = z.infer<typeof servicoSchema> & { id: string; orgId: string; ativo: boolean };
