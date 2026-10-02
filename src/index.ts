@@ -12,6 +12,7 @@ import { sessaoApp } from './routes/auth';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
+import { funilApp } from './routes/funil';
 import { proposalsApp } from './routes/proposals';
 import { organizacaoApp } from './routes/organizacao';
 import { organizacoesApp } from './routes/organizacoes';
@@ -346,6 +347,7 @@ app.route('/api/v1/auth/mfa', mfaApp);
 app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
+app.route('/api/v1/funil', funilApp);
 app.route('/api/v1/proposals', proposalsApp);
 app.route('/api/v1/org', organizacaoApp);
 // Organizações (consultorias): só platform_admin (fatia 5).

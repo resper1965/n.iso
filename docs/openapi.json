@@ -3616,8 +3616,13 @@
                 "properties": {
                   "status": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
+                    "enum": [
+                      "New",
+                      "Assessment",
+                      "Proposal",
+                      "Won",
+                      "Lost"
+                    ]
                   }
                 },
                 "required": [

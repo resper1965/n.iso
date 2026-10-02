@@ -123,14 +123,33 @@ leadsApp.delete('/:id', async (c) => {
   return c.json({ success: true });
 });
 
+// Transições manuais. `Won` (fecharVenda, proposta aceita) e a recusa pública escrevem direto e não
+// passam por esta tabela; por aqui `Won` só vem de `Proposal`, e é final.
+const TRANSICOES: Record<string, string[]> = {
+  New: ['Assessment', 'Proposal', 'Lost'],
+  Assessment: ['Proposal', 'Lost'],
+  Proposal: ['Won', 'Lost'],
+  Lost: ['New'],
+  Won: [],
+};
+
 leadsApp.put('/:id/status', async (c) => {
   try {
     const id = c.req.param('id');
     const valid = await validateBody(c, leadStatusSchema);
     if (!valid.success) return valid.response;
     const { status } = valid.data;
-    const r = await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ? AND org_id = ?').bind(status, id, c.get('orgId')).run();
-    if (!r.meta?.changes) return c.json({ error: 'Lead não encontrado' }, 404);
+    const orgId = c.get('orgId');
+    const lead = await c.env.DB.prepare('SELECT status FROM leads WHERE id = ? AND org_id = ?').bind(id, orgId).first<{ status: string | null }>();
+    if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
+    const atual = lead.status ?? 'New';
+    const invalida = { error: `Transição de status inválida: ${atual} → ${status}` };
+    if (!TRANSICOES[atual]?.includes(status)) return c.json(invalida, 409);
+    // `AND status` guarda a corrida: dois PUT que leram o mesmo estado, só um grava.
+    const r = await c.env.DB.prepare(`UPDATE leads SET status = ?, updated_at = datetime('now') WHERE id = ? AND org_id = ? AND COALESCE(status, 'New') = ?`)
+      .bind(status, id, orgId, atual).run();
+    if (!r.meta?.changes) return c.json(invalida, 409);
+    await logAudit(c.env.DB, 'lead.status', c.get('user')?.email ?? 'system', JSON.stringify({ lead_id: id, de: atual, para: status }));
     return c.json({ ok: true, status });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar lead', e);

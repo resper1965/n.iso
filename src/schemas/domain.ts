@@ -126,7 +126,8 @@ export const leadSchema = z.object({
   qsa: z.array(z.record(z.string(), z.unknown())).max(200).optional().nullable(),
 }).passthrough();
 
-export const leadStatusSchema = z.object({ status: curto }).passthrough();
+export const LEAD_STATUS = ['New', 'Assessment', 'Proposal', 'Won', 'Lost'] as const;
+export const leadStatusSchema = z.object({ status: z.enum(LEAD_STATUS) }).passthrough();
 
 export const cnpjSchema = z.object({
   // Aceita com ou sem pontuação: o handler normaliza com replace(/\D/g,'')
