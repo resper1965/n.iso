@@ -272,7 +272,8 @@ describe('documento', () => {
     servidor({
       'GET /api/v1/propostas/p1': proposta({ id: 'p1', status: 'gerada', numero: 'NESS-2026-001', revisao: 2 }),
       'GET /api/v1/propostas/p1/documento': () => new Response('<html><body>Doc p1</body></html>', { headers: { 'content-type': 'text/html' } }),
-      'GET /api/v1/propostas/p1/docx': () => new Response(new Blob(['PK']), { headers: { 'content-type': 'application/octet-stream' } }),
+      // Corpo em texto: o Blob do jsdom dentro do Response do Node 22 (o do CI) não é lido; no Node 24 é.
+      'GET /api/v1/propostas/p1/docx': () => new Response('PK', { headers: { 'content-type': 'application/octet-stream' } }),
       'POST /api/v1/propostas/p1/revisao': () => json(proposta({ id: 'p9', numero: 'NESS-2026-001', revisao: 3 }), 201),
     });
     URL.createObjectURL = vi.fn(() => 'blob:x');
@@ -288,7 +289,7 @@ describe('documento', () => {
     await clica('__prpWord');
     expect(chamadas('GET', '/api/v1/propostas/p1/docx')[0][1].headers.Authorization).toBe('Bearer tok-123');
     // `r.blob()` leva mais ciclos sob cobertura (CI): espera a condição, não um número fixo de ticks.
-    await vi.waitFor(() => expect(clique).toHaveBeenCalled());
+    await vi.waitFor(() => expect(clique, `erro mostrado: ${JSON.stringify(window.showToast.mock.calls)}`).toHaveBeenCalled());
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(clique.mock.instances[0].download).toBe('NESS-2026-001-rev2.docx');
   });
