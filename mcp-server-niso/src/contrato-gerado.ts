@@ -51,6 +51,8 @@ export const ROTAS = {
   'POST /api/v1/projects/{projectId}/webhooks': { obrigatorios: ['events', 'url'] },
   'POST /api/v1/proposals': { obrigatorios: ['assessment_id', 'lead_id', 'total_price'] },
   'POST /api/v1/propostas': { obrigatorios: ['leadId'] },
+  'POST /api/v1/propostas/{id}/aceite-manual': { obrigatorios: ['cargo', 'comprovante', 'email', 'nome'] },
+  'POST /api/v1/propostas/{id}/enviar': { obrigatorios: ['email'] },
   'POST /api/v1/propostas/{id}/gerar': { obrigatorios: [] },
   'POST /api/v1/public/policies/ack': { obrigatorios: ['policy_type'] },
   'POST /api/v1/public/policies/request-otp': { obrigatorios: ['email', 'project_id'] },

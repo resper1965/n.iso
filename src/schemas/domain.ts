@@ -581,3 +581,15 @@ export const propostaEditarSchema = z.object({
 }).strict();
 // Sem trim: espaço no número é erro, não algo a consertar em silêncio. O formato fino (prefixo da organização) é conferido na rota.
 export const propostaGerarSchema = z.object({ numero: z.string().max(40).optional() }).strict();
+
+// Envio e aceite manual (fatia 4). O e-mail do cliente é só o destinatário; nome e cargo vão para a prova do aceite.
+export const propostaEnviarSchema = z.object({
+  email: z.string().trim().email().max(200),
+  mensagem: z.string().trim().max(2000).optional(),
+}).strict();
+export const propostaAceiteManualSchema = z.object({
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  comprovante: z.string().trim().min(3).max(1000),
+}).strict();
