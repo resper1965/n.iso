@@ -21,6 +21,7 @@
     "@cloudflare/workers-oauth-provider": "^1.2.1",
     "@modelcontextprotocol/server": "^2.0.0",
     "agents": "^0.24.0",
+    "docx": "^9.8.1",
     "hono": "^4.13.7",
     "typescript": "^5.5.2",
     "wrangler": "^4.107.0",
