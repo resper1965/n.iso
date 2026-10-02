@@ -281,3 +281,22 @@ npx wrangler d1 migrations list niso-db --remote   # esperado: "No migrations to
 ```
 
 Ordem: registrar **antes** do merge, porque `deploy.yml` recusa migration pendente.
+
+---
+
+## 0036 — organização comercial (propostas, fatia 1, 2026-10-02)
+
+Adiciona a `organizations` as colunas `cnpj`, `cor_destaque`, `selo_niso`,
+`prefixo_proposta`, `proximo_numero`, `config_preco`, `textos` e
+`secoes_desligadas`; `org_id` (default `org_ness`) a `leads`, `assessments`,
+`proposals` e `contracts`; e semeia a linha `org_ness`. Conferido em produção em
+2026-10-02 por `pragma_table_info`: nenhuma dessas colunas existia e
+`organizations` estava vazia.
+
+**Diferente da 0035, esta RODA em produção** (as colunas ainda não existem).
+`org_id` não tem `REFERENCES`: o SQLite não aceita `ADD COLUMN` com FK e default
+não nulo, e `schema.sql` e migration precisam do mesmo DDL.
+
+Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote`
+→ `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to
+apply") → merge, porque `deploy.yml` recusa migration pendente.

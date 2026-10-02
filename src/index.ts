@@ -13,6 +13,7 @@ import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
 import { proposalsApp } from './routes/proposals';
+import { organizacaoApp } from './routes/organizacao';
 import { assessmentsApp } from './routes/assessments';
 import { projectsApp } from './routes/projects';
 import { controlsApp } from './routes/controls';
@@ -328,6 +329,7 @@ app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
 app.route('/api/v1/proposals', proposalsApp);
+app.route('/api/v1/org', organizacaoApp);
 app.route('/api/v1/assessments', assessmentsApp);
 app.route('/api/v1/projects', projectsApp);
 app.route('/api/v1/projects/:projectId/readiness-check', readinessApp);

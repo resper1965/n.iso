@@ -479,3 +479,29 @@ export const politicaTenantSchema = z.object({
   sessao_ttl_seg: z.coerce.number().int().min(300, 'TTL mínimo é 300 s').max(86400, 'TTL máximo é 86400 s').nullish(),
   ip_allowlist: z.string().max(2000).nullish(),
 }).passthrough();
+
+// Configuração comercial da organização (PUT parcial: tudo opcional). Texto é guardado cru;
+// o escape acontece só na saída para HTML.
+const valorDiaria = z.number().positive().max(100_000);
+export const configOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120).optional(),
+  cnpj: z.string().trim().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').nullable().optional(),
+  corDestaque: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #rrggbb').optional(),
+  seloNiso: z.boolean().optional(),
+  prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números').optional(),
+  proximoNumero: z.number().int().min(1).optional(),
+  preco: z.object({
+    diaria: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
+    porte: z.array(z.object({ maxPessoas: z.number().int().positive().nullable(), fator: z.number().min(0.5).max(5) })).min(1).max(8).optional(),
+    tetoDesconto: z.number().min(0).max(50).optional(),
+    custoInterno: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
+    overheadPct: z.number().min(0).max(1).optional(),
+    tributosPct: z.number().min(0).max(0.6).optional(),
+    margemAlvo: z.number().min(0).max(1).optional(),
+  }).optional(),
+  textos: z.object({
+    sobre: z.string().max(4000), comoTrabalhamos: z.string().max(6000), equipe: z.string().max(4000),
+    termos: z.string().max(30000), premissas: z.string().max(6000), pagamentoPadrao: z.string().max(500),
+  }).partial().optional(),
+  secoesDesligadas: z.array(z.enum(['como_trabalhamos', 'responsabilidades'])).max(2).optional(),
+}).strict();
