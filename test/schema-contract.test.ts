@@ -245,6 +245,35 @@ describe('schema contract (real D1)', () => {
     await ins('pr_e', 'org_ness', null);
     await env.DB.prepare(`DELETE FROM propostas WHERE id IN ('pr_a','pr_c','pr_d','pr_e')`).run();
   });
+  it('colunas de envio, aceite e contrato (0039): CHECK de aceite_origem e índices únicos', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['token_hash', 'link_gerado_em', 'enviada_em', 'enviada_para', 'visualizada_em', 'aceite_nome', 'aceite_cargo', 'aceite_email', 'aceite_ip', 'aceite_em', 'aceite_origem', 'aceite_comprovante', 'recusa_motivo', 'ajuste_mensagem', 'contrato_id', 'projeto_id']) {
+      expect(await colunas('propostas'), c).toContain(c);
+    }
+    for (const c of ['proposta_id', 'documento_hash', 'valor_projeto', 'mensalidade', 'prazo_minimo_meses', 'servicos', 'projeto_id']) {
+      expect(await colunas('contracts'), c).toContain(c);
+    }
+    expect(await colunas('projects')).toContain('proposta_id');
+
+    const ins = (id: string, token: string | null, origem: string | null = null) =>
+      env.DB.prepare(`INSERT INTO propostas (id, org_id, numero, cliente, criada_por, token_hash, aceite_origem) VALUES (?, 'org_ness', ?, 'x', 'u', ?, ?)`).bind(id, id, token, origem).run();
+    await expect(ins('pt_x', null, 'x')).rejects.toThrow();
+    await ins('pt_a', 'h1', 'link');
+    await ins('pt_b', null, 'manual');
+    await expect(ins('pt_c', 'h1')).rejects.toThrow();
+    await ins('pt_d', null);
+    await ins('pt_e', null);
+
+    const ctr = (id: string, proposta: string | null) =>
+      env.DB.prepare(`INSERT INTO contracts (id, proposta_id) VALUES (?, ?)`).bind(id, proposta).run();
+    await ctr('ct_a', 'pt_a');
+    await expect(ctr('ct_b', 'pt_a')).rejects.toThrow();
+    await ctr('ct_c', null);
+    await ctr('ct_d', null);
+    await env.DB.prepare(`DELETE FROM contracts WHERE id IN ('ct_a','ct_c','ct_d')`).run();
+    await env.DB.prepare(`DELETE FROM propostas WHERE id LIKE 'pt_%'`).run();
+  });
   it('a org_ness nasce com os termos iniciais', async () => {
     const r = await env.DB.prepare(`SELECT textos FROM organizations WHERE id = 'org_ness'`).first<any>();
     const t = JSON.parse(r.textos);

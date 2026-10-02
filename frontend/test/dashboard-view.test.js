@@ -68,6 +68,18 @@ describe('renderDashboard — onboarding do cliente', () => {
     // Proposta aprovada → badge "Assinado".
     expect(c.textContent).toContain('Assinado');
   });
+
+  it('proposta em andamento: sem o link do gerador antigo (410), só o aviso de que o comercial envia', async () => {
+    const { c, h, a } = montaDom();
+    S.user = { role: 'org_user' };
+    S.clientAssessmentId = 'as-1';
+    S.clientProposalId = 'pr-1';
+    S.clientProposalStatus = 'Draft';
+    await window.renderDashboard(c, h, a);
+    expect(c.innerHTML).not.toContain('generate-proposal');
+    expect(c.textContent).not.toContain('Revisar e Assinar');
+    expect(c.textContent).toContain('Proposta enviada pelo comercial');
+  });
 });
 
 describe('renderDashboard — visão do consultor', () => {

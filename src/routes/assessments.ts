@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import { seedPhases } from '../services/project-setup';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteNess, somenteComercial, ehComercial, erro500, designacaoDoCriador } from '../helpers';
+import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
 import { calculatePricing } from '../services/pricing';
 import { orgDoUsuario } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
@@ -382,109 +381,10 @@ assessmentsApp.put('/:id/pricing', somenteComercial, async (c) => {
   }
 });
 
-// Gerar proposta põe preço: é ato comercial, não do consultor que conduziu o
-// diagnóstico. O resto do assessment segue em `somenteNess`.
-assessmentsApp.post('/:id/generate-proposal', somenteComercial, async (c) => {
-  try {
-    const id = c.req.param('id');
-    const user = c.get('user');
+// O gerador antigo (tabela proposals, preço por tier) deu lugar à tela Propostas (fatia 3/4).
+assessmentsApp.post('/:id/generate-proposal', (c) =>
+  c.json({ error: 'O gerador antigo foi substituído pela tela Propostas' }, 410));
 
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
-    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
-
-    const { results: answers } = await c.env.DB.prepare(
-      'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
-    ).bind(id).all<{ question_key: string; answer: string }>();
-
-    const ansMap: Record<string, any> = {};
-    for (const a of (answers || [])) ansMap[a.question_key] = a.answer;
-
-    const pricingAnswers = buildPricingAnswers(ansMap);
-    const configRow = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
-    const configOverrides = configRow ? JSON.parse(configRow.value) : undefined;
-    const pricing = calculatePricing(pricingAnswers, configOverrides);
-
-    if (assessment.pricing_override) {
-      pricing.precoFinal = assessment.pricing_override;
-      const total = pricing.fases.reduce((a: number, f: any) => a + (f.valorFase || 0), 0);
-      if (total > 0) pricing.fases.forEach((f: any) => { f.valorFase = Math.round((f.valorFase || 0) / total * pricing.precoFinal); });
-    } else if (assessment.pricing_desconto && assessment.pricing_desconto > 0) {
-      const factor = 1 - (assessment.pricing_desconto / 100);
-      pricing.precoFinal = Math.ceil(pricing.precoFinal * factor / 1000) * 1000;
-      pricing.fases.forEach((f: any) => { f.valorFase = Math.round((f.valorFase || 0) * factor); });
-    }
-
-    const clientName = assessment.client_name || 'Cliente';
-    const now = new Date().toLocaleDateString('pt-BR');
-    const body = await c.req.json().catch(() => ({}));
-    const meta = {
-      proposalNum: body.proposalNum || `PROP-${new Date().getFullYear()}-${Math.floor(Math.random()*900)+100}`,
-      validade: body.validade || '30',
-      razaoSocial: body.razaoSocial || clientName,
-      cnpj: body.cnpj || '',
-      respCliente: body.respCliente || '',
-      cargoCliente: body.cargoCliente || '',
-      respNess: body.respNess || 'ness.',
-      cargoNess: body.cargoNess || 'Lead Consultant',
-      condicaoPagamento: body.condicaoPagamento || '40/30/30',
-      observacoes: body.observacoes || ''
-    };
-
-    const proposalId = genId();
-    const contentHtml = `<p>Proposta ${escapeHtml(meta.proposalNum)} para ${escapeHtml(meta.razaoSocial)}</p>`; // HTML proposal template
-    await c.env.DB.prepare(
-      `INSERT INTO proposals (id, lead_id, assessment_id, content_html, total_price, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'Draft', datetime('now'))`
-    ).bind(proposalId, assessment.lead_id, id, contentHtml, pricing.precoFinal).run();
-
-    await logAudit(c.env.DB, 'proposal.generated', user?.email ?? 'system', `Proposta ${proposalId} gerada automaticamente do assessment ${id}.`);
-    await createNotification(c.env.DB, 'proposal_ready', `Proposta gerada: ${clientName}`, `Tier ${pricing.tier.name}`, user?.id, `/proposals/${proposalId}`);
-
-    return c.json({ ok: true, proposal_id: proposalId, proposal_num: meta.proposalNum, tier: pricing.tier.name, preco: pricing.precoFinal, html: contentHtml });
-  } catch (e: any) {
-    return erro500(c, 'Falha ao gerar proposta', e);
-  }
-});
-
-assessmentsApp.post('/:id/convert', async (c) => {
-  try {
-    const id = c.req.param('id');
-    const assessment = await c.env.DB.prepare('SELECT * FROM assessments WHERE id = ?').bind(id).first<any>();
-    if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
-    if (assessment.converted_project_id) return c.json({ error: 'Assessment já foi convertido', project_id: assessment.converted_project_id }, 409);
-
-    const { results: answers } = await c.env.DB.prepare(
-      'SELECT question_key, answer FROM assessment_answers WHERE assessment_id = ?'
-    ).bind(id).all<{ question_key: string; answer: string }>();
-
-    const answerMap = new Map((answers ?? []).map((a) => [a.question_key, a.answer]));
-    const projectId = genId();
-    const sector = answerMap.get('sector') ?? '';
-    const scope = answerMap.get('scope_type') ?? '';
-    const standards = answerMap.get('target_standard') ?? 'ISO 27001';
-    const orgRole = answerMap.get('data_role') ?? '';
-
-    const user = c.get('user');
-    const cria = c.env.DB.prepare(
-      `INSERT INTO projects (id, client_name, sector, scope, standards, org_role, status, assessment_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
-    ).bind(projectId, assessment.client_name, sector, scope, standards, orgRole, id);
-    // D5: consultor que converte fica designado no projeto novo, no mesmo batch.
-    const designa = designacaoDoCriador(c.env.DB, user, projectId);
-    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
-    if (designa) {
-      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${projectId} que converteu`, '', '', projectId);
-    }
-
-    await seedPhases(c.env.DB, projectId);
-
-    await c.env.DB.prepare(
-      `UPDATE assessments SET status = 'converted', converted_project_id = ?, completed_at = datetime('now') WHERE id = ?`
-    ).bind(projectId, id).run();
-
-    await logAudit(c.env.DB, 'assessment.converted', c.get('user')?.email ?? 'system', `Assessment ${id} convertido em projeto ${projectId}`);
-    return c.json({ ok: true, project_id: projectId }, 201);
-  } catch (e: any) {
-    return erro500(c, 'Falha ao converter assessment', e);
-  }
-});
+// O projeto nasce do aceite da proposta (fecharVenda); este caminho criava projeto em dobro.
+assessmentsApp.post('/:id/convert', (c) =>
+  c.json({ error: 'Converter levantamento em projeto foi substituído pelo aceite da proposta (tela Propostas)' }, 410));

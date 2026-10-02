@@ -1445,3 +1445,22 @@ textarea:focus-visible {
 .prp-frame-doc { height: 80vh; }
 .prp-doc-barra { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .prp-doc-barra .prp-nota { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+/* Envio e resposta do cliente (fatia 4): ações por estado, o que o cliente respondeu e o fechamento. */
+.prp-envio { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.prp-envio-acoes { justify-content: flex-start; }
+.prp-envio .prp-dica { margin: 0; }
+.prp-ajuste, .prp-recusa, .prp-fechamento { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-left: 2px solid var(--border); }
+.prp-ajuste { border-left-color: var(--warning); }
+.prp-recusa { border-left-color: var(--text-faint); }
+.prp-fechamento { border-left-color: var(--success); }
+.prp-resposta-texto { margin: 0; max-width: 75ch; font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.prp-id { font: 500 12px var(--font-mono); color: var(--text-2); overflow-wrap: anywhere; }
+.prp-fechamento .prp-ficha-dados dd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.prp-link-novo { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border: 1px solid var(--accent-glow); }
+.prp-link-url { font: 400 12.5px var(--font-mono); }
+.prp-modal-titulo { margin: 0 0 8px; font: 600 17px var(--font-head); color: var(--text); }
+.prp-modal .prp-nota { margin-bottom: 16px; }
+.prp-modal [aria-invalid="true"] { border-color: var(--danger); }
+.prp-modal-rodape { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.prp-modal .btn-primary:disabled { opacity: 0.45; cursor: progress; }
