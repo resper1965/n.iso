@@ -17,8 +17,8 @@ export interface ItemCalculado {
 const NOME_FAIXA: Record<Faixa, string> = { '1': 'Foundation', '2': 'Standard', '3': 'Enterprise' };
 
 // Intl devolve NBSP depois de "R$"; normaliza para espaço comum.
-const brl = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v).replace(/\u00a0/g, ' ');
-const num = (v: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v);
+export const brl = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v).replace(/\u00a0/g, ' ');
+export const num = (v: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v);
 
 export function fatorDePorte(porte: ConfigPreco['porte'], pessoas: number | null): { fator: number; rotulo: string } {
   if (pessoas == null) return { fator: porte[0].fator, rotulo: 'porte não informado' };
