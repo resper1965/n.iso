@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO, genId, genToken, hashPassword, invalidateUserSessions, revogarAgentesPorTrocaDeSenha } from '../helpers';
+import { enviarBoasVindas, nomeDaOrg } from './users';
 import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -146,6 +147,81 @@ governanceApp.delete('/projects/:id/governance/:memberId', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao deletar governança', e);
+  }
+});
+
+/*
+ * Acesso de stakeholder (papel `stakeholder`, só perfil/senha/MFA/pedidos): nasce da linha da
+ * matriz e morre nela. O vínculo é por `client_project_id`, como os papéis de cliente. Quem
+ * convida e revoga: `org_admin` do projeto, consultor designado, `consultoria_admin` da org e
+ * `platform_admin` (o corte de projeto/organização vem do `projectAccessMiddleware`); o resto,
+ * inclusive o próprio stakeholder, recebe 403. A conta nova não vale sem a troca da senha provisória.
+ */
+const PODE_CONVIDAR = new Set(['platform_admin', 'consultoria_admin', 'consultor', 'org_admin']);
+const recusaConvite = { error: 'Forbidden: convidar e revogar acesso é do administrador do cliente, do consultor designado ou da consultoria' };
+
+const membroDaMatriz = (db: D1Database, projectId: string, memberId: string) =>
+  db.prepare('SELECT id, name, email FROM project_governance WHERE id = ? AND project_id = ?')
+    .bind(memberId, projectId).first<{ id: string; name: string; email: string | null }>();
+
+governanceApp.post('/projects/:id/governance/:memberId/convidar', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const ator = c.get('user');
+    if (!PODE_CONVIDAR.has(ator?.role ?? '')) return c.json(recusaConvite, 403);
+    const membro = await membroDaMatriz(c.env.DB, projectId, c.req.param('memberId'));
+    if (!membro) return c.json({ error: 'Membro da governança não encontrado' }, 404);
+    const email = membro.email?.trim().toLowerCase();
+    if (!email) return c.json({ error: 'A linha da matriz não tem e-mail: preencha antes de convidar' }, 400);
+
+    const conta = await c.env.DB.prepare('SELECT id, role, client_project_id, ativo FROM users WHERE lower(email) = ?')
+      .bind(email).first<{ id: string; role: string; client_project_id: string | null; ativo: number | null }>();
+    // E-mail que já é outra conta (equipe, cliente, outro projeto) não é tocado: convite não vira promoção.
+    if (conta && !(conta.role === 'stakeholder' && conta.client_project_id === projectId)) {
+      return c.json({ error: 'Este e-mail já tem conta no n.iso com outro acesso' }, 409);
+    }
+    if (conta && conta.ativo !== 0) return c.json({ ok: true, ja_convidado: true });
+
+    const org = (await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id;
+    if (!org) return c.json({ error: 'Projeto não encontrado' }, 404);
+    const senha = genToken().slice(0, 24); // vale para um login: a troca é obrigatória
+    const hash = await hashPassword(senha);
+    // Reativação (conta revogada): senha provisória nova e troca obrigatória de novo.
+    if (conta) {
+      await c.env.DB.prepare('UPDATE users SET ativo = 1, password_hash = ?, requires_password_change = 1 WHERE id = ?').bind(hash, conta.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id, requires_password_change) VALUES (?, ?, ?, ?, 'stakeholder', ?, ?, 1)`
+      ).bind(genId(), email, hash, membro.name, projectId, org).run();
+    }
+    await logAudit(c.env.DB, 'stakeholder.convidado', ator.email, `Acesso de stakeholder para ${email} no projeto ${projectId}`, '', '', projectId);
+    const emailEnviado = await enviarBoasVindas(c, email, membro.name, senha, await nomeDaOrg(c.env.DB, org)).catch(() => false);
+    return c.json({ ok: true, emailEnviado }, conta ? 200 : 201);
+  } catch (e: any) {
+    if (String(e?.message).includes('UNIQUE')) return c.json({ error: 'Este e-mail já tem conta no n.iso' }, 409);
+    return erro500(c, 'Falha ao convidar stakeholder', e);
+  }
+});
+
+governanceApp.post('/projects/:id/governance/:memberId/revogar-acesso', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const ator = c.get('user');
+    if (!PODE_CONVIDAR.has(ator?.role ?? '')) return c.json(recusaConvite, 403);
+    const membro = await membroDaMatriz(c.env.DB, projectId, c.req.param('memberId'));
+    const email = membro?.email?.trim().toLowerCase();
+    const conta = email ? await c.env.DB.prepare(`SELECT id FROM users WHERE lower(email) = ? AND role = 'stakeholder' AND client_project_id = ?`)
+      .bind(email, projectId).first<{ id: string }>() : null;
+    if (!conta) return c.json({ error: 'Esta pessoa não tem acesso de stakeholder neste projeto' }, 404);
+
+    await c.env.DB.prepare('UPDATE users SET ativo = 0 WHERE id = ?').bind(conta.id).run();
+    // As sessões vivem no KV sob token aleatório e não se enumeram: o marco de invalidação as derruba.
+    await invalidateUserSessions(c.env.SESSIONS, conta.id);
+    await revogarAgentesPorTrocaDeSenha(c.env.DB, conta.id);
+    await logAudit(c.env.DB, 'stakeholder.revogado', ator.email, `Acesso de stakeholder de ${email} revogado no projeto ${projectId}`, '', '', projectId);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao revogar acesso', e);
   }
 });
 
