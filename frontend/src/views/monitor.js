@@ -659,7 +659,9 @@ import { navigate } from '../router.js';
     window.convidarStakeholder = async function(projectId, memberId) {
         try {
             const r = await api('POST', `/api/v1/projects/${projectId}/governance/${memberId}/convidar`);
-            showToast(r && r.ja_convidado ? 'Esta pessoa já tem acesso ao n.iso' : 'Convite enviado por e-mail');
+            if (r && r.ja_convidado) showToast('Esta pessoa já tem acesso ao n.iso');
+            else if (r && r.emailEnviado === false) showToast('Conta criada, mas o e-mail NÃO foi enviado. Use "Revogar acesso" e depois "Convidar para o n.iso" de novo para gerar outra senha e reenviar, ou avise o administrador da plataforma.', 'error');
+            else showToast('Convite enviado por e-mail');
         } catch (e) { showToast(e.message || 'Falha ao convidar', 'error'); }
     };
 

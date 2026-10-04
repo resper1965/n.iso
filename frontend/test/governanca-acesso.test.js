@@ -59,3 +59,19 @@ describe('ações', () => {
     expect(api).toHaveBeenCalledWith('POST', '/api/v1/projects/p1/governance/g1/revogar-acesso');
   });
 });
+
+describe('aviso quando o e-mail do convite não saiu', () => {
+  beforeEach(() => { document.body.innerHTML = '<div id="toast-container"></div>'; });
+  const toast = () => document.body.textContent;
+  it('emailEnviado:false avisa com clareza e diz como proceder', async () => {
+    api.mockResolvedValueOnce({ ok: true, emailEnviado: false });
+    await window.convidarStakeholder('p1', 'g1');
+    expect(toast()).toContain('NÃO foi enviado');
+    expect(toast()).not.toContain('Convite enviado por e-mail');
+  });
+  it('emailEnviado:true confirma o envio', async () => {
+    api.mockResolvedValueOnce({ ok: true, emailEnviado: true });
+    await window.convidarStakeholder('p1', 'g1');
+    expect(toast()).toContain('Convite enviado por e-mail');
+  });
+});
