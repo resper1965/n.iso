@@ -22,6 +22,7 @@ import './views/config-comercial.js';
 import './views/organizacoes.js';
 import './views/propostas.js';
 import './views/trocar-senha.js';
+import './views/meus-pedidos.js';
 import './views/ai.js';
 import './views/privacy.js';
 import './views/security.js';

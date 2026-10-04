@@ -276,6 +276,12 @@ beforeAll(async () => {
         headers: await sessionFor({ id: `${m}-${uid}`, email: `${uid}@${m}.lat`, role: papel, org_id: de.org }),
       });
     }
+    // Stakeholder (fatia 1 do acesso de stakeholders): preso ao projeto da própria organização; o
+    // allow-list de caminhos o deixa em perfil/senha/MFA, então toda rota por id alheio é 403.
+    PRINCIPAIS.push({
+      nome: `stakeholder@${de.org}`, de, alheio,
+      headers: await sessionFor({ id: `${m}-stk`, email: `stk@${m}.lat`, role: 'stakeholder', client_project_id: de.proj, org_id: de.org }),
+    });
     PRINCIPAIS.push({
       nome: `agente@${de.org}`, de, alheio, headers: { 'X-Agente-Confirmado': '1' },
       extraEnv: { AGENTE: { concessaoId: `${m}-conc`, userId: `${m}-cons`, email: `cons@${m}.lat`, projectId: de.proj } },
@@ -302,6 +308,7 @@ describe('contrato de isolamento entre organizações', () => {
       consultor: ['/api/v1/projects/:p/risks'],
       comercial: ['/api/v1/servicos/:r', '/api/v1/org/logo'],
       consultoria_admin: ['/api/v1/projects/:p/risks', '/api/v1/servicos/:r', '/api/v1/leads/:r', '/api/v1/org/config', '/api/v1/org/logo'],
+      stakeholder: ['/api/v1/auth/me'],
       agente: ['/api/v1/projects/:p/risks'],
       'chave-api': ['/api/v1/projects/:p/risks'],
     };

@@ -142,6 +142,18 @@ const MFA_AUTO_SERVICO = /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable)
 // escrevem só o hash do próprio usuário.
 const SENHA_AUTO_SERVICO = /^\/api\/v1\/auth\/(change-password|reset-password-first)$/;
 
+/**
+ * Allow-list de CAMINHOS do papel `stakeholder` (mínimo privilégio), para qualquer método: perfil,
+ * senha, MFA, aceite legal e, na fatia 2, `/api/v1/pedidos*`. Lista fechada: o resto do app é 403,
+ * inclusive GET. Prefixo largo aqui abriria tudo; `test/stakeholder-acesso.test.ts` varre as rotas.
+ */
+const STAKEHOLDER_PERMITIDO: RegExp[] = [
+  /^\/api\/v1\/auth\/(me|logout|change-password|reset-password-first)$/,
+  /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable|status)$/,
+  /^\/api\/v1\/legal\/(pending|accept)$/,
+  /^\/api\/v1\/pedidos(\/.*)?$/,
+];
+
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (PUBLIC_TOKEN_PREFIXES.some(p => path.startsWith(p))) {
@@ -260,7 +272,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     // Só CLIENTE é preso a projeto por `client_project_id`. Em conta de equipe (ou papel
     // desconhecido) o campo não vale nada, e rota que o lê direto (portal do cliente) não pode
     // obedecê-lo. Os helpers de acesso também o ignoram (`ehPapelCliente`): defesa em profundidade.
-    if (user.role !== 'platform_admin' && !ehPapelCliente(user)) user.client_project_id = null;
+    // `stakeholder` também é preso ao projeto (o convite grava), mas NÃO é `ehPapelCliente`: os
+    // helpers de projeto o negam, e o allow-list abaixo o limita aos caminhos de auto-serviço.
+    if (user.role !== 'platform_admin' && user.role !== 'stakeholder' && !ehPapelCliente(user)) user.client_project_id = null;
 
     // Sessão aberta antes da suspensão da organização morre na requisição seguinte (o login já
     // recusa). Uma consulta só para equipe de fora da ness.; o agente tem a mesma regra em
@@ -299,6 +313,10 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
         }, 403);
       }
     }
+  }
+
+  if (user.role === 'stakeholder' && !STAKEHOLDER_PERMITIDO.some((re) => re.test(path.replace(/\/+$/, '')))) {
+    return c.json({ error: 'Forbidden: papel sem acesso a este recurso' }, 403);
   }
 
   // Global RBAC enforcement for org_user / client roles (aplica a sessões E API keys).
