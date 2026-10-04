@@ -38,7 +38,9 @@ async function api(m, p, b, extras) {
     // precisam da mensagem real do servidor, não de "Unauthorized".
     // `/auth/change-password` entra na mesma isenção: "senha atual incorreta" é 401
     // esperado, e a tela de Trocar senha precisa mostrá-lo junto do campo.
-    const autoatendimentoMfa = p.startsWith('/api/v1/auth/mfa/') || p === '/api/v1/auth/change-password';
+    // Aprovar/recusar pedido também: a decisão pede a senha, e "senha incorreta" (401) é erro do usuário.
+    const autoatendimentoMfa = p.startsWith('/api/v1/auth/mfa/') || p === '/api/v1/auth/change-password'
+        || /^\/api\/v1\/pedidos\/[^/]+\/(aprovar|recusar)$/.test(p);
 
     // O corpo é lido UMA vez. A checagem de 401 precisa dele (para separar
     // sessão expirada de sessão inválida) e o erro logo abaixo também; ler duas
