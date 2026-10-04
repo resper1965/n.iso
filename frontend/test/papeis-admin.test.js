@@ -73,6 +73,21 @@ describe('menu por papel (login.html real)', () => {
   });
 });
 
+describe('menu do stakeholder', () => {
+  it('só "Meus pedidos" aparece; o resto do menu some', async () => {
+    await menu('stakeholder');
+    const visiveis = [...document.querySelectorAll('.sidebar-nav[id^="nav-"]')].filter((el) => el.style.display !== 'none').map((el) => el.id);
+    expect(visiveis).toEqual(['nav-meus']);
+    expect($('nav-meus').getAttribute('data-args')).toBe('["meus-pedidos"]');
+    for (const el of document.querySelectorAll('.sidebar-label, .sidebar-group')) expect(el.style.display, el.id || el.className).toBe('none');
+  });
+
+  it.each(['platform_admin', 'consultor', 'org_admin', 'client'])('%s não vê "Meus pedidos"', async (papel) => {
+    await menu(papel);
+    expect(visivel('nav-meus')).toBe(false);
+  });
+});
+
 describe('seletor de organização no cabeçalho', () => {
   it('platform_admin tem o seletor com as organizações', async () => {
     await menu('platform_admin');
