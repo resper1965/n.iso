@@ -84,9 +84,11 @@ describe('convite a partir da matriz', () => {
   });
 
   it('e-mail de conta que já é outra coisa: 409 e a conta não muda', async () => {
-    const r = await convidar(orgAdmin, 'g-cons');
+    await env.DB.prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES ('g-dup', ?, 'Cons', 'cons@ness.lat', 'executivo', 'CTO')`).bind(P).run();
+    const r = await convidar(orgAdmin, 'g-dup');
     expect(r.status).toBe(409);
     expect((await contas('cons@ness.lat'))[0].role).toBe('consultor');
+    await env.DB.prepare(`DELETE FROM project_governance WHERE id = 'g-dup'`).run();
   });
 
   it('quem pode convidar: org_admin, consultor designado, consultoria_admin da org e platform_admin', async () => {
@@ -183,5 +185,51 @@ describe('revogação', () => {
     const c = await contas('beto@cliente.com');
     expect(c).toHaveLength(1);
     expect(c[0]).toMatchObject({ ativo: 1, requires_password_change: 1 });
+  });
+});
+
+describe('conta órfã: a linha da matriz muda ou some', () => {
+  const login = (email: string) => chamar({}, 'POST', '/api/v1/auth/login', { email, password: SENHA });
+  async function conviteComSessao(membro: string, email: string) {
+    await env.DB.prepare('DELETE FROM users WHERE lower(email) = ?').bind(email).run();
+    await env.DB.prepare('UPDATE project_governance SET email = ? WHERE id = ?').bind(email, membro).run();
+    expect((await convidar(orgAdmin, membro)).status).toBe(201);
+    const [conta] = await contas(email);
+    await env.DB.prepare('UPDATE users SET password_hash = ?, requires_password_change = 0 WHERE id = ?').bind(await hashPassword(SENHA), conta.id).run();
+    const { token } = await (await login(email)).json() as any;
+    const me = () => chamar({ Authorization: `Bearer ${token}` }, 'GET', '/api/v1/auth/me');
+    expect((await me()).status).toBe(200);
+    return me;
+  }
+
+  it('trocar o e-mail da linha revoga a conta do e-mail antigo e derruba a sessão', async () => {
+    const me = await conviteComSessao('g-ceo', 'ana@cliente.com');
+    const r = await chamar(orgAdmin, 'POST', `/api/v1/projects/${P}/governance`, { id: 'g-ceo', name: 'Ana Diretora', email: 'ana.nova@cliente.com', role_category: 'executivo', job_title: 'CEO' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect((await contas('ana@cliente.com'))[0].ativo).toBe(0);
+    expect((await me()).status).toBe(401);
+    expect((await login('ana@cliente.com')).status).toBe(401);
+  });
+
+  it('apagar a linha revoga a conta e derruba a sessão', async () => {
+    const me = await conviteComSessao('g-ciso', 'beto@cliente.com');
+    const r = await chamar(orgAdmin, 'DELETE', `/api/v1/projects/${P}/governance/g-ciso`);
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect((await contas('beto@cliente.com'))[0].ativo).toBe(0);
+    expect((await me()).status).toBe(401);
+  });
+
+  it('editar a linha sem trocar o e-mail não revoga', async () => {
+    await env.DB.prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES ('g-dpo', ?, 'Dani', 'dani@cliente.com', 'executivo', 'DPO')`).bind(P).run();
+    expect((await convidar(orgAdmin, 'g-dpo')).status).toBe(201);
+    const r = await chamar(orgAdmin, 'POST', `/api/v1/projects/${P}/governance`, { id: 'g-dpo', name: 'Dani S', email: 'DANI@cliente.com', role_category: 'executivo', job_title: 'DPO' });
+    expect(r.status).toBe(200);
+    expect((await contas('dani@cliente.com'))[0].ativo).toBe(1);
+  });
+
+  it('convidar linha de consultor é recusado (422) e nada é criado', async () => {
+    const antes = (await env.DB.prepare('SELECT count(*) n FROM users').first<{ n: number }>())!.n;
+    expect((await convidar(orgAdmin, 'g-cons')).status).toBe(422);
+    expect((await env.DB.prepare('SELECT count(*) n FROM users').first<{ n: number }>())!.n).toBe(antes);
   });
 });
