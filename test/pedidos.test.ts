@@ -316,7 +316,7 @@ describe('papéis de cliente e de plataforma como destinatários (revisão da fa
     ou = await sessionFor({ id: 'u-ou2', email: 'ou2@cliente.com', role: 'org_user', client_project_id: P });
     cl = await sessionFor({ id: 'u-cl2', email: 'cl2@cliente.com', role: 'client', client_project_id: P });
     pa = await sessionFor({ id: 'u-pa2', email: 'pa2@ness.lat', role: 'platform_admin' });
-  });
+  }, 60_000); // hashPassword é lento com a máquina carregada
 
   it('org_user e client destinatários dão ciência e recusam com senha (o write-guard deixa passar só essas rotas)', async () => {
     await resetDpia();
