@@ -40,6 +40,7 @@ import { platformApp } from './routes/platform';
 import { documentoOpenApi } from './openapi';
 import { mfaApp } from './routes/mfa';
 import { dataSubjectApp } from './routes/data-subject';
+import { pedidosApp, projectPedidosApp } from './routes/pedidos';
 
 
 import { readinessApp } from './routes/readiness';
@@ -386,6 +387,11 @@ app.route('/api/v1/capa', capaApp);
 app.route('/api/v1/projects/:projectId/capa', projectCapaApp);
 
 app.route('/api/v1/projects/:projectId/data-subject', dataSubjectApp);
+
+// Pedidos de aprovação/ciência (acesso de stakeholders): a consultoria pede no projeto; o
+// destinatário decide em /pedidos (único caminho de dados do papel `stakeholder`).
+app.route('/api/v1/projects/:projectId/pedidos', projectPedidosApp);
+app.route('/api/v1/pedidos', pedidosApp);
 
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
