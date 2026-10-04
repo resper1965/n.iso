@@ -148,9 +148,13 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: s
 
     let nome = dest.nome || dbUser.name || user.email;
     let assinar: { papel: PapelAssinatura } | undefined;
+    const autoridade = await autoridadeDeAssinatura(db, pedido.project_id, user);
+    // Ciência também é ato do cliente: conta que administra a plataforma não a dá, nem sendo destinatária.
+    if (pedido.papel_exigido === 'ciente' && autoridade.papelDePlataforma) {
+      return c.json({ error: 'Operação proibida: conta de administração da plataforma não dá ciência por cliente.' }, 403);
+    }
     if (pedido.papel_exigido !== 'ciente') {
       const papel = pedido.papel_exigido as PapelAssinatura;
-      const autoridade = await autoridadeDeAssinatura(db, pedido.project_id, user);
       const recusa = recusaDeAssinatura(autoridade, papel);
       if (recusa) return c.json({ error: recusa }, 403);
       nome = autoridade.nome || nome;

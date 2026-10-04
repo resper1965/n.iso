@@ -332,4 +332,12 @@ describe('papéis de cliente e de plataforma como destinatários (revisão da fa
   it('org_user e client continuam sem criar pedido', async () => {
     for (const h of [ou, cl]) expect((await criar(h, corpoDpia('ciente'))).status).toBe(403);
   });
+
+  it('platform_admin não dá ciência por cliente, mesmo destinatário: 403 e nada gravado', async () => {
+    await resetDpia();
+    const { id } = await (await criar(consultor, corpoDpia('ciente', ['pa2@ness.lat']))).json<any>();
+    const r = await chamar(pa, 'POST', `/api/v1/pedidos/${id}/aprovar`, { senha: SENHA });
+    expect(r.status, await r.clone().text()).toBe(403);
+    expect((await destinatarios(id))[0].status).toBe('pendente');
+  });
 });
