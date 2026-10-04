@@ -304,3 +304,32 @@ describe('documento alterado depois do pedido', () => {
     expect((await dpia()).status).toBe('Approved');
   });
 });
+
+describe('papéis de cliente e de plataforma como destinatários (revisão da fatia 2)', () => {
+  let ou: Record<string, string>, cl: Record<string, string>, pa: Record<string, string>;
+  beforeAll(async () => {
+    const senha = await hashPassword(SENHA);
+    await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id) VALUES
+      ('u-ou2', 'ou2@cliente.com', ?, 'Olga Usuária', 'org_user', ?, 'org_ness'),
+      ('u-cl2', 'cl2@cliente.com', ?, 'Cleo Cliente', 'client', ?, 'org_ness'),
+      ('u-pa2', 'pa2@ness.lat', ?, 'Plataforma', 'platform_admin', NULL, 'org_ness')`).bind(senha, P, senha, P, senha).run();
+    ou = await sessionFor({ id: 'u-ou2', email: 'ou2@cliente.com', role: 'org_user', client_project_id: P });
+    cl = await sessionFor({ id: 'u-cl2', email: 'cl2@cliente.com', role: 'client', client_project_id: P });
+    pa = await sessionFor({ id: 'u-pa2', email: 'pa2@ness.lat', role: 'platform_admin' });
+  });
+
+  it('org_user e client destinatários dão ciência e recusam com senha (o write-guard deixa passar só essas rotas)', async () => {
+    await resetDpia();
+    const { id } = await (await criar(consultor, corpoDpia('ciente', ['ou2@cliente.com', 'cl2@cliente.com']))).json<any>();
+    const r1 = await chamar(ou, 'POST', `/api/v1/pedidos/${id}/aprovar`, { senha: SENHA });
+    expect(r1.status, await r1.clone().text()).toBe(200);
+    const r2 = await chamar(cl, 'POST', `/api/v1/pedidos/${id}/recusar`, { senha: SENHA, motivo: 'Discordo' });
+    expect(r2.status, await r2.clone().text()).toBe(200);
+    const ds = await destinatarios(id);
+    expect(ds.map((d: any) => [d.email, d.status])).toEqual([['cl2@cliente.com', 'recusado'], ['ou2@cliente.com', 'ciente']]);
+  });
+
+  it('org_user e client continuam sem criar pedido', async () => {
+    for (const h of [ou, cl]) expect((await criar(h, corpoDpia('ciente'))).status).toBe(403);
+  });
+});

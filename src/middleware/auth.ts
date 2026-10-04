@@ -342,6 +342,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       { methods: ['POST'], test: p => p.endsWith('/chat') },
       { methods: ['POST'], test: p => MFA_AUTO_SERVICO.test(p) },
       { methods: ['POST'], test: p => SENHA_AUTO_SERVICO.test(p) },
+      // Decisão do PRÓPRIO pedido de aprovação/ciência (o handler exige ser destinatário e a senha).
+      // Criar pedido continua bloqueado para estes papéis.
+      { methods: ['POST'], test: p => /^\/api\/v1\/pedidos\/[^/]+\/(aprovar|recusar)$/.test(p) },
     ];
     const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
     if (!isAllowed) {
