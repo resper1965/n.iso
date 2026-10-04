@@ -772,6 +772,7 @@ window.updateHeaderUser = function updateHeaderUser() {
                 else if (S.user.role === 'org_admin') roleText = 'Gestor do Cliente';
                 else if (S.user.role === 'org_user') roleText = 'Colaborador do Cliente';
                 else if (S.user.role === 'client') roleText = 'Cliente';
+                else if (S.user.role === 'stakeholder') roleText = 'Stakeholder';
                 roleEl.textContent = roleText;
             }
         }
@@ -874,6 +875,14 @@ window.updateHeaderUser = function updateHeaderUser() {
                 const rotulo = document.querySelector(`.sidebar-label[data-args='["${id}"]']`);
                 if (rotulo) rotulo.style.display = 'none';
             });
+        }
+
+        // Stakeholder (mínimo privilégio): só "Meus pedidos" e o cartão de perfil (senha e MFA). O
+        // servidor já recusa o resto (allow-list de caminhos); o menu só não oferece o que daria 403.
+        if (S.user && S.user.role === 'stakeholder') {
+            document.querySelectorAll('.sidebar-nav[id^="nav-"]').forEach(el => { el.style.display = el.id === 'nav-meus' ? '' : 'none'; });
+            document.querySelectorAll('.sidebar-label, .sidebar-group').forEach(el => { el.style.display = 'none'; });
+            if (selectorContainer) selectorContainer.style.display = 'none';
         }
 
         // Seletor de organização e faixa "Atuando em": só o platform_admin (views/organizacoes.js).
@@ -1376,7 +1385,9 @@ window.initApp = async function initApp() {
         if (await window.checkLegalGate()) return;
 
         document.getElementById('login-overlay').classList.add('hidden');
-        await loadAll();
+        const ehStakeholder = S.user && S.user.role === 'stakeholder';
+        // Stakeholder não alcança leads, projetos nem controles (403 em todos): não os pede.
+        if (!ehStakeholder) await loadAll();
 
         const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
         if (isClient && S.user.client_project_id) {
@@ -1394,13 +1405,15 @@ window.initApp = async function initApp() {
         updateHeaderUser();
         updateActiveProjectWidget();
 
-        if (isClient && S.user.client_project_id) {
+        if (ehStakeholder) {
+            navigate('meus-pedidos');
+        } else if (isClient && S.user.client_project_id) {
             navigate('project-detail');
         } else {
             navigate('dashboard');
         }
         // ponytail: poll notifications every 60s
-        window._notifPoll = setInterval(loadNotifications, 60000);
+        if (!ehStakeholder) window._notifPoll = setInterval(loadNotifications, 60000);
         // Close dropdowns on outside click
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.dropdown-wrap')) {
