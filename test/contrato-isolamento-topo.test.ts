@@ -210,6 +210,9 @@ const CORPOS: Record<string, unknown> = {
   // propósito: o que precisa recusar o pedido é a guarda de tenant, não a senha.
   'POST /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
   'PUT /api/v1/controls/:id/approve': { password: SENHA_DO_USUARIO },
+  // Decisão de pedido valida o corpo antes de procurar o pedido; senha correta pelo mesmo motivo.
+  'POST /api/v1/pedidos/:id/aprovar': { senha: SENHA_DO_USUARIO },
+  'POST /api/v1/pedidos/:id/recusar': { senha: SENHA_DO_USUARIO },
 };
 
 /**
@@ -225,6 +228,7 @@ const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   legal_documents: { classification: 'comum' },
   servicos: { tipo: 'avulso' },
   propostas: { status: 'rascunho' },
+  pedidos: { tipo: 'dpia', papel_exigido: 'ciente' },
 };
 
 async function semearTenantAlheio(id: string, projeto: string): Promise<void> {

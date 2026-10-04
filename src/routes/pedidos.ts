@@ -1,13 +1,12 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { Bindings, Variables } from '../index';
 import {
   logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
   autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura,
 } from '../helpers';
-import { validateBody } from '../schemas';
+import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema } from '../schemas';
 import {
-  criarPedido, conferirVigencia, assinaturaDpia, TIPOS_PEDIDO, PAPEIS_PEDIDO, type PedidoRow,
+  criarPedido, conferirVigencia, assinaturaDpia, type PedidoRow,
 } from '../services/pedidos';
 
 /**
@@ -33,27 +32,12 @@ export const projectPedidosApp = new Hono<Ctx>();
 /** Quem pede (parte 4 do desenho). `platform_admin` não: opera a plataforma, não o cliente. */
 const PODE_PEDIR = new Set(['org_admin', 'consultor', 'consultant', 'consultoria_admin']);
 
-const criarSchema = z.object({
-  tipo: z.enum(TIPOS_PEDIDO),
-  ref_id: z.string().trim().min(1).max(200),
-  papel_exigido: z.enum(PAPEIS_PEDIDO),
-  destinatarios: z.array(z.object({
-    email: z.string().trim().email().max(320),
-    nome: z.string().trim().max(200).optional().nullable(),
-  })).min(1).max(50),
-});
-
-const decisaoSchema = z.object({
-  senha: z.string().min(1).max(500),
-  motivo: z.string().trim().max(2000).optional().nullable(),
-});
-
 projectPedidosApp.post('/', async (c) => {
   try {
     const user = c.get('user');
     if (!PODE_PEDIR.has(user?.role ?? '')) return c.json({ error: 'Forbidden: papel sem permissão para pedir aprovação' }, 403);
     const projectId = c.req.param('projectId') ?? '';
-    const valid = await validateBody(c, criarSchema);
+    const valid = await validateBody(c, pedidoCriarSchema);
     if (!valid.success) return valid.response;
     const b = valid.data;
 
@@ -138,14 +122,13 @@ pedidosApp.get('/:id', async (c) => {
  * id do substituto, se houver); senha errada é 401; sem autoridade para o papel, 403. A prova, a
  * assinatura do documento e o novo status do pedido vão num único `batch`.
  */
-async function decidir(c: any, decisao: 'aprovar' | 'recusar') {
+async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: string; motivo?: string | null }) {
   try {
     const user: Usuario = c.get('user');
     const db: D1Database = c.env.DB;
     const meu = await meuPedido(db, user, c.req.param('id'));
     if (!meu) return c.json({ error: 'Pedido não encontrado' }, 404);
-    const valid = await validateBody(c, decisaoSchema);
-    if (!valid.success) return valid.response;
+    const valid = { data: corpo };
     const { pedido, dest } = meu;
 
     const vig = await conferirVigencia(db, pedido);
@@ -204,5 +187,15 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar') {
   }
 }
 
-pedidosApp.post('/:id/aprovar', (c) => decidir(c, 'aprovar'));
-pedidosApp.post('/:id/recusar', (c) => decidir(c, 'recusar'));
+// A validação fica em cada rota (e não dentro de `decidir`): é assim que test/openapi.test.ts liga o
+// schema à rota lendo o fonte.
+pedidosApp.post('/:id/aprovar', async (c) => {
+  const valid = await validateBody(c, pedidoDecisaoSchema);
+  if (!valid.success) return valid.response;
+  return decidir(c, 'aprovar', valid.data);
+});
+pedidosApp.post('/:id/recusar', async (c) => {
+  const valid = await validateBody(c, pedidoDecisaoSchema);
+  if (!valid.success) return valid.response;
+  return decidir(c, 'recusar', valid.data);
+});

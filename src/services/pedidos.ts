@@ -14,9 +14,7 @@
 import { genId, sha256Hex, type PapelAssinatura } from '../helpers';
 
 export type TipoPedido = 'dpia';
-export const TIPOS_PEDIDO = ['dpia'] as const;
-export const PAPEIS_PEDIDO = ['ciso', 'ceo', 'ciente'] as const;
-export type PapelPedido = (typeof PAPEIS_PEDIDO)[number];
+export type PapelPedido = 'ciso' | 'ceo' | 'ciente';
 
 /** JSON com chaves ordenadas, em qualquer profundidade: a mesma informação dá sempre o mesmo texto. */
 function canonico(v: unknown): unknown {
