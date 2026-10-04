@@ -146,18 +146,78 @@ export async function substituirPedidosDoDocumento(db: D1Database, tipo: TipoPed
 }
 
 /**
+ * O DPIA ainda tem, coluna a coluna, o conteúdo congelado no pedido? Fragmento SQL sobre as colunas
+ * da linha de `dpia_assessments` em escopo (`prefixo` = alias ou vazio), com um `?` por coluna, todos
+ * ligados ao `conteudo_json` do pedido (`binds`). É a conferência do hash feita DENTRO do `batch`:
+ * fecha a janela entre conferir em JS e gravar.
+ */
+function dpiaIntacto(prefixo: string, conteudoJson: string): { sql: string; binds: string[] } {
+  return {
+    sql: COLUNAS_DPIA.map((c) => `${prefixo}${c} IS json_extract(?, '$.${c}')`).join(' AND '),
+    binds: COLUNAS_DPIA.map(() => conteudoJson),
+  };
+}
+
+/** Guarda da assinatura feita por pedido: só assina se a decisão acabou de ser gravada e o texto é o lido. */
+export type GuardaAssinatura = { destId: string; status: string; decididoEm: string; conteudoJson: string };
+
+/**
  * Assinatura do DPIA por papel — a MESMA usada por `POST /projects/:id/dpia/:assessmentId/approve`.
  * Devolve o UPDATE (para entrar num `batch`), ou `null` se o DPIA não existe no projeto. O DPO assina
- * e o DPIA segue em análise; só com as duas assinaturas ele vira Approved.
+ * e o DPIA segue em análise; só com as duas assinaturas ele vira Approved (decidido no próprio UPDATE,
+ * sem ler antes). Com `guarda`, o UPDATE só pega se a prova do destinatário foi gravada neste mesmo
+ * `batch` (status e `decidido_em` exatos) e o conteúdo é o congelado.
  */
-export async function assinaturaDpia(db: D1Database, projectId: string, assessmentId: string, role: PapelAssinatura, approvedBy: string): Promise<D1PreparedStatement | null> {
-  const atual = await db.prepare('SELECT dpo_signature, ceo_signature FROM dpia_assessments WHERE id = ? AND project_id = ?')
-    .bind(assessmentId, projectId).first<{ dpo_signature: string | null; ceo_signature: string | null }>();
-  if (!atual) return null;
+export async function assinaturaDpia(db: D1Database, projectId: string, assessmentId: string, role: PapelAssinatura, approvedBy: string, guarda?: GuardaAssinatura): Promise<D1PreparedStatement | null> {
+  const existe = await db.prepare('SELECT 1 FROM dpia_assessments WHERE id = ? AND project_id = ?').bind(assessmentId, projectId).first();
+  if (!existe) return null;
   const now = new Date().toISOString();
-  return role === 'ciso'
-    ? db.prepare('UPDATE dpia_assessments SET dpo_signature = ?, dpo_approved_by = ?, dpo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?')
-      .bind(approvedBy, approvedBy, now, atual.ceo_signature ? 'Approved' : 'Under Review', assessmentId, projectId)
-    : db.prepare('UPDATE dpia_assessments SET ceo_signature = ?, status = ? WHERE id = ? AND project_id = ?')
-      .bind(approvedBy, atual.dpo_signature ? 'Approved' : 'Under Review', assessmentId, projectId);
+  const set = role === 'ciso'
+    ? { sql: `dpo_signature = ?, dpo_approved_by = ?, dpo_approved_at = ?, status = CASE WHEN ceo_signature IS NOT NULL THEN 'Approved' ELSE 'Under Review' END`, binds: [approvedBy, approvedBy, now] }
+    : { sql: `ceo_signature = ?, status = CASE WHEN dpo_signature IS NOT NULL THEN 'Approved' ELSE 'Under Review' END`, binds: [approvedBy] };
+  let onde = 'id = ? AND project_id = ?';
+  const bindsOnde: unknown[] = [assessmentId, projectId];
+  if (guarda) {
+    const intacto = dpiaIntacto('', guarda.conteudoJson);
+    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${intacto.sql}`;
+    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...intacto.binds);
+  }
+  return db.prepare(`UPDATE dpia_assessments SET ${set.sql} WHERE ${onde}`).bind(...set.binds, ...bindsOnde);
+}
+
+/**
+ * Grava a decisão do destinatário, a assinatura (se houver) e o novo status do pedido num `batch`
+ * só, com toda condição conferida no SQL: o destinatário ainda pendente, o pedido ainda `aberto` com
+ * o mesmo hash, e o documento com o conteúdo congelado. Devolve se a decisão pegou; se não pegou,
+ * nada foi gravado (a assinatura depende da linha do destinatário que acabou de mudar).
+ */
+export async function registrarDecisao(db: D1Database, a: {
+  pedido: PedidoRow; destId: string; status: 'aprovado' | 'ciente' | 'recusado'; ip: string | null; ua: string | null;
+  mfa: boolean; nome: string; motivo: string | null; assinar?: { papel: PapelAssinatura };
+}): Promise<boolean> {
+  const { pedido: p } = a;
+  const decididoEm = new Date().toISOString();
+  const intacto = dpiaIntacto('d.', p.conteudo_json);
+  const stmts: D1PreparedStatement[] = [
+    db.prepare(`UPDATE pedido_destinatarios SET status = ?, decidido_em = ?, canal = 'conta', ip = ?, user_agent = ?, hash_lido = ?,
+        mfa_usado = ?, nome = ?, motivo = ?
+      WHERE id = ? AND status = 'pendente'
+        AND EXISTS (SELECT 1 FROM pedidos WHERE id = ? AND status = 'aberto' AND hash = ?)
+        AND EXISTS (SELECT 1 FROM dpia_assessments d WHERE d.id = ? AND d.project_id = ? AND ${intacto.sql})`)
+      .bind(a.status, decididoEm, a.ip, a.ua, p.hash, a.mfa ? 1 : 0, a.nome, a.motivo, a.destId, p.id, p.hash, p.ref_id, p.project_id, ...intacto.binds),
+  ];
+  if (a.assinar) {
+    const st = await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome,
+      { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json });
+    if (!st) return false;
+    stmts.push(st);
+  }
+  // Recusa de um fecha o pedido; aprovado quando ninguém mais está pendente.
+  stmts.push(db.prepare(`UPDATE pedidos SET status = CASE
+      WHEN EXISTS (SELECT 1 FROM pedido_destinatarios WHERE pedido_id = ?1 AND status = 'recusado') THEN 'recusado'
+      WHEN NOT EXISTS (SELECT 1 FROM pedido_destinatarios WHERE pedido_id = ?1 AND status = 'pendente') THEN 'aprovado'
+      ELSE status END
+    WHERE id = ?1 AND status = 'aberto'`).bind(p.id));
+  const res = await db.batch(stmts);
+  return !!res[0].meta?.changes;
 }

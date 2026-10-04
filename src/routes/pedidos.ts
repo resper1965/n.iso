@@ -6,7 +6,7 @@ import {
 } from '../helpers';
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema } from '../schemas';
 import {
-  criarPedido, conferirVigencia, assinaturaDpia, type PedidoRow,
+  criarPedido, conferirVigencia, registrarDecisao, type PedidoRow,
 } from '../services/pedidos';
 
 /**
@@ -147,36 +147,33 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: s
     }
 
     let nome = dest.nome || dbUser.name || user.email;
-    let assinatura: D1PreparedStatement | null = null;
+    let assinar: { papel: PapelAssinatura } | undefined;
     if (pedido.papel_exigido !== 'ciente') {
       const papel = pedido.papel_exigido as PapelAssinatura;
       const autoridade = await autoridadeDeAssinatura(db, pedido.project_id, user);
       const recusa = recusaDeAssinatura(autoridade, papel);
       if (recusa) return c.json({ error: recusa }, 403);
       nome = autoridade.nome || nome;
-      if (decisao === 'aprovar') {
-        assinatura = await assinaturaDpia(db, pedido.project_id, pedido.ref_id, papel, nome);
-        if (!assinatura) return c.json({ error: 'Documento não encontrado' }, 409);
-      }
+      if (decisao === 'aprovar') assinar = { papel };
     }
 
     const novoStatus = decisao === 'recusar' ? 'recusado' : pedido.papel_exigido === 'ciente' ? 'ciente' : 'aprovado';
     const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null;
     const ua = c.req.header('User-Agent') || null;
-    const res = await db.batch([
-      db.prepare(`UPDATE pedido_destinatarios SET status = ?, decidido_em = ?, canal = 'conta', ip = ?, user_agent = ?, hash_lido = ?,
-          mfa_usado = ?, nome = ?, motivo = ? WHERE id = ? AND status = 'pendente'`)
-        .bind(novoStatus, new Date().toISOString(), ip, ua, pedido.hash, dbUser.totp_enabled === 1 ? 1 : 0, nome,
-          decisao === 'recusar' ? valid.data.motivo ?? null : null, dest.id),
-      ...(assinatura ? [assinatura] : []),
-      // Recusa de um fecha o pedido; aprovado quando ninguém mais está pendente.
-      db.prepare(`UPDATE pedidos SET status = CASE
-          WHEN EXISTS (SELECT 1 FROM pedido_destinatarios WHERE pedido_id = ?1 AND status = 'recusado') THEN 'recusado'
-          WHEN NOT EXISTS (SELECT 1 FROM pedido_destinatarios WHERE pedido_id = ?1 AND status = 'pendente') THEN 'aprovado'
-          ELSE status END
-        WHERE id = ?1 AND status = 'aberto'`).bind(pedido.id),
-    ]);
-    if (!res[0].meta?.changes) return c.json({ error: 'Você já decidiu este pedido.' }, 409);
+    const pegou = await registrarDecisao(db, {
+      pedido, destId: dest.id, status: novoStatus, ip, ua, mfa: dbUser.totp_enabled === 1, nome,
+      motivo: decisao === 'recusar' ? valid.data.motivo ?? null : null, assinar,
+    });
+    if (!pegou) {
+      // Algo mudou entre a conferência e a gravação (documento, pedido ou outra decisão): nada foi
+      // gravado. Confere de novo para devolver o motivo e, se for o caso, abrir o pedido substituto.
+      const atual = await db.prepare('SELECT * FROM pedidos WHERE id = ?').bind(pedido.id).first<PedidoRow>();
+      const vig2 = atual ? await conferirVigencia(db, atual) : null;
+      if (vig2 && !vig2.vigente) {
+        return c.json({ error: 'O pedido mudou enquanto você decidia. Abra-o de novo.', status: vig2.status, substituido_por: vig2.substituido_por ?? null }, 409);
+      }
+      return c.json({ error: 'Você já decidiu este pedido.' }, 409);
+    }
 
     await logAudit(db, decisao === 'recusar' ? 'pedido.recusado' : 'pedido.aprovado', user.email,
       `Pedido ${pedido.id} (${pedido.tipo} ${pedido.ref_id}, papel ${pedido.papel_exigido}): ${novoStatus} por ${nome}; hash lido ${pedido.hash}`,
