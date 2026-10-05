@@ -3,10 +3,11 @@ import { Bindings, Variables } from '../index';
 import {
   logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
   autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura,
+  sendEmail, escapeHtml, genToken, sha256Hex,
 } from '../helpers';
-import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema } from '../schemas';
+import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema } from '../schemas';
 import {
-  criarPedido, conferirVigencia, registrarDecisao, type PedidoRow,
+  criarPedido, conferirVigencia, registrarDecisao, DIAS_LINK, type PedidoRow,
 } from '../services/pedidos';
 
 /**
@@ -199,4 +200,175 @@ pedidosApp.post('/:id/recusar', async (c) => {
   const valid = await validateBody(c, pedidoDecisaoSchema);
   if (!valid.success) return valid.response;
   return decidir(c, 'recusar', valid.data);
+});
+
+// ─── Ciência em massa por link com código (fatia 3) ──────────────────────────────────────────────
+// A consultoria (os mesmos papéis de `PODE_PEDIR`) manda um documento a até 200 e-mails, sem conta.
+// Cada pessoa recebe um link pessoal: token CSPRNG só no FRAGMENTO da URL (o servidor nunca o recebe
+// no caminho nem na query), só o SHA-256 no banco. O lado público está em `routes/public-pedidos.ts`.
+
+const URL_BASE = 'https://niso.ness.com.br';
+const SEM_EMAIL = { error: 'Envio de e-mail não configurado' };
+type Link = { email: string; nome: string | null; token: string };
+
+function emailCiencia(titulo: string, nome: string | null, link: string): string {
+  const e = escapeHtml;
+  return `<div style="font-family: Arial, sans-serif; max-width: 560px; color: #1e293b;">
+    <p>Olá${nome ? ` ${e(nome)}` : ''},</p>
+    <p>Pedimos a sua ciência do documento <strong>${e(titulo)}</strong>. O link é pessoal: leia o documento e confirme com o código que enviaremos ao seu e-mail.</p>
+    <p><a href="${e(link)}" style="background-color: #00ade8; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ler e dar ciência</a></p>
+    <p style="font-size: 12px; color: #64748b;">O link vale por ${DIAS_LINK} dias. Se você recebeu um link anterior para este documento, ele deixou de valer.</p>
+  </div>`;
+}
+
+/** Manda os links; devolve os e-mails cujo envio falhou (ficam pendentes, para reenviar). */
+async function enviarLinks(c: any, titulo: string, links: Link[]): Promise<string[]> {
+  const falhas: string[] = [];
+  for (const l of links) {
+    const ok = await sendEmail(c, l.email, `Ciência de documento: ${titulo}`, emailCiencia(titulo, l.nome, `${URL_BASE}/politicas#${l.token}`));
+    if (!ok) falhas.push(l.email);
+  }
+  return falhas;
+}
+
+const podePedir = (c: any) => PODE_PEDIR.has(c.get('user')?.role ?? '');
+const SEM_PAPEL = { error: 'Forbidden: papel sem permissão para pedir ciência' };
+
+projectPedidosApp.post('/ciencia', async (c) => {
+  try {
+    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const user = c.get('user');
+    const projectId = c.req.param('projectId') ?? '';
+    const valid = await validateBody(c, pedidoCienciaLoteSchema);
+    if (!valid.success) return valid.response;
+    // Sem a chave o sendEmail só simula: criar links que ninguém recebeu engana quem pediu.
+    if (!c.env.RESEND_API_KEY) return c.json(SEM_EMAIL, 503);
+    const b = valid.data;
+    const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
+    if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const criado = await criarPedido(c.env.DB, {
+      orgId: projeto.org_id, projectId, tipo: b.tipo, refId: b.ref_id, papel: 'ciente',
+      destinatarios: b.destinatarios, criadoPor: user.email, comLink: true,
+    });
+    if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
+    const p = await c.env.DB.prepare('SELECT titulo FROM pedidos WHERE id = ?').bind(criado.id).first<{ titulo: string }>();
+    const falhas = await enviarLinks(c, p?.titulo ?? '', criado.links);
+    await logAudit(c.env.DB, 'pedido.ciencia_lote', user.email,
+      `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, ciência por link) para ${criado.links.length} destinatário(s), ${falhas.length} falha(s) de envio; hash ${criado.hash}`,
+      '', c.req.header('CF-Connecting-IP') ?? '', projectId);
+    return c.json({ ok: true, id: criado.id, hash: criado.hash, enviados: criado.links.length - falhas.length, falhas }, 201);
+  } catch (e: any) {
+    return erro500(c, 'Erro ao criar o pedido de ciência', e);
+  }
+});
+
+projectPedidosApp.get('/', async (c) => {
+  try {
+    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const { results } = await c.env.DB.prepare(
+      `SELECT p.id, p.tipo, p.ref_id, p.titulo, p.papel_exigido, p.status, p.hash, p.substituido_por, p.criado_por, p.criado_em,
+              COUNT(d.id) AS total,
+              COALESCE(SUM(d.status IN ('ciente', 'aprovado')), 0) AS cientes,
+              COALESCE(SUM(d.status = 'pendente'), 0) AS pendentes,
+              COALESCE(SUM(d.status = 'pendente' AND d.aberto_em IS NULL), 0) AS nao_abriram
+         FROM pedidos p LEFT JOIN pedido_destinatarios d ON d.pedido_id = p.id
+        WHERE p.project_id = ?
+        GROUP BY p.id ORDER BY p.criado_em DESC LIMIT 200`
+    ).bind(c.req.param('projectId') ?? '').all();
+    return c.json({ pedidos: results });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao listar os pedidos do projeto', e);
+  }
+});
+
+/** Pedido do projeto da rota (o `projectAccessMiddleware` já cortou o projeto), ou `null`. */
+const pedidoDoProjeto = (db: D1Database, projectId: string, id: string) =>
+  db.prepare('SELECT * FROM pedidos WHERE id = ? AND project_id = ?').bind(id, projectId).first<PedidoRow>();
+
+/**
+ * Painel de acompanhamento: por destinatário, ciente / pendente (abriu) / não abriu, a ciência de
+ * uma VERSÃO ANTERIOR do mesmo documento (pedido substituído) e a linha do portal antigo
+ * (`policy_acknowledgments`, sem hash: "versão não registrada"). Nada de token, IP ou user-agent.
+ */
+projectPedidosApp.get('/:id', async (c) => {
+  try {
+    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const db = c.env.DB;
+    let p = await pedidoDoProjeto(db, c.req.param('projectId') ?? '', c.req.param('id'));
+    if (!p) return c.json({ error: 'Pedido não encontrado' }, 404);
+    const vig = await conferirVigencia(db, p);
+    if (!vig.vigente) p = { ...p, status: vig.status, substituido_por: vig.substituido_por ?? p.substituido_por };
+
+    const { results: dests } = await db.prepare(
+      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
+    ).bind(p.id).all<any>();
+    const { results: anteriores } = await db.prepare(
+      `SELECT d.email, d.decidido_em, d.hash_lido FROM pedido_destinatarios d JOIN pedidos q ON q.id = d.pedido_id
+        WHERE q.project_id = ? AND q.tipo = ? AND q.ref_id = ? AND q.id <> ? AND q.status = 'substituido' AND d.status = 'ciente'
+        ORDER BY d.decidido_em DESC`
+    ).bind(p.project_id, p.tipo, p.ref_id, p.id).all<any>();
+    const anterior = new Map<string, unknown>();
+    for (const a of anteriores) if (!anterior.has(a.email)) anterior.set(a.email, { decidido_em: a.decidido_em, hash_lido: a.hash_lido });
+
+    // Portal antigo: a ciência era pelo título (ou id) do controle, sem versão.
+    const antigo = new Map<string, unknown>();
+    if (p.tipo === 'politica') {
+      const titulo = String(JSON.parse(p.conteudo_json).title ?? '');
+      const { results } = await db.prepare(
+        `SELECT lower(user_email) AS email, user_name, acknowledged_at FROM policy_acknowledgments
+          WHERE project_id = ? AND policy_type IN (?, ?) ORDER BY acknowledged_at DESC`
+      ).bind(p.project_id, titulo, p.ref_id).all<any>();
+      for (const r of results) if (!antigo.has(r.email)) antigo.set(r.email, { user_name: r.user_name, acknowledged_at: r.acknowledged_at, hash: null });
+    }
+
+    const { conteudo_json: _conteudo, ...pedido } = p;
+    return c.json({
+      pedido,
+      destinatarios: dests.map((d) => ({
+        ...d,
+        situacao: d.status === 'pendente' ? (d.aberto_em ? 'pendente' : 'nao_abriu') : d.status,
+        versao_anterior: anterior.get(d.email) ?? null,
+        portal_antigo: antigo.get(d.email) ?? null,
+      })),
+    });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao abrir o acompanhamento do pedido', e);
+  }
+});
+
+/**
+ * Lembrete só aos PENDENTES de um pedido de ciência aberto. Como só o hash fica no banco, lembrar é
+ * emitir token novo: o link anterior da pessoa deixa de valer. Ciência gravada não é tocada (o
+ * UPDATE exige `pendente`, e o trigger `pedido_dest_prova_imutavel` recusa de qualquer jeito).
+ */
+projectPedidosApp.post('/:id/reenviar', async (c) => {
+  try {
+    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const db = c.env.DB;
+    const user = c.get('user');
+    const p = await pedidoDoProjeto(db, c.req.param('projectId') ?? '', c.req.param('id'));
+    if (!p) return c.json({ error: 'Pedido não encontrado' }, 404);
+    if (!c.env.RESEND_API_KEY) return c.json(SEM_EMAIL, 503);
+    if (p.papel_exigido !== 'ciente') return c.json({ error: 'Só pedido de ciência tem link por e-mail' }, 400);
+    const vig = await conferirVigencia(db, p);
+    if (!vig.vigente) {
+      return c.json({ error: 'Este pedido não está mais aberto.', status: vig.status, substituido_por: vig.substituido_por ?? null }, 409);
+    }
+    const { results: pend } = await db.prepare(`SELECT id, email, nome FROM pedido_destinatarios WHERE pedido_id = ? AND status = 'pendente'`)
+      .bind(p.id).all<{ id: string; email: string; nome: string | null }>();
+    const links: Link[] = [];
+    for (const d of pend) {
+      const token = genToken();
+      const r = await db.prepare(`UPDATE pedido_destinatarios SET token_hash = ?, token_expira_em = datetime('now', '+${DIAS_LINK} days')
+        WHERE id = ? AND status = 'pendente'`).bind(await sha256Hex(token), d.id).run();
+      if (r.meta?.changes) links.push({ email: d.email, nome: d.nome, token });
+    }
+    const falhas = await enviarLinks(c, p.titulo, links);
+    await logAudit(db, 'pedido.lembrete', user.email,
+      `Pedido ${p.id}: lembrete a ${links.length} pendente(s), ${falhas.length} falha(s) de envio`, '', c.req.header('CF-Connecting-IP') ?? '', p.project_id);
+    return c.json({ ok: true, enviados: links.length - falhas.length, falhas });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao reenviar o pedido de ciência', e);
+  }
 });

@@ -125,6 +125,9 @@ const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/public/propostas/aceitar': 'proposta pública: o token do link é a autorização',
   'POST /api/v1/public/propostas/recusar': 'proposta pública: o token do link é a autorização',
   'POST /api/v1/public/propostas/ajuste': 'proposta pública: o token do link é a autorização',
+  'POST /api/v1/public/pedidos/ver': 'ciência por link: o token pessoal do link é a autorização',
+  'POST /api/v1/public/pedidos/codigo': 'ciência por link: o token pessoal do link é a autorização; o código vai ao e-mail do destinatário',
+  'POST /api/v1/public/pedidos/ciencia': 'ciência por link: token pessoal do link + código do e-mail do destinatário',
   'POST /scim/v2/Users': 'SCIM: token próprio do projeto, cria usuário só naquele projeto',
   'POST /oauth/authorize/entrar': 'login do agente: credencial do próprio consultor',
   'POST /oauth/authorize/confirmar': 'login do agente: projetos oferecidos já cortados por organização (tarefa 2)',
@@ -275,9 +278,11 @@ beforeAll(async () => {
   }
   // Pedido de uma organização endereçado (por engano) ao stakeholder da OUTRA: ser destinatário não
   // basta, o projeto do pedido tem de ser o dele. Sem esta linha a varredura por id de /pedidos só
-  // provaria "não é destinatário".
-  await env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email) VALUES ('cruz-1', ?, ?), ('cruz-2', ?, ?)`)
-    .bind(B.rec, `stk@${NESS.m}.lat`, NESS.rec, `stk@${B.m}.lat`).run();
+  // provaria "não é destinatário". Ligado pelo `user_id`, com e-mail neutro: o painel de
+  // acompanhamento (fatia 3) mostra à organização dona do pedido os e-mails que ELA endereçou, e um
+  // e-mail com o marcador alheio aqui seria acusado como vazamento sem ser.
+  await env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email, user_id) VALUES ('cruz-1', ?, 'cruz@neutro.lat', ?), ('cruz-2', ?, 'cruz@neutro.lat', ?)`)
+    .bind(B.rec, `${NESS.m}-stk`, NESS.rec, `${B.m}-stk`).run();
   for (const [de, alheio] of [[NESS, B], [B, NESS]] as const) {
     const m = de.m;
     for (const [papel, uid] of [['consultor', 'cons'], ['comercial', 'com'], ['consultoria_admin', 'cadm']] as const) {

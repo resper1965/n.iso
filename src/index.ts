@@ -31,6 +31,7 @@ import { capaApp, projectCapaApp } from './routes/capa';
 import { certificationsApp, projectCertificationsApp } from './routes/certifications';
 import { publicApp } from './routes/public';
 import { publicPropostasApp } from './routes/public-propostas';
+import { publicPedidosApp } from './routes/public-pedidos';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
@@ -316,6 +317,8 @@ app.route('/api/v1/auth', authApp);
 app.route('/api/v1/public', publicApp);
 // Link da proposta para o cliente, sem sessão: limite de taxa próprio por IP e por token (rateLimitD1).
 app.route('/api/v1/public/propostas', publicPropostasApp);
+// Link pessoal de ciência (pedidos, fatia 3), sem sessão: mesmo desenho, limite por IP e por token.
+app.route('/api/v1/public/pedidos', publicPedidosApp);
 
 /*
  * SCIM 2.0 (item 4.2). Montado em `/scim/v2/*` — o caminho que a RFC 7644

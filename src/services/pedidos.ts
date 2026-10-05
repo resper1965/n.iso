@@ -8,12 +8,16 @@
  * documento (PUT do DPIA) E de novo na hora de decidir, porque o documento pode mudar por outro
  * caminho (agente, ferramenta genérica, banco).
  *
- * Tipos suportados: só `dpia` por enquanto. Tipo novo = uma entrada em `DOCUMENTOS` e a ação de
- * assinatura correspondente em `routes/pedidos.ts`.
+ * Tipos: `dpia` e `politica` (texto da política no controle, `compliance_controls`). Tipo novo =
+ * uma entrada em `DOCUMENTOS`, o CHECK da tabela (migration) e, se assina, a ação em
+ * `routes/pedidos.ts`.
  */
-import { genId, sha256Hex, type PapelAssinatura } from '../helpers';
+import { genId, genToken, sha256Hex, type PapelAssinatura } from '../helpers';
 
-export type TipoPedido = 'dpia';
+export type TipoPedido = 'dpia' | 'politica';
+export type Canal = 'conta' | 'link';
+/** Validade do link pessoal da ciência; reenviar emite outro. */
+export const DIAS_LINK = 30;
 export type PapelPedido = 'ciso' | 'ceo' | 'ciente';
 
 /** JSON com chaves ordenadas, em qualquer profundidade: a mesma informação dá sempre o mesmo texto. */
@@ -42,19 +46,19 @@ const COLUNAS_DPIA = [
 
 type Documento = { titulo: string; conteudo: Record<string, unknown> };
 
-const DOCUMENTOS: Record<TipoPedido, (db: D1Database, refId: string, projectId: string) => Promise<Documento | null>> = {
-  async dpia(db, refId, projectId) {
-    const row = await db.prepare(`SELECT ${COLUNAS_DPIA.join(', ')} FROM dpia_assessments WHERE id = ? AND project_id = ?`)
-      .bind(refId, projectId).first<Record<string, unknown>>();
-    if (!row) return null;
-    const conteudo = Object.fromEntries(COLUNAS_DPIA.map((c) => [c, row[c] ?? null]));
-    return { titulo: `DPIA: ${String(row.processing_name || row.system_name || refId)}`, conteudo };
-  },
+/** Onde mora cada tipo e quais colunas são CONTEÚDO (entram no hash e na conferência do batch). */
+const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[]; titulo: (r: Record<string, unknown>, refId: string) => string }> = {
+  dpia: { tabela: 'dpia_assessments', colunas: COLUNAS_DPIA, titulo: (r, id) => `DPIA: ${String(r.processing_name || r.system_name || id)}` },
+  politica: { tabela: 'compliance_controls', colunas: ['title', 'description'], titulo: (r, id) => `Política: ${String(r.title || id)}` },
 };
 
 /** Conteúdo atual do documento (do projeto informado), ou `null` se não existe nele. */
-export function documentoAtual(db: D1Database, tipo: TipoPedido, refId: string, projectId: string) {
-  return DOCUMENTOS[tipo](db, refId, projectId);
+export async function documentoAtual(db: D1Database, tipo: TipoPedido, refId: string, projectId: string): Promise<Documento | null> {
+  const d = DOCUMENTOS[tipo];
+  const row = await db.prepare(`SELECT ${d.colunas.join(', ')} FROM ${d.tabela} WHERE id = ? AND project_id = ?`)
+    .bind(refId, projectId).first<Record<string, unknown>>();
+  if (!row) return null;
+  return { titulo: d.titulo(row, refId), conteudo: Object.fromEntries(d.colunas.map((c) => [c, row[c] ?? null])) };
 }
 
 export interface PedidoRow {
@@ -63,7 +67,7 @@ export interface PedidoRow {
   substituido_por: string | null; criado_por: string; criado_em: string;
 }
 
-type Destinatario = { email: string; nome?: string | null; user_id?: string | null };
+type Destinatario = { email: string; nome?: string | null; user_id?: string | null; token_hash?: string | null };
 
 /** Statements que criam o pedido e os destinatários (para o chamador pôr num `batch`). */
 function inserirPedido(
@@ -76,19 +80,22 @@ function inserirPedido(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'aberto', ?)`)
       .bind(p.id, p.orgId, p.projectId, p.tipo, p.refId, p.doc.titulo, p.papel, JSON.stringify(p.doc.conteudo), p.hash, p.criadoPor),
     ...destinatarios.map((d) =>
-      db.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, nome, email, user_id, status) VALUES (?, ?, ?, ?, ?, 'pendente')`)
-        .bind(genId(), p.id, d.nome ?? null, d.email.trim().toLowerCase(), d.user_id ?? null)),
+      db.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, nome, email, user_id, token_hash, token_expira_em, status)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?6 IS NULL THEN NULL ELSE datetime('now', '+${DIAS_LINK} days') END, 'pendente')`)
+        .bind(genId(), p.id, d.nome ?? null, d.email.trim().toLowerCase(), d.user_id ?? null, d.token_hash ?? null)),
   ];
 }
 
 /**
  * Cria o pedido congelando o documento. `null` se o documento não existe no projeto. E-mails
  * repetidos (sem caixa) entram uma vez só; o destinatário com conta ativa é ligado pelo `user_id`.
+ * `comLink`: cada destinatário ganha um token CSPRNG (só o SHA-256 vai ao banco); os tokens em
+ * claro voltam UMA vez, para o e-mail, e não devem ir a resposta, trilha nem log.
  */
 export async function criarPedido(
   db: D1Database,
-  a: { orgId: string; projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; destinatarios: Destinatario[]; criadoPor: string },
-): Promise<{ id: string; hash: string } | null> {
+  a: { orgId: string; projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; destinatarios: Destinatario[]; criadoPor: string; comLink?: boolean },
+): Promise<{ id: string; hash: string; links: { email: string; nome: string | null; token: string }[] } | null> {
   const doc = await documentoAtual(db, a.tipo, a.refId, a.projectId);
   if (!doc) return null;
   const vistos = new Map<string, Destinatario>();
@@ -101,10 +108,18 @@ export async function criarPedido(
     d.user_id = u?.id ?? null;
     d.nome = d.nome || u?.name || null;
   }
+  const links: { email: string; nome: string | null; token: string }[] = [];
+  if (a.comLink) {
+    for (const d of vistos.values()) {
+      const token = genToken();
+      d.token_hash = await sha256Hex(token);
+      links.push({ email: d.email, nome: d.nome ?? null, token });
+    }
+  }
   const id = genId();
   const hash = await hashConteudo(doc.conteudo);
   await db.batch(inserirPedido(db, { id, orgId: a.orgId, projectId: a.projectId, tipo: a.tipo, refId: a.refId, papel: a.papel, doc, hash, criadoPor: a.criadoPor }, [...vistos.values()]));
-  return { id, hash };
+  return { id, hash, links };
 }
 
 export type Vigencia = { vigente: true } | { vigente: false; status: 'substituido' | 'cancelado' | string; substituido_por?: string | null };
@@ -146,15 +161,16 @@ export async function substituirPedidosDoDocumento(db: D1Database, tipo: TipoPed
 }
 
 /**
- * O DPIA ainda tem, coluna a coluna, o conteúdo congelado no pedido? Fragmento SQL sobre as colunas
- * da linha de `dpia_assessments` em escopo (`prefixo` = alias ou vazio), com um `?` por coluna, todos
+ * O documento ainda tem, coluna a coluna, o conteúdo congelado no pedido? Fragmento SQL sobre as
+ * colunas da linha do documento em escopo (`prefixo` = alias ou vazio), com um `?` por coluna, todos
  * ligados ao `conteudo_json` do pedido (`binds`). É a conferência do hash feita DENTRO do `batch`:
  * fecha a janela entre conferir em JS e gravar.
  */
-function dpiaIntacto(prefixo: string, conteudoJson: string): { sql: string; binds: string[] } {
+function intacto(tipo: TipoPedido, prefixo: string, conteudoJson: string): { sql: string; binds: string[] } {
+  const { colunas } = DOCUMENTOS[tipo];
   return {
-    sql: COLUNAS_DPIA.map((c) => `${prefixo}${c} IS json_extract(?, '$.${c}')`).join(' AND '),
-    binds: COLUNAS_DPIA.map(() => conteudoJson),
+    sql: colunas.map((c) => `${prefixo}${c} IS json_extract(?, '$.${c}')`).join(' AND '),
+    binds: colunas.map(() => conteudoJson),
   };
 }
 
@@ -178,9 +194,9 @@ export async function assinaturaDpia(db: D1Database, projectId: string, assessme
   let onde = 'id = ? AND project_id = ?';
   const bindsOnde: unknown[] = [assessmentId, projectId];
   if (guarda) {
-    const intacto = dpiaIntacto('', guarda.conteudoJson);
-    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${intacto.sql}`;
-    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...intacto.binds);
+    const ok = intacto('dpia', '', guarda.conteudoJson);
+    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${ok.sql}`;
+    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...ok.binds);
   }
   return db.prepare(`UPDATE dpia_assessments SET ${set.sql} WHERE ${onde}`).bind(...set.binds, ...bindsOnde);
 }
@@ -190,21 +206,26 @@ export async function assinaturaDpia(db: D1Database, projectId: string, assessme
  * só, com toda condição conferida no SQL: o destinatário ainda pendente, o pedido ainda `aberto` com
  * o mesmo hash, e o documento com o conteúdo congelado. Devolve se a decisão pegou; se não pegou,
  * nada foi gravado (a assinatura depende da linha do destinatário que acabou de mudar).
+ * Canal `link`: também o mesmo token e ainda no prazo (reenvio no meio troca o token: nada grava).
  */
 export async function registrarDecisao(db: D1Database, a: {
   pedido: PedidoRow; destId: string; status: 'aprovado' | 'ciente' | 'recusado'; ip: string | null; ua: string | null;
   mfa: boolean; nome: string; motivo: string | null; assinar?: { papel: PapelAssinatura };
+  canal?: Canal; tokenHash?: string;
 }): Promise<boolean> {
   const { pedido: p } = a;
   const decididoEm = new Date().toISOString();
-  const intacto = dpiaIntacto('d.', p.conteudo_json);
+  const ok = intacto(p.tipo, 'd.', p.conteudo_json);
+  const link = a.canal === 'link';
   const stmts: D1PreparedStatement[] = [
-    db.prepare(`UPDATE pedido_destinatarios SET status = ?, decidido_em = ?, canal = 'conta', ip = ?, user_agent = ?, hash_lido = ?,
+    db.prepare(`UPDATE pedido_destinatarios SET status = ?, decidido_em = ?, canal = ?, ip = ?, user_agent = ?, hash_lido = ?,
         mfa_usado = ?, nome = ?, motivo = ?
       WHERE id = ? AND status = 'pendente'
+        ${link ? `AND token_hash = ? AND token_expira_em > datetime('now')` : ''}
         AND EXISTS (SELECT 1 FROM pedidos WHERE id = ? AND status = 'aberto' AND hash = ?)
-        AND EXISTS (SELECT 1 FROM dpia_assessments d WHERE d.id = ? AND d.project_id = ? AND ${intacto.sql})`)
-      .bind(a.status, decididoEm, a.ip, a.ua, p.hash, a.mfa ? 1 : 0, a.nome, a.motivo, a.destId, p.id, p.hash, p.ref_id, p.project_id, ...intacto.binds),
+        AND EXISTS (SELECT 1 FROM ${DOCUMENTOS[p.tipo].tabela} d WHERE d.id = ? AND d.project_id = ? AND ${ok.sql})`)
+      .bind(a.status, decididoEm, link ? 'link' : 'conta', a.ip, a.ua, p.hash, a.mfa ? 1 : 0, a.nome, a.motivo, a.destId,
+        ...(link ? [a.tokenHash ?? ''] : []), p.id, p.hash, p.ref_id, p.project_id, ...ok.binds),
   ];
   if (a.assinar) {
     const st = await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome,
