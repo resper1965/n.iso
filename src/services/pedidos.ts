@@ -12,13 +12,51 @@
  * uma entrada em `DOCUMENTOS`, o CHECK da tabela (migration) e, se assina, a ação em
  * `routes/pedidos.ts`.
  */
-import { genId, genToken, sha256Hex, type PapelAssinatura } from '../helpers';
+import {
+  genId, genToken, sha256Hex, requireProjectAccess, ehConsultor, autoridadeDeAssinatura, recusaDeAssinatura,
+  RECUSA_PLATAFORMA, type PapelAssinatura,
+} from '../helpers';
 
 export type TipoPedido = 'dpia' | 'politica';
 export type Canal = 'conta' | 'link';
 /** Validade do link pessoal da ciência; reenviar emite outro. */
 export const DIAS_LINK = 30;
 export type PapelPedido = 'ciso' | 'ceo' | 'ciente';
+
+/** Papéis que pedem (parte 4 do desenho). `platform_admin` não: opera a plataforma, não o cliente. */
+const PAPEIS_QUE_PEDEM = new Set(['org_admin', 'consultor', 'consultant', 'consultoria_admin']);
+
+/**
+ * Quem PEDE aprovação ou ciência neste projeto: o `org_admin` do projeto, o consultor designado nele
+ * e o `consultoria_admin` da organização dele. Stakeholder, `org_user`, comercial e `platform_admin`
+ * nunca. O alcance do projeto é o de `requireProjectAccess` (designação na matriz, organização,
+ * `client_project_id`), a mesma regra do `projectAccessMiddleware`, aqui de novo para a regra não
+ * depender de onde o router foi montado. Devolve o motivo da recusa, ou `null` se pode.
+ */
+export async function podePedir(db: D1Database, user: { role?: string; email?: string; client_project_id?: string | null; org_id?: string | null }, projectId: string): Promise<string | null> {
+  if (!PAPEIS_QUE_PEDEM.has(user?.role ?? '')) {
+    return 'Só o administrador da empresa no projeto, o consultor designado no projeto ou o administrador da consultoria pedem aprovação ou ciência.';
+  }
+  const alcanca = await requireProjectAccess(db, user as any, projectId).then(() => true, () => false);
+  if (alcanca) return null;
+  return ehConsultor(user)
+    ? 'Você não está designado como consultor neste projeto (matriz de Governança).'
+    : 'Você não tem acesso a este projeto.';
+}
+
+/**
+ * Autoridade do destinatário sobre o pedido, pelo papel exigido. `ciente`: basta ser destinatário
+ * (o chamador já conferiu), mas conta que administra a plataforma não dá ciência por cliente.
+ * `ciso`/`ceo`: a regra das assinaturas (`recusaDeAssinatura`), falha fechado sem linha na matriz.
+ * `nome`: como consta na matriz, para o carimbo; `null` se não consta.
+ */
+export async function autoridadeNoPedido(
+  db: D1Database, pedido: Pick<PedidoRow, 'project_id' | 'papel_exigido'>, user: { email?: string; role?: string },
+): Promise<{ recusa: string | null; nome: string | null }> {
+  const a = await autoridadeDeAssinatura(db, pedido.project_id, user);
+  if (pedido.papel_exigido === 'ciente') return { recusa: a.papelDePlataforma ? RECUSA_PLATAFORMA : null, nome: a.nome };
+  return { recusa: recusaDeAssinatura(a, pedido.papel_exigido), nome: a.nome };
+}
 
 /** JSON com chaves ordenadas, em qualquer profundidade: a mesma informação dá sempre o mesmo texto. */
 function canonico(v: unknown): unknown {
