@@ -186,6 +186,23 @@ describe('revogação', () => {
     expect(c).toHaveLength(1);
     expect(c[0]).toMatchObject({ ativo: 1, requires_password_change: 1 });
   });
+
+  it('conta desativada fora da matriz (à mão ou por SCIM): convite não reativa (409)', async () => {
+    const [conta] = await contas('beto@cliente.com');
+    await env.DB.prepare('UPDATE users SET ativo = 0 WHERE id = ?').bind(conta.id).run();
+    let r = await convidar(orgAdmin, 'g-ciso');
+    expect(r.status, await r.clone().text()).toBe(409);
+    expect((await contas('beto@cliente.com'))[0].ativo).toBe(0);
+
+    // Revogada pela matriz e depois desligada pelo SCIM: vale o SCIM, o mais recente.
+    await env.DB.prepare('UPDATE users SET ativo = 1 WHERE id = ?').bind(conta.id).run();
+    expect((await revogar(orgAdmin, 'g-ciso')).status).toBe(200);
+    await env.DB.prepare(`INSERT INTO audit_logs (id, action, actor, details, project_id, created_at)
+      VALUES ('a-scim-beto', 'scim.user_deactivated', 'scim:${P}', 'Conta beto@cliente.com desativada por SCIM', ?, datetime('now', '+1 minute'))`).bind(P).run();
+    r = await convidar(orgAdmin, 'g-ciso');
+    expect(r.status).toBe(409);
+    expect((await contas('beto@cliente.com'))[0].ativo).toBe(0);
+  });
 });
 
 describe('conta órfã: a linha da matriz muda ou some', () => {
