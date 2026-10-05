@@ -296,4 +296,26 @@ describe('schema contract (real D1)', () => {
     expect(t.pagamentoPadrao).toBe('40/30/30');
     for (const k of ['sobre', 'comoTrabalhamos', 'premissas']) expect(t[k].length, k).toBeGreaterThan(50);
   });
+  it('pedidos e pedido_destinatarios (0041): colunas da prova, CHECKs e índices', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['id', 'org_id', 'project_id', 'tipo', 'ref_id', 'titulo', 'papel_exigido', 'conteudo_json', 'hash', 'status', 'substituido_por', 'criado_por', 'criado_em']) {
+      expect(await colunas('pedidos'), c).toContain(c);
+    }
+    for (const c of ['id', 'pedido_id', 'nome', 'email', 'user_id', 'token_hash', 'status', 'decidido_em', 'canal', 'ip', 'user_agent', 'hash_lido', 'mfa_usado', 'motivo']) {
+      expect(await colunas('pedido_destinatarios'), c).toContain(c);
+    }
+    const ins = (id: string, status = 'aberto', papel = 'ciso') =>
+      env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, criado_por)
+        VALUES (?, 'org_ness', 'p1', 'dpia', 'd1', 't', ?, '{}', 'h', ?, 'u')`).bind(id, papel, status).run();
+    await expect(ins('pd_x', 'outro')).rejects.toThrow();
+    await expect(ins('pd_y', 'aberto', 'rei')).rejects.toThrow();
+    await ins('pd_a');
+    await expect(env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email, canal) VALUES ('pdd1', 'pd_a', 'a@x.io', 'fax')`).run()).rejects.toThrow();
+    await env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email) VALUES ('pdd2', 'pd_a', 'a@x.io')`).run();
+    for (const n of ['idx_pedidos_projeto', 'idx_pedidos_documento', 'idx_pedido_dest_pedido', 'idx_pedido_dest_email', 'idx_pedido_dest_user', 'idx_pedido_dest_token']) {
+      expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
+    }
+    await env.DB.prepare(`DELETE FROM pedidos WHERE id = 'pd_a'`).run();
+  });
 });

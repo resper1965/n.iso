@@ -82,7 +82,15 @@ describe('menu do stakeholder', () => {
     for (const el of document.querySelectorAll('.sidebar-label, .sidebar-group')) expect(el.style.display, el.id || el.className).toBe('none');
   });
 
-  it.each(['platform_admin', 'consultor', 'org_admin', 'client'])('%s não vê "Meus pedidos"', async (papel) => {
+  // Revisão da fatia 2: quem pode ser destinatário vê o item (lista vazia mostra o estado vazio).
+  it.each(['org_admin', 'org_user', 'client', 'consultor', 'consultoria_admin'])('%s também vê "Meus pedidos", sem perder o resto do menu', async (papel) => {
+    await menu(papel);
+    expect(visivel('nav-meus')).toBe(true);
+    const outros = [...document.querySelectorAll('.sidebar-nav[id^="nav-"]')].filter((el) => el.id !== 'nav-meus' && el.style.display !== 'none');
+    expect(outros.length).toBeGreaterThan(0);
+  });
+
+  it.each(['platform_admin', 'comercial'])('%s não vê "Meus pedidos"', async (papel) => {
     await menu(papel);
     expect(visivel('nav-meus')).toBe(false);
   });

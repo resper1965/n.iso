@@ -636,3 +636,20 @@ export const propostaAceiteLinkSchema = z.object({
 }).strict();
 export const propostaRecusaSchema = z.object({ token: tokenProposta, motivo: z.string().trim().max(1000).optional() }).strict();
 export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z.string().trim().min(1).max(2000) }).strict();
+
+// ─── Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2) ─────────────
+// `tipo` acompanha o CHECK da tabela `pedidos` (migration 0041): tipo novo exige migration.
+export const pedidoCriarSchema = z.object({
+  tipo: z.enum(['dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  })).min(1).max(50),
+});
+
+export const pedidoDecisaoSchema = z.object({
+  senha: z.string().min(1).max(500),
+  motivo: z.string().trim().max(2000).optional().nullable(),
+});

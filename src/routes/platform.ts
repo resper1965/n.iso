@@ -5,6 +5,7 @@ import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, aut
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
+import { assinaturaDpia, substituirPedidosDoDocumento } from '../services/pedidos';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
@@ -71,6 +72,8 @@ platformApp.put('/dpia/:id', async (c) => {
     await c.env.DB.prepare(
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
     ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
+    // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
+    await substituirPedidosDoDocumento(c.env.DB, 'dpia', id);
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_updated', user?.email || 'system', `DPIA ${id} updated`);
     return c.json({ ok: true });
@@ -124,23 +127,14 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     const recusa = recusaDeAssinatura(autoridade, role);
     if (recusa) return c.json({ error: recusa }, 403);
 
-    const atual = await c.env.DB.prepare('SELECT dpo_signature, ceo_signature FROM dpia_assessments WHERE id = ? AND project_id = ?')
-      .bind(assessmentId, projectId).first<{ dpo_signature: string | null; ceo_signature: string | null }>();
-    if (!atual) return c.json({ error: 'DPIA não encontrado' }, 404);
-
     const dbUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first<any>();
     // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
     const approvedBy = autoridade.nome || dbUser?.name || user.email;
-    const now = new Date().toISOString();
 
-    // O DPO assina e o DPIA segue em análise; só com as duas assinaturas ele vira Approved.
-    if (role === 'ciso') {
-      await c.env.DB.prepare('UPDATE dpia_assessments SET dpo_signature = ?, dpo_approved_by = ?, dpo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?')
-        .bind(approvedBy, approvedBy, now, atual.ceo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
-    } else {
-      await c.env.DB.prepare('UPDATE dpia_assessments SET ceo_signature = ?, status = ? WHERE id = ? AND project_id = ?')
-        .bind(approvedBy, atual.dpo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
-    }
+    // A mesma assinatura que o pedido de aprovação (routes/pedidos.ts) aciona.
+    const assinatura = await assinaturaDpia(c.env.DB, projectId, assessmentId, role, approvedBy);
+    if (!assinatura) return c.json({ error: 'DPIA não encontrado' }, 404);
+    await assinatura.run();
 
     const quem = role === 'ciso' ? 'pelo DPO / Líder SGSI' : 'pela Direção Executiva';
     await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado ${quem} (${approvedBy}); papel: ${role}`, '', c.req.header('CF-Connecting-IP') ?? '', projectId);

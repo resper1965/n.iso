@@ -1,0 +1,202 @@
+import { Hono } from 'hono';
+import { Bindings, Variables } from '../index';
+import {
+  logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
+  autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura,
+} from '../helpers';
+import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema } from '../schemas';
+import {
+  criarPedido, conferirVigencia, registrarDecisao, type PedidoRow,
+} from '../services/pedidos';
+
+/**
+ * Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2). Ver `services/pedidos.ts`.
+ *
+ * - `POST /api/v1/projects/:projectId/pedidos` — a consultoria (consultor designado,
+ *   `consultoria_admin`) ou o `org_admin` do projeto pede. O `projectAccessMiddleware` já cortou o
+ *   projeto; aqui só o papel. Stakeholder nem chega (allow-list de caminhos).
+ * - `/api/v1/pedidos*` — o lado do DESTINATÁRIO: "Meus pedidos", abrir, aprovar, recusar. Só vê o
+ *   pedido quem é destinatário (por `user_id`, ou pelo e-mail enquanto não há conta ligada) E
+ *   alcança o projeto dele. Pedido alheio é 404, não 403: não confirma que existe.
+ *
+ * Autoridade de aprovação PROVISÓRIA (fatia 4 refina): `ciente` basta ser destinatário; `ciso`/`ceo`
+ * passam por `autoridadeDeAssinatura`/`recusaDeAssinatura`, a mesma regra das aprovações existentes
+ * (falha fechado: sem designação na matriz, sem aprovação).
+ */
+type Ctx = { Bindings: Bindings; Variables: Variables };
+type Usuario = Variables['user'];
+
+export const pedidosApp = new Hono<Ctx>();
+export const projectPedidosApp = new Hono<Ctx>();
+
+/** Quem pede (parte 4 do desenho). `platform_admin` não: opera a plataforma, não o cliente. */
+const PODE_PEDIR = new Set(['org_admin', 'consultor', 'consultant', 'consultoria_admin']);
+
+projectPedidosApp.post('/', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_PEDIR.has(user?.role ?? '')) return c.json({ error: 'Forbidden: papel sem permissão para pedir aprovação' }, 403);
+    const projectId = c.req.param('projectId') ?? '';
+    const valid = await validateBody(c, pedidoCriarSchema);
+    if (!valid.success) return valid.response;
+    const b = valid.data;
+
+    const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
+    if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const criado = await criarPedido(c.env.DB, {
+      orgId: projeto.org_id, projectId, tipo: b.tipo, refId: b.ref_id, papel: b.papel_exigido,
+      destinatarios: b.destinatarios, criadoPor: user.email,
+    });
+    if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
+    await logAudit(c.env.DB, 'pedido.criado', user.email,
+      `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, papel ${b.papel_exigido}) para ${b.destinatarios.length} destinatário(s); hash ${criado.hash}`,
+      '', c.req.header('CF-Connecting-IP') ?? '', projectId);
+    return c.json({ ok: true, ...criado }, 201);
+  } catch (e: any) {
+    return erro500(c, 'Erro ao criar pedido', e);
+  }
+});
+
+/** O usuário alcança o projeto do pedido? Stakeholder: só o próprio `client_project_id`. */
+async function alcancaProjeto(db: D1Database, user: Usuario, projectId: string): Promise<boolean> {
+  if (user.role === 'stakeholder') return !!user.client_project_id && user.client_project_id === projectId;
+  return requireProjectAccess(db, user, projectId).then(() => true, () => false);
+}
+
+type Meu = { pedido: PedidoRow; dest: { id: string; status: string; nome: string | null; email: string; decidido_em: string | null } };
+
+/** O pedido, se o usuário é destinatário dele e alcança o projeto; senão `null` (vira 404). */
+async function meuPedido(db: D1Database, user: Usuario, id: string): Promise<Meu | null> {
+  const row = await db.prepare(
+    `SELECT p.*, d.id AS d_id, d.status AS d_status, d.nome AS d_nome, d.email AS d_email, d.decidido_em AS d_decidido_em
+       FROM pedidos p JOIN pedido_destinatarios d ON d.pedido_id = p.id
+      WHERE p.id = ? AND (d.user_id = ? OR (d.user_id IS NULL AND d.email = lower(?)))
+      LIMIT 1`
+  ).bind(id, user.id ?? '', user.email ?? '').first<any>();
+  if (!row || !(await alcancaProjeto(db, user, row.project_id))) return null;
+  const { d_id, d_status, d_nome, d_email, d_decidido_em, ...pedido } = row;
+  return { pedido, dest: { id: d_id, status: d_status, nome: d_nome, email: d_email, decidido_em: d_decidido_em } };
+}
+
+pedidosApp.get('/', async (c) => {
+  try {
+    const user = c.get('user');
+    // Mesmo corte de projeto das listagens (stakeholder: o próprio projeto), além de ser destinatário.
+    const vis = user.role === 'stakeholder'
+      ? { sql: 'SELECT ?', bind: user.client_project_id ?? '' }
+      : projetosVisiveis(user);
+    const { results } = await c.env.DB.prepare(
+      `SELECT p.id, p.project_id, p.tipo, p.titulo, p.papel_exigido, p.status, p.hash, p.criado_em,
+              d.status AS meu_status, d.decidido_em
+         FROM pedidos p JOIN pedido_destinatarios d ON d.pedido_id = p.id
+        WHERE (d.user_id = ? OR (d.user_id IS NULL AND d.email = lower(?)))
+          AND p.status NOT IN ('substituido', 'cancelado')
+          ${vis ? `AND p.project_id IN (${vis.sql})` : ''}
+        ORDER BY p.criado_em DESC LIMIT 200`
+    ).bind(user.id ?? '', user.email ?? '', ...(vis ? [vis.bind] : [])).all();
+    return c.json({ pedidos: results });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao listar pedidos', e);
+  }
+});
+
+pedidosApp.get('/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const meu = await meuPedido(c.env.DB, user, c.req.param('id'));
+    if (!meu) return c.json({ error: 'Pedido não encontrado' }, 404);
+    let { pedido } = meu;
+    // Abrir já confere se o documento mudou: a pessoa não lê uma versão que não vale mais.
+    const vig = await conferirVigencia(c.env.DB, pedido);
+    if (!vig.vigente) pedido = { ...pedido, status: vig.status, substituido_por: vig.substituido_por ?? pedido.substituido_por };
+    const { conteudo_json, ...resto } = pedido;
+    return c.json({ pedido: { ...resto, conteudo: JSON.parse(conteudo_json) }, destinatario: meu.dest });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao abrir pedido', e);
+  }
+});
+
+/**
+ * Aprovar (ou dar ciência) e recusar: mesma sequência, mesma prova. Pedido fora do ar é 409 (com o
+ * id do substituto, se houver); senha errada é 401; sem autoridade para o papel, 403. A prova, a
+ * assinatura do documento e o novo status do pedido vão num único `batch`.
+ */
+async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: string; motivo?: string | null }) {
+  try {
+    const user: Usuario = c.get('user');
+    const db: D1Database = c.env.DB;
+    const meu = await meuPedido(db, user, c.req.param('id'));
+    if (!meu) return c.json({ error: 'Pedido não encontrado' }, 404);
+    const valid = { data: corpo };
+    const { pedido, dest } = meu;
+
+    const vig = await conferirVigencia(db, pedido);
+    if (!vig.vigente) {
+      const msg = vig.status === 'substituido'
+        ? 'O documento mudou depois deste pedido. Abra o pedido novo, com o texto atual.'
+        : 'Este pedido não está mais aberto.';
+      return c.json({ error: msg, status: vig.status, substituido_por: vig.substituido_por ?? null }, 409);
+    }
+    if (dest.status !== 'pendente') return c.json({ error: 'Você já decidiu este pedido.', status: dest.status }, 409);
+
+    const dbUser = await db.prepare('SELECT password_hash, name, totp_enabled FROM users WHERE id = ?').bind(user.id ?? '')
+      .first<{ password_hash: string; name: string | null; totp_enabled: number | null }>();
+    if (!dbUser || !(await verifyPassword(valid.data.senha, dbUser.password_hash))) {
+      return c.json({ error: 'Senha incorreta' }, 401);
+    }
+
+    let nome = dest.nome || dbUser.name || user.email;
+    let assinar: { papel: PapelAssinatura } | undefined;
+    const autoridade = await autoridadeDeAssinatura(db, pedido.project_id, user);
+    // Ciência também é ato do cliente: conta que administra a plataforma não a dá, nem sendo destinatária.
+    if (pedido.papel_exigido === 'ciente' && autoridade.papelDePlataforma) {
+      return c.json({ error: 'Operação proibida: conta de administração da plataforma não dá ciência por cliente.' }, 403);
+    }
+    if (pedido.papel_exigido !== 'ciente') {
+      const papel = pedido.papel_exigido as PapelAssinatura;
+      const recusa = recusaDeAssinatura(autoridade, papel);
+      if (recusa) return c.json({ error: recusa }, 403);
+      nome = autoridade.nome || nome;
+      if (decisao === 'aprovar') assinar = { papel };
+    }
+
+    const novoStatus = decisao === 'recusar' ? 'recusado' : pedido.papel_exigido === 'ciente' ? 'ciente' : 'aprovado';
+    const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null;
+    const ua = c.req.header('User-Agent') || null;
+    const pegou = await registrarDecisao(db, {
+      pedido, destId: dest.id, status: novoStatus, ip, ua, mfa: dbUser.totp_enabled === 1, nome,
+      motivo: decisao === 'recusar' ? valid.data.motivo ?? null : null, assinar,
+    });
+    if (!pegou) {
+      // Algo mudou entre a conferência e a gravação (documento, pedido ou outra decisão): nada foi
+      // gravado. Confere de novo para devolver o motivo e, se for o caso, abrir o pedido substituto.
+      const atual = await db.prepare('SELECT * FROM pedidos WHERE id = ?').bind(pedido.id).first<PedidoRow>();
+      const vig2 = atual ? await conferirVigencia(db, atual) : null;
+      if (vig2 && !vig2.vigente) {
+        return c.json({ error: 'O pedido mudou enquanto você decidia. Abra-o de novo.', status: vig2.status, substituido_por: vig2.substituido_por ?? null }, 409);
+      }
+      return c.json({ error: 'Você já decidiu este pedido.' }, 409);
+    }
+
+    await logAudit(db, decisao === 'recusar' ? 'pedido.recusado' : 'pedido.aprovado', user.email,
+      `Pedido ${pedido.id} (${pedido.tipo} ${pedido.ref_id}, papel ${pedido.papel_exigido}): ${novoStatus} por ${nome}; hash lido ${pedido.hash}`,
+      decisao === 'recusar' ? valid.data.motivo ?? '' : '', ip ?? '', pedido.project_id);
+    return c.json({ ok: true, status: novoStatus, hash_lido: pedido.hash });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao registrar a decisão do pedido', e);
+  }
+}
+
+// A validação fica em cada rota (e não dentro de `decidir`): é assim que test/openapi.test.ts liga o
+// schema à rota lendo o fonte.
+pedidosApp.post('/:id/aprovar', async (c) => {
+  const valid = await validateBody(c, pedidoDecisaoSchema);
+  if (!valid.success) return valid.response;
+  return decidir(c, 'aprovar', valid.data);
+});
+pedidosApp.post('/:id/recusar', async (c) => {
+  const valid = await validateBody(c, pedidoDecisaoSchema);
+  if (!valid.success) return valid.response;
+  return decidir(c, 'recusar', valid.data);
+});

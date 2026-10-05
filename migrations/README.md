@@ -354,3 +354,23 @@ Depois de aplicar, a conferência é `SELECT COUNT(*) FROM users WHERE org_id <>
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0041 — pedidos de aprovação e ciência (acesso de stakeholders, fatia 2, 2026-10-04)
+
+Cria duas tabelas novas, com índices: `pedidos` (um por documento/ação, com
+`org_id` e `project_id`, o conteúdo congelado em `conteudo_json` e o SHA-256
+dele em `hash`; `status` em `aberto|aprovado|recusado|substituido|cancelado`,
+`substituido_por` aponta o pedido que nasceu quando o documento mudou) e
+`pedido_destinatarios` (uma linha por pessoa, com a prova da decisão:
+`decidido_em`, `canal`, `ip`, `user_agent`, `hash_lido`, `mfa_usado`, `motivo`;
+`token_hash` fica para a fatia 3, com índice único parcial). `tipo` aceita só
+`dpia` por enquanto (CHECK): tipo novo exige migration. Só `CREATE ... IF NOT
+EXISTS`, nenhuma tabela existente é alterada.
+
+Conferência depois de aplicar: `PRAGMA table_info(pedidos)` e
+`PRAGMA table_info(pedido_destinatarios)` mostram as colunas acima.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.
