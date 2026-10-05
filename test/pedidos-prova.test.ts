@@ -219,34 +219,53 @@ describe('prova imutável', () => {
   });
 
   it('varredura: nenhuma rota que não é GET altera ou apaga a prova', async () => {
-    const corpos: Record<string, unknown> = {
-      'POST /api/v1/pedidos/:id/aprovar': { senha: SENHA },
-      'POST /api/v1/pedidos/:id/recusar': { senha: SENHA, motivo: 'tentativa de reverter' },
-      'POST /api/v1/public/pedidos/ver': { token: TOKEN_CLARO },
-      'POST /api/v1/public/pedidos/codigo': { token: TOKEN_CLARO },
-      'POST /api/v1/public/pedidos/ciencia': { token: TOKEN_CLARO, codigo: '123456', nome: 'Lia' },
+    // Rotas de pedido: corpo válido e o status que prova que a chamada chegou à regra (e não parou
+    // na validação). `null` = qualquer status; a prova é a foto, no fim.
+    type Quem = keyof typeof U;
+    const DE_PEDIDO: Record<string, { corpo?: unknown; esperado: (q: Quem, id: string) => number | null }> = {
+      'POST /api/v1/pedidos/:id/aprovar': { corpo: { senha: SENHA }, esperado: (q, id) => (q === 'stk' && id === 'pv-ap' ? 409 : 404) },
+      'POST /api/v1/pedidos/:id/recusar': { corpo: { senha: SENHA, motivo: 'tentativa de reverter' }, esperado: (q, id) => (q === 'stk' && id === 'pv-ap' ? 409 : 404) },
+      'POST /api/v1/public/pedidos/ver': { corpo: { token: TOKEN_CLARO }, esperado: () => 200 }, // só lê: "já deu ciência"
+      'POST /api/v1/public/pedidos/codigo': { corpo: { token: TOKEN_CLARO }, esperado: () => 404 },
+      'POST /api/v1/public/pedidos/ciencia': { corpo: { token: TOKEN_CLARO, codigo: '123456', nome: 'Lia' }, esperado: () => 409 },
+      'POST /api/v1/projects/:projectId/pedidos/:id/reenviar': {
+        esperado: (q, id) => (q === 'stk' || q === 'adm' ? 403 : id === 'pv-ap' ? 409 : id === 'pv-ab' ? 200 : 404),
+      },
     };
     const vistas = new Set<string>();
     const rotas = app.routes.filter((r) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method) && r.path !== '/*'
       && !vistas.has(`${r.method} ${r.path}`) && vistas.add(`${r.method} ${r.path}`));
     expect(rotas.length).toBeGreaterThan(150);
+    const forjar = (caminho: string, id: string) => caminho
+      .replace(/^\/api\/v1\/(platform\/)?projects\/:\w+/, (_t, plat = '') => `/api/v1/${plat}projects/${P}`)
+      .replace(/:(\w+)/g, (_t, n: string) => (n.toLowerCase().includes('token') ? 'tok-aud-p' : n === 'projectId' ? P : id));
     const antes = await fotoDaProva();
-    const chamadas: number[] = [];
-    for (const id of ['pv-ap', 'pv-ab', 'pv-d3']) {
-      for (const quem of Object.values(U)) {
-        for (const r of rotas) {
-          const caminho = r.path
-            .replace(/^\/api\/v1\/(platform\/)?projects\/:\w+/, (_t, plat = '') => `/api/v1/${plat}projects/${P}`)
-            .replace(/:(\w+)/g, (_t, n: string) => (n.toLowerCase().includes('token') ? 'tok-aud-p' : n === 'projectId' ? P : id));
+    const fora: string[] = [];
+    let chamadas = 0;
+    for (const r of rotas) {
+      const chave = `${r.method} ${r.path}`;
+      // Rota de pedido: os quatro papéis × pedido fechado, pedido aberto e destinatário decidido.
+      // Demais rotas: quem mais alcança (platform_admin), com o id do pedido fechado; o stakeholder
+      // é barrado fora de /pedidos pelo allow-list (stakeholder-acesso.test.ts).
+      const dePedido = r.path.includes('pedidos');
+      const quems: Quem[] = dePedido ? ['cadm', 'orgAdmin', 'adm', 'stk'] : ['adm'];
+      const ids = !/:(?!projectId\b)\w/.test(r.path.replace(/^\/api\/v1\/(platform\/)?projects\/:\w+/, '')) ? ['-'] : dePedido ? ['pv-ap', 'pv-ab', 'pv-d3'] : ['pv-ap'];
+      for (const q of quems) {
+        for (const id of ids) {
           // Sessão nova a cada chamada: /auth/logout e afins derrubariam a do usuário no meio da varredura.
-          const res = await chamar(await sessionFor(quem), r.method, caminho, corpos[`${r.method} ${r.path}`]);
-          chamadas.push(res.status);
+          const res = await chamar(await sessionFor(U[q]), r.method, forjar(r.path, id), DE_PEDIDO[chave]?.corpo);
+          chamadas++;
+          const esperado = DE_PEDIDO[chave]?.esperado(q, id) ?? null;
+          if (esperado !== null && res.status !== esperado) fora.push(`${chave} [${q}, ${id}]: ${res.status}, esperado ${esperado}`);
         }
+        if (r.path.startsWith('/api/v1/public/')) break; // pública: quem chama não muda nada
       }
     }
-    expect(chamadas.length).toBe(rotas.length * 3 * Object.keys(U).length);
+    expect(Object.keys(DE_PEDIDO).every((k) => vistas.has(k)), 'rota de pedido sumiu de app.routes').toBe(true);
+    expect(fora).toEqual([]);
+    expect(chamadas).toBeGreaterThan(rotas.length);
     expect(await fotoDaProva()).toEqual(antes);
-  }, 1_200_000);
+  }, 600_000);
 
   it('correção é pedido novo: a prova anterior fica como estava', async () => {
     const antes = await env.DB.prepare(`SELECT * FROM pedido_destinatarios WHERE id = 'pv-d1'`).first();
