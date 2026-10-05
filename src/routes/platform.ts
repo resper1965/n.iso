@@ -5,7 +5,8 @@ import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, aut
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
-import { assinaturaDpia, substituirPedidosDoDocumento } from '../services/pedidos';
+import { assinaturaDpia } from '../services/pedidos';
+import { conferirPedidosDoDocumento } from './pedidos';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
@@ -73,7 +74,7 @@ platformApp.put('/dpia/:id', async (c) => {
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
     ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
     // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
-    await substituirPedidosDoDocumento(c.env.DB, 'dpia', id);
+    await conferirPedidosDoDocumento(c, 'dpia', id);
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_updated', user?.email || 'system', `DPIA ${id} updated`);
     return c.json({ ok: true });

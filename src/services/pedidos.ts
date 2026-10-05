@@ -162,7 +162,8 @@ export async function criarPedido(
   return { id, hash, links };
 }
 
-export type Vigencia = { vigente: true } | { vigente: false; status: 'substituido' | 'cancelado' | string; substituido_por?: string | null };
+/** `criado`: foi ESTA chamada que substituiu (o chamador avisa os destinatários uma vez só). */
+export type Vigencia = { vigente: true } | { vigente: false; status: 'substituido' | 'cancelado' | string; substituido_por?: string | null; criado?: boolean };
 
 /**
  * O pedido ainda fala do documento como ele está? Só pedido `aberto` é conferido. Documento
@@ -191,13 +192,26 @@ export async function conferirVigencia(db: D1Database, p: PedidoRow): Promise<Vi
   await db.batch(inserirPedido(db, {
     id: novoId, projectId: p.project_id, tipo: p.tipo, refId: p.ref_id, papel: p.papel_exigido, doc, hash, criadoPor: p.criado_por,
   }, dests));
-  return { vigente: false, status: 'substituido', substituido_por: novoId };
+  return { vigente: false, status: 'substituido', substituido_por: novoId, criado: true };
 }
 
-/** Confere todos os pedidos abertos de um documento (chamado depois de o documento ser gravado). */
-export async function substituirPedidosDoDocumento(db: D1Database, tipo: TipoPedido, refId: string): Promise<void> {
-  const { results } = await db.prepare(`SELECT * FROM pedidos WHERE tipo = ? AND ref_id = ? AND status = 'aberto'`).bind(tipo, refId).all<PedidoRow>();
-  for (const p of results) await conferirVigencia(db, p);
+/**
+ * Confere todos os pedidos abertos de um documento (chamado depois de o documento ser gravado).
+ * `refIds`: mais de um quando a escrita casa `(id = normId OR id = controlId)`; o hash decide, então
+ * id que não mudou não substitui nada. Devolve cada pedido conferido com o resultado, para o
+ * chamador avisar os destinatários (`avisarSubstituicao` em `routes/pedidos.ts`).
+ */
+export async function substituirPedidosDoDocumento(
+  db: D1Database, tipo: TipoPedido, refIds: string | string[], projectId?: string,
+): Promise<{ antigo: PedidoRow; vig: Vigencia }[]> {
+  const ids = [...new Set(Array.isArray(refIds) ? refIds : [refIds])].filter(Boolean);
+  if (!ids.length) return [];
+  const { results } = await db.prepare(`SELECT * FROM pedidos WHERE tipo = ? AND status = 'aberto' AND ref_id IN (${ids.map(() => '?').join(', ')})
+      ${projectId ? 'AND project_id = ?' : ''}`)
+    .bind(tipo, ...ids, ...(projectId ? [projectId] : [])).all<PedidoRow>();
+  const out: { antigo: PedidoRow; vig: Vigencia }[] = [];
+  for (const p of results) out.push({ antigo: p, vig: await conferirVigencia(db, p) });
+  return out;
 }
 
 /**

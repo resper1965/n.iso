@@ -21,8 +21,15 @@ export const senhaNovaSchema = z
   .min(8, 'A senha precisa de pelo menos 8 caracteres')
   .max(200, 'Senha longa demais');
 
+/**
+ * E-mail é identidade de login: grava-se e busca-se sempre em minúsculas e sem
+ * espaço. Sem isto, `CEO@x.com` virava conta distinta de `ceo@x.com` (a linha da
+ * matriz de Governança) e o login comparava sensível a caixa.
+ */
+export const emailNormalizado = () => z.string().trim().toLowerCase().email('E-mail inválido');
+
 export const loginSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: emailNormalizado(),
   password: z.string().min(1, 'Senha é obrigatória'),
   // Token do desafio anti-abuso. Só é exigido a partir da 2ª tentativa
   // (ver auth-policy.ts); por isso é opcional no schema.
@@ -30,14 +37,14 @@ export const loginSchema = z.object({
 });
 
 export const setupSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: emailNormalizado(),
   password: senhaNovaSchema,
   name: z.string().min(1, 'Nome é obrigatório'),
   setupKey: z.string().optional()
 });
 
 export const resetRequestSchema = z.object({
-  email: z.string().email('E-mail inválido')
+  email: emailNormalizado()
 });
 
 export const resetConfirmSchema = z.object({
@@ -57,7 +64,7 @@ export const mudarSenhaSchema = z.object({
 
 /** Só o e-mail: a tela de login pergunta por onde este endereço entra. */
 export const ssoInicioSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: emailNormalizado(),
 });
 
 /**
