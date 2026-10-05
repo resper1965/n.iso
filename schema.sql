@@ -1168,6 +1168,19 @@ CREATE TABLE IF NOT EXISTS pedidos (
 );
 CREATE INDEX IF NOT EXISTS idx_pedidos_projeto ON pedidos(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_pedidos_documento ON pedidos(tipo, ref_id, status);
+-- Pedido também é prova (0043): conteúdo, hash e documento nunca mudam; fechado não muda de status
+-- nem de substituto. `org_id` livre (transferência de projeto). DELETE livre (cascata do projeto).
+CREATE TRIGGER IF NOT EXISTS pedido_prova_imutavel
+BEFORE UPDATE ON pedidos
+WHEN NEW.hash IS NOT OLD.hash
+  OR NEW.conteudo_json IS NOT OLD.conteudo_json
+  OR NEW.tipo IS NOT OLD.tipo
+  OR NEW.ref_id IS NOT OLD.ref_id
+  OR NEW.papel_exigido IS NOT OLD.papel_exigido
+  OR (OLD.status <> 'aberto' AND (NEW.status IS NOT OLD.status OR NEW.substituido_por IS NOT OLD.substituido_por))
+BEGIN
+    SELECT RAISE(ABORT, 'prova de pedido e imutavel');
+END;
 
 CREATE TABLE IF NOT EXISTS pedido_destinatarios (
     id TEXT PRIMARY KEY,

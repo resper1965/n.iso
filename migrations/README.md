@@ -401,3 +401,24 @@ Conferência depois de aplicar:
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0043 — pedido imutável (acesso de stakeholders, fatia 5, 2026-10-05)
+
+Só cria o trigger `pedido_prova_imutavel` (`BEFORE UPDATE ON pedidos`); nenhuma
+tabela ou linha muda. O trigger recusa mudar `hash`, `conteudo_json`, `tipo`,
+`ref_id` e `papel_exigido` em qualquer pedido, e `status`/`substituido_por` em
+pedido fechado (`status <> 'aberto'`). Continua permitido: o pedido aberto
+virar `substituido` (com `substituido_por`), `cancelado`, `aprovado` ou
+`recusado`, e mudar `org_id` (transferência de projeto). DELETE não é
+bloqueado: apagar o projeto apaga os pedidos em cascata.
+`test/migration-0043.test.ts` aplica 0041, 0042 e 0043 sobre linhas e confere
+as regras, também contra o `schema.sql`.
+
+Conferência depois de aplicar:
+`SELECT name FROM sqlite_master WHERE type='trigger' AND name='pedido_prova_imutavel'`
+devolve uma linha.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.
