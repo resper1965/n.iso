@@ -99,17 +99,19 @@ describe('Portfólio e portal do cliente', () => {
       expect(portfolio.map((p: any) => p.id).sort()).toEqual([A, B]);
     });
 
-    it('papel FORA da lista de papéis-cliente é escopado, não promovido a plataforma', async () => {
+    it('papel FORA da lista de papéis-cliente não é promovido a plataforma nem usa o client_project_id', async () => {
       // A decisão de ver tudo é por allowlist de STAFF, não por allowlist de
       // papel-cliente: lista de cliente nunca é exaustiva com `role` livre.
       // Antes desta inversão, `ciso` do projeto A recebia a carteira inteira.
+      // Revisão final da fatia 5 (B1): papel desconhecido também não entra pelo
+      // `client_project_id` — só papel de CLIENTE entra por ele (falha fechada).
       const res = await req('/api/v1/portfolio', { headers: cisoA });
       expect(res.status).toBe(200);
       const { portfolio } = await res.json() as any;
-      expect(portfolio.map((p: any) => p.id), 'papel desconhecido virou visão de plataforma').toEqual([A]);
+      expect(portfolio.map((p: any) => p.id), 'papel desconhecido virou visão de plataforma').toEqual([]);
 
       const stats = await req('/api/v1/dashboard/stats', { headers: cisoA });
-      expect((await stats.json() as any).projects).toBe(1);
+      expect((await stats.json() as any).projects).toBe(0);
     });
 
     it('papel de cliente SEM projeto não vê nada (falha fechado, não aberto)', async () => {

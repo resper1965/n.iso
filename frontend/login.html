@@ -259,6 +259,10 @@
             </div>
         </div>
         <div class="sidebar-nav-list">
+            <div class="sidebar-nav" id="nav-meus" data-action="navigate" data-args='["meus-pedidos"]' style="display:none">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+                <span class="sidebar-nav-text">Meus pedidos</span>
+            </div>
             <div class="sidebar-nav active" id="nav-dashboard" data-action="navigate" data-args='["dashboard"]'>
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 <span class="sidebar-nav-text">Dashboard</span>
@@ -395,6 +399,10 @@
                     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
                     <span class="sidebar-nav-text">Trilha de Logs</span>
                 </div>
+                <div class="sidebar-nav" id="nav-organizacoes" data-action="navigate" data-args='["organizacoes"]' style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+                    <span class="sidebar-nav-text">Organizações</span>
+                </div>
                 <div class="sidebar-nav" id="nav-users" data-action="navigate" data-args='["users"]' style="display:none">
                     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span class="sidebar-nav-text">Usuários</span>
@@ -433,6 +441,7 @@
                 <div id="header-project-badge" style="display:none;cursor:pointer;font-size:0.55rem;padding:0.2rem 0.6rem;border-radius:6px;background:rgba(0,173,232,0.12);color:var(--accent);border:1px solid rgba(0,173,232,0.25);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis" data-action="openActiveProjectModal"></div>
             </div>
             <div class="header-right">
+                <div class="org-seletor" id="org-seletor" hidden></div>
                 <div class="header-actions" id="header-actions"></div>
                 <div style="position:relative">
                     <div class="notif-badge" id="notif-badge" data-action="toggleNotifications" role="button" aria-label="Notificações" aria-haspopup="true"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="notif-count" id="notif-count" style="display:none">0</span></div>
@@ -440,6 +449,7 @@
                 </div>
             </div>
         </header>
+        <div class="org-faixa" id="org-faixa" role="status" hidden></div>
         <div style="display:flex;flex:1;overflow:hidden">
             <!-- `aria-live` saiu do #content: o container troca de innerHTML
                  inteiro a cada navegação, então o leitor de tela lia a view

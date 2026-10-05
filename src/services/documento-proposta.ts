@@ -7,6 +7,7 @@ import { ORG_NESS, type ConfigOrg } from './organizacao';
 import { brl, num, type ItemCalculado } from './preco-proposta';
 import type { Servico } from '../schemas/domain';
 import type { Diagnostico } from './diagnostico';
+import { LOGO_DATA_URI } from './logo-org';
 
 export interface DadosDocumento {
   org: ConfigOrg; numero: string; revisao: number; emitidaEm: string; validaAte: string;
@@ -15,6 +16,8 @@ export interface DadosDocumento {
   itens: { servico: Servico; calc: ItemCalculado; textoCliente: string }[];
   totais: { totalProjeto: number; mensalidade: number };
   pagamento: string; diagnostico: Diagnostico | null;
+  /** `data:` URI do logo, lido do R2 na geração (congela com o documento); ausente = sem logo. */
+  logo?: string;
 }
 export type SecaoId = 'capa' | 'sumario' | 'diagnostico' | 'lacunas' | 'objeto' | 'como_trabalhamos' | 'plano' | 'cronograma' | 'responsabilidades' | 'sobre' | 'investimento' | 'premissas' | 'termos' | 'observacoes' | 'aceite';
 export const SECOES_EDITAVEIS: SecaoId[] = ['sumario', 'objeto', 'como_trabalhamos', 'responsabilidades', 'sobre', 'premissas', 'termos', 'observacoes'];
@@ -28,7 +31,7 @@ export type Bloco =
   | { t: 'kpis'; itens: { valor: string; rotulo: string }[] };
 export interface Secao { id: SecaoId; numero: string | null; titulo: string; blocos: Bloco[]; editada: boolean }
 export interface ConteudoDocumento {
-  org: { nome: string; cor: string; marcaNess: boolean; selo: boolean };
+  org: { nome: string; cor: string; marcaNess: boolean; selo: boolean; logo?: string };
   numero: string; revisao: number; emitidaEm: string; validaAte: string;
   capa: { titulo: string; cliente: string; cnpj: string | null; pessoas: number | null; duracao: string | null; investimento: string };
   secoes: Secao[];
@@ -270,7 +273,8 @@ function montarTudo(d: DadosDocumento, editadas: Partial<Record<SecaoId, string>
 
   const nomes = d.itens.map((i) => i.servico.nome);
   const conteudo: ConteudoDocumento = {
-    org: { nome: o.nome, cor: o.corDestaque, marcaNess: o.id === ORG_NESS, selo: o.seloNiso },
+    // sem logo, a chave nem existe: o JSON congelado (e o HTML) fica igual ao de antes da tarefa 6
+    org: { nome: o.nome, cor: o.corDestaque, marcaNess: o.id === ORG_NESS, selo: o.seloNiso, ...(d.logo ? { logo: d.logo } : {}) },
     numero: d.numero, revisao: d.revisao, emitidaEm: d.emitidaEm, validaAte: d.validaAte,
     capa: {
       titulo: nomes.length > 1 ? `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}` : (nomes[0] ?? 'Proposta comercial'),
@@ -406,7 +410,13 @@ const QUEBRA: SecaoId[] = ['plano', 'investimento', 'termos'];
 export function renderizarHtml(c: ConteudoDocumento): string {
   const cor = /^#[0-9a-fA-F]{6}$/.test(c.org.cor) ? c.org.cor : COR_PADRAO;
   const numero = `${c.numero}${c.revisao > 1 ? ` rev. ${c.revisao}` : ''}`;
-  const marca = c.org.marcaNess ? '<span class="mark">ness<span class="dot">.</span></span>' : `<span class="mark">${e(c.org.nome)}</span>`;
+  // Logo só se o data: URI casa a regex ancorada (PNG/JPEG em base64); senão, o comportamento de antes.
+  const logo = c.org.logo && LOGO_DATA_URI.test(c.org.logo) ? `<img class="logo" alt="${e(c.org.nome)}" src="${c.org.logo}">` : '';
+  const marca = logo || (c.org.marcaNess ? '<span class="mark">ness<span class="dot">.</span></span>' : `<span class="mark">${e(c.org.nome)}</span>`);
+  // CSS do logo só quando há logo: o HTML (e o hash) de documento sem logo não muda.
+  const cssLogo = logo ? `
+.cover img.logo { display: block; max-height: 20mm; max-width: 80mm; object-fit: contain; align-self: flex-start; }
+.run img.logo { max-height: 6mm; max-width: 40mm; vertical-align: middle; }` : '';
   const cap = c.capa;
   const para = [cap.cnpj ? `CNPJ ${e(cap.cnpj)}` : '', cap.pessoas != null ? `${e(String(cap.pessoas))} pessoas no escopo` : ''].filter(Boolean).join(' · ');
   const dt = (rotulo: string, valor: string) => `<div><dt>${rotulo}</dt><dd>${valor.split(' + ').map((v, i) => `<span>${i ? '+ ' : ''}${e(v)}</span>`).join('')}</dd></div>`;
@@ -431,9 +441,9 @@ export function renderizarHtml(c: ConteudoDocumento): string {
 <title>Proposta ${e(numero)} · ${e(cap.cliente)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600&amp;family=Inter:wght@400;500;600&amp;display=swap">
-<style>:root { --acc: ${cor}; }${CSS}${paginas}</style></head>
+<style>:root { --acc: ${cor}; }${CSS}${paginas}${cssLogo}</style></head>
 <body>
-<div class="run"><span>${e(c.org.nome)}</span><span>Proposta ${e(numero)}</span></div>
+<div class="run"><span>${logo || e(c.org.nome)}</span><span>Proposta ${e(numero)}</span></div>
 <div class="foot"><span>${e(rodape)}</span>${c.org.selo ? '<span>emitida com n.iso</span>' : ''}</div>
 <section class="cover">${marca}
 <div class="eyebrow">Proposta comercial · ${e(numero)}</div>

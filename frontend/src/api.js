@@ -2,12 +2,23 @@ import { S } from './state.js';
 
 export const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? 'http://127.0.0.1:8787' : window.location.origin;
 
+// Cabeçalhos de autenticação de TODA chamada (api() e os fetch binários: logo, Word). O
+// `X-Org-Id` só existe para o platform_admin que escolheu outra organização no seletor do
+// cabeçalho (S.orgAtuacao); para qualquer outro papel nunca sai, mesmo com S.orgAtuacao
+// preenchido: o servidor o ignora, mas mandar daria a impressão de que vale.
+export function cabecalhosAuth() {
+    const h = {};
+    if (S.token) h['Authorization'] = `Bearer ${S.token}`;
+    const org = S.user?.role === 'platform_admin' ? S.orgAtuacao : null;
+    if (org && org !== 'org_ness') h['X-Org-Id'] = org;
+    return h;
+}
+
 // `extras` carrega cabeçalho por chamada — hoje só o X-Operacao, que agrupa as
 // linhas da trilha de uma ação em lote. Fica opcional para não tocar nas ~200
 // chamadas existentes.
 async function api(m, p, b, extras) {
-    const headers = { 'Content-Type': 'application/json', ...(extras || {}) };
-    if (S.token) headers['Authorization'] = `Bearer ${S.token}`;
+    const headers = { 'Content-Type': 'application/json', ...(extras || {}), ...cabecalhosAuth() };
     // AbortSignal.timeout é nativo: sem ele, um backend travado deixava a UI
     // esperando para sempre, sem erro e sem feedback.
     const o = { method: m, headers, signal: AbortSignal.timeout(30000) };
@@ -27,7 +38,9 @@ async function api(m, p, b, extras) {
     // precisam da mensagem real do servidor, não de "Unauthorized".
     // `/auth/change-password` entra na mesma isenção: "senha atual incorreta" é 401
     // esperado, e a tela de Trocar senha precisa mostrá-lo junto do campo.
-    const autoatendimentoMfa = p.startsWith('/api/v1/auth/mfa/') || p === '/api/v1/auth/change-password';
+    // Aprovar/recusar pedido também: a decisão pede a senha, e "senha incorreta" (401) é erro do usuário.
+    const autoatendimentoMfa = p.startsWith('/api/v1/auth/mfa/') || p === '/api/v1/auth/change-password'
+        || /^\/api\/v1\/pedidos\/[^/]+\/(aprovar|recusar)$/.test(p);
 
     // O corpo é lido UMA vez. A checagem de 401 precisa dele (para separar
     // sessão expirada de sessão inválida) e o erro logo abaixo também; ler duas

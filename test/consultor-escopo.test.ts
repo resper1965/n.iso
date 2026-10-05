@@ -146,37 +146,16 @@ describe('quem cria o projeto sendo consultor fica designado nele (D5)', () => {
     expect(total!.n).toBe(0);
   });
 
-  describe('converter assessment em projeto segue a mesma regra', () => {
-    const converter = async (h: Record<string, string>, assessment: string) => {
-      await env.DB.prepare(`INSERT INTO assessments (id, client_name) VALUES (?, 'Convertido')`).bind(assessment).run();
-      const r = await chamar('POST', `/api/v1/assessments/${assessment}/convert`, h);
-      return { status: r.status, id: (await r.json<any>()).project_id as string };
-    };
-
-    it('consultor que converte fica designado numa única linha e alcança o projeto novo', async () => {
-      const { status, id } = await converter(cons, 'as-cons');
-      expect(status).toBe(201);
-      expect(await linhas(id)).toEqual([{ name: 'Criador', email: 'Criador@Ness.lat', role_category: 'consultor', job_title: 'Consultor' }]);
-      expect((await chamar('GET', `/api/v1/projects/${id}/risks`, cons)).status).toBe(200);
-    });
-
-    it('platform_admin que converte não ganha linha', async () => {
-      const { status, id } = await converter(admin, 'as-admin');
-      expect(status).toBe(201);
-      expect(await linhas(id)).toEqual([]);
-    });
-
-    it('se a designação falha, nem projeto nem conversão ficam gravados', async () => {
-      await env.DB.prepare(`CREATE TRIGGER falha_designacao_conv BEFORE INSERT ON project_governance BEGIN SELECT RAISE(ABORT, 'designacao falhou'); END`).run();
-      try {
-        const antes = await env.DB.prepare(`SELECT count(*) AS n FROM projects`).first<{ n: number }>();
-        const { status } = await converter(cons, 'as-orfao');
-        expect(status).toBe(500);
-        expect((await env.DB.prepare(`SELECT count(*) AS n FROM projects`).first<{ n: number }>())!.n).toBe(antes!.n);
-        expect((await env.DB.prepare(`SELECT converted_project_id FROM assessments WHERE id = 'as-orfao'`).first<any>()).converted_project_id).toBeNull();
-      } finally {
-        await env.DB.prepare(`DROP TRIGGER falha_designacao_conv`).run();
-      }
+  // A designação do consultor no projeto vindo do aceite é coberta por test/fechar-venda.test.ts.
+  describe('converter assessment foi aposentado', () => {
+    it.each([['consultor', () => cons], ['platform_admin', () => admin]])('%s: /convert é 410 e não cria projeto nem linha de governança', async (_n, quem) => {
+      await env.DB.prepare(`INSERT OR IGNORE INTO assessments (id, client_name) VALUES ('as-conv', 'Convertido')`).run();
+      const antes = await env.DB.prepare(`SELECT (SELECT count(*) FROM projects) AS p, (SELECT count(*) FROM project_governance) AS g`).first<any>();
+      const r = await chamar('POST', '/api/v1/assessments/as-conv/convert', quem());
+      expect(r.status).toBe(410);
+      const depois = await env.DB.prepare(`SELECT (SELECT count(*) FROM projects) AS p, (SELECT count(*) FROM project_governance) AS g`).first<any>();
+      expect(depois).toEqual(antes);
+      expect((await env.DB.prepare(`SELECT converted_project_id FROM assessments WHERE id = 'as-conv'`).first<any>()).converted_project_id).toBeNull();
     });
   });
 

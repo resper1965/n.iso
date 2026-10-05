@@ -1,13 +1,14 @@
 import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
-import { sha256Hex, sessionRevoked, SESSION_TTL_SEC } from '../helpers';
+import { sha256Hex, sessionRevoked, SESSION_TTL_SEC, ehPapelCliente } from '../helpers';
 import { apiKeyRoleViolation, expirouPorInatividade } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 import { resolverAgente, acaoDestrutiva } from './agente';
 import { logAudit } from '../helpers';
 import { alvoDaExclusao } from '../trilha-exclusao';
+import { equipeDeOrgSuspensa, ORG_SUSPENSA } from '../services/organizacao';
 
 /** De quanto em quanto tempo a marca de atividade da sessão é reescrita. */
 const RENOVA_ATIVIDADE_MS = 60 * 1000;
@@ -141,6 +142,18 @@ const MFA_AUTO_SERVICO = /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable)
 // escrevem só o hash do próprio usuário.
 const SENHA_AUTO_SERVICO = /^\/api\/v1\/auth\/(change-password|reset-password-first)$/;
 
+/**
+ * Allow-list de CAMINHOS do papel `stakeholder` (mínimo privilégio), para qualquer método: perfil,
+ * senha, MFA, aceite legal e, na fatia 2, `/api/v1/pedidos*`. Lista fechada: o resto do app é 403,
+ * inclusive GET. Prefixo largo aqui abriria tudo; `test/stakeholder-acesso.test.ts` varre as rotas.
+ */
+const STAKEHOLDER_PERMITIDO: RegExp[] = [
+  /^\/api\/v1\/auth\/(me|logout|change-password|reset-password-first)$/,
+  /^\/api\/v1\/auth\/mfa\/(setup|activate|verify|disable|status)$/,
+  /^\/api\/v1\/legal\/(pending|accept)$/,
+  /^\/api\/v1\/pedidos(\/.*)?$/,
+];
+
 export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (PUBLIC_TOKEN_PREFIXES.some(p => path.startsWith(p))) {
@@ -253,6 +266,20 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     else if (user.role === 'user') user.role = 'org_user';
     else if (user.role === 'consultant') user.role = 'consultor';
     else if (user.role === 'client_admin') user.role = 'client';
+    // `employee`: grafia antiga de conta de cliente (há uma em produção, de 22/07/2026). Sem este mapa
+    // ela virava papel desconhecido e, com o corte de acesso por papel, perdia o projeto do próprio cliente.
+    else if (user.role === 'employee') user.role = 'org_user';
+    // Só CLIENTE é preso a projeto por `client_project_id`. Em conta de equipe (ou papel
+    // desconhecido) o campo não vale nada, e rota que o lê direto (portal do cliente) não pode
+    // obedecê-lo. Os helpers de acesso também o ignoram (`ehPapelCliente`): defesa em profundidade.
+    // `stakeholder` também é preso ao projeto (o convite grava), mas NÃO é `ehPapelCliente`: os
+    // helpers de projeto o negam, e o allow-list abaixo o limita aos caminhos de auto-serviço.
+    if (user.role !== 'platform_admin' && user.role !== 'stakeholder' && !ehPapelCliente(user)) user.client_project_id = null;
+
+    // Sessão aberta antes da suspensão da organização morre na requisição seguinte (o login já
+    // recusa). Uma consulta só para equipe de fora da ness.; o agente tem a mesma regra em
+    // `concessaoValida`, e a chave de API é de cliente (presa a projeto).
+    if (await equipeDeOrgSuspensa(c.env.DB, user)) return c.json(ORG_SUSPENSA, 403);
   }
 
   // Documento legal MATERIAL pendente barra o acesso até o aceite — muda base
@@ -288,6 +315,10 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     }
   }
 
+  if (user.role === 'stakeholder' && !STAKEHOLDER_PERMITIDO.some((re) => re.test(path.replace(/\/+$/, '')))) {
+    return c.json({ error: 'Forbidden: papel sem acesso a este recurso' }, 403);
+  }
+
   // Global RBAC enforcement for org_user / client roles (aplica a sessões E API keys).
   const method = c.req.method.toUpperCase();
 
@@ -311,6 +342,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       { methods: ['POST'], test: p => p.endsWith('/chat') },
       { methods: ['POST'], test: p => MFA_AUTO_SERVICO.test(p) },
       { methods: ['POST'], test: p => SENHA_AUTO_SERVICO.test(p) },
+      // Decisão do PRÓPRIO pedido de aprovação/ciência (o handler exige ser destinatário e a senha).
+      // Criar pedido continua bloqueado para estes papéis.
+      { methods: ['POST'], test: p => /^\/api\/v1\/pedidos\/[^/]+\/(aprovar|recusar)$/.test(p) },
     ];
     const isAllowed = allowedWrites.some(a => a.methods.includes(method) && a.test(path));
     if (!isAllowed) {

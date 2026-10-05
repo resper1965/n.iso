@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { ehComercial, genId, logAudit, erro500 } from '../helpers';
+import { ehComercial, podeAdministrarOrg, genId, logAudit, erro500 } from '../helpers';
 import { validateBody, servicoSchema } from '../schemas';
 import type { Servico } from '../schemas';
-import { orgDoUsuario } from '../services/organizacao';
+import { exigirOrg } from '../services/organizacao';
 import { catalogoInicialNess } from '../services/catalogo-inicial';
 
 export const servicosApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -61,12 +61,13 @@ servicosApp.use('*', async (c, next) => {
   if (!ehComercial(c.get('user'))) return c.json(NEGADO, 403);
   await next();
 });
+servicosApp.use('*', exigirOrg);
 
 servicosApp.get('/', async (c) => {
   try {
     const so = c.req.query('ativos') === '1' ? ' AND ativo = 1' : '';
     const { results } = await c.env.DB.prepare(`SELECT * FROM servicos WHERE org_id = ?${so} ORDER BY created_at, nome`)
-      .bind(orgDoUsuario(c.get('user'))).all<any>();
+      .bind(c.get('orgId')).all<any>();
     return c.json(results.map(deLinha));
   } catch (e) { return erro500(c, 'Erro ao listar o catálogo', e); }
 });
@@ -74,12 +75,12 @@ servicosApp.get('/', async (c) => {
 servicosApp.post('/semear-padrao', async (c) => {
   try {
     const user = c.get('user');
-    if (user?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador da plataforma semeia o catálogo' }, 403);
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
+    if (!podeAdministrarOrg(user, orgId)) return c.json({ error: 'Forbidden: só o administrador da organização semeia o catálogo' }, 403);
     const ja = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM servicos WHERE org_id = ?').bind(orgId).first<{ n: number }>();
     if (ja && ja.n > 0) return c.json({ error: 'A organização já tem serviços no catálogo' }, 409);
     // Os INSERTs vão num batch (tudo ou nada). ponytail: o COUNT acima e o batch não são atômicos entre si;
-    // duas semeaduras simultâneas duplicariam. Só platform_admin chega aqui; fechar com INSERT ... WHERE NOT EXISTS se virar problema.
+    // duas semeaduras simultâneas duplicariam. Só o administrador da organização chega aqui; fechar com INSERT ... WHERE NOT EXISTS se virar problema.
     await c.env.DB.batch(catalogoInicialNess().map(({ ativo, ...s }) => stmtInserir(c.env.DB, orgId, servicoSchema.parse(s), ativo !== false).stmt));
     await logAudit(c.env.DB, 'servico.semeado', user.email ?? 'system', `Catálogo inicial semeado na organização ${orgId}`);
     const { results } = await c.env.DB.prepare('SELECT * FROM servicos WHERE org_id = ? ORDER BY created_at, nome').bind(orgId).all<any>();
@@ -89,7 +90,7 @@ servicosApp.post('/semear-padrao', async (c) => {
 
 servicosApp.get('/:id', async (c) => {
   try {
-    const r = await achar(c.env.DB, orgDoUsuario(c.get('user')), c.req.param('id'));
+    const r = await achar(c.env.DB, c.get('orgId'), c.req.param('id'));
     return r ? c.json(deLinha(r)) : c.json({ error: 'Serviço não encontrado' }, 404);
   } catch (e) { return erro500(c, 'Erro ao ler o serviço', e); }
 });
@@ -99,7 +100,7 @@ servicosApp.post('/', async (c) => {
     const user = c.get('user');
     const v = await validateBody(c, servicoSchema);
     if (!v.success) return v.response;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const id = await inserir(c.env.DB, orgId, v.data, true);
     await logAudit(c.env.DB, 'servico.criado', user?.email ?? 'system', `Serviço ${id} (${v.data.nome}) criado na organização ${orgId}`);
     return c.json(deLinha(await achar(c.env.DB, orgId, id)), 201);
@@ -109,7 +110,7 @@ servicosApp.post('/', async (c) => {
 servicosApp.put('/:id', async (c) => {
   try {
     const user = c.get('user');
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const id = c.req.param('id');
     if (!(await achar(c.env.DB, orgId, id))) return c.json({ error: 'Serviço não encontrado' }, 404);
     const v = await validateBody(c, servicoSchema);
@@ -127,7 +128,7 @@ for (const [acao, ativo, evento] of [['arquivar', 0, 'servico.arquivado'], ['rea
   servicosApp.post(`/:id/${acao}`, async (c) => {
     try {
       const user = c.get('user');
-      const orgId = orgDoUsuario(user);
+      const orgId = c.get('orgId');
       const id = c.req.param('id');
       if (!(await achar(c.env.DB, orgId, id))) return c.json({ error: 'Serviço não encontrado' }, 404);
       await c.env.DB.prepare('UPDATE servicos SET ativo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND org_id = ?')

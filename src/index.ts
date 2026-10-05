@@ -12,8 +12,10 @@ import { sessaoApp } from './routes/auth';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
+import { funilApp } from './routes/funil';
 import { proposalsApp } from './routes/proposals';
 import { organizacaoApp } from './routes/organizacao';
+import { organizacoesApp } from './routes/organizacoes';
 import { servicosApp } from './routes/servicos';
 import { propostasApp, CSP_DOCUMENTO } from './routes/propostas';
 import { assessmentsApp } from './routes/assessments';
@@ -28,6 +30,8 @@ import { auditsApp, projectAuditsApp } from './routes/audits';
 import { capaApp, projectCapaApp } from './routes/capa';
 import { certificationsApp, projectCertificationsApp } from './routes/certifications';
 import { publicApp } from './routes/public';
+import { publicPropostasApp } from './routes/public-propostas';
+import { publicPedidosApp } from './routes/public-pedidos';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
@@ -37,6 +41,7 @@ import { platformApp } from './routes/platform';
 import { documentoOpenApi } from './openapi';
 import { mfaApp } from './routes/mfa';
 import { dataSubjectApp } from './routes/data-subject';
+import { pedidosApp, projectPedidosApp } from './routes/pedidos';
 
 
 import { readinessApp } from './routes/readiness';
@@ -128,7 +133,11 @@ export type Variables = {
     iat?: number;
     /** Última atividade vista pelo middleware; relógio da expiração por inatividade. */
     seen?: number;
+    /** `users.org_id`, gravado pelo login (migration 0040). Ausente em sessão anterior a ela. */
+    org_id?: string;
   };
+  /** Organização da requisição, resolvida por `exigirOrg` (services/organizacao.ts). */
+  orgId: string;
 };
 
 
@@ -306,6 +315,10 @@ app.route('/api/v1/auth', authApp);
 
 // 4. Public sub-router (público)
 app.route('/api/v1/public', publicApp);
+// Link da proposta para o cliente, sem sessão: limite de taxa próprio por IP e por token (rateLimitD1).
+app.route('/api/v1/public/propostas', publicPropostasApp);
+// Link pessoal de ciência (pedidos, fatia 3), sem sessão: mesmo desenho, limite por IP e por token.
+app.route('/api/v1/public/pedidos', publicPedidosApp);
 
 /*
  * SCIM 2.0 (item 4.2). Montado em `/scim/v2/*` — o caminho que a RFC 7644
@@ -338,8 +351,11 @@ app.route('/api/v1/auth/mfa', mfaApp);
 app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
+app.route('/api/v1/funil', funilApp);
 app.route('/api/v1/proposals', proposalsApp);
 app.route('/api/v1/org', organizacaoApp);
+// Organizações (consultorias): só platform_admin (fatia 5).
+app.route('/api/v1/platform/orgs', organizacoesApp);
 app.route('/api/v1/servicos', servicosApp);
 app.route('/api/v1/propostas', propostasApp);
 app.route('/api/v1/assessments', assessmentsApp);
@@ -374,6 +390,11 @@ app.route('/api/v1/capa', capaApp);
 app.route('/api/v1/projects/:projectId/capa', projectCapaApp);
 
 app.route('/api/v1/projects/:projectId/data-subject', dataSubjectApp);
+
+// Pedidos de aprovação/ciência (acesso de stakeholders): a consultoria pede no projeto; o
+// destinatário decide em /pedidos (único caminho de dados do papel `stakeholder`).
+app.route('/api/v1/projects/:projectId/pedidos', projectPedidosApp);
+app.route('/api/v1/pedidos', pedidosApp);
 
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);

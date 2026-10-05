@@ -469,6 +469,9 @@ import { navigate } from '../router.js';
     // quem designa o consultor do próprio cliente.
     const podeEditarGovernanca = () => !!(S.user && ['platform_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
 
+    // Quem convida e revoga stakeholder (o servidor decide de verdade; isto só mostra os botões).
+    const podeConvidarStakeholder = () => !!(S.user && ['platform_admin', 'consultoria_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
+
     async function renderGovernance(c, h, a) {
         h.textContent = 'Governança & Equipe';
         a.innerHTML = '';
@@ -516,6 +519,13 @@ import { navigate } from '../router.js';
         const manageBtn = podeEditarGovernanca() ? `
             <button class="btn btn-secondary" data-action="openGovernanceModal" data-args='["${projectId}"]'>Gerenciar governança</button>` : '';
 
+        // Convite e revogação nascem da linha da matriz; sem e-mail, ou para a equipe da consultoria, não há o que convidar.
+        const acoesAcesso = (m) => (podeConvidarStakeholder() && m.email && m.role_category !== 'consultor') ? `
+                <div class="gov-member-acoes">
+                    <button class="btn btn-secondary" data-action="convidarStakeholder" data-args='["${escapeHTML(projectId)}","${escapeHTML(m.id)}"]'>Convidar para o n.iso</button>
+                    <button class="btn btn-secondary" data-action="revogarStakeholder" data-args='["${escapeHTML(projectId)}","${escapeHTML(m.id)}"]'>Revogar acesso</button>
+                </div>` : '';
+
         const memberCard = (m) => `
             <div class="gov-member-item">
                 <div class="gov-avatar" aria-hidden="true">${escapeHTML(getInitials(m.name))}</div>
@@ -524,6 +534,7 @@ import { navigate } from '../router.js';
                     <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
                     ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
                 </div>
+                ${acoesAcesso(m)}
             </div>`;
 
         const anchorHtml = anchor ? `
@@ -534,6 +545,7 @@ import { navigate } from '../router.js';
                     <div class="org-anchor-title">${escapeHTML(anchor.job_title)}</div>
                     ${anchor.email ? `<div class="gov-member-email org-anchor-email" title="${escapeHTML(anchor.email)}">${escapeHTML(anchor.email)}</div>` : ''}
                 </div>
+                ${acoesAcesso(anchor)}
             </div>` : `
             <div class="org-anchor org-anchor-empty">
                 <div class="org-anchor-name">Líder do SGSI não designado</div>
@@ -642,6 +654,23 @@ import { navigate } from '../router.js';
         _timerAgentes = setInterval(ciclo, intervaloMs);
         _visivelAgentes = () => { if (document.visibilityState === 'visible') ciclo(); };
         document.addEventListener('visibilitychange', _visivelAgentes);
+    };
+
+    window.convidarStakeholder = async function(projectId, memberId) {
+        try {
+            const r = await api('POST', `/api/v1/projects/${projectId}/governance/${memberId}/convidar`);
+            if (r && r.ja_convidado) showToast('Esta pessoa já tem acesso ao n.iso');
+            else if (r && r.emailEnviado === false) showToast('Conta criada, mas o e-mail NÃO foi enviado. Use "Revogar acesso" e depois "Convidar para o n.iso" de novo para gerar outra senha e reenviar, ou avise o administrador da plataforma.', 'error');
+            else showToast('Convite enviado por e-mail');
+        } catch (e) { showToast(e.message || 'Falha ao convidar', 'error'); }
+    };
+
+    window.revogarStakeholder = async function(projectId, memberId) {
+        if (!confirm('Revogar o acesso desta pessoa ao n.iso? A conta é desativada e as sessões abertas caem.')) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/governance/${memberId}/revogar-acesso`);
+            showToast('Acesso revogado');
+        } catch (e) { showToast(e.message || 'Falha ao revogar', 'error'); }
     };
 
     window.revogarAgente = async function(projectId, id) {

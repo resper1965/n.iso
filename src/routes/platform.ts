@@ -2,10 +2,13 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema } from '../schemas';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema } from '../schemas';
+import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
+import { assinaturaDpia, substituirPedidosDoDocumento } from '../services/pedidos';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
+import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
 
 export const platformApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -69,6 +72,8 @@ platformApp.put('/dpia/:id', async (c) => {
     await c.env.DB.prepare(
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
     ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
+    // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
+    await substituirPedidosDoDocumento(c.env.DB, 'dpia', id);
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_updated', user?.email || 'system', `DPIA ${id} updated`);
     return c.json({ ok: true });
@@ -122,23 +127,14 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     const recusa = recusaDeAssinatura(autoridade, role);
     if (recusa) return c.json({ error: recusa }, 403);
 
-    const atual = await c.env.DB.prepare('SELECT dpo_signature, ceo_signature FROM dpia_assessments WHERE id = ? AND project_id = ?')
-      .bind(assessmentId, projectId).first<{ dpo_signature: string | null; ceo_signature: string | null }>();
-    if (!atual) return c.json({ error: 'DPIA não encontrado' }, 404);
-
     const dbUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first<any>();
     // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
     const approvedBy = autoridade.nome || dbUser?.name || user.email;
-    const now = new Date().toISOString();
 
-    // O DPO assina e o DPIA segue em análise; só com as duas assinaturas ele vira Approved.
-    if (role === 'ciso') {
-      await c.env.DB.prepare('UPDATE dpia_assessments SET dpo_signature = ?, dpo_approved_by = ?, dpo_approved_at = ?, status = ? WHERE id = ? AND project_id = ?')
-        .bind(approvedBy, approvedBy, now, atual.ceo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
-    } else {
-      await c.env.DB.prepare('UPDATE dpia_assessments SET ceo_signature = ?, status = ? WHERE id = ? AND project_id = ?')
-        .bind(approvedBy, atual.dpo_signature ? 'Approved' : 'Under Review', assessmentId, projectId).run();
-    }
+    // A mesma assinatura que o pedido de aprovação (routes/pedidos.ts) aciona.
+    const assinatura = await assinaturaDpia(c.env.DB, projectId, assessmentId, role, approvedBy);
+    if (!assinatura) return c.json({ error: 'DPIA não encontrado' }, 404);
+    await assinatura.run();
 
     const quem = role === 'ciso' ? 'pelo DPO / Líder SGSI' : 'pela Direção Executiva';
     await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado ${quem} (${approvedBy}); papel: ${role}`, '', c.req.header('CF-Connecting-IP') ?? '', projectId);
@@ -222,15 +218,42 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * digest; comparar só metadado seria teatro, porque quem reescreve o objeto
  * reescreve o metadado junto.
  *
- * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
+ * Restrita à equipe da ness. (`somenteOrgNess`: a cadeia é da plataforma inteira, e a equipe de
+ * outra consultoria, inclusive o consultoria_admin, não a lê): o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteNess, exigirOrg, somenteOrgNess, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
   } catch (e: any) {
     return erro500(c, 'Falha ao verificar a cadeia da trilha', e);
+  }
+});
+
+/**
+ * Transfere o projeto para outra organização (fatia 5, spec §9): só o platform_admin. A consultoria
+ * de origem perde o acesso na hora (designações dela e agentes do projeto saem no mesmo batch);
+ * propostas, contratos e usuários do cliente ficam. Ver services/transferencia-projeto.ts.
+ */
+platformApp.post('/platform/projects/:id/transferir', async (c) => {
+  if (c.get('user')?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador da plataforma transfere projetos' }, 403);
+  try {
+    const v = await validateBody(c, transferirProjetoSchema);
+    if (!v.success) return v.response;
+    const r = await transferirProjeto(c.env.DB, {
+      projetoId: c.req.param('id'), orgDestinoId: v.data.orgDestinoId, motivo: v.data.motivo,
+      atorEmail: c.get('user').email, ip: c.req.header('CF-Connecting-IP') ?? '',
+    });
+    if (r.ok) return c.json(r);
+    switch (r.motivo) {
+      case 'nao_encontrado': return c.json({ error: 'Projeto ou organização de destino não encontrado' }, 404);
+      case 'destino_invalido': return c.json({ error: 'A organização de destino não está ativa' }, 409);
+      case 'mesma_org': return c.json({ error: 'O projeto já é dessa organização' }, 409);
+      case 'corrida': return c.json(MSG_CORRIDA, 409);
+    }
+  } catch (e: any) {
+    return erro500(c, 'Falha ao transferir o projeto', e);
   }
 });
 
@@ -271,9 +294,11 @@ platformApp.get('/dashboard', async (c) => {
   const v = projetosVisiveis(user);
   const doProjeto = v ? `AND project_id IN (${v.sql})` : '';
   const conta = (sql: string) => (v ? c.env.DB.prepare(sql).bind(v.bind) : c.env.DB.prepare(sql)).first() as Promise<any>;
+  // Leads: só o comercial, e só os da organização dele (sem organização, nenhum).
+  const orgLeads = ehComercial(user) ? await resolverOrg(c) : null;
   const [projects, leads, controls, evidence, risks] = await Promise.all([
     conta(`SELECT COUNT(*) as count FROM projects WHERE 1=1 ${v ? `AND id IN (${v.sql})` : ''}`),
-    (ehComercial(user) ? c.env.DB.prepare('SELECT COUNT(*) as count FROM leads') : c.env.DB.prepare('SELECT 0 as count')).first() as Promise<any>,
+    (orgLeads ? c.env.DB.prepare('SELECT COUNT(*) as count FROM leads WHERE org_id = ?').bind(orgLeads) : c.env.DB.prepare('SELECT 0 as count')).first() as Promise<any>,
     conta(`SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed' ${doProjeto}`),
     conta(`SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending' ${doProjeto}`),
     conta(`SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15 ${doProjeto}`),
@@ -307,14 +332,15 @@ platformApp.get('/dashboard/stats', async (c) => {
     const whereResource = v ? `WHERE project_id IN (${v.sql})` : '';
     const whereProject = v ? `WHERE id IN (${v.sql})` : '';
     const params = v ? [v.bind] : [];
+    const orgLeads = ehComercial(user) ? await resolverOrg(c) : null;
 
     const stats = await c.env.DB.batch<{ count: number }>([
       // O funil comercial é do comercial da ness. (ver `somenteComercial` em
       // helpers.ts): cliente e consultor não veem lead — nem o conteúdo, nem
       // quantos existem. O `SELECT 0` mantém o alinhamento posicional do
       // batch, para os índices abaixo não dependerem do papel de quem pergunta.
-      ehComercial(user)
-        ? c.env.DB.prepare('SELECT count(*) as count FROM leads')
+      orgLeads
+        ? c.env.DB.prepare('SELECT count(*) as count FROM leads WHERE org_id = ?').bind(orgLeads)
         : c.env.DB.prepare('SELECT 0 as count'),
       c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
       c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
@@ -435,9 +461,12 @@ platformApp.get('/client/proposal', async (c) => {
 // Notifications
 platformApp.get('/notifications', async (c) => {
   const user = c.get('user');
+  // Notificação é do destinatário. A de difusão (`user_id` nulo) é legado da era só-ness. (nenhum
+  // caminho a cria hoje): fica para a equipe da ness. e o platform_admin, não para outra consultoria.
+  const veDifusao = orgDoUsuario(user) === ORG_NESS ? 1 : 0;
   const { results } = await c.env.DB.prepare(
-    'SELECT * FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT 50'
-  ).bind(user?.id || null).all();
+    'SELECT * FROM notifications WHERE user_id = ? OR (user_id IS NULL AND ? = 1) ORDER BY created_at DESC LIMIT 50'
+  ).bind(user?.id || null, veDifusao).all();
   return c.json({ ok: true, notifications: results || [] });
 });
 
@@ -446,8 +475,8 @@ platformApp.put('/notifications/:id/read', async (c) => {
   const user = c.get('user');
   // Escopo ao dono: sem o filtro, qualquer autenticado marcaria como lida a
   // notificação de outro usuário (IDOR). Só o destinatário (ou broadcast) pode.
-  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND (user_id = ? OR user_id IS NULL)')
-    .bind(id, user?.id || null).run();
+  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND (user_id = ? OR (user_id IS NULL AND ? = 1))')
+    .bind(id, user?.id || null, orgDoUsuario(user) === ORG_NESS ? 1 : 0).run();
   return c.json({ ok: true });
 });
 
@@ -486,7 +515,7 @@ platformApp.get('/phases/config', (c) => {
 // Phase config & Auditor token
 // Tabela de preços da ness. (custo interno, tributos, margem): comercial apenas.
 // Estava sem trava nenhuma — qualquer sessão, inclusive de cliente, lia com 200.
-platformApp.get('/pricing-config', somenteComercial, async (c) => {
+platformApp.get('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
@@ -503,7 +532,7 @@ platformApp.get('/pricing-config', somenteComercial, async (c) => {
   }
 });
 
-platformApp.put('/pricing-config', somenteComercial, async (c) => {
+platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const body = await c.req.json();

@@ -126,7 +126,8 @@ export const leadSchema = z.object({
   qsa: z.array(z.record(z.string(), z.unknown())).max(200).optional().nullable(),
 }).passthrough();
 
-export const leadStatusSchema = z.object({ status: curto }).passthrough();
+export const LEAD_STATUS = ['New', 'Assessment', 'Proposal', 'Won', 'Lost'] as const;
+export const leadStatusSchema = z.object({ status: z.enum(LEAD_STATUS) }).passthrough();
 
 export const cnpjSchema = z.object({
   // Aceita com ou sem pontuação: o handler normaliza com replace(/\D/g,'')
@@ -508,6 +509,34 @@ export const configOrgSchema = z.object({
   secoesDesligadas: z.array(z.enum(['como_trabalhamos', 'responsabilidades'])).max(2).optional(),
 }).strict();
 
+// Provisionamento de organização (fatia 5): só o platform_admin. A organização nasce com a
+// configuração padrão e SEM termos comerciais (o administrador dela escreve os dele); o termo de uso
+// da consultoria é registrado pela versão e pela data do aceite.
+export const criarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120),
+  slug: z.string().regex(/^[a-z0-9-]{3,40}$/, 'Slug com 3 a 40 letras minúsculas, números ou hífen'),
+  prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números'),
+  cnpj: z.string().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').optional(),
+  adminEmail: z.string().trim().email('E-mail inválido').max(254),
+  adminNome: z.string().trim().min(1).max(120),
+  maxProjetos: z.number().int().min(1).max(10000),
+  maxUsuarios: z.number().int().min(1).max(10000),
+  termoVersao: z.string().trim().min(1).max(60),
+}).strict();
+
+export const atualizarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120).optional(),
+  maxProjetos: z.number().int().min(1).max(10000).optional(),
+  maxUsuarios: z.number().int().min(1).max(10000).optional(),
+  status: z.enum(['Active', 'Suspended']).optional(),
+}).strict().refine((o) => Object.keys(o).length > 0, 'Nada a alterar');
+
+/** Transferência de projeto para outra organização (só platform_admin). */
+export const transferirProjetoSchema = z.object({
+  orgDestinoId: z.string().trim().min(1).max(80),
+  motivo: z.string().trim().min(5, 'Motivo com 5 a 500 caracteres').max(500, 'Motivo com 5 a 500 caracteres'),
+}).strict();
+
 // ---------------------------------------------------------------------------
 // Catálogo de serviços (spec do sistema de propostas, seção 3)
 // ---------------------------------------------------------------------------
@@ -581,3 +610,69 @@ export const propostaEditarSchema = z.object({
 }).strict();
 // Sem trim: espaço no número é erro, não algo a consertar em silêncio. O formato fino (prefixo da organização) é conferido na rota.
 export const propostaGerarSchema = z.object({ numero: z.string().max(40).optional() }).strict();
+
+// Envio e aceite manual (fatia 4). O e-mail do cliente é só o destinatário; nome e cargo vão para a prova do aceite.
+export const propostaEnviarSchema = z.object({
+  email: z.string().trim().email().max(200),
+  mensagem: z.string().trim().max(2000).optional(),
+}).strict();
+export const propostaAceiteManualSchema = z.object({
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  comprovante: z.string().trim().min(3).max(1000),
+}).strict();
+
+// Rotas públicas do cliente (fatia 4). O token vai no corpo, nunca no caminho nem na query (o log
+// de requisição grava o caminho). Sem regex de formato: token malformado cai no mesmo 404 do desconhecido.
+const tokenProposta = z.string().min(1).max(200);
+export const propostaTokenSchema = z.object({ token: tokenProposta }).strict();
+export const propostaAceiteLinkSchema = z.object({
+  token: tokenProposta,
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  poderes: z.literal(true),
+}).strict();
+export const propostaRecusaSchema = z.object({ token: tokenProposta, motivo: z.string().trim().max(1000).optional() }).strict();
+export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z.string().trim().min(1).max(2000) }).strict();
+
+// ─── Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2) ─────────────
+// `tipo` acompanha o CHECK da tabela `pedidos` (migration 0041): tipo novo exige migration.
+export const pedidoCriarSchema = z.object({
+  tipo: z.enum(['dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  })).min(1).max(50),
+});
+
+// Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
+// Teto de 200 por lote. `dpia` por conta continua em `pedidoCriarSchema` (a assinatura é só dele).
+export const pedidoCienciaLoteSchema = z.object({
+  tipo: z.enum(['politica', 'dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  }).strict()).min(1).max(200),
+}).strict();
+// Reenvio: sem `emails`, a todos os pendentes; com, só a esses (ex.: as falhas do envio).
+export const pedidoReenvioSchema = z.object({
+  emails: z.array(z.string().trim().email().max(320)).min(1).max(200).optional(),
+}).strict();
+// Rotas públicas do link: o token vem no CORPO, nunca na URL.
+const tokenPedido = z.string().min(1).max(200);
+export const pedidoTokenSchema = z.object({ token: tokenPedido }).strict();
+export const pedidoCienciaLinkSchema = z.object({
+  token: tokenPedido,
+  codigo: z.string().trim().regex(/^\d{6}$/),
+  nome: z.string().trim().min(2).max(200),
+}).strict();
+
+export const pedidoDecisaoSchema = z.object({
+  senha: z.string().min(1).max(500),
+  motivo: z.string().trim().max(2000).optional().nullable(),
+});

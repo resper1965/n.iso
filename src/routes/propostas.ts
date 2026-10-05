@@ -4,20 +4,22 @@
 // e nunca é remontado; mudança depois da geração só por revisão.
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { ehComercial, genId, logAudit, erro500 } from '../helpers';
-import { validateBody, propostaCriarSchema, propostaEditarSchema, propostaGerarSchema } from '../schemas';
+import { ehComercial, podeAdministrarOrg, genId, genToken, sha256Hex, escapeHtml, sendEmail, logAudit, erro500 } from '../helpers';
+import { validateBody, propostaCriarSchema, propostaEditarSchema, propostaGerarSchema, propostaEnviarSchema, propostaAceiteManualSchema } from '../schemas';
 import type { Servico } from '../schemas';
-import { orgDoUsuario, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
+import { exigirOrg, lerConfigOrg, formatarNumeroProposta, type ConfigOrg } from '../services/organizacao';
 import { calcularItem, totais, descontoAcimaDoTeto, margem, type Faixa } from '../services/preco-proposta';
 import { diagnosticoDe, type Diagnostico } from '../services/diagnostico';
 import { montarConteudo, textosEditaveis, renderizarHtml, hashDocumento, type DadosDocumento } from '../services/documento-proposta';
+import { logoComoDataUri } from '../services/logo-org';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
+import { fecharVenda, consultorValido } from '../services/fechar-venda';
 
 export const propostasApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /** O documento não leva script nem recurso externo além das fontes. Aplicado em index.ts, por fora do secureHeaders. */
-export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com";
+export const CSP_DOCUMENTO = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:";
 
 const NEGADO = { error: 'Forbidden: Área comercial restrita ao comercial da ness.' };
 const EDITAVEIS = `('rascunho', 'aguardando_aprovacao')`;
@@ -96,7 +98,7 @@ export const diaEmBrasilia = (agora = new Date()) => FUSO_BR.format(agora);
 const maisDias = (dia: string, n: number) => isoDia(new Date(Date.parse(`${dia}T00:00:00Z`) + n * 86_400_000));
 const cnpjBr = (s: string | null) => (s && /^\d{14}$/.test(s) ? s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : s ?? null);
 
-async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
+async function montar(db: D1Database, storage: R2Bucket, cfg: ConfigOrg, p: any, itens: Item[], calc: Calculo, dg: Diagnostico | null, numero: string) {
   const lead = p.lead_id ? await db.prepare('SELECT cnpj FROM leads WHERE id = ?').bind(p.lead_id).first<any>() : null;
   const hoje = diaEmBrasilia();
   const validaAte = maisDias(hoje, p.validade_dias);
@@ -106,6 +108,8 @@ async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], cal
     textos: { contexto: p.contexto, escopo: p.escopo, observacoes: p.observacoes },
     itens: itens.map((i, k) => ({ servico: i.servico, calc: calc.calcs[k], textoCliente: i.textoCliente })),
     totais: calc.totais, pagamento: p.pagamento, diagnostico: dg,
+    // o logo entra como data: URI, então o documento gerado não depende do R2 nem de troca posterior
+    logo: await logoComoDataUri(storage, cfg.logoChave, cfg.id),
   };
   const editadas = JSON.parse(p.secoes_editadas || '{}');
   const conteudo = montarConteudo(dados, editadas);
@@ -113,35 +117,43 @@ async function montar(db: D1Database, cfg: ConfigOrg, p: any, itens: Item[], cal
 }
 
 async function saida(db: D1Database, orgId: string, id: string) {
-  const { documento_html: _h, documento_conteudo: _c, ...p } = await achar(db, orgId, id);
+  const { documento_html: _h, documento_conteudo: _c, token_hash: t, ...p } = await achar(db, orgId, id);
   const { results } = await db.prepare('SELECT * FROM proposta_itens WHERE proposta_id = ? ORDER BY ordem').bind(id).all<any>();
   return {
-    ...p, memoria: JSON.parse(p.memoria || 'null'), margem: JSON.parse(p.margem || 'null'), secoes_editadas: JSON.parse(p.secoes_editadas || '{}'),
+    ...p, tem_link: t != null, memoria: JSON.parse(p.memoria || 'null'), margem: JSON.parse(p.margem || 'null'), secoes_editadas: JSON.parse(p.secoes_editadas || '{}'),
     itens: results.map((r) => ({ ...r, servico: JSON.parse(r.servico) })),
   };
 }
 
 const unico = (e: unknown) => /UNIQUE constraint failed/i.test(String((e as any)?.message ?? e));
 
+/** consultorEmail informado precisa ser de consultor ativo da organização: é quem o fechamento designa no projeto. */
+async function conferirConsultor(db: D1Database, orgId: string, email: string | null | undefined) {
+  if (email && !(await consultorValido(db, orgId, email))) {
+    throw new Recusa(`Consultor responsável: ${email} não é consultor ativo desta organização`);
+  }
+}
+
 // Proposta carrega preço, custo e margem: nem leitura para quem não é do comercial.
 propostasApp.use('*', async (c, next) => {
   if (!ehComercial(c.get('user'))) return c.json(NEGADO, 403);
   await next();
 });
+propostasApp.use('*', exigirOrg);
 
 propostasApp.get('/', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
-      `SELECT id, numero, revisao, status, cliente, lead_id, total_projeto, mensalidade, created_at, updated_at, gerada_em, valida_ate
-       FROM propostas WHERE org_id = ? ORDER BY created_at DESC, rowid DESC`
-    ).bind(orgDoUsuario(c.get('user'))).all<any>();
-    return c.json(results);
+      `SELECT id, numero, revisao, status, cliente, lead_id, total_projeto, mensalidade, created_at, updated_at, gerada_em, valida_ate,
+       token_hash IS NOT NULL AS tem_link FROM propostas WHERE org_id = ? ORDER BY created_at DESC, rowid DESC`
+    ).bind(c.get('orgId')).all<any>();
+    return c.json(results.map((r) => ({ ...r, tem_link: !!r.tem_link })));
   } catch (e) { return erro500(c, 'Erro ao listar as propostas', e); }
 });
 
 propostasApp.get('/:id', async (c) => {
   try {
-    const orgId = orgDoUsuario(c.get('user'));
+    const orgId = c.get('orgId');
     if (!(await achar(c.env.DB, orgId, c.req.param('id')))) return c.json(NAO_ACHADA, 404);
     return c.json(await saida(c.env.DB, orgId, c.req.param('id')));
   } catch (e) { return erro500(c, 'Erro ao ler a proposta', e); }
@@ -154,9 +166,10 @@ propostasApp.post('/', async (c) => {
     if (!v.success) return v.response;
     const b = v.data;
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const lead = await db.prepare('SELECT id, company_name, razao_social FROM leads WHERE id = ? AND org_id = ?').bind(b.leadId, orgId).first<any>();
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
+    await conferirConsultor(db, orgId, b.consultorEmail);
     // o diagnóstico mais recente do lead que tenha respostas
     const as = await db.prepare(
       `SELECT a.id FROM assessments a WHERE a.lead_id = ? AND a.org_id = ?
@@ -185,7 +198,7 @@ propostasApp.put('/:id', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const id = c.req.param('id');
     const p = await achar(db, orgId, id);
     if (!p) return c.json(NAO_ACHADA, 404);
@@ -193,6 +206,7 @@ propostasApp.put('/:id', async (c) => {
     const v = await validateBody(c, propostaEditarSchema);
     if (!v.success) return v.response;
     const b = v.data;
+    await conferirConsultor(db, orgId, b.consultorEmail);
 
     const editadas = { ...JSON.parse(p.secoes_editadas || '{}') };
     for (const [k, t] of Object.entries(b.secoesEditadas ?? {})) {
@@ -233,14 +247,14 @@ propostasApp.put('/:id', async (c) => {
 propostasApp.get('/:id/previa', async (c) => {
   try {
     const db = c.env.DB;
-    const orgId = orgDoUsuario(c.get('user'));
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     const cfg = await lerConfigOrg(db, orgId);
     const itens = await itensDe(db, p.id);
     const dg = await diagnosticoDaProposta(db, p.assessment_id);
     const numero = p.numero ?? formatarNumeroProposta(cfg.prefixoProposta, Number(diaEmBrasilia().slice(0, 4)), cfg.proximoNumero);
-    const { conteudo, html, textos } = await montar(db, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
+    const { conteudo, html, textos } = await montar(db, c.env.STORAGE, cfg, p, itens, calcular(itens, cfg, dg), dg, numero);
     // só a parte editável de cada seção editável presente, para a tela pré-preencher (seção ausente: sem chave)
     return c.json({ conteudo, html, textos });
   } catch (e) { return falha(c, e, 'Erro ao montar a prévia'); }
@@ -251,10 +265,14 @@ propostasApp.post('/:id/gerar', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!['rascunho', 'aguardando_aprovacao'].includes(p.status)) return c.json(JA_GERADA, 409);
+    // aceita uma revisão, as outras não geram (o fechamento já as substituiu; isto cobre dado antigo)
+    if (p.revisao > 1 && await db.prepare(`SELECT 1 FROM propostas WHERE org_id = ? AND numero = ? AND status = 'aceita'`).bind(orgId, p.numero).first()) {
+      return c.json({ error: 'Esta proposta já foi aceita em outra revisão' }, 409);
+    }
     const v = await validateBody(c, propostaGerarSchema);
     if (!v.success) return v.response;
 
@@ -290,7 +308,7 @@ propostasApp.post('/:id/gerar', async (c) => {
       proximo = cfg.proximoNumero + 1;
     }
 
-    const { conteudo, html, validaAte } = await montar(db, cfg, p, itens, calc, dg, numero);
+    const { conteudo, html, validaAte } = await montar(db, c.env.STORAGE, cfg, p, itens, calc, dg, numero);
     const hash = await hashDocumento(html);
     // Tudo num batch (transação): sem número reservado à toa se algo falhar. Duas gerações
     // simultâneas com o mesmo número esbarram no índice único (org_id, numero, revisao) e uma leva 409.
@@ -316,7 +334,7 @@ propostasApp.post('/:id/gerar', async (c) => {
     }
     if (p.revisao > 1) {
       stmts.push(db.prepare(`UPDATE propostas SET status = 'substituida', updated_at = CURRENT_TIMESTAMP
-        WHERE org_id = ? AND numero = ? AND revisao < ? AND status IN ('gerada', 'enviada', 'visualizada') AND ${feito}`)
+        WHERE org_id = ? AND numero = ? AND revisao < ? AND status IN ('gerada', 'enviada', 'visualizada', 'expirada') AND ${feito}`)
         .bind(orgId, numero, p.revisao, p.id, hash));
     }
     const res = await db.batch(stmts);
@@ -331,9 +349,9 @@ propostasApp.post('/:id/gerar', async (c) => {
 propostasApp.post('/:id/aprovar-desconto', async (c) => {
   try {
     const user = c.get('user');
-    if (user?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador aprova desconto acima do teto' }, 403);
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
+    if (!podeAdministrarOrg(user, orgId)) return c.json({ error: 'Forbidden: só o administrador da organização aprova desconto acima do teto' }, 403);
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (p.status !== 'aguardando_aprovacao') return c.json({ error: 'A proposta não está aguardando aprovação de desconto' }, 409);
@@ -348,11 +366,12 @@ propostasApp.post('/:id/revisao', async (c) => {
   try {
     const user = c.get('user');
     const db = c.env.DB;
-    const orgId = orgDoUsuario(user);
+    const orgId = c.get('orgId');
     const p = await achar(db, orgId, c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
-    // visualizada entra com o link do cliente (fatia 4): "pedir ajuste" chega depois de ver
-    if (!['gerada', 'enviada', 'visualizada'].includes(p.status)) return c.json({ error: 'Só proposta gerada ou enviada ganha revisão' }, 409);
+    // visualizada entra com o link do cliente (fatia 4): "pedir ajuste" chega depois de ver;
+    // expirada sai por revisão, com validade nova
+    if (!['gerada', 'enviada', 'visualizada', 'expirada'].includes(p.status)) return c.json({ error: 'Só proposta gerada, enviada ou expirada ganha revisão' }, 409);
     const id = genId();
     // Itens copiados com a cópia do serviço congelada: a revisão não relê o catálogo.
     // A aprovação de desconto não passa adiante; a revisão gera de novo e confere o teto de novo.
@@ -378,7 +397,7 @@ propostasApp.post('/:id/revisao', async (c) => {
 
 propostasApp.get('/:id/docx', async (c) => {
   try {
-    const p = await achar(c.env.DB, orgDoUsuario(c.get('user')), c.req.param('id'));
+    const p = await achar(c.env.DB, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!p.documento_conteudo) return c.json({ error: 'A proposta ainda não foi gerada' }, 409);
     const rodape = `Cópia de trabalho. Vale a versão ${p.numero} rev. ${p.revisao} do n.iso, hash ${String(p.documento_hash).slice(0, 8)}.`;
@@ -396,7 +415,7 @@ propostasApp.get('/:id/docx', async (c) => {
 
 propostasApp.get('/:id/documento', async (c) => {
   try {
-    const p = await achar(c.env.DB, orgDoUsuario(c.get('user')), c.req.param('id'));
+    const p = await achar(c.env.DB, c.get('orgId'), c.req.param('id'));
     if (!p) return c.json(NAO_ACHADA, 404);
     if (!p.documento_html) return c.json({ error: 'A proposta ainda não foi gerada' }, 409);
     // o HTML gravado, nunca remontado
@@ -404,4 +423,107 @@ propostasApp.get('/:id/documento', async (c) => {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_DOCUMENTO, 'Cache-Control': 'no-store' },
     });
   } catch (e) { return erro500(c, 'Erro ao ler o documento', e); }
+});
+
+// Envio e link (fatia 4). O token é a credencial do cliente: 32 bytes CSPRNG, no banco só o SHA-256,
+// na URL só no fragmento (o servidor nunca o recebe) e nunca em trilha, log ou resposta de enviar.
+const URL_BASE = 'https://niso.ness.com.br';
+const ENVIAVEL = ['gerada', 'enviada', 'visualizada', 'expirada'];
+const NAO_ENVIAVEL = (status: string) => ({ error: `Proposta em "${status}" não pode ser enviada: só gerada, enviada, visualizada ou expirada` });
+/** Link novo não nasce vencido: validade passada (expirada ou não) pede revisão. */
+const VENCIDA = { error: 'A validade passou: gere uma revisão com nova validade' };
+const vencida = (p: any) => !!p.valida_ate && String(p.valida_ate).slice(0, 10) < diaEmBrasilia();
+const dataBr = (dia: string | null) => (dia ? dia.slice(0, 10).split('-').reverse().join('/') : '');
+/** Nome de organização no cabeçalho From: sem <, >, aspas nem quebra de linha. */
+const nomeSeguro = (n: string) => n.replace(/[<>"\r\n]/g, ' ').replace(/\s+/g, ' ').trim() || 'ness.';
+
+function emailProposta(nome: string, p: any, link: string, mensagem?: string): string {
+  const e = escapeHtml;
+  return `<div style="font-family: Arial, sans-serif; max-width: 560px; color: #1e293b;">
+    <h2 style="margin: 0 0 12px;">${e(nome)}</h2>
+    <p>Segue a proposta <strong>${e(p.numero)}</strong> (revisão ${e(String(p.revisao))}), válida até <strong>${e(dataBr(p.valida_ate))}</strong>.</p>
+    ${mensagem ? `<p style="white-space: pre-wrap;">${e(mensagem)}</p>` : ''}
+    <p><a href="${e(link)}" style="background-color: #00ade8; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ver e responder a proposta</a></p>
+  </div>`;
+}
+
+/** Troca o token da proposta (o anterior morre) e põe a proposta em 'enviada'. false: o estado mudou no meio. */
+async function gravarToken(db: D1Database, p: any, hash: string, enviadaPara?: string) {
+  const r = await db.prepare(`UPDATE propostas SET token_hash = ?, status = 'enviada', visualizada_em = NULL, link_gerado_em = CURRENT_TIMESTAMP,
+    enviada_em = ${enviadaPara ? 'CURRENT_TIMESTAMP' : 'COALESCE(enviada_em, CURRENT_TIMESTAMP)'},
+    enviada_para = ${enviadaPara ? '?' : 'enviada_para'}, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND org_id = ? AND status IN (${ENVIAVEL.map(() => '?').join(', ')})`)
+    .bind(...[hash, ...(enviadaPara ? [enviadaPara] : []), p.id, p.org_id, ...ENVIAVEL]).run();
+  return r.meta.changes > 0;
+}
+
+propostasApp.post('/:id/enviar', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
+    if (!p) return c.json(NAO_ACHADA, 404);
+    if (!ENVIAVEL.includes(p.status)) return c.json(NAO_ENVIAVEL(p.status), 409);
+    if (vencida(p)) return c.json(VENCIDA, 409);
+    const v = await validateBody(c, propostaEnviarSchema);
+    if (!v.success) return v.response;
+    // sem a chave, o sendEmail só simula: marcar enviada com um link que ninguém recebeu engana o comercial
+    if (!c.env.RESEND_API_KEY) return c.json({ error: 'Envio de e-mail não configurado' }, 503);
+    const token = genToken();
+    const nome = nomeSeguro((await lerConfigOrg(db, p.org_id)).nome);
+    // e-mail primeiro: se falhar, nada foi gravado e o link anterior continua valendo
+    const ok = await sendEmail(c, v.data.email, `Proposta ${p.numero} - ${nome}`,
+      emailProposta(nome, p, `${URL_BASE}/proposta#${token}`, v.data.mensagem),
+      { from: `${nome} via n.iso <noreply@ness.com.br>`, replyTo: user.email });
+    if (!ok) return c.json({ error: 'Não foi possível enviar o e-mail: nada foi alterado, tente de novo' }, 502);
+    if (!(await gravarToken(db, p, await sha256Hex(token), v.data.email))) return c.json({ error: 'A proposta mudou de estado durante o envio: confira e envie de novo' }, 409);
+    await logAudit(db, 'proposta.enviada', user.email ?? 'system', `Proposta ${p.id} (${p.numero} rev. ${p.revisao}) enviada para ${v.data.email}`);
+    return c.json(await saida(db, p.org_id, p.id));
+  } catch (e) { return erro500(c, 'Erro ao enviar a proposta', e); }
+});
+
+// De 'gerada' o link também leva a 'enviada': o aceite pelo link só vale de enviada/visualizada.
+propostasApp.post('/:id/link', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
+    if (!p) return c.json(NAO_ACHADA, 404);
+    if (!ENVIAVEL.includes(p.status)) return c.json(NAO_ENVIAVEL(p.status), 409);
+    if (vencida(p)) return c.json(VENCIDA, 409);
+    const token = genToken();
+    if (!(await gravarToken(db, p, await sha256Hex(token)))) return c.json({ error: 'A proposta mudou de estado: confira e tente de novo' }, 409);
+    await logAudit(db, 'proposta.link_gerado', user.email ?? 'system', `Link da proposta ${p.id} (${p.numero} rev. ${p.revisao}) gerado; o anterior deixou de valer`);
+    // a única vez que o token existe fora do e-mail: só o hash fica no banco
+    return c.json({ url: `${URL_BASE}/proposta#${token}` });
+  } catch (e) { return erro500(c, 'Erro ao gerar o link', e); }
+});
+
+propostasApp.post('/:id/revogar-link', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.env.DB;
+    const p = await achar(db, c.get('orgId'), c.req.param('id'));
+    if (!p) return c.json(NAO_ACHADA, 404);
+    await db.prepare('UPDATE propostas SET token_hash = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND org_id = ?').bind(p.id, p.org_id).run();
+    await logAudit(db, 'proposta.link_revogado', user.email ?? 'system', `Link da proposta ${p.id} (${p.numero} rev. ${p.revisao}) revogado`);
+    return c.json({ ok: true });
+  } catch (e) { return erro500(c, 'Erro ao revogar o link', e); }
+});
+
+propostasApp.post('/:id/aceite-manual', async (c) => {
+  try {
+    const user = c.get('user');
+    const orgId = c.get('orgId');
+    const id = c.req.param('id');
+    if (!(await achar(c.env.DB, orgId, id))) return c.json(NAO_ACHADA, 404);
+    const v = await validateBody(c, propostaAceiteManualSchema);
+    if (!v.success) return v.response;
+    const r = await fecharVenda(c.env.DB, {
+      propostaId: id, orgId, origem: 'manual', atorEmail: user.email ?? 'system',
+      aceite: { ...v.data, ip: c.req.header('CF-Connecting-IP') ?? '' },
+    });
+    if (!r.ok) return c.json({ error: r.mensagem }, r.motivo === 'nao_encontrada' ? 404 : 409);
+    return c.json({ contratoId: r.contratoId, projetoId: r.projetoId });
+  } catch (e) { return erro500(c, 'Erro ao registrar o aceite', e); }
 });

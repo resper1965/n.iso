@@ -28,8 +28,12 @@ CREATE TABLE IF NOT EXISTS users (
     -- existindo — a trilha referencia o e-mail dela, e apagar reescreveria o
     -- passado — mas não autentica. DEFAULT 1: nada muda para quem já existe.
     ativo INTEGER NOT NULL DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Consultoria a que a conta de equipe pertence (migration 0040). Para o
+    -- usuário de cliente NÃO vale: a organização dele é a do projeto.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
+CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id);
 
 -- ═══════════════════════════════════════════════
 -- STREAM A: CRM & PRÉ-SALES (Leads, Proposals, Contracts)
@@ -107,8 +111,17 @@ CREATE TABLE IF NOT EXISTS contracts (
     -- Organização dona do registro (spec do sistema de propostas, seção 8).
     -- Sem REFERENCES: ALTER TABLE não aceita FK com default não nulo, e o DDL
     -- precisa ser o mesmo aqui e na migration 0036.
-    org_id TEXT NOT NULL DEFAULT 'org_ness'
+    org_id TEXT NOT NULL DEFAULT 'org_ness',
+    -- Contrato novo, gerado pelo aceite da proposta (fatia 4). Sem FK: proposal_id acima aponta para a tabela antiga.
+    proposta_id TEXT,
+    documento_hash TEXT,
+    valor_projeto REAL,
+    mensalidade REAL,
+    prazo_minimo_meses INTEGER,
+    servicos TEXT,
+    projeto_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_proposta ON contracts(proposta_id) WHERE proposta_id IS NOT NULL;
 
 -- ═══════════════════════════════════════════════
 -- STREAM B: ASSESSMENT PRE-SALES
@@ -193,8 +206,13 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     language TEXT DEFAULT 'pt-BR',
     repository_url TEXT,
-    repository_token TEXT
+    repository_token TEXT,
+    proposta_id TEXT,
+    -- Consultoria dona do projeto (migration 0040). Sem REFERENCES, como nas
+    -- tabelas comerciais: ALTER TABLE não aceita FK com default.
+    org_id TEXT NOT NULL DEFAULT 'org_ness'
 );
+CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(org_id);
 
 CREATE TABLE IF NOT EXISTS project_phases (
     id TEXT PRIMARY KEY,
@@ -656,8 +674,16 @@ CREATE TABLE IF NOT EXISTS organizations (
     -- escapado só na hora de virar HTML.
     config_preco TEXT,
     textos TEXT,
-    secoes_desligadas TEXT
+    secoes_desligadas TEXT,
+    -- Termo de uso da consultoria (migration 0040): data do aceite e versão.
+    termo_aceito_em DATETIME,
+    termo_versao TEXT,
+    -- Chave do logo no R2 (migration 0040).
+    logo_chave TEXT
 );
+-- Prefixo de proposta único entre organizações (migration 0040): a conferência na rota tem corrida,
+-- o índice decide. Parcial: organização sem prefixo (NULL) não conflita com outra.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_organizations_prefixo ON organizations(prefixo_proposta) WHERE prefixo_proposta IS NOT NULL;
 
 INSERT OR IGNORE INTO organizations (id, name, slug, plan, status, prefixo_proposta, proximo_numero, textos)
 VALUES ('org_ness', 'ness.', 'ness', 'interno', 'Active', 'NESS', 1, '{"sobre":"A ness. é uma consultoria de segurança da informação e privacidade. Implementa sistemas de gestão de segurança e de privacidade até a certificação, com método próprio e com o trabalho registrado no n.iso, onde o cliente acompanha cada controle, evidência e decisão.","comoTrabalhamos":"## Como trabalhamos\n\nO projeto segue o ciclo de melhoria contínua da própria norma: planejar o sistema, implementá-lo, verificar se funciona e corrigir o que não funciona. Cada fase termina com uma entrega aprovada pela empresa, e nenhuma começa sem que a anterior tenha critério de aceite cumprido.\n\n## Princípios\n\n- O sistema é da empresa, não da consultoria. Documentos são escritos com as áreas e na linguagem delas, para serem usados depois.\n- Evidência desde o primeiro dia. Tudo o que é feito fica registrado no n.iso, onde o auditor encontra o que precisa.\n- Quem implementa não audita. A auditoria interna é conduzida por auditor que não participou da implementação (cláusula 9.2).\n- Proporcionalidade. Controles na medida do risco, sem burocracia que a empresa não consiga manter.\n\n## Ritmo e comunicação\n\n- Reunião de acompanhamento, semanal, 1 h, com o ponto focal e o líder do projeto: andamento, bloqueios, próximas tarefas.\n- Oficinas temáticas, conforme a fase, com as áreas envolvidas: riscos, processos, privacidade, controles.\n- Comitê do projeto, mensal, 1 h, com a direção e o líder do projeto: decisões, aceite de riscos, aprovações.\n- Relatório de status, quinzenal, para o ponto focal e a direção: situação por fase, riscos do projeto.\n\n## O n.iso no projeto\n\nA empresa recebe acesso ao n.iso durante todo o projeto. Ali ficam o escopo, os riscos, a Declaração de Aplicabilidade, as políticas, as evidências por controle, o ROPA e os DPIAs. As aprovações da direção são registradas com data e responsável, e a trilha de auditoria guarda quem fez o quê.","premissas":"- A empresa designa um ponto focal com autoridade para decidir e com pelo menos 30% do tempo dedicado ao projeto.\n- A direção participa do comitê mensal e das aprovações nos marcos previstos.\n- As áreas cumprem os prazos de resposta combinados, de até cinco dias úteis por pedido.\n- O escopo aprovado em F1 não muda de forma relevante durante o projeto.\n- As correções técnicas apontadas pelo diagnóstico são executadas pela equipe da empresa ou por terceiros contratados por ela.","termos":"## Obrigações da ness.\n\n- Executar os serviços descritos com a equipe e a qualificação apresentadas.\n- Cumprir o cronograma, salvo atrasos causados por premissas não atendidas.\n- Manter sigilo sobre toda informação da contratante a que tiver acesso.\n- Comunicar por escrito qualquer fato que ameace prazo, escopo ou qualidade.\n\n## Obrigações da contratante\n\n- Disponibilizar pessoas, informações e acessos necessários nos prazos combinados.\n- Aprovar ou rejeitar entregas em até cinco dias úteis, com justificativa.\n- Executar as correções técnicas sob sua responsabilidade.\n- Contratar o organismo certificador e pagar as taxas correspondentes.\n- Efetuar os pagamentos nas datas acordadas.\n\n## Propriedade das entregas\n\nOs documentos produzidos para a contratante passam a pertencer a ela após o pagamento correspondente. Metodologias, modelos e ferramentas da ness. continuam de sua propriedade, com licença de uso perpétua para a contratante no escopo do sistema de gestão.\n\n## Confidencialidade\n\nAs partes mantêm em sigilo as informações trocadas durante a negociação e a execução, por todo o contrato e por cinco anos após o seu término. Não se aplica a informações públicas, já conhecidas pela parte receptora ou cuja divulgação seja exigida por lei ou ordem judicial.\n\n## Proteção de dados pessoais\n\nNa execução dos serviços, a ness. atua como operadora dos dados pessoais a que tiver acesso, tratando-os apenas conforme as instruções da contratante e para a finalidade deste contrato, nos termos da LGPD.\n\n- Medidas de segurança técnicas e administrativas compatíveis com a natureza dos dados.\n- Comunicação de incidente de segurança à contratante em até 48 horas da ciência.\n- Suboperadores, incluindo o n.iso, apenas com informação prévia à contratante.\n- Devolução ou eliminação dos dados ao fim do contrato, com confirmação por escrito.\n\n## Vigência\n\nO contrato vigora da assinatura até a conclusão da fase F7 ou até 30 semanas, o que ocorrer primeiro, podendo ser prorrogado por aditivo.\n\n## Rescisão\n\nQualquer parte pode rescindir mediante aviso por escrito com 30 dias de antecedência. Os serviços prestados até a data da rescisão são devidos proporcionalmente. Em caso de descumprimento não sanado em 15 dias após notificação, a rescisão é imediata.\n\nSe a contratante encerrar o contrato com a consultoria, os registros do projeto no n.iso podem ser transferidos para uma conta própria da contratante, mediante contratação direta.\n\n## Foro\n\nFica eleito o foro da comarca de São Paulo (SP) para dirimir questões oriundas deste contrato, com renúncia a qualquer outro.","pagamentoPadrao":"40/30/30"}');
@@ -1081,8 +1107,26 @@ CREATE TABLE IF NOT EXISTS propostas (
     valida_ate DATE,
     criada_por TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Envio e aceite (fatia 4). Só o hash do token é guardado, nunca o token.
+    token_hash TEXT,
+    link_gerado_em DATETIME,
+    enviada_em DATETIME,
+    enviada_para TEXT,
+    visualizada_em DATETIME,
+    aceite_nome TEXT,
+    aceite_cargo TEXT,
+    aceite_email TEXT,
+    aceite_ip TEXT,
+    aceite_em DATETIME,
+    aceite_origem TEXT CHECK (aceite_origem IS NULL OR aceite_origem IN ('link', 'manual')),
+    aceite_comprovante TEXT,
+    recusa_motivo TEXT,
+    ajuste_mensagem TEXT,
+    contrato_id TEXT,
+    projeto_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_propostas_token ON propostas(token_hash) WHERE token_hash IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_propostas_numero ON propostas(org_id, numero, revisao);
 CREATE INDEX IF NOT EXISTS idx_propostas_org ON propostas(org_id, status);
 
@@ -1100,3 +1144,70 @@ CREATE TABLE IF NOT EXISTS proposta_itens (
     texto_cliente TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_proposta_itens ON proposta_itens(proposta_id, ordem);
+
+-- Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2).
+-- `pedidos`: um por documento/ação, com o conteúdo CONGELADO no momento do pedido
+-- e o SHA-256 dele. Documento alterado depois vira `substituido`: nunca se aprova
+-- texto diferente do lido. `org_id` e `project_id` vêm do projeto (isolamento).
+-- `pedido_destinatarios`: uma linha por pessoa, com a prova da decisão (quando,
+-- IP, user-agent, hash lido, canal, MFA). `token_hash` é da fatia 3 (link).
+CREATE TABLE IF NOT EXISTS pedidos (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica')),
+    ref_id TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    papel_exigido TEXT NOT NULL CHECK (papel_exigido IN ('ciso', 'ceo', 'ciente')),
+    conteudo_json TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'aprovado', 'recusado', 'substituido', 'cancelado')),
+    substituido_por TEXT,
+    criado_por TEXT NOT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_pedidos_projeto ON pedidos(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_pedidos_documento ON pedidos(tipo, ref_id, status);
+-- Pedido também é prova (0043): conteúdo, hash e documento nunca mudam; fechado não muda de status
+-- nem de substituto. `org_id` livre (transferência de projeto). DELETE livre (cascata do projeto).
+CREATE TRIGGER IF NOT EXISTS pedido_prova_imutavel
+BEFORE UPDATE ON pedidos
+WHEN NEW.hash IS NOT OLD.hash
+  OR NEW.conteudo_json IS NOT OLD.conteudo_json
+  OR NEW.tipo IS NOT OLD.tipo
+  OR NEW.ref_id IS NOT OLD.ref_id
+  OR NEW.papel_exigido IS NOT OLD.papel_exigido
+  OR (OLD.status <> 'aberto' AND (NEW.status IS NOT OLD.status OR NEW.substituido_por IS NOT OLD.substituido_por))
+BEGIN
+    SELECT RAISE(ABORT, 'prova de pedido e imutavel');
+END;
+
+CREATE TABLE IF NOT EXISTS pedido_destinatarios (
+    id TEXT PRIMARY KEY,
+    pedido_id TEXT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    nome TEXT,
+    email TEXT NOT NULL,
+    user_id TEXT,
+    token_hash TEXT,
+    token_expira_em DATETIME,
+    aberto_em DATETIME,
+    status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'ciente', 'aprovado', 'recusado')),
+    decidido_em DATETIME,
+    canal TEXT CHECK (canal IS NULL OR canal IN ('conta', 'link')),
+    ip TEXT,
+    user_agent TEXT,
+    hash_lido TEXT,
+    mfa_usado INTEGER,
+    motivo TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pedido_dest_pedido ON pedido_destinatarios(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_pedido_dest_email ON pedido_destinatarios(email);
+CREATE INDEX IF NOT EXISTS idx_pedido_dest_user ON pedido_destinatarios(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pedido_dest_token ON pedido_destinatarios(token_hash) WHERE token_hash IS NOT NULL;
+-- Prova imutável (0042): decisão gravada não muda; correção é um pedido novo.
+CREATE TRIGGER IF NOT EXISTS pedido_dest_prova_imutavel
+BEFORE UPDATE ON pedido_destinatarios
+WHEN OLD.status <> 'pendente'
+BEGIN
+    SELECT RAISE(ABORT, 'prova de pedido decidido e imutavel');
+END;
