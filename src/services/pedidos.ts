@@ -110,13 +110,15 @@ type Destinatario = { email: string; nome?: string | null; user_id?: string | nu
 /** Statements que criam o pedido e os destinatários (para o chamador pôr num `batch`). */
 function inserirPedido(
   db: D1Database,
-  p: { id: string; orgId: string; projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; doc: Documento; hash: string; criadoPor: string },
+  p: { id: string; projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; doc: Documento; hash: string; criadoPor: string },
   destinatarios: Destinatario[],
 ): D1PreparedStatement[] {
   return [
+    // `org_id` sai do projeto na hora de gravar: substituto de pedido lido antes de uma transferência
+    // de projeto não herda a organização antiga.
     db.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, criado_por)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'aberto', ?)`)
-      .bind(p.id, p.orgId, p.projectId, p.tipo, p.refId, p.doc.titulo, p.papel, JSON.stringify(p.doc.conteudo), p.hash, p.criadoPor),
+      VALUES (?, (SELECT org_id FROM projects WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, 'aberto', ?)`)
+      .bind(p.id, p.projectId, p.projectId, p.tipo, p.refId, p.doc.titulo, p.papel, JSON.stringify(p.doc.conteudo), p.hash, p.criadoPor),
     ...destinatarios.map((d) =>
       db.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, nome, email, user_id, token_hash, token_expira_em, status)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?6 IS NULL THEN NULL ELSE datetime('now', '+${DIAS_LINK} days') END, 'pendente')`)
@@ -132,7 +134,7 @@ function inserirPedido(
  */
 export async function criarPedido(
   db: D1Database,
-  a: { orgId: string; projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; destinatarios: Destinatario[]; criadoPor: string; comLink?: boolean },
+  a: { projectId: string; tipo: TipoPedido; refId: string; papel: PapelPedido; destinatarios: Destinatario[]; criadoPor: string; comLink?: boolean },
 ): Promise<{ id: string; hash: string; links: { email: string; nome: string | null; token: string }[] } | null> {
   const doc = await documentoAtual(db, a.tipo, a.refId, a.projectId);
   if (!doc) return null;
@@ -156,7 +158,7 @@ export async function criarPedido(
   }
   const id = genId();
   const hash = await hashConteudo(doc.conteudo);
-  await db.batch(inserirPedido(db, { id, orgId: a.orgId, projectId: a.projectId, tipo: a.tipo, refId: a.refId, papel: a.papel, doc, hash, criadoPor: a.criadoPor }, [...vistos.values()]));
+  await db.batch(inserirPedido(db, { id, projectId: a.projectId, tipo: a.tipo, refId: a.refId, papel: a.papel, doc, hash, criadoPor: a.criadoPor }, [...vistos.values()]));
   return { id, hash, links };
 }
 
@@ -187,7 +189,7 @@ export async function conferirVigencia(db: D1Database, p: PedidoRow): Promise<Vi
   }
   const { results: dests } = await db.prepare('SELECT email, nome, user_id FROM pedido_destinatarios WHERE pedido_id = ?').bind(p.id).all<Destinatario>();
   await db.batch(inserirPedido(db, {
-    id: novoId, orgId: p.org_id, projectId: p.project_id, tipo: p.tipo, refId: p.ref_id, papel: p.papel_exigido, doc, hash, criadoPor: p.criado_por,
+    id: novoId, projectId: p.project_id, tipo: p.tipo, refId: p.ref_id, papel: p.papel_exigido, doc, hash, criadoPor: p.criado_por,
   }, dests));
   return { vigente: false, status: 'substituido', substituido_por: novoId };
 }

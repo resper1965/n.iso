@@ -92,6 +92,56 @@ auditorApp.get('/projects/:id/auditor-notes', async (c) => {
   }
 });
 
+/** Uma linha com conteúdo ilegível não derruba a prova inteira: vai o texto cru. */
+function lerConteudo(json: string): unknown {
+  try { return JSON.parse(json); } catch { return json; }
+}
+
+const PEDIDOS_POR_PAGINA = 500;
+
+/**
+ * Prova dos pedidos de aprovação/ciência do projeto do token (acesso de stakeholders, fatia 5): por
+ * pedido, a versão congelada (conteúdo + SHA-256), o status e o substituto; por destinatário, quem,
+ * quando, IP, user-agent, hash lido, canal, MFA e motivo. Somente GET. Nunca o hash do token do link
+ * nem o prazo dele: autenticam a ciência por link e não são prova. Paginado (`?pagina=N`, 500 por
+ * página, do mais novo ao mais velho), com `total` e `truncado` para o corte nunca passar calado.
+ */
+auditorApp.get('/auditor/:token/pedidos', async (c) => {
+  try {
+    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")')
+      .bind(c.req.param('token')).first<{ project_id: string }>();
+    if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
+    const pagina = Number(c.req.query('pagina') ?? '1');
+    if (!Number.isInteger(pagina) || pagina < 1) return c.json({ error: 'pagina deve ser um inteiro a partir de 1' }, 400);
+    const db = c.env.DB;
+    const offset = (pagina - 1) * PEDIDOS_POR_PAGINA;
+    // Os destinatários saem só dos pedidos desta página (mesma subconsulta).
+    const daPagina = `SELECT id FROM pedidos WHERE project_id = ?1 ORDER BY criado_em DESC, id DESC LIMIT ${PEDIDOS_POR_PAGINA} OFFSET ?2`;
+    const [total, pedidos, dests] = await Promise.all([
+      db.prepare('SELECT COUNT(*) AS n FROM pedidos WHERE project_id = ?').bind(t.project_id).first<number>('n'),
+      db.prepare(
+        `SELECT id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, substituido_por, criado_por, criado_em
+           FROM pedidos WHERE id IN (${daPagina}) ORDER BY criado_em DESC, id DESC`
+      ).bind(t.project_id, offset).all<any>(),
+      db.prepare(
+        `SELECT pedido_id, nome, email, status, decidido_em, aberto_em, canal, ip, user_agent, hash_lido, mfa_usado, motivo
+           FROM pedido_destinatarios WHERE pedido_id IN (${daPagina}) ORDER BY email`
+      ).bind(t.project_id, offset).all<any>(),
+    ]);
+    const porPedido = new Map<string, unknown[]>();
+    for (const { pedido_id, ...d } of dests.results) porPedido.set(pedido_id, [...(porPedido.get(pedido_id) ?? []), d]);
+    return c.json({
+      total: total ?? 0, pagina, por_pagina: PEDIDOS_POR_PAGINA,
+      truncado: offset + pedidos.results.length < (total ?? 0),
+      pedidos: pedidos.results.map(({ conteudo_json, ...p }) => ({
+        ...p, conteudo: lerConteudo(conteudo_json), destinatarios: porPedido.get(p.id) ?? [],
+      })),
+    });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao buscar a prova dos pedidos', e);
+  }
+});
+
 auditorApp.get('/auditor/:token/evidence/:evidenceId/download', async (c) => {
   try {
     const token = c.req.param('token');

@@ -73,6 +73,9 @@ export async function transferirProjeto(db: D1Database, e: EntradaTransferencia)
     db.prepare(`UPDATE project_sso SET ativo = 0, atualizado_em = datetime('now'), atualizado_por = ?
         WHERE project_id = ? AND ativo = 1 AND ${DESTA}`).bind(e.atorEmail, e.projetoId, auditId),
     db.prepare(`UPDATE project_scim SET ativo = 0 WHERE project_id = ? AND ativo = 1 AND ${DESTA}`).bind(e.projetoId, auditId),
+    // Pedidos (abertos e fechados) acompanham o projeto: `org_id` é o corte de isolamento deles. O
+    // trigger `pedido_prova_imutavel` deixa `org_id` livre; a prova (hash, conteúdo, status) não muda.
+    db.prepare(`UPDATE pedidos SET org_id = ? WHERE project_id = ? AND ${DESTA}`).bind(e.orgDestinoId, e.projetoId, auditId),
   ]);
   if (!res[0].meta.changes) {
     // o destino pode ter sido suspenso no meio; senão, outra transferência levou o projeto
