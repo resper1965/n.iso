@@ -323,8 +323,8 @@ export async function provisionar(
   const email = claims.email!.toLowerCase().trim();
 
   const existente = await env.DB.prepare(
-    'SELECT id, email, role, client_project_id, org_id FROM users WHERE email = ?'
-  ).bind(email).first<{ id: string; email: string; role: string; client_project_id: string | null; org_id: string }>();
+    'SELECT id, email, role, client_project_id, org_id FROM users WHERE lower(trim(email)) = ? ORDER BY email = ? DESC LIMIT 1'
+  ).bind(email, email).first<{ id: string; email: string; role: string; client_project_id: string | null; org_id: string }>();
 
   if (existente) {
     // Conta de equipe (ou papel desconhecido) não entra por SSO de tenant, nem com projeto gravado.

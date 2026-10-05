@@ -517,7 +517,7 @@ export const criarOrgSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]{3,40}$/, 'Slug com 3 a 40 letras minúsculas, números ou hífen'),
   prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números'),
   cnpj: z.string().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').optional(),
-  adminEmail: z.string().trim().email('E-mail inválido').max(254),
+  adminEmail: z.string().trim().toLowerCase().email('E-mail inválido').max(254),
   adminNome: z.string().trim().min(1).max(120),
   maxProjetos: z.number().int().min(1).max(10000),
   maxUsuarios: z.number().int().min(1).max(10000),

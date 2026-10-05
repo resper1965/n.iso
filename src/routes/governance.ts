@@ -87,7 +87,8 @@ const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin', 'consult
 
 /**
  * Revoga a conta `stakeholder` deste projeto cujo e-mail é `email`: desativa, derruba as sessões (marco
- * no KV) e os agentes. Devolve se havia conta. Usada pelo "Revogar acesso" e quando a linha da matriz
+ * no KV) e os agentes. Devolve se havia conta ATIVA: conta já inativa (SCIM, à mão) não ganha evento
+ * `stakeholder.revogado`, senão o convite seguinte a reativaria (ver `desativadaPelaMatriz`). Usada pelo "Revogar acesso" e quando a linha da matriz
  * que originou o convite muda de e-mail ou some (senão a conta ficaria órfã, ativa e sem dono).
  */
 async function revogarContaStakeholder(c: any, projectId: string, email: string | null | undefined, ator: string): Promise<boolean> {
@@ -96,12 +97,32 @@ async function revogarContaStakeholder(c: any, projectId: string, email: string 
   const conta = await c.env.DB.prepare(`SELECT id FROM users WHERE lower(email) = ? AND role = 'stakeholder' AND client_project_id = ?`)
     .bind(alvo, projectId).first() as { id: string } | null;
   if (!conta) return false;
-  await c.env.DB.prepare('UPDATE users SET ativo = 0 WHERE id = ?').bind(conta.id).run();
+  const r = await c.env.DB.prepare('UPDATE users SET ativo = 0 WHERE id = ? AND COALESCE(ativo, 1) <> 0').bind(conta.id).run();
+  if (!r.meta?.changes) return false;
   // As sessões vivem no KV sob token aleatório e não se enumeram: o marco de invalidação as derruba.
   await invalidateUserSessions(c.env.SESSIONS, conta.id);
   await revogarAgentesPorTrocaDeSenha(c.env.DB, conta.id);
   await logAudit(c.env.DB, 'stakeholder.revogado', ator, `Acesso de stakeholder de ${alvo} revogado no projeto ${projectId}`, '', '', projectId);
   return true;
+}
+
+/**
+ * A conta inativa foi desativada pela revogação da matriz (e não por SCIM ou à mão)? Só então o
+ * convite pode reativá-la: reativar quem o IdP do cliente desligou desfaria o desligamento.
+ * Sem coluna de origem, a prova é o evento de auditoria mais recente sobre a conta neste projeto
+ * (convite, revogação, ativação/desativação por SCIM; textos de `logAudit` abaixo e do `definirAtivo`
+ * do SCIM): tem de ser a revogação. Desativação sem evento (à mão) vem depois de um convite: não reativa.
+ */
+async function desativadaPelaMatriz(db: D1Database, projectId: string, email: string): Promise<boolean> {
+  const ultimo = await db.prepare(`SELECT action FROM audit_logs WHERE project_id = ?
+      AND ((action = 'stakeholder.revogado' AND details = ?) OR (action = 'stakeholder.convidado' AND details = ?)
+        OR (action IN ('scim.user_deactivated', 'scim.user_activated') AND lower(details) IN (?, ?)))
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+    .bind(projectId, `Acesso de stakeholder de ${email} revogado no projeto ${projectId}`,
+      `Acesso de stakeholder para ${email} no projeto ${projectId}`,
+      `conta ${email} desativada por scim`, `conta ${email} reativada por scim`)
+    .first<{ action: string }>();
+  return ultimo?.action === 'stakeholder.revogado';
 }
 
 /** Outra linha da matriz do projeto ainda usa este e-mail? Então o acesso continua justificado. */
@@ -220,6 +241,9 @@ governanceApp.post('/projects/:id/governance/:memberId/convidar', async (c) => {
       return c.json({ error: 'Este e-mail já tem conta no n.iso com outro acesso' }, 409);
     }
     if (conta && conta.ativo !== 0) return c.json({ ok: true, ja_convidado: true });
+    if (conta && !(await desativadaPelaMatriz(c.env.DB, projectId, email))) {
+      return c.json({ error: 'Esta conta foi desativada fora da matriz (SCIM do cliente ou administração da plataforma); o convite não a reativa. Reative por onde ela foi desativada.' }, 409);
+    }
 
     const org = (await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id;
     if (!org) return c.json({ error: 'Projeto não encontrado' }, 404);
