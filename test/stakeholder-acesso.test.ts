@@ -202,6 +202,11 @@ describe('revogação', () => {
     r = await convidar(orgAdmin, 'g-ciso');
     expect(r.status).toBe(409);
     expect((await contas('beto@cliente.com'))[0].ativo).toBe(0);
+
+    // Revogar conta já inativa não grava revogação: senão o convite seguinte desfaria o SCIM.
+    expect((await revogar(orgAdmin, 'g-ciso')).status).toBe(404);
+    expect((await convidar(orgAdmin, 'g-ciso')).status).toBe(409);
+    expect((await contas('beto@cliente.com'))[0].ativo).toBe(0);
   });
 });
 
