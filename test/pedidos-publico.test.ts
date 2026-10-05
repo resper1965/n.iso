@@ -33,14 +33,21 @@ const publico = (acao: string, corpo: unknown, ip = ipNovo(), ua = 'Navegador de
 /** E-mails "enviados" (a chamada ao Resend é interceptada). */
 let enviados: { to: string; subject: string; html: string }[] = [];
 let resendFalha = new Set<string>();
+/** Falha só na primeira tentativa para estes e-mails (a segunda entrega). */
+let resendFalhaUmaVez = new Set<string>();
+let tentativasResend: string[] = [];
 beforeEach(() => {
   enviados = [];
   resendFalha = new Set();
+  resendFalhaUmaVez = new Set();
+  tentativasResend = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: any) => {
     const url = typeof input === 'string' ? input : input.url;
     if (!url.startsWith('https://api.resend.com/')) throw new Error(`fetch inesperado: ${url}`);
     const b = JSON.parse(init.body);
+    tentativasResend.push(b.to[0]);
     if (resendFalha.has(b.to[0])) return new Response('{}', { status: 500 });
+    if (resendFalhaUmaVez.delete(b.to[0])) return new Response('{}', { status: 500 });
     enviados.push({ to: b.to[0], subject: b.subject, html: b.html });
     return new Response('{"id":"x"}', { status: 200 });
   });
@@ -315,6 +322,37 @@ describe('painel e reenvio', () => {
     expect(enviados.map((e) => e.to).sort()).toEqual(['nada@cliente.com', 'v1@cliente.com']);
     // O pedido velho não aceita reenvio.
     expect((await chamar(consultor, 'POST', `/api/v1/projects/${P}/pedidos/${r.id}/reenviar`)).status).toBe(409);
+  });
+
+  it('envio: falha passageira é tentada de novo; falha persistente fica em falhas', async () => {
+    await resetPolitica();
+    resendFalhaUmaVez = new Set(['passa@cliente.com']);
+    resendFalha = new Set(['cai@cliente.com']);
+    const r = await lote(['passa@cliente.com', 'cai@cliente.com', 'ok@cliente.com']);
+    expect(r.enviados).toBe(2);
+    expect(r.falhas).toEqual(['cai@cliente.com']);
+    expect(tentativasResend.filter((e) => e === 'passa@cliente.com')).toHaveLength(2);
+    expect(tentativasResend.filter((e) => e === 'cai@cliente.com')).toHaveLength(2);
+  });
+
+  it('reenviar só às falhas: troca o token só delas; quem já recebeu segue com o link válido', async () => {
+    await resetPolitica();
+    resendFalha = new Set(['f1@cliente.com', 'f2@cliente.com']);
+    const r = await lote(['f1@cliente.com', 'f2@cliente.com', 'chegou@cliente.com']);
+    expect(r.falhas.sort()).toEqual(['f1@cliente.com', 'f2@cliente.com']);
+    const tChegou = tokenDe('chegou@cliente.com');
+    const antes = await dests(r.id);
+    resendFalha = new Set();
+    enviados = [];
+    const re = await chamar(consultor, 'POST', `/api/v1/projects/${P}/pedidos/${r.id}/reenviar`, { emails: r.falhas });
+    expect(re.status, await re.clone().text()).toBe(200);
+    expect(enviados.map((e) => e.to).sort()).toEqual(['f1@cliente.com', 'f2@cliente.com']);
+    const depois = await dests(r.id);
+    const de = (l: any[], e: string) => l.find((d) => d.email === e);
+    expect(de(depois, 'chegou@cliente.com').token_hash).toBe(de(antes, 'chegou@cliente.com').token_hash);
+    expect(de(depois, 'f1@cliente.com').token_hash).not.toBe(de(antes, 'f1@cliente.com').token_hash);
+    expect((await publico('ver', { token: tChegou })).status).toBe(200);
+    expect((await publico('ver', { token: tokenDe('f1@cliente.com') })).status).toBe(200);
   });
 
   it('linhas antigas do portal aparecem como versão não registrada', async () => {

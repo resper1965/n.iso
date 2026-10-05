@@ -5,7 +5,7 @@ import {
   autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura,
   sendEmail, escapeHtml, genToken, sha256Hex,
 } from '../helpers';
-import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema } from '../schemas';
+import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import {
   criarPedido, conferirVigencia, registrarDecisao, DIAS_LINK, type PedidoRow,
 } from '../services/pedidos';
@@ -222,11 +222,23 @@ function emailCiencia(titulo: string, nome: string | null, link: string): string
 }
 
 /** Manda os links; devolve os e-mails cujo envio falhou (ficam pendentes, para reenviar). */
+// ponytail: 5 envios por vez e uma nova tentativa após pausa curta. Lote de 200 cabe na requisição;
+// teto de taxa do provedor mais baixo que isso pede fila (Queues), não laço maior aqui.
+const ENVIOS_SIMULTANEOS = 5;
+const PAUSA_RETENTATIVA_MS = 300;
+const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function enviarLinks(c: any, titulo: string, links: Link[]): Promise<string[]> {
+  const enviar = (l: Link) => sendEmail(c, l.email, `Ciência de documento: ${titulo}`, emailCiencia(titulo, l.nome, `${URL_BASE}/politicas#${l.token}`));
   const falhas: string[] = [];
-  for (const l of links) {
-    const ok = await sendEmail(c, l.email, `Ciência de documento: ${titulo}`, emailCiencia(titulo, l.nome, `${URL_BASE}/politicas#${l.token}`));
-    if (!ok) falhas.push(l.email);
+  for (let i = 0; i < links.length; i += ENVIOS_SIMULTANEOS) {
+    const grupo = links.slice(i, i + ENVIOS_SIMULTANEOS);
+    const ok = await Promise.all(grupo.map(enviar));
+    const falhou = grupo.filter((_, k) => !ok[k]);
+    if (!falhou.length) continue;
+    await pausa(PAUSA_RETENTATIVA_MS);
+    const ok2 = await Promise.all(falhou.map(enviar));
+    falhas.push(...falhou.filter((_, k) => !ok2[k]).map((l) => l.email));
   }
   return falhas;
 }
@@ -352,6 +364,10 @@ projectPedidosApp.post('/:id/reenviar', async (c) => {
     if (!p) return c.json({ error: 'Pedido não encontrado' }, 404);
     if (!c.env.RESEND_API_KEY) return c.json(SEM_EMAIL, 503);
     if (p.papel_exigido !== 'ciente') return c.json({ error: 'Só pedido de ciência tem link por e-mail' }, 400);
+    const valid = await validateBody(c, pedidoReenvioSchema);
+    if (!valid.success) return valid.response;
+    // Com `emails` (ex.: as `falhas` do envio), só esses ganham link novo: quem já recebeu mantém o seu.
+    const so = valid.data.emails ? new Set(valid.data.emails.map((e) => e.trim().toLowerCase())) : null;
     const vig = await conferirVigencia(db, p);
     if (!vig.vigente) {
       return c.json({ error: 'Este pedido não está mais aberto.', status: vig.status, substituido_por: vig.substituido_por ?? null }, 409);
@@ -360,6 +376,7 @@ projectPedidosApp.post('/:id/reenviar', async (c) => {
       .bind(p.id).all<{ id: string; email: string; nome: string | null }>();
     const links: Link[] = [];
     for (const d of pend) {
+      if (so && !so.has(d.email)) continue;
       const token = genToken();
       const r = await db.prepare(`UPDATE pedido_destinatarios SET token_hash = ?, token_expira_em = datetime('now', '+${DIAS_LINK} days')
         WHERE id = ? AND status = 'pendente'`).bind(await sha256Hex(token), d.id).run();

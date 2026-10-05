@@ -659,6 +659,10 @@ export const pedidoCienciaLoteSchema = z.object({
     nome: z.string().trim().max(200).optional().nullable(),
   }).strict()).min(1).max(200),
 }).strict();
+// Reenvio: sem `emails`, a todos os pendentes; com, só a esses (ex.: as falhas do envio).
+export const pedidoReenvioSchema = z.object({
+  emails: z.array(z.string().trim().email().max(320)).min(1).max(200).optional(),
+}).strict();
 // Rotas públicas do link: o token vem no CORPO, nunca na URL.
 const tokenPedido = z.string().min(1).max(200);
 export const pedidoTokenSchema = z.object({ token: tokenPedido }).strict();

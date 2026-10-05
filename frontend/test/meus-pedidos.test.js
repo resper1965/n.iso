@@ -166,5 +166,6 @@ describe('ciência por link (consultoria, fatia 3)', () => {
     document.querySelector('[data-action="reenviarCiencia"]').click();
     await espera();
     expect(fetchMock.mock.calls[1][0]).toMatch(/\/api\/v1\/projects\/p1\/pedidos\/pd7\/reenviar$/);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({});
   });
 });

@@ -46,6 +46,7 @@ export const ROTAS = {
   'POST /api/v1/projects/{projectId}/certification': { obrigatorios: [] },
   'POST /api/v1/projects/{projectId}/data-subject/erase': { obrigatorios: ['identificador', 'justificativa'] },
   'POST /api/v1/projects/{projectId}/pedidos': { obrigatorios: ['destinatarios', 'papel_exigido', 'ref_id', 'tipo'] },
+  'POST /api/v1/projects/{projectId}/pedidos/{id}/reenviar': { obrigatorios: [] },
   'POST /api/v1/projects/{projectId}/pedidos/ciencia': { obrigatorios: ['destinatarios', 'ref_id', 'tipo'] },
   'POST /api/v1/projects/{projectId}/risks': { obrigatorios: ['asset', 'threat'] },
   'POST /api/v1/projects/{projectId}/ropa': { obrigatorios: ['processing_purpose'] },

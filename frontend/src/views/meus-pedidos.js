@@ -340,7 +340,7 @@ window.abrirAcompanhamento = async function abrirAcompanhamento(projectId, id) {
 
 window.reenviarCiencia = async function reenviarCiencia(projectId, id) {
     try {
-        const r = await api('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/${encodeURIComponent(id)}/reenviar`);
+        const r = await api('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/${encodeURIComponent(id)}/reenviar`, {});
         showToast(`Lembrete enviado a ${r.enviados} pendente(s). Os links anteriores deixaram de valer.${r.falhas?.length ? ` ${r.falhas.length} envio(s) falharam.` : ''}`);
     } catch (e) {
         showToast('Erro ao reenviar: ' + e.message, 'error');
