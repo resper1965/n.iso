@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
+import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
 import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
@@ -16,7 +17,10 @@ const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<{ control_id?: string; phase_number?: number }>().catch(() => ({} as any));
+    // Corpo opcional: sem JSON vale o padrão; com JSON, o formato é validado.
+    const parsed = politicaGerarSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'Payload inválido' }, 400);
+    const body = parsed.data;
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
@@ -117,9 +121,9 @@ function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: 
 policies.post('/api/v1/projects/:projectId/generate-document', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<{ itemId: string; fields: Record<string, string> }>().catch(() => ({} as any));
-    const { itemId, fields } = body;
-    if (!itemId || !fields) return c.json({ error: 'itemId and fields are required' }, 400);
+    const v = await validateBody(c, documentoGerarSchema);
+    if (!v.success) return v.response;
+    const { itemId, fields } = v.data;
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
@@ -187,9 +191,9 @@ REQUISITOS:
 policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const body = await c.req.json<{ itemId: string; content: string }>().catch(() => ({} as any));
-    const { itemId, content } = body;
-    if (!itemId || !content) return c.json({ error: 'itemId and content are required' }, 400);
+    const v = await validateBody(c, documentoAprovarSchema);
+    if (!v.success) return v.response;
+    const { itemId, content } = v.data;
     
     // ponytail: validate document size maximum limit (2MB) to prevent Edge memory exhaustion
     if (content.length > 2 * 1024 * 1024) {
@@ -333,9 +337,10 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const body = await c.req.json<{ control_ids?: string[] }>();
-    const controlIds = body.control_ids?.length
-      ? body.control_ids
+    const v = await validateBody(c, politicasLoteSchema);
+    if (!v.success) return v.response;
+    const controlIds = v.data.control_ids?.length
+      ? v.data.control_ids
       : ['A.5.1', 'A.5.2', 'A.5.3', 'A.5.4', 'A.5.8', 'A.5.9', 'A.5.10'];
 
     // ponytail: build org memory once, reuse for all controls
@@ -447,7 +452,9 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionI
 policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version', async (c) => {
   const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
-  const { version_id } = await c.req.json<{ version_id: string }>();
+  const v = await validateBody(c, versaoRestaurarSchema);
+  if (!v.success) return v.response;
+  const { version_id } = v.data;
   const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
   
   const row = await c.env.DB.prepare(
@@ -486,8 +493,9 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c
   try {
     const projectId = c.req.param('projectId');
     const controlIdRaw = c.req.param('controlId');
-    const body = await c.req.json<{ text?: string }>().catch(() => ({} as any));
-    const { text } = body;
+    const v = await validateBody(c, politicaTextoSchema);
+    if (!v.success) return v.response;
+    const { text } = v.data;
     if (!text || !text.trim()) return c.json({ error: 'text é obrigatório' }, 400);
 
     // ponytail: mesmo limite de 2MB usado em approve-document, para evitar exaustão de memória na Edge
@@ -567,11 +575,9 @@ policies.get('/api/v1/policies/templates/:templateName', async (c) => {
 policies.post('/api/v1/projects/:projectId/policies/generate-from-template', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const { template_name, control_id } = await c.req.json<{ template_name: string; control_id: string }>();
-
-    if (!template_name || !control_id) {
-      return c.json({ error: 'template_name e control_id são obrigatórios' }, 400);
-    }
+    const v = await validateBody(c, politicaDeTemplateSchema);
+    if (!v.success) return v.response;
+    const { template_name, control_id } = v.data;
 
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);

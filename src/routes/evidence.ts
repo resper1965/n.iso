@@ -4,7 +4,7 @@ import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload,
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
-import { validateBody, evidenceContentSchema } from '../schemas';
+import { validateBody, evidenceContentSchema, evidenciaVincularSchema, evidenciaTextoSchema, evidenciaAssinarSchema } from '../schemas';
 
 export const evidenceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectEvidenceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -131,7 +131,9 @@ evidenceApp.put('/:id', async (c) => {
     const ev = await c.env.DB.prepare('SELECT id, project_id, control_id FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
-    const body = await c.req.json<{ control_id?: string | null }>().catch(() => ({} as any));
+    const v = await validateBody(c, evidenciaVincularSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     if (!('control_id' in body)) {
       return c.json({ error: 'Envie control_id (id do controle, ou null para desassociar).' }, 400);
     }
@@ -166,7 +168,9 @@ evidenceApp.post('/:id/evaluate', async (c) => {
   try {
     const evidenceId = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'evidence', evidenceId, c.get('user'));
-    const body = await c.req.json<{ text: string }>().catch(() => ({ text: '' }));
+    const v = await validateBody(c, evidenciaTextoSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
 
     if (!body.text) {
       return c.json({ error: 'Campo "text" é obrigatório (texto extraído do documento)' }, 400);
@@ -233,7 +237,9 @@ async function handleApprove(c: any) {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Não autorizado' }, 401);
 
-    const body = (await c.req.json().catch(() => ({}))) as any;
+    const v = await validateBody(c, evidenciaAssinarSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     const password = body.password;
     if (!password) return c.json({ error: 'Senha é obrigatória para assinatura eletrônica' }, 400);
 

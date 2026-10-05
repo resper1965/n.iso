@@ -580,7 +580,7 @@ export async function executarFerramenta(
         const { evidenceId, text } = z
           .object({ evidenceId: z.string(), text: z.string() })
           .parse(args);
-        return await t.enviar(`/api/v1/evidence/${enc(evidenceId)}/evaluate`, { text });
+        return await t.contrato("POST /api/v1/evidence/{id}/evaluate", { id: evidenceId }, { text });
       }
 
       case "niso_create_evidence": {
@@ -621,9 +621,11 @@ export async function executarFerramenta(
           .object({ projectId: z.string(), controlIds: z.array(z.string()).optional() })
           .parse(args);
         fora(projectId);
-        return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policies-bulk`, {
-          control_ids: controlIds,
-        });
+        return await t.contrato(
+          "POST /api/v1/projects/{projectId}/generate-policies-bulk",
+          { projectId },
+          { control_ids: controlIds }
+        );
       }
 
       case "niso_migrate_27701": {

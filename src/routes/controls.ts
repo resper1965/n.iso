@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis } from '../helpers';
-import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema } from '../schemas';
+import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema, revogarAprovacaoSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
 import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
 import { conferirPedidosDoDocumento } from './pedidos';
@@ -374,9 +374,10 @@ controlsApp.post('/:id/revoke-approval', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'compliance_controls', id, c.get('user'));
-    const body = await c.req.json().catch(() => ({} as any));
-    const role = body?.role;
-    const reason = String(body?.reason ?? '').trim();
+    const v = await validateBody(c, revogarAprovacaoSchema);
+    if (!v.success) return v.response;
+    const role = v.data.role;
+    const reason = (v.data.reason ?? '').trim();
     if (role !== 'ciso' && role !== 'ceo') return c.json({ error: "Campo 'role' deve ser 'ciso' ou 'ceo'" }, 400);
     if (!reason) return c.json({ error: "Campo 'reason' é obrigatório para revogar uma aprovação" }, 400);
 

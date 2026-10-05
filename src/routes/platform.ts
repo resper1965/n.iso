@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema } from '../schemas';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
 import { assinaturaDpia } from '../services/pedidos';
@@ -536,8 +536,9 @@ platformApp.get('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, 
 platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
-    const body = await c.req.json();
-    const json = JSON.stringify(body);
+    const v = await validateBody(c, precificacaoConfigSchema);
+    if (!v.success) return v.response;
+    const json = JSON.stringify(v.data);
     await c.env.DB.prepare(
       "INSERT INTO settings (key, value, updated_at) VALUES ('pricing_config', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')"
     ).bind(json, json).run();

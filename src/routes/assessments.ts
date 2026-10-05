@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } from '../helpers';
+import { validateBody, assessmentCriarSchema, assessmentAtualizarSchema, assessmentPrecoSchema, assessmentRespostasPublicasSchema, assessmentBlocoSchema } from '../schemas';
 import { calculatePricing } from '../services/pricing';
 import { exigirOrg, ORG_NESS } from '../services/organizacao';
 import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
@@ -153,7 +154,9 @@ function buildPricingAnswers(ansMap: Record<string, any>) {
 
 assessmentsApp.post('/', async (c) => {
   try {
-    const body = await c.req.json<{ client_name: string; lead_id?: string }>();
+    const v = await validateBody(c, assessmentCriarSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     if (!body.client_name) {
       return c.json({ error: 'client_name é obrigatório' }, 400);
     }
@@ -207,8 +210,9 @@ assessmentsApp.post('/public/:token/answers', async (c) => {
     if (!assessment) return c.json({ error: 'Token invalido' }, 404);
     if (assessment.status === 'converted') return c.json({ error: 'Assessment ja foi convertido' }, 410);
 
-    const { block, answers } = await c.req.json<{ block: number; answers: Array<{ question_key: string; question: string; answer: string; notes?: string }> }>();
-    if (!Array.isArray(answers) || block === undefined) return c.json({ error: 'block and answers required' }, 400);
+    const v = await validateBody(c, assessmentRespostasPublicasSchema);
+    if (!v.success) return v.response;
+    const { block, answers } = v.data;
 
     await c.env.DB.prepare('DELETE FROM assessment_answers WHERE assessment_id = ? AND block = ?').bind(assessment.id, block).run();
 
@@ -304,20 +308,9 @@ assessmentsApp.post('/:id/block/:num', async (c) => {
     if (!assessment) return c.json({ error: 'Assessment não encontrado' }, 404);
     if (num < 1 || num > 10) return c.json({ error: 'Bloco deve ser entre 1 e 10' }, 400);
 
-    const body = await c.req.json<{
-      answers: Array<{
-        question_key: string;
-        question: string;
-        answer: string;
-        complexity_impact?: string;
-        gap_detected?: number;
-        notes?: string;
-      }>;
-    }>();
-
-    if (!body.answers || !Array.isArray(body.answers)) {
-      return c.json({ error: 'answers (array) é obrigatório' }, 400);
-    }
+    const v = await validateBody(c, assessmentBlocoSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
 
     await c.env.DB.prepare('DELETE FROM assessment_answers WHERE assessment_id = ? AND block = ?').bind(id, num).run();
 
@@ -371,7 +364,9 @@ assessmentsApp.get('/:id/pricing', somenteComercial, async (c) => {
 assessmentsApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string; client_name?: string }>();
+    const v = await validateBody(c, assessmentAtualizarSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     const updates: string[] = [];
     const values: any[] = [];
     if (body.status) { updates.push('status = ?'); values.push(body.status); }
@@ -389,7 +384,9 @@ assessmentsApp.put('/:id', async (c) => {
 assessmentsApp.put('/:id/pricing', somenteComercial, async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ precoFinal?: number; desconto?: number; notas?: string }>();
+    const v = await validateBody(c, assessmentPrecoSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     const updates: string[] = [];
     const values: any[] = [];
     if (body.precoFinal !== undefined) { updates.push('pricing_override = ?'); values.push(body.precoFinal || null); }
