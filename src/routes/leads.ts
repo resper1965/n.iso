@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 import { genId, logAudit, createNotification, escapeHtml, somenteComercial, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
+import { exigirOrg } from '../services/organizacao';
 
 export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -11,6 +12,7 @@ export const leadsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 // `org_admin` de um cliente listava todos os leads (com contato e CNPJ) e
 // mudava o status de lead alheio com 200.
 leadsApp.use('*', somenteComercial);
+leadsApp.use('*', exigirOrg);
 
 leadsApp.post('/', async (c) => {
   try {
@@ -24,8 +26,8 @@ leadsApp.post('/', async (c) => {
        cnpj, razao_social, nome_fantasia, natureza_juridica, porte, capital_social,
        cnae_fiscal, cnae_fiscal_descricao, data_inicio_atividade, situacao_cadastral,
        logradouro, numero, complemento, bairro, municipio, uf, cep,
-       telefone, qsa, cnpj_fetched_at, created_at)
-       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       telefone, qsa, cnpj_fetched_at, org_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).bind(
       id, body.company_name, body.contact_name || null, body.contact_email || null, body.source || null,
       body.cnpj || null, body.razao_social || null, body.nome_fantasia || null,
@@ -35,7 +37,7 @@ leadsApp.post('/', async (c) => {
       body.logradouro || null, body.numero || null, body.complemento || null,
       body.bairro || null, body.municipio || null, body.uf || null, body.cep || null,
       body.telefone || null, body.qsa ? JSON.stringify(body.qsa) : null,
-      body.cnpj ? new Date().toISOString() : null
+      body.cnpj ? new Date().toISOString() : null, c.get('orgId')
     ).run();
 
     await logAudit(c.env.DB, 'lead.created', c.get('user')?.email ?? 'system', `Lead ${id} criado para ${body.company_name}`);
@@ -47,7 +49,7 @@ leadsApp.post('/', async (c) => {
 
 leadsApp.get('/', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+    const { results } = await c.env.DB.prepare('SELECT * FROM leads WHERE org_id = ? ORDER BY created_at DESC').bind(c.get('orgId')).all();
     return c.json(results);
   } catch (e: any) {
     return erro500(c, 'Falha ao listar leads', e);
@@ -101,10 +103,10 @@ leadsApp.get('/consulta-cnpj/:cnpj', async (c) => {
 leadsApp.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const lead = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
-    
-    const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ?').bind(id).all();
+
+    const { results: assessments } = await c.env.DB.prepare('SELECT id, status, complexity, created_at FROM assessments WHERE lead_id = ? AND org_id = ?').bind(id, c.get('orgId')).all();
     const { results: proposals } = await c.env.DB.prepare('SELECT id, status, total_price, created_at FROM proposals WHERE lead_id = ?').bind(id).all();
 
     return c.json({ ...lead, assessments, proposals });
@@ -115,9 +117,21 @@ leadsApp.get('/:id', async (c) => {
 
 leadsApp.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  await c.env.DB.prepare('DELETE FROM leads WHERE id = ?').bind(id).run();
+  // Id de outra organização: 404, sem revelar que existe.
+  const r = await c.env.DB.prepare('DELETE FROM leads WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).run();
+  if (!r.meta?.changes) return c.json({ error: 'Lead não encontrado' }, 404);
   return c.json({ success: true });
 });
+
+// Transições manuais. `Won` (fecharVenda, proposta aceita) e a recusa pública escrevem direto e não
+// passam por esta tabela; por aqui `Won` só vem de `Proposal`, e é final.
+const TRANSICOES: Record<string, string[]> = {
+  New: ['Assessment', 'Proposal', 'Lost'],
+  Assessment: ['Proposal', 'Lost'],
+  Proposal: ['Won', 'Lost'],
+  Lost: ['New'],
+  Won: [],
+};
 
 leadsApp.put('/:id/status', async (c) => {
   try {
@@ -125,7 +139,17 @@ leadsApp.put('/:id/status', async (c) => {
     const valid = await validateBody(c, leadStatusSchema);
     if (!valid.success) return valid.response;
     const { status } = valid.data;
-    await c.env.DB.prepare('UPDATE leads SET status = ?, updated_at = datetime("now") WHERE id = ?').bind(status, id).run();
+    const orgId = c.get('orgId');
+    const lead = await c.env.DB.prepare('SELECT status FROM leads WHERE id = ? AND org_id = ?').bind(id, orgId).first<{ status: string | null }>();
+    if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
+    const atual = lead.status ?? 'New';
+    const invalida = { error: `Transição de status inválida: ${atual} → ${status}` };
+    if (!TRANSICOES[atual]?.includes(status)) return c.json(invalida, 409);
+    // `AND status` guarda a corrida: dois PUT que leram o mesmo estado, só um grava.
+    const r = await c.env.DB.prepare(`UPDATE leads SET status = ?, updated_at = datetime('now') WHERE id = ? AND org_id = ? AND COALESCE(status, 'New') = ?`)
+      .bind(status, id, orgId, atual).run();
+    if (!r.meta?.changes) return c.json(invalida, 409);
+    await logAudit(c.env.DB, 'lead.status', c.get('user')?.email ?? 'system', JSON.stringify({ lead_id: id, de: atual, para: status }));
     return c.json({ ok: true, status });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar lead', e);
@@ -141,7 +165,7 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
     const cleanCnpj = (cnpj || '').replace(/\D/g, '');
     if (cleanCnpj.length !== 14) return c.json({ error: 'CNPJ inválido (14 dígitos)' }, 400);
 
-    const lead = await c.env.DB.prepare('SELECT id FROM leads WHERE id = ?').bind(id).first();
+    const lead = await c.env.DB.prepare('SELECT id FROM leads WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     if (!lead) return c.json({ error: 'Lead não encontrado' }, 404);
 
     let res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
@@ -194,7 +218,7 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
        logradouro=?, numero=?, complemento=?, bairro=?, municipio=?, uf=?, cep=?,
        telefone=?, qsa=?, cnpj_fetched_at=datetime('now'), updated_at=datetime('now'),
        company_name=COALESCE(NULLIF(company_name,''), ?)
-       WHERE id=?`
+       WHERE id=? AND org_id=?`
     ).bind(
       cleanCnpj, d.razao_social || null, d.nome_fantasia || null,
       d.natureza_juridica || null, d.porte || null, d.capital_social ?? null,
@@ -203,10 +227,10 @@ leadsApp.post('/:id/enrich-cnpj', async (c) => {
       logradouroFull || null, d.numero || null, d.complemento || null,
       d.bairro || null, d.municipio || null, d.uf || null, cepStr,
       telefone, qsaJson,
-      d.razao_social || d.nome_fantasia || '', id
+      d.razao_social || d.nome_fantasia || '', id, c.get('orgId')
     ).run();
 
-    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+    const updated = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ? AND org_id = ?').bind(id, c.get('orgId')).first();
     await logAudit(c.env.DB, 'lead.cnpj_enriched', c.get('user')?.email ?? 'system', `Lead ${id} enriquecido via CNPJ ${cleanCnpj}`);
     return c.json({ ok: true, lead: updated });
   } catch (e: any) {

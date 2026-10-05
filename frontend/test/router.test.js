@@ -28,7 +28,7 @@ const VIEWS = [
     'renderGovernance', 'renderCertification', 'renderAIChat', 'renderKnowledge', 'renderSettings',
     'renderUsers', 'renderAssessmentDetail', 'renderSelfServiceAssessment', 'renderProjectDetail',
     'renderSoA', 'renderStakeholders', 'renderContext', 'renderAuditExecution',
-    'renderManagementReview', 'updateActiveProjectWidget', 'updateHeaderUser',
+    'renderManagementReview', 'renderPropostas', 'updateActiveProjectWidget', 'updateHeaderUser',
 ];
 
 function itemAtivo() {
@@ -77,6 +77,14 @@ describe('navigate()', () => {
                 expect(globalThis.renderDashboard).toHaveBeenCalledTimes(1);
             }
         );
+
+        it('"proposals" abre a tela nova de propostas (fatia 3), nao a do fluxo antigo', () => {
+            S.user = { role: 'comercial' };
+            navigate('proposals');
+            expect(globalThis.renderPropostas).toHaveBeenCalledTimes(1);
+            expect(globalThis.renderProposals).not.toHaveBeenCalled();
+            expect(itemAtivo().id).toBe('nav-proposals');
+        });
 
         it('sem usuario nao ha desvio (boot antes do login)', () => {
             navigate('dashboard');

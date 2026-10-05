@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, verifyPassword, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis } from '../helpers';
 import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
 import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
@@ -45,7 +45,11 @@ controlsApp.get('/', async (c) => {
     const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(user.client_project_id).all();
     return c.json(results || []);
   }
-  const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC').all();
+  // Os controles dos projetos que o usuário enxerga (D5 e organização); só o platform_admin vê todos.
+  const v = projetosVisiveis(user);
+  const { results } = await (v
+    ? c.env.DB.prepare(`SELECT * FROM compliance_controls WHERE project_id IN (${v.sql}) ORDER BY id ASC`).bind(v.bind)
+    : c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC')).all();
   return c.json(results || []);
 });
 

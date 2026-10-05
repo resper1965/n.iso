@@ -22,7 +22,7 @@ export const projectAccessMiddleware = createMiddleware<{ Bindings: Bindings; Va
 
   if (user && projectId && !RESERVED_SEGMENTS.has(projectId)) {
     try {
-      requireProjectAccess(user, projectId);
+      await requireProjectAccess(c.env.DB, user, projectId);
     } catch {
       return c.json({ error: 'Forbidden: No access to this project' }, 403);
     }

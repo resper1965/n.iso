@@ -52,12 +52,14 @@ describe('Assinatura eletrônica (D1 real)', () => {
         `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-ceo','direcao@cliente.com',?,'Direcao Executiva','org_admin','proj-1')`
       ).bind(hash),
 
-      // A matriz de governança deste projeto. Quem assina o quê sai daqui — o
+      // A matriz de governança deste projeto. A linha do consultor é `consultor`
+      // (D5: é ela que lhe dá acesso ao projeto) com o cargo de DPO, que é o que
+      // lhe dá a assinatura de Líder SGSI. Quem assina o quê sai daqui — o
       // papel de plataforma (`platform_admin`) não concede assinatura nenhuma,
       // porque o papel de alguém MUDA de projeto para projeto.
       env.DB.prepare(
         `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
-         VALUES ('gov-sgsi','proj-1','Ricardo Esper','resper@bekaa.eu','tech','DPO / Líder do SGSI')`
+         VALUES ('gov-sgsi','proj-1','Ricardo Esper','resper@bekaa.eu','consultor','DPO / Líder do SGSI')`
       ),
       env.DB.prepare(
         `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
@@ -141,8 +143,12 @@ describe('Assinatura eletrônica (D1 real)', () => {
     });
 
     it('404 para evidência inexistente', async () => {
-      const res = await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' });
+      // D5: para o consultor, recurso inexistente é 403 (não há projeto em que ele esteja designado);
+      // o 404 do handler é o que o platform_admin vê.
+      const admin = { ...(await sessionFor({ id: 'usr-pa', email: 'pa@ness.lat', role: 'platform_admin' })), 'Content-Type': 'application/json' };
+      const res = await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' }, admin);
       expect(res.status).toBe(404);
+      expect((await post('/api/v1/evidence/nao-existe/approve', { password: 'password123' })).status).toBe(403);
     });
 
     it('recusa senha incorreta e NÃO grava assinatura', async () => {
@@ -212,9 +218,17 @@ describe('Assinatura eletrônica (D1 real)', () => {
     it('quem não está na matriz deste projeto não assina, qualquer que seja o papel de plataforma', async () => {
       await env.DB.prepare("DELETE FROM project_governance WHERE email = 'resper@bekaa.eu'").run();
 
+      // D5: o consultor fora da matriz já não alcança o projeto.
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
       expect(res.status).toBe(403);
-      expect(await res.text()).toContain('não designado na matriz');
+
+      // Quem alcança o projeto (o administrador do cliente) mas não está na matriz também não assina.
+      await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-fora','fora@cliente.com',?,'Fora','org_admin','proj-1')`)
+        .bind(await hashPassword('password123')).run();
+      const fora = { ...(await sessionFor({ id: 'usr-fora', email: 'fora@cliente.com', role: 'org_admin', client_project_id: 'proj-1' })), 'Content-Type': 'application/json' };
+      const r2 = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' }, fora);
+      expect(r2.status).toBe(403);
+      expect(await r2.text()).toContain('não está designado na matriz');
 
       const ev = await env.DB.prepare("SELECT ciso_approved_by FROM evidence WHERE id='ev-1'").first<any>();
       expect(ev.ciso_approved_by).toBeNull();

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO, genId, genToken, hashPassword, invalidateUserSessions, revogarAgentesPorTrocaDeSenha } from '../helpers';
+import { enviarBoasVindas, nomeDaOrg } from './users';
 import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -70,14 +71,41 @@ governanceApp.get('/projects/:id/governance', async (c) => {
  * Designar o consultor de um projeto é ato de quem contrata (o `org_admin`
  * daquele cliente) ou de quem opera a plataforma (`platform_admin`) — nunca do
  * próprio consultor. A governança é a fonte de "em quais clientes este
- * consultor atua" (escopo da chave de agente); se ele pudesse se incluir, o
- * escopo seria decorativo, porque o consultor alcança todos os projetos.
+ * consultor atua" — do agente e, desde a D5, do próprio consultor humano
+ * (`consultorDesignado` em helpers.ts); se ele pudesse se incluir, o escopo
+ * seria decorativo.
  *
  * Vale para criar, alterar (inclusive trocar o e-mail, que é designar outra
  * pessoa, e rebaixar o papel) e remover. Os demais papéis seguem livres.
  * O isolamento entre projetos já vem do `projectAccessMiddleware`.
  */
-const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin']);
+// `consultoria_admin`: só chega aqui em projeto da PRÓPRIA organização (`projectAccessMiddleware` →
+// `requireProjectAccess`), e e-mail de outra organização na governança não dá acesso (D5 com org).
+const PODE_DESIGNAR_CONSULTOR = new Set(['platform_admin', 'org_admin', 'consultoria_admin']);
+
+/**
+ * Revoga a conta `stakeholder` deste projeto cujo e-mail é `email`: desativa, derruba as sessões (marco
+ * no KV) e os agentes. Devolve se havia conta. Usada pelo "Revogar acesso" e quando a linha da matriz
+ * que originou o convite muda de e-mail ou some (senão a conta ficaria órfã, ativa e sem dono).
+ */
+async function revogarContaStakeholder(c: any, projectId: string, email: string | null | undefined, ator: string): Promise<boolean> {
+  const alvo = email?.trim().toLowerCase();
+  if (!alvo) return false;
+  const conta = await c.env.DB.prepare(`SELECT id FROM users WHERE lower(email) = ? AND role = 'stakeholder' AND client_project_id = ?`)
+    .bind(alvo, projectId).first() as { id: string } | null;
+  if (!conta) return false;
+  await c.env.DB.prepare('UPDATE users SET ativo = 0 WHERE id = ?').bind(conta.id).run();
+  // As sessões vivem no KV sob token aleatório e não se enumeram: o marco de invalidação as derruba.
+  await invalidateUserSessions(c.env.SESSIONS, conta.id);
+  await revogarAgentesPorTrocaDeSenha(c.env.DB, conta.id);
+  await logAudit(c.env.DB, 'stakeholder.revogado', ator, `Acesso de stakeholder de ${alvo} revogado no projeto ${projectId}`, '', '', projectId);
+  return true;
+}
+
+/** Outra linha da matriz do projeto ainda usa este e-mail? Então o acesso continua justificado. */
+const emailAindaNaMatriz = async (db: D1Database, projectId: string, email: string, exceto?: string) =>
+  !!(await db.prepare('SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = ? AND id IS NOT ?')
+    .bind(projectId, email.trim().toLowerCase(), exceto ?? null).first());
 
 async function mexeEmConsultor(db: D1Database, projectId: string, memberId: string | undefined, novoPapel?: string): Promise<boolean> {
   if (novoPapel === 'consultor') return true;
@@ -87,7 +115,7 @@ async function mexeEmConsultor(db: D1Database, projectId: string, memberId: stri
   return atual?.role_category === 'consultor';
 }
 
-const recusaDesignacao = { error: 'Forbidden: designar consultor é do platform_admin ou do administrador do cliente' };
+const recusaDesignacao = { error: 'Forbidden: designar consultor é do platform_admin, do administrador da consultoria ou do administrador do cliente' };
 
 governanceApp.post('/projects/:id/governance', async (c) => {
   try {
@@ -110,12 +138,18 @@ governanceApp.post('/projects/:id/governance', async (c) => {
     ).bind(projectId, id ?? null);
 
     if (id) {
+      const emailAntigo = (await c.env.DB.prepare('SELECT email FROM project_governance WHERE id = ? AND project_id = ?')
+        .bind(id, projectId).first<{ email: string | null }>())?.email;
       const grava = c.env.DB.prepare(`
         UPDATE project_governance
         SET name = ?, email = ?, role_category = ?, job_title = ?, is_primary = ?
         WHERE id = ? AND project_id = ?
       `).bind(name, email || null, role_category, job_title, is_primary ? 1 : 0, id, projectId);
       await c.env.DB.batch(is_primary ? [desmarcaOutros, grava] : [grava]);
+      if (emailAntigo && emailAntigo.trim().toLowerCase() !== (email || '').trim().toLowerCase()
+        && !(await emailAindaNaMatriz(c.env.DB, projectId, emailAntigo))) {
+        await revogarContaStakeholder(c, projectId, emailAntigo, c.get('user')?.email || 'system');
+      }
       await logAudit(c.env.DB, 'governance.updated', c.get('user')?.email || 'system', `Membro da governança ${name} atualizado para projeto ${projectId}`);
     } else {
       const grava = c.env.DB.prepare(`
@@ -138,11 +172,86 @@ governanceApp.delete('/projects/:id/governance/:memberId', async (c) => {
     if (!PODE_DESIGNAR_CONSULTOR.has(c.get('user')?.role ?? '') && await mexeEmConsultor(c.env.DB, projectId, memberId)) {
       return c.json(recusaDesignacao, 403);
     }
+    const emailAntigo = (await c.env.DB.prepare('SELECT email FROM project_governance WHERE id = ? AND project_id = ?')
+      .bind(memberId, projectId).first<{ email: string | null }>())?.email;
     await c.env.DB.prepare('DELETE FROM project_governance WHERE id = ? AND project_id = ?').bind(memberId, projectId).run();
+    if (emailAntigo && !(await emailAindaNaMatriz(c.env.DB, projectId, emailAntigo))) {
+      await revogarContaStakeholder(c, projectId, emailAntigo, c.get('user')?.email || 'system');
+    }
     await logAudit(c.env.DB, 'governance.deleted', c.get('user')?.email || 'system', `Membro da governança id ${memberId} deletado do projeto ${projectId}`);
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao deletar governança', e);
+  }
+});
+
+/*
+ * Acesso de stakeholder (papel `stakeholder`, só perfil/senha/MFA/pedidos): nasce da linha da
+ * matriz e morre nela. O vínculo é por `client_project_id`, como os papéis de cliente. Quem
+ * convida e revoga: `org_admin` do projeto, consultor designado, `consultoria_admin` da org e
+ * `platform_admin` (o corte de projeto/organização vem do `projectAccessMiddleware`); o resto,
+ * inclusive o próprio stakeholder, recebe 403. A conta nova não vale sem a troca da senha provisória.
+ */
+const PODE_CONVIDAR = new Set(['platform_admin', 'consultoria_admin', 'consultor', 'org_admin']);
+const recusaConvite = { error: 'Forbidden: convidar e revogar acesso é do administrador do cliente, do consultor designado ou da consultoria' };
+
+const membroDaMatriz = (db: D1Database, projectId: string, memberId: string) =>
+  db.prepare('SELECT id, name, email, role_category FROM project_governance WHERE id = ? AND project_id = ?')
+    .bind(memberId, projectId).first<{ id: string; name: string; email: string | null; role_category: string }>();
+
+governanceApp.post('/projects/:id/governance/:memberId/convidar', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const ator = c.get('user');
+    if (!PODE_CONVIDAR.has(ator?.role ?? '')) return c.json(recusaConvite, 403);
+    const membro = await membroDaMatriz(c.env.DB, projectId, c.req.param('memberId'));
+    if (!membro) return c.json({ error: 'Membro da governança não encontrado' }, 404);
+    // Consultor tem conta de equipe, não de stakeholder: o e-mail dele ficaria preso pelo UNIQUE.
+    if (membro.role_category === 'consultor') return c.json({ error: 'Consultoria não é convidada como stakeholder' }, 422);
+    const email = membro.email?.trim().toLowerCase();
+    if (!email) return c.json({ error: 'A linha da matriz não tem e-mail: preencha antes de convidar' }, 400);
+
+    const conta = await c.env.DB.prepare('SELECT id, role, client_project_id, ativo FROM users WHERE lower(email) = ?')
+      .bind(email).first<{ id: string; role: string; client_project_id: string | null; ativo: number | null }>();
+    // E-mail que já é outra conta (equipe, cliente, outro projeto) não é tocado: convite não vira promoção.
+    if (conta && !(conta.role === 'stakeholder' && conta.client_project_id === projectId)) {
+      return c.json({ error: 'Este e-mail já tem conta no n.iso com outro acesso' }, 409);
+    }
+    if (conta && conta.ativo !== 0) return c.json({ ok: true, ja_convidado: true });
+
+    const org = (await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>())?.org_id;
+    if (!org) return c.json({ error: 'Projeto não encontrado' }, 404);
+    const senha = genToken().slice(0, 24); // vale para um login: a troca é obrigatória
+    const hash = await hashPassword(senha);
+    // Reativação (conta revogada): senha provisória nova e troca obrigatória de novo.
+    if (conta) {
+      await c.env.DB.prepare('UPDATE users SET ativo = 1, password_hash = ?, requires_password_change = 1 WHERE id = ?').bind(hash, conta.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id, requires_password_change) VALUES (?, ?, ?, ?, 'stakeholder', ?, ?, 1)`
+      ).bind(genId(), email, hash, membro.name, projectId, org).run();
+    }
+    await logAudit(c.env.DB, 'stakeholder.convidado', ator.email, `Acesso de stakeholder para ${email} no projeto ${projectId}`, '', '', projectId);
+    const emailEnviado = await enviarBoasVindas(c, email, membro.name, senha, await nomeDaOrg(c.env.DB, org)).catch(() => false);
+    return c.json({ ok: true, emailEnviado }, conta ? 200 : 201);
+  } catch (e: any) {
+    if (String(e?.message).includes('UNIQUE')) return c.json({ error: 'Este e-mail já tem conta no n.iso' }, 409);
+    return erro500(c, 'Falha ao convidar stakeholder', e);
+  }
+});
+
+governanceApp.post('/projects/:id/governance/:memberId/revogar-acesso', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const ator = c.get('user');
+    if (!PODE_CONVIDAR.has(ator?.role ?? '')) return c.json(recusaConvite, 403);
+    const membro = await membroDaMatriz(c.env.DB, projectId, c.req.param('memberId'));
+    if (!(await revogarContaStakeholder(c, projectId, membro?.email, ator.email))) {
+      return c.json({ error: 'Esta pessoa não tem acesso de stakeholder neste projeto' }, 404);
+    }
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao revogar acesso', e);
   }
 });
 
@@ -356,6 +465,31 @@ governanceApp.post('/projects/:id/management-reviews', async (c) => {
     return c.json({ ok: true, id });
   } catch (e: any) {
     return erro500(c, 'Falha ao criar reunião de análise crítica', e);
+  }
+});
+
+// Excluir análise crítica (F6, decisão D1): humano, pela interface, platform_admin e administrador do
+// cliente. Não existia rota nenhuma, nem para o humano. Além da linha central `registro.excluido`
+// (src/trilha-exclusao.ts), grava o texto específico com a data e o status da análise. As colunas de
+// assinatura (`ciso_signed_by`...) existem em produção mas NÃO em schema.sql nem em migration (achado
+// no plano de fechamento): ler daqui quebraria banco novo e staging, por isso a rota não depende delas.
+governanceApp.delete('/management-reviews/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_REVOGAR_APROVACAO.has(user?.role ?? '')) {
+      return c.json({ error: 'Forbidden: excluir análise crítica é do administrador do cliente ou da plataforma' }, 403);
+    }
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'management_reviews', id, user);
+    const r = await c.env.DB.prepare('SELECT project_id, review_date, status FROM management_reviews WHERE id = ?')
+      .bind(id).first<{ project_id: string; review_date: string; status: string | null }>();
+    if (!r) return c.json({ error: 'Análise crítica não encontrada' }, 404);
+    await c.env.DB.prepare('DELETE FROM management_reviews WHERE id = ?').bind(id).run();
+    await logAudit(c.env.DB, 'management_review.deleted', user.email,
+      `Análise crítica ${id} (${r.review_date}, ${r.status ?? 'sem status'}) excluída.`, '', '', r.project_id);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao excluir análise crítica', e);
   }
 });
 

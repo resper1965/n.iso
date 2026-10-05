@@ -380,7 +380,7 @@ describe('Rotas de SSO', () => {
       body: JSON.stringify({ ...corpoValido, papel_padrao: 'platform_admin' }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json<any>()).error).toContain('papel de plataforma');
+    expect(await res.text()).toContain('papel_padrao');
   });
 
   it('recusa issuer que não é https', async () => {

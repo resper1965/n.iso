@@ -36,6 +36,8 @@ describe('Designação de consultor na governança do projeto', () => {
     await applySchema();
     await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
       .bind('p-gov', 'Cliente Gov', 'ISO 27001', 'controller', 'Active').run();
+    // D5: a conta do consultor existe e está ativa; o acesso ao projeto vem da designação abaixo.
+    await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','fulano@ness.lat','x','Fulano','consultor')`).run();
     consultor = json(await sessionFor({ id: 'u-c', email: 'fulano@ness.lat', role: 'consultor' }));
     admin = json(await sessionFor({ id: 'u-a', email: 'adm@ness.lat', role: 'platform_admin' }));
     orgAdmin = json(await sessionFor({ id: 'u-o', email: 'dono@cliente.com', role: 'org_admin', client_project_id: 'p-gov' }));

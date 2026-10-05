@@ -469,6 +469,9 @@ import { navigate } from '../router.js';
     // quem designa o consultor do próprio cliente.
     const podeEditarGovernanca = () => !!(S.user && ['platform_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
 
+    // Quem convida e revoga stakeholder (o servidor decide de verdade; isto só mostra os botões).
+    const podeConvidarStakeholder = () => !!(S.user && ['platform_admin', 'consultoria_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
+
     async function renderGovernance(c, h, a) {
         h.textContent = 'Governança & Equipe';
         a.innerHTML = '';
@@ -483,6 +486,7 @@ import { navigate } from '../router.js';
             S.currentGovernance = members || [];
             c.innerHTML = `<div class="fade-in">${window.renderProjectGovernance(S.currentGovernance, p.id)}<div id="gov-agentes"></div></div>`;
             window.carregarAgentesDoProjeto(p.id);
+            window.agentesAoVivo(p.id);
         } catch(e) {
             c.innerHTML = `<div class="error">Erro ao carregar governança: ${escapeHTML(e.message)}</div>`;
         }
@@ -515,6 +519,13 @@ import { navigate } from '../router.js';
         const manageBtn = podeEditarGovernanca() ? `
             <button class="btn btn-secondary" data-action="openGovernanceModal" data-args='["${projectId}"]'>Gerenciar governança</button>` : '';
 
+        // Convite e revogação nascem da linha da matriz; sem e-mail, ou para a equipe da consultoria, não há o que convidar.
+        const acoesAcesso = (m) => (podeConvidarStakeholder() && m.email && m.role_category !== 'consultor') ? `
+                <div class="gov-member-acoes">
+                    <button class="btn btn-secondary" data-action="convidarStakeholder" data-args='["${escapeHTML(projectId)}","${escapeHTML(m.id)}"]'>Convidar para o n.iso</button>
+                    <button class="btn btn-secondary" data-action="revogarStakeholder" data-args='["${escapeHTML(projectId)}","${escapeHTML(m.id)}"]'>Revogar acesso</button>
+                </div>` : '';
+
         const memberCard = (m) => `
             <div class="gov-member-item">
                 <div class="gov-avatar" aria-hidden="true">${escapeHTML(getInitials(m.name))}</div>
@@ -523,6 +534,7 @@ import { navigate } from '../router.js';
                     <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
                     ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
                 </div>
+                ${acoesAcesso(m)}
             </div>`;
 
         const anchorHtml = anchor ? `
@@ -533,6 +545,7 @@ import { navigate } from '../router.js';
                     <div class="org-anchor-title">${escapeHTML(anchor.job_title)}</div>
                     ${anchor.email ? `<div class="gov-member-email org-anchor-email" title="${escapeHTML(anchor.email)}">${escapeHTML(anchor.email)}</div>` : ''}
                 </div>
+                ${acoesAcesso(anchor)}
             </div>` : `
             <div class="org-anchor org-anchor-empty">
                 <div class="org-anchor-name">Líder do SGSI não designado</div>
@@ -566,21 +579,46 @@ import { navigate } from '../router.js';
 
     // Agentes de IA (MCP remoto) com acesso a este projeto. Sem a rota (404) ou
     // sem permissão (403), o bloco simplesmente não aparece.
-    window.carregarAgentesDoProjeto = async function(projectId) {
+    // O banco grava em UTC ("2026-09-30 22:58:05", sem fuso). Mostrar cru fazia "20:49" aparecer
+    // quando eram 17:49 no relógio de quem olhava, e parecia que o agente tinha parado.
+    const comoData = (v) => {
+        if (!v) return null;
+        const s = String(v);
+        const d = new Date(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+        return isNaN(d.getTime()) ? null : d;
+    };
+    const dataLocal = (v) => {
+        const d = comoData(v);
+        return d ? d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    };
+    const haQuanto = (v) => {
+        const d = comoData(v);
+        if (!d) return '';
+        const min = Math.floor((Date.now() - d.getTime()) / 60000);
+        if (min < 1) return 'há menos de 1 min';
+        if (min < 60) return `há ${min} min`;
+        if (min < 1440) return `há ${Math.floor(min / 60)} h`;
+        return `há ${Math.floor(min / 1440)} d`;
+    };
+
+    // `manter`: nos ciclos automáticos, uma falha de rede NÃO apaga o cartão que já está na tela.
+    // Só a primeira carga esconde o bloco (sem a rota ou sem permissão).
+    window.carregarAgentesDoProjeto = async function(projectId, { manter = false } = {}) {
         const alvo = document.getElementById('gov-agentes');
         if (!alvo) return;
         let lista;
-        try { lista = await api('GET', `/api/v1/projects/${projectId}/agentes`); } catch (e) { alvo.innerHTML = ''; return; }
-        if (!Array.isArray(lista)) { alvo.innerHTML = ''; return; }
+        try { lista = await api('GET', `/api/v1/projects/${projectId}/agentes`); } catch (e) { if (!manter) alvo.innerHTML = ''; return; }
+        if (!Array.isArray(lista)) { if (!manter) alvo.innerHTML = ''; return; }
         const podeRevogar = (ag) => S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin' || ((S.user.role === 'consultor' || S.user.role === 'consultant') && ag.consultor === S.user.email));
-        const data = (v) => v ? escapeHTML(String(v).slice(0, 16).replace('T', ' ')) : '—';
+        const data = (v) => escapeHTML(dataLocal(v));
+        const ultimoUso = (v) => v ? `${data(v)} (${haQuanto(v)})` : 'nunca';
         const linhas = lista.map(ag => {
             const revogado = !!ag.revogado_em;
             return `
             <div class="gov-agente ${revogado ? 'gov-agente-revogado' : ''}">
                 <div>
                     <div class="gov-member-name">${escapeHTML(ag.consultor)} · ${escapeHTML(ag.cliente_mcp || 'cliente MCP')}</div>
-                    <div class="gov-agente-meta">desde ${data(ag.criado_em)} · último uso ${data(ag.ultimo_uso_em)} · ${revogado ? `revogado em ${data(ag.revogado_em)}` : `válido até ${data(ag.expira_em)}`}</div>
+                    <div class="gov-agente-meta">desde ${data(ag.criado_em)} · último uso ${ultimoUso(ag.ultimo_uso_em)} · ${revogado ? `revogado em ${data(ag.revogado_em)}` : `válido até ${data(ag.expira_em)}`}</div>
                 </div>
                 ${!revogado && podeRevogar(ag) ? `<button class="btn btn-secondary" data-action="revogarAgente" data-args='["${escapeHTML(projectId)}","${escapeHTML(ag.id)}"]'>Revogar</button>` : ''}
             </div>`;
@@ -593,6 +631,46 @@ import { navigate } from '../router.js';
                 </div>
                 ${linhas || '<div class="gov-empty-list">Nenhum agente conectado a este cliente.</div>'}
             </section>`;
+    };
+
+    // Atualização ao vivo do cartão (F3): o "último uso" é o único sinal de leitura do agente, e só
+    // mudava recarregando a página. Um temporizador por vez, que se encerra sozinho quando o cartão
+    // sai do DOM, não consulta com a aba em segundo plano e atualiza na hora ao voltar a ela.
+    let _timerAgentes = null;
+    let _visivelAgentes = null;
+    window.pararAgentesAoVivo = function() {
+        clearInterval(_timerAgentes);
+        _timerAgentes = null;
+        if (_visivelAgentes) document.removeEventListener('visibilitychange', _visivelAgentes);
+        _visivelAgentes = null;
+    };
+    window.agentesAoVivo = function(projectId, intervaloMs = 60000) {
+        window.pararAgentesAoVivo();
+        const ciclo = () => {
+            if (!document.getElementById('gov-agentes')) return window.pararAgentesAoVivo(); // saiu da tela
+            if (document.visibilityState === 'hidden') return;                                // aba em segundo plano
+            window.carregarAgentesDoProjeto(projectId, { manter: true });
+        };
+        _timerAgentes = setInterval(ciclo, intervaloMs);
+        _visivelAgentes = () => { if (document.visibilityState === 'visible') ciclo(); };
+        document.addEventListener('visibilitychange', _visivelAgentes);
+    };
+
+    window.convidarStakeholder = async function(projectId, memberId) {
+        try {
+            const r = await api('POST', `/api/v1/projects/${projectId}/governance/${memberId}/convidar`);
+            if (r && r.ja_convidado) showToast('Esta pessoa já tem acesso ao n.iso');
+            else if (r && r.emailEnviado === false) showToast('Conta criada, mas o e-mail NÃO foi enviado. Use "Revogar acesso" e depois "Convidar para o n.iso" de novo para gerar outra senha e reenviar, ou avise o administrador da plataforma.', 'error');
+            else showToast('Convite enviado por e-mail');
+        } catch (e) { showToast(e.message || 'Falha ao convidar', 'error'); }
+    };
+
+    window.revogarStakeholder = async function(projectId, memberId) {
+        if (!confirm('Revogar o acesso desta pessoa ao n.iso? A conta é desativada e as sessões abertas caem.')) return;
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/governance/${memberId}/revogar-acesso`);
+            showToast('Acesso revogado');
+        } catch (e) { showToast(e.message || 'Falha ao revogar', 'error'); }
     };
 
     window.revogarAgente = async function(projectId, id) {
@@ -1470,12 +1548,26 @@ import { navigate } from '../router.js';
                     </select>
                 </div>
                 <div style="text-align:right">
+                    ${S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin') ? `<button type="button" data-action="excluirMgmtReview" data-args='["${review.id}"]' class="btn-secondary" style="margin-right:8px">Excluir análise</button>` : ''}
                     <button type="button" data-action="openEditMgmtReviewModal" data-args='["${review.id}"]' class="btn-secondary" style="margin-right:8px">Voltar</button>
                     <button type="submit" class="btn-primary">Salvar Alterações</button>
                 </div>
             </form>
         `;
         openModal(html);
+    };
+
+    // F6: excluir análise crítica é da direção, pela interface (o agente não alcança a rota).
+    window.excluirMgmtReview = async function(id) {
+        if (!confirm('Excluir esta análise crítica? Ela é um registro de gestão, possivelmente assinado, e a exclusão é permanente (fica na trilha de auditoria).')) return;
+        try {
+            await api('DELETE', `/api/v1/management-reviews/${id}`);
+            showToast('Análise crítica excluída');
+            closeModal();
+            render();
+        } catch(err) {
+            showToast('Erro ao excluir: ' + err.message, 'error');
+        }
     };
 
     window.saveMgmtReviewDetails = async function(e, id) {

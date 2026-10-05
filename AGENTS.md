@@ -68,7 +68,26 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
   dominio em `src/routes/*.ts` (auth, users, leads, proposals, assessments,
   projects, evidence, vendors, training, ropa, audits, capa, certifications,
-  public, ai, governance, auditor, platform, risks, policies, integrations).
+  public, ai, governance, auditor, platform, risks, policies, integrations,
+  pedidos, public-pedidos).
+- **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
+  (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
+  Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
+  `conferirVigencia`, `registrarDecisao`). Rotas: `/api/v1/pedidos*` (o
+  destinatario; unico prefixo de dado do papel `stakeholder`),
+  `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
+  painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
+  token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
+  auditor externo, paginada). **A prova e imutavel**: o trigger
+  `pedido_dest_prova_imutavel` recusa UPDATE em linha decidida, e
+  `pedido_prova_imutavel` (0043) recusa mudar hash, conteudo e documento de
+  qualquer pedido e status/substituto de pedido fechado (`org_id` fica livre:
+  a transferencia de projeto o atualiza). DELETE fica livre no banco so para o
+  projeto cascatear. No fonte, todo `UPDATE pedidos` leva `status = 'aberto'` e
+  todo `UPDATE pedido_destinatarios` leva `status = 'pendente'` na WHERE do
+  proprio statement (a unica excecao e `UPDATE pedidos SET org_id = ?`), sem
+  DELETE nem REPLACE; `test/pedidos-prova.test.ts` le o fonte e reprova o que
+  fugir disso. Correcao e pedido novo.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
@@ -100,8 +119,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     Ciência de Políticas", não o do app.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
-  `migrations/`, ultima a **0034**. O estado real de producao e o historico da
+- **Schema**: `schema.sql` — **58 tabelas** (medido em 2026-10-05: o `schema.sql` aplicado num
+  SQLite em memoria, `SELECT count(*) FROM sqlite_master WHERE type='table'`; as linhas que comecam
+  por `CREATE TABLE` sao 58 nomes distintos). Migrations numeradas em
+  `migrations/`, ultima a **0043**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
@@ -112,6 +133,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   Worker nao le disco, entao `npm run skills:gerar` escreve `src/mcp/skills-gerado.ts` (commitado; o
   `test/agente-skills.test.ts` falha se ficar velho). O agente as le pelo MCP com `niso_skill`,
   atras do login. Skill nova = pasta nova + gerar + roteiro em `src/mcp/contexto.ts`.
+- **Documentacao do agente**: `docs/agente/` (uso, arquitetura com diagramas, seguranca e o
+  checklist de PR). Leia `docs/agente/seguranca.md` antes de criar rota nova: o principal do
+  agente carrega o `users.id` real do consultor, e rota de "minha conta" entra em
+  `FORA_DO_AGENTE`.
 - **MCP remoto** (consultor): agente com alcance de consultor preso a um projeto (`src/mcp/servidor.ts`); `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
   (`src/routes/oauth-autorizacao.ts`); principal agente em
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
@@ -159,17 +184,20 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
-  tocar e melhoria barata; nao precisa de permissao.
-- **1 de 58 arquivos de teste ainda mocka o D1**: `test/mcp-integration.test.ts`. Todos os demais que tocam banco usam o D1 real do
-  `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
+- **~510 `any` em `src/`** (medido em 2026-10-01: `: any`, `as any` e `<any>` em
+  `src/*.ts`). `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria
+  barata; nao precisa de permissao. Falta uma catraca que reprove o aumento.
+- **4 de 94 arquivos de teste ainda mockam o D1**: `api`, `integration`,
+  `mcp-integration` e `services-rag` (medido em 2026-10-01). Os demais que tocam
+  banco usam o D1 real do `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com quase nenhum teste** (~12k linhas). `test/e2e/` cobre so o fluxo
-  de MFA, roda fora do `npm test` e exige servidor e navegador. Todo o resto da
-  interface nao tem cobertura nenhuma.
-- **~46 leituras de corpo sem schema semantico** (`projects`, `policies`,
-  `assessments`, `platform`, `public`). O `bodyGuard` global cobre teto de
+- **Frontend com pouco teste.** `frontend/test/` tem 19 arquivos (jsdom) e
+  `test/e2e/` cobre so o fluxo de MFA, fora do `npm test`, com servidor e
+  navegador. A maior parte das telas nao tem cobertura.
+- **36 leituras de corpo (`c.req.json`) sem schema semantico em 12 arquivos**
+  (medido em 2026-10-01; mais em `policies` 7, `assessments` 6, `governance` 6,
+  `projects` 4). O `bodyGuard` global cobre teto de
   tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
 - ~~**324 handlers `onclick=` inline**~~ **RESOLVIDO.** A migracao para delegacao
   de eventos terminou (PRs #121–#134) e `'unsafe-inline'` saiu de `script-src`
@@ -223,6 +251,8 @@ errar um digito destruia a sessao.
   de 900px.
 
 ## Documentos que valem a leitura
+
+- `docs/plano-2026-10-fechamento.md` — o que esta aberto, de quem e a ordem
 
 - `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
 - `SECURITY.md` — invariantes de seguranca que nao podem regredir

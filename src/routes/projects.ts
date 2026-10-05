@@ -1,14 +1,15 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador } from '../helpers';
+import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
 import { NA_STATUS } from '../services/soa-logic';
-import { validateBody, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
+import { validateBody, checklistProgressSchema, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
 import { COLUNAS_REVOGACAO } from './controls';
@@ -98,7 +99,7 @@ projectsApp.put('/:projectId/sso', somenteNess, async (c) => {
     // Papel de staff atribuído por provisionamento automático transformaria
     // "quem tem e-mail do domínio" em "quem administra a plataforma".
     if (!papelValidoParaSso(body.papel_padrao)) {
-      return c.json({ error: `papel_padrao não pode ser papel de plataforma: ${body.papel_padrao}` }, 400);
+      return c.json({ error: `papel_padrao precisa ser papel de cliente (org_admin, org_user ou client)` }, 400);
     }
 
     const chaveCripto = (c.env as any).TOKEN_ENC_KEY as string | undefined;
@@ -314,9 +315,17 @@ projectsApp.post('/', async (c) => {
     }
 
     const id = genId();
-    await c.env.DB.prepare(
-      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'))`
+    const user = c.get('user');
+    // O projeto nasce na organização de quem cria (o platform_admin escolhe com X-Org-Id, que precisa
+    // existir). Cliente e papel desconhecido não têm organização: 403, falha fechada.
+    const orgId = await resolverOrg(c);
+    if (!orgId) return c.json(SEM_ORG, 403);
+    // Criação MANUAL respeita o plano; a do aceite de proposta (fecharVenda) passa e vai para a trilha.
+    // ponytail: COUNT e INSERT não são atômicos; duas criações simultâneas no limite passam as duas.
+    if (await limiteDoPlanoAtingido(c.env.DB, orgId, 'projetos')) return c.json(LIMITE_PROJETOS, 409);
+    const cria = c.env.DB.prepare(
+      `INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, org_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'))`
     ).bind(
       id,
       body.project_name ?? '',
@@ -324,11 +333,18 @@ projectsApp.post('/', async (c) => {
       body.sector ?? '',
       body.scope ?? '',
       body.standards ?? 'ISO 27001',
-      body.org_role ?? ''
-    ).run();
+      body.org_role ?? '',
+      orgId
+    );
+    // D5: consultor que cria fica designado no projeto, no mesmo batch.
+    const designa = designacaoDoCriador(c.env.DB, user, id);
+    await c.env.DB.batch(designa ? [cria, designa] : [cria]);
 
     await seedPhases(c.env.DB, id);
-    await logAudit(c.env.DB, 'project.created', c.get('user')?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    await logAudit(c.env.DB, 'project.created', user?.email ?? 'system', `Projeto ${id} criado para ${body.client_name}`, '', '', id);
+    if (designa) {
+      await logAudit(c.env.DB, 'governance.created', user.email, `Consultor ${user.email} designado no projeto ${id} que criou`, '', '', id);
+    }
 
     return c.json({ id, project_name: body.project_name, client_name: body.client_name, status: 'active' }, 201);
   } catch (e: any) {
@@ -349,7 +365,12 @@ projectsApp.get('/', async (c) => {
       return c.json(project ? [redactProject(project)] : []);
     }
 
-    const { results } = await c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    // Consultor: os designados na própria organização (D5); consultoria_admin: os da organização;
+    // só o platform_admin vê todos. Comercial e papel desconhecido: nenhum.
+    const v = projetosVisiveis(user);
+    const { results } = await (v
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${v.sql}) ORDER BY created_at DESC`).bind(v.bind)
+      : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')).all();
     return c.json((results ?? []).map(redactProject));
   } catch (e: any) {
     return erro500(c, 'Falha ao listar projetos', e);
@@ -679,6 +700,44 @@ projectsApp.get('/:id/checklist-progress', async (c) => {
     WHERE cp.project_id = ?
   `).bind(projectId).all();
   return c.json({ ok: true, progress: rows.results || [] });
+});
+
+// Sumiu na decomposição do index.ts (72f1b59): a tela chamava a rota e engolia o 404
+// num console.error, então marcação, nota, responsável e prazo não persistiam.
+projectsApp.put('/:id/checklist-progress', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const v = await validateBody(c, checklistProgressSchema);
+    if (!v.success) return v.response;
+    const { items } = v.data;
+
+    // Aterramento de tenant: evidência vinculada tem de ser DESTE projeto. Compara em
+    // memória (e não com `IN (?, …)`): até 500 itens passam do teto de 100 parâmetros do D1.
+    const pedidas = [...new Set(items.map((i) => i.evidence_id).filter((x): x is string => !!x))];
+    if (pedidas.length) {
+      const { results } = await c.env.DB.prepare('SELECT id FROM evidence WHERE project_id = ?').bind(projectId).all<{ id: string }>();
+      const doProjeto = new Set((results || []).map((r) => r.id));
+      if (pedidas.some((id) => !doProjeto.has(id))) {
+        return c.json({ error: 'evidence_id inexistente ou de outro projeto' }, 400);
+      }
+    }
+
+    const user = c.get('user');
+    // `checked_by` referencia users(id): chave de API não tem linha lá (id `apikey:…`).
+    const quem = user?.id && !user.id.startsWith('apikey:') ? user.id : null;
+    const stmt = c.env.DB.prepare(
+      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes, assigned_to, due_date)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET is_checked = excluded.is_checked, checked_by = excluded.checked_by, checked_at = excluded.checked_at, evidence_id = excluded.evidence_id, notes = excluded.notes, assigned_to = excluded.assigned_to, due_date = excluded.due_date`
+    );
+    await c.env.DB.batch(items.map((i) =>
+      stmt.bind(projectId, i.phase_number, i.item_id, i.is_checked ? 1 : 0, quem, i.evidence_id ?? null, i.notes ?? null, i.assigned_to ?? null, i.due_date ?? null)
+    ));
+    await logAudit(c.env.DB, 'checklist.updated', user?.email ?? 'system', `${items.length} item(ns) do checklist atualizado(s)`, '', '', projectId);
+    return c.json({ ok: true, count: items.length });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao salvar o progresso do checklist', e);
+  }
 });
 
 // Scope changes inside Project

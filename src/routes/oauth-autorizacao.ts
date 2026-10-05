@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { verifyPassword, rateLimit, rateLimitD1, genId, genToken, logAudit, escapeHtml } from '../helpers';
+import { verifyPassword, rateLimit, rateLimitD1, genId, genToken, logAudit, escapeHtml, PROJETOS_DO_CONSULTOR_SQL } from '../helpers';
 import { clientIp, chavesTentativa, registrarFalhaLogin } from './auth';
 import { mensagemBloqueio } from '../auth-policy';
 import { verificarCodigoTotp } from '../services/totp';
@@ -138,8 +138,9 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   }
 
   const { results } = await c.env.DB.prepare(
-    `SELECT p.id, ${NOME_CLIENTE_SQL} AS client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
-      WHERE lower(g.email) = ? AND g.role_category = 'consultor' ORDER BY 2`
+    // A mesma definição de "designado" do consultor humano: só projetos da organização dele.
+    `SELECT p.id, ${NOME_CLIENTE_SQL} AS client_name FROM projects p
+      WHERE p.id IN (${PROJETOS_DO_CONSULTOR_SQL}) ORDER BY 2`
   ).bind(email).all<{ id: string; client_name: string }>();
   if (!results.length) {
     await c.env.SESSIONS.delete(chave(token));
@@ -147,8 +148,8 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
   }
 
   await c.env.SESSIONS.put(chave(token), JSON.stringify({ ...pedido, userId: u.id, email: u.email }), { expirationTtl: TTL_PEDIDO });
-  const opcoes = results.map((p, i) =>
-    `<label class="op"><input type="radio" name="projeto" value="${escapeHtml(p.id)}" ${i === 0 ? 'checked' : ''}> ${escapeHtml(p.client_name)}</label>`
+  const opcoes = results.map((p) =>
+    `<label class="op"><input type="radio" name="projeto" value="${escapeHtml(p.id)}" required> ${escapeHtml(p.client_name)}</label>`
   ).join('');
   return pagina('Escolha o cliente', `
 <h1>Em qual cliente o agente vai atuar?</h1>
@@ -156,7 +157,7 @@ oauthAutorizacao.post('/authorize/entrar', async (c) => {
 ${LOOPBACK.has(new URL(`http://${pedido.destino}`).hostname) ? '' : `<p class="erro">Atenção: o acesso será entregue a ${escapeHtml(pedido.destino)}. Só autorize se você reconhece este endereço.</p>`}
 <form method="post" action="/oauth/authorize/confirmar">
 <input type="hidden" name="pedido" value="${token}">${opcoes}
-<p class="nota">O agente tem o mesmo alcance que você tem neste cliente: lê tudo e grava adequação (políticas, SoA, evidências, controles, riscos). Com a sua confirmação a cada vez, também apaga registros, gera políticas em lote, elimina dados de titular e revoga aprovações. Não registra achado de auditoria, não gerencia usuários, SSO, chaves de API nem webhooks. O administrador do cliente vê e pode revogar este acesso.</p>
+<p class="nota">O agente tem o mesmo alcance que você tem neste cliente: lê tudo e grava adequação (políticas, SoA, evidências, controles, riscos). Com a sua confirmação a cada vez, também apaga registros, gera políticas em lote, elimina dados de titular e revoga aprovações de controle. Aprovação de ROPA e DPIA e análise crítica assinada só se desfazem pela interface, por quem administra. Não registra achado de auditoria, não gerencia usuários, SSO, chaves de API nem webhooks. O administrador do cliente vê e pode revogar este acesso.</p>
 <button type="submit">Autorizar</button></form>`);
 });
 
@@ -169,8 +170,8 @@ oauthAutorizacao.post('/authorize/confirmar', async (c) => {
 
   const projectId = String(f.projeto || '');
   const alvo = await c.env.DB.prepare(
-    `SELECT ${NOME_CLIENTE_SQL} AS client_name FROM projects p JOIN project_governance g ON g.project_id = p.id
-      WHERE p.id = ? AND lower(g.email) = lower(?) AND g.role_category = 'consultor'`
+    `SELECT ${NOME_CLIENTE_SQL} AS client_name FROM projects p
+      WHERE p.id = ? AND p.id IN (${PROJETOS_DO_CONSULTOR_SQL})`
   ).bind(projectId, pedido.email).first<{ client_name: string }>();
   if (!alvo) return pagina('Não autorizado', '<h1>Cliente fora da sua designação</h1>', 403);
 

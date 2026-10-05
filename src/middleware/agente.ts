@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { apiKeyRoleViolation } from '../auth-policy';
+import { consultorDesignado } from '../helpers';
 
 /**
  * Identidade de um agente de IA conectado pelo MCP remoto (spec
@@ -17,9 +18,9 @@ export interface PropsAgente {
 const REFACA = 'Acesso do agente revogado, expirado ou sem designação no projeto: refaça o login no cliente MCP.';
 
 /**
- * A concessão vale agora? Não revogada, não expirada, consultor ativo e AINDA
- * designado na governança do projeto. Única fonte da regra: o handler /mcp a
- * consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
+ * A concessão vale agora? Não revogada, não expirada, consultor ativo, projeto da
+ * MESMA organização do consultor e AINDA designado na governança do projeto.
+ * Única fonte da regra: o handler /mcp a consulta antes de abrir a sessão MCP (401 para o cliente reabrir o OAuth) e
  * o resolverAgente a cada chamada interna.
  */
 /**
@@ -40,16 +41,18 @@ export async function concessaoValida(
        JOIN users u ON u.id = ac.user_id
        JOIN projects p ON p.id = ac.project_id
       WHERE ac.id = ? AND ac.user_id = ? AND ac.project_id = ?
-        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')`
+        AND ac.revogado_em IS NULL AND ac.expira_em > datetime('now')
+        -- multiconsultoria: o projeto tem de ser da organização do consultor da concessão
+        AND p.org_id = u.org_id
+        -- organização suspensa derruba o agente da equipe dela (a ness. não é suspensa)
+        AND (u.org_id = 'org_ness' OR EXISTS (SELECT 1 FROM organizations o WHERE o.id = u.org_id AND o.status = 'Active'))`
   ).bind(p.concessaoId, p.userId, p.projectId).first<{ email: string; role: string; ativo: number | null; client_name: string; project_name: string }>();
   if (!row || row.ativo === 0 || (row.role !== 'consultor' && row.role !== 'consultant')) return null;
 
   // Tirar o consultor da governança derruba o agente na próxima requisição,
   // sem esperar o token expirar.
-  const designado = await db.prepare(
-    `SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor'`
-  ).bind(p.projectId, row.email).first();
-  return designado ? { email: row.email, client_name: row.client_name, project_name: row.project_name } : null;
+  // Mesma regra do consultor humano (D5): uma fonte só.
+  return await consultorDesignado(db, row.email, p.projectId) ?{ email: row.email, client_name: row.client_name, project_name: row.project_name } : null;
 }
 
 /** Só `resolverAgente` lê; ele só roda com `env.AGENTE`, então de fora o cabeçalho é inerte. */
@@ -64,8 +67,12 @@ export const CABECALHO_CONFIRMADO = 'X-Agente-Confirmado';
 /** Terceiro campo opcional: só estes métodos são recusados (GET /projects segue valendo, escopado). */
 const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/(users|admin\/users)(\/|$)/, 'gestão de usuários'],
+  [/^\/api\/v1\/platform(\/|$)/, 'administração da plataforma (organizações)'],
   [/^\/api\/v1\/dashboard(\/|$)/, 'o painel global agrega todos os clientes'],
-  [/^\/api\/v1\/(assessments|leads|proposals)(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/(assessments|leads|proposals|funil)(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/org(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/servicos(\/|$)/, 'área comercial'],
+  [/^\/api\/v1\/propostas(\/|$)/, 'área comercial'],
   [/^\/api\/v1\/projects\/[^/]+\/(sso|security-policy|scim-token|api-keys|webhooks)(\/|$)/, 'configuração de segurança do cliente'],
   [/^\/api\/v1\/webhooks(\/|$)/, 'configuração de segurança do cliente'],
   // O principal do agente carrega o users.id REAL do consultor: rotas de "minha conta" agiriam sobre ele.
@@ -73,6 +80,11 @@ const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   [/^\/api\/v1\/projects\/[^/]+\/auditor-token(\/|$)/, 'credencial de auditor externo'],
   [/^\/api\/v1\/projects\/?$/, 'o agente está preso a um projeto', ['POST']],
   [/\/agentes(\/|$)/, 'o agente não gere o próprio acesso'],
+  // Desaprovar é ato da direção, pela interface (F6, decisão D1): o agente não revoga a aprovação de
+  // ROPA nem de DPIA, e não apaga análise crítica, que é registro assinado. Revogar aprovação de
+  // CONTROLE segue possível, com confirmação (acaoDestrutiva).
+  [/^\/api\/v1\/projects\/[^/]+\/(ropa|dpia)\/[^/]+\/revoke-approval$/, 'revogar aprovação de ROPA e DPIA é da direção, pela interface'],
+  [/^\/api\/v1\/management-reviews\/[^/]+$/, 'excluir análise crítica destrói registro assinado: use a interface', ['DELETE']],
 ];
 
 /** Única definição do que exige confirmação: apagar, gerar em lote, anonimizar titular, revogar aprovações. */
@@ -94,6 +106,12 @@ export async function resolverAgente(
     return c.json({ error: 'Forbidden: caminho inválido' }, 403);
   }
 
+  // A concessão primeiro: agente revogado, expirado ou sem designação ouve 401 ("refaça o
+  // login") em QUALQUER rota. Com a lista de proibidas antes, ele ouvia 403 e não sabia que
+  // precisava reconectar.
+  const row = await concessaoValida(c.env.DB, p);
+  if (!row) return c.json({ error: REFACA }, 401);
+
   // Paridade com o consultor, preso ao projeto: `role: 'client'` + `client_project_id`
   // herda o isolamento de tenant; o que é destrutivo exige confirmação.
   for (const [re, motivo, metodos] of FORA_DO_AGENTE) {
@@ -104,9 +122,6 @@ export async function resolverAgente(
   }
   const violacao = apiKeyRoleViolation('consultant', method, path);
   if (violacao) return c.json({ error: violacao }, 403);
-
-  const row = await concessaoValida(c.env.DB, p);
-  if (!row) return c.json({ error: REFACA }, 401);
 
   await c.env.DB.prepare(`UPDATE agente_concessoes SET ultimo_uso_em = datetime('now') WHERE id = ?`)
     .bind(p.concessaoId).run().catch(() => {});

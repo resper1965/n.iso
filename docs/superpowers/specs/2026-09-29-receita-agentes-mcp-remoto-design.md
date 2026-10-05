@@ -1,5 +1,11 @@
 # Receita dos agentes: MCP remoto com login no nISO
 
+> **Estado (2026-10-01): implementada e, em parte, superada.** O OAuth, a concessão, a
+> revalidação a cada chamada e a revogação seguem como descritos aqui. A regra "o agente
+> não apaga e não gera em lote" foi **substituída** em 30/09/2026: o agente passou a ter o
+> alcance do consultor, preso a um projeto, com confirmação para as ações destrutivas
+> ([spec](2026-09-30-agente-paridade-consultor-design.md)). O estado atual está em [`docs/agente/`](../../agente/README.md).
+
 Data: 2026-09-29. Decisões tomadas em conversa; esta spec as consolida.
 
 ## Objetivo

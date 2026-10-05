@@ -70,9 +70,15 @@ describe('helpers', () => {
       await expect(requireResourceAccess({} as any, 'invalid_table', 'id', {})).rejects.toThrow('Invalid table');
     });
 
-    it('resolves for allowed tables if user is consultor', async () => {
-      await expect(requireResourceAccess({} as any, 'risks', 'id', { role: 'consultor' })).resolves.toBe(true);
+    it('resolves for allowed tables if user is platform_admin', async () => {
       await expect(requireResourceAccess({} as any, 'vendors', 'id', { role: 'platform_admin' })).resolves.toBe(true);
+    });
+
+    // D5: consultor deixou de passar direto; a cobertura com banco real está em consultor-escopo.test.ts.
+    it('consultor nega quando a consulta falha (falha fechada)', async () => {
+      const quebrado = { prepare: () => ({ bind: () => ({ first: async () => ({ project_id: 'p-x' }) }) }) } as any;
+      const db = { prepare: (sql: string) => sql.includes('project_governance') ? { bind: () => ({ first: async () => { throw new Error('D1 fora'); } }) } : quebrado.prepare() } as any;
+      await expect(requireResourceAccess(db, 'risks', 'id', { role: 'consultor', email: 'c@ness.lat' })).rejects.toThrow('Forbidden');
     });
 
     // ponytail: the source-scanning meta-test (readdirSync/readFileSync over ../src) was

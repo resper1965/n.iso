@@ -86,6 +86,14 @@ describe('menu de conta', () => {
     expect(marcados[0].textContent).toContain('Twyn');
   });
 
+  it('oferece "Trocar senha", que abre o modal de troca (F7)', () => {
+    window.toggleAccountMenu();
+    const item = [...document.querySelectorAll('#account-menu .account-item')].find((b) => b.textContent.includes('Trocar senha'));
+    expect(item, 'o menu não tem "Trocar senha"').toBeTruthy();
+    expect(item.getAttribute('data-action')).toBe('accountMenuAction');
+    expect(JSON.parse(item.getAttribute('data-args'))).toEqual(['openChangePasswordModal']);
+  });
+
   it('não oferece "Tema": não existe tema claro para trocar', () => {
     window.toggleAccountMenu();
     expect(document.getElementById('account-menu').textContent).not.toContain('Tema');
@@ -127,5 +135,22 @@ describe('toggleSidebar', () => {
     window.toggleSidebar();
     expect(sb.classList.contains('collapsed')).toBe(false);
     expect(document.getElementById('toggle-sidebar-svg').textContent).toBe('«');
+  });
+});
+
+describe('notificação de proposta (fatia 4)', () => {
+  it('link /propostas/:id abre a tela de Propostas na ficha da proposta', async () => {
+    const { api } = await import('../src/api.js');
+    await import('../src/views/propostas.js');
+    document.body.innerHTML += '<div id="notif-dropdown"></div><h1 id="header-title"></h1><div id="header-actions"></div><div id="content"></div>';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('<html></html>', { headers: { 'content-type': 'text/html' } }));
+    api.mockImplementation(async (m, p) => (p === '/api/v1/propostas/p1'
+      ? { id: 'p1', numero: 'N-1', revisao: 1, status: 'visualizada', cliente: 'Acme', itens: [] }
+      : []));
+    S.notifications = [{ id: 'n1', read: 0, title: 'Proposta visualizada: Acme', link: '/propostas/p1', action_type: 'proposta_visualizada', target_id: 'p1' }];
+    await window.handleNotificationClick('n1');
+    await vi.waitFor(() => expect(api).toHaveBeenCalledWith('GET', '/api/v1/propostas/p1'));
+    expect(S.view).toBe('proposals');
+    await vi.waitFor(() => expect(document.querySelector('[data-action="__prpEnviar"]')).toBeTruthy());
   });
 });

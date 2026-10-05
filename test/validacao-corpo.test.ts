@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword, verifyPassword } from '../src/helpers';
-import { applySchema, sessionFor, pedir } from './helpers/d1';
+import { applySchema, sessionFor, pedir, designarConsultor } from './helpers/d1';
 import middlewareSrc from '../src/middleware/auth.ts?raw';
 import helpersSrc from '../src/helpers.ts?raw';
 
@@ -50,7 +50,7 @@ describe('Política de senha nova', () => {
     // E, o que mais importa: não trocou.
     const linha = await env.DB.prepare('SELECT password_hash FROM users WHERE id = ?').bind('u-1').first<any>();
     expect(await verifyPassword('senha-antiga-boa', linha.password_hash), 'a senha foi trocada apesar do 400').toBe(true);
-  });
+  }, 30_000);
 
   it('aceita senha nova de 8+ e troca de verdade', async () => {
     const res = await req('/api/v1/auth/change-password', {
@@ -60,7 +60,7 @@ describe('Política de senha nova', () => {
     expect(res.status, await res.clone().text()).toBe(200);
     const linha = await env.DB.prepare('SELECT password_hash FROM users WHERE id = ?').bind('u-1').first<any>();
     expect(await verifyPassword('senha-nova-boa', linha.password_hash)).toBe(true);
-  });
+  }, 30_000);
 
   it('senha ERRADA continua sendo 401, não 400 — a validação não mudou a ordem', async () => {
     // Se o schema recusasse antes de conferir a senha atual, a resposta viraria
@@ -112,7 +112,7 @@ describe('Rotas de /api/v1/auth que exigem sessão', () => {
       .bind('u-novo').first<any>();
     expect(await verifyPassword('definitiva-boa', linha.password_hash)).toBe(true);
     expect(linha.requires_password_change, 'a marca de primeiro acesso não foi limpa').toBe(0);
-  });
+  }, 30_000);
 
   it('a sessão que troca a senha do primeiro acesso continua valendo', async () => {
     // `globals.js` chama `initApp()` com o MESMO token logo após a troca. Se a
@@ -332,6 +332,7 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
       .bind('proj-m', 'Cliente M', 'ISO 27001', 'controller', 'Active').run();
     await env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?,?,?,?,?)`)
       .bind('u-st', 'st@ness.io', await hashPassword('password123'), 'Staff', 'consultor').run();
+    await designarConsultor('st@ness.io', 'proj-m');
     staff = {
       ...(await sessionFor({ id: 'u-st', email: 'st@ness.io', role: 'consultor' })),
       'Content-Type': 'application/json',

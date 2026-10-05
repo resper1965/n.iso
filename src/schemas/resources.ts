@@ -26,6 +26,31 @@ export const createRiskSchema = z.object({
   accepted_at: z.string().optional().nullable()
 }).passthrough();
 
+/**
+ * Progresso do checklist por item (`PUT /projects/:id/checklist-progress`). A tela
+ * manda o projeto inteiro a cada alteração: 132 itens no catálogo, então 500 é
+ * teto folgado, e as 41 fases vão de 0 a 40.
+ */
+export const checklistProgressSchema = z.object({
+  items: z.array(z.object({
+    phase_number: z.number().int().min(0).max(40),
+    item_id: z.string().min(1).max(100),
+    is_checked: z.boolean(),
+    evidence_id: z.string().max(100).nullish(),
+    notes: z.string().max(5000).nullish(),
+    assigned_to: z.string().max(200).nullish(),
+    due_date: z.string().max(40).nullish()
+  })).min(1).max(500)
+});
+
+/**
+ * Revogar a aprovação de ROPA ou DPIA (F6): o motivo é obrigatório e vai para a trilha. Mínimo de
+ * 5 caracteres para barrar o "x" digitado só para passar.
+ */
+const motivoDaRevogacao = z.string().trim().min(5, 'Informe o motivo (mínimo de 5 caracteres)').max(500);
+export const revogarRopaSchema = z.object({ role: z.enum(['ciso', 'ceo', 'todas']), reason: motivoDaRevogacao });
+export const revogarDpiaSchema = z.object({ reason: motivoDaRevogacao });
+
 export const createVendorSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   category: z.string().optional().nullable()
