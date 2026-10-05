@@ -193,8 +193,11 @@ authApp.post('/login', async (c) => {
     }
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, org_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
-    ).bind(email).first() as any;
+      // Busca sem caixa: conta antiga gravada com maiúscula continua entrando. Se
+      // houver duas que só diferem na caixa, vence a já minúscula (determinístico).
+      `SELECT id, email, name, role, client_project_id, org_id, password_hash, requires_password_change, totp_enabled, ativo FROM users
+       WHERE lower(trim(email)) = ? ORDER BY email = ? DESC LIMIT 1`
+    ).bind(email, email).first() as any;
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       const depois = await registrarFalhaLogin(c, chaves, falhas, desafioVerificavel, ip);
@@ -327,8 +330,8 @@ authApp.post('/forgot-password', async (c) => {
     const { email } = v.data;
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name FROM users WHERE email = ?'
-    ).bind(email).first() as any;
+      'SELECT id, email, name FROM users WHERE lower(trim(email)) = ? ORDER BY email = ? DESC LIMIT 1'
+    ).bind(email, email).first() as any;
 
     if (!user) {
       return c.json({ ok: true, message: 'Se o e-mail estiver cadastrado, um código foi gerado.' });
@@ -358,7 +361,7 @@ authApp.post('/forgot-password', async (c) => {
         <p style="color: #8e8e93; font-size: 0.85rem; text-align: center;">Se você não solicitou esta redefinição, por favor desconsidere este e-mail de forma segura.</p>
       </div>
     `;
-    await sendEmail(c, email, 'Recuperação de senha · n.iso', emailHtml);
+    await sendEmail(c, user.email, 'Recuperação de senha · n.iso', emailHtml);
 
     if (c.env.ENVIRONMENT === 'development' || c.env.ENVIRONMENT === 'test') {
       return c.json({ ok: true, reset_token: token, message: 'Código de recuperação gerado (Desenvolvimento)' });

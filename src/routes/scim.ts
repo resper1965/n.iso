@@ -158,12 +158,12 @@ scimApp.get('/Users', async (c) => {
     if (filtro) {
       const m = filtro.match(/^\s*userName\s+eq\s+"([^"]+)"\s*$/i);
       if (!m) return erroScim(c, 400, `Filtro não suportado: ${filtro}. Apenas 'userName eq "..."'.`, 'invalidFilter');
-      email = m[1].toLowerCase();
+      email = m[1].trim().toLowerCase();
     }
 
     const { results } = email
       ? await c.env.DB.prepare(
-          'SELECT id, email, name, role, client_project_id, ativo, created_at FROM users WHERE client_project_id = ? AND email = ?'
+          'SELECT id, email, name, role, client_project_id, ativo, created_at FROM users WHERE client_project_id = ? AND lower(trim(email)) = ?'
         ).bind(projectId, email).all<LinhaUsuario>()
       : await c.env.DB.prepare(
           'SELECT id, email, name, role, client_project_id, ativo, created_at FROM users WHERE client_project_id = ? ORDER BY created_at LIMIT 200'
@@ -213,7 +213,7 @@ scimApp.post('/Users', async (c) => {
     if (!email || !email.includes('@')) return erroScim(c, 400, 'userName precisa ser um e-mail.', 'invalidValue');
 
     const existente = await c.env.DB.prepare(
-      'SELECT id, client_project_id FROM users WHERE email = ?'
+      'SELECT id, client_project_id FROM users WHERE lower(trim(email)) = ?'
     ).bind(email).first<{ id: string; client_project_id: string | null }>();
 
     if (existente) {
