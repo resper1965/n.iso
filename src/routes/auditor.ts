@@ -92,6 +92,42 @@ auditorApp.get('/projects/:id/auditor-notes', async (c) => {
   }
 });
 
+/**
+ * Prova dos pedidos de aprovação/ciência do projeto do token (acesso de stakeholders, fatia 5): por
+ * pedido, a versão congelada (conteúdo + SHA-256), o status e o substituto; por destinatário, quem,
+ * quando, IP, user-agent, hash lido, canal, MFA e motivo. Somente GET. Nunca o hash do token do link
+ * nem o prazo dele: autenticam a ciência por link e não são prova.
+ */
+/** Uma linha com conteúdo ilegível não derruba a prova inteira: vai o texto cru. */
+function lerConteudo(json: string): unknown {
+  try { return JSON.parse(json); } catch { return json; }
+}
+
+auditorApp.get('/auditor/:token/pedidos', async (c) => {
+  try {
+    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")')
+      .bind(c.req.param('token')).first<{ project_id: string }>();
+    if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
+    const { results: pedidos } = await c.env.DB.prepare(
+      `SELECT id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, substituido_por, criado_por, criado_em
+         FROM pedidos WHERE project_id = ? ORDER BY criado_em DESC, id LIMIT 500`
+    ).bind(t.project_id).all<any>();
+    const { results: dests } = await c.env.DB.prepare(
+      `SELECT d.pedido_id, d.nome, d.email, d.status, d.decidido_em, d.aberto_em, d.canal, d.ip, d.user_agent, d.hash_lido, d.mfa_usado, d.motivo
+         FROM pedido_destinatarios d JOIN pedidos p ON p.id = d.pedido_id WHERE p.project_id = ? ORDER BY d.email`
+    ).bind(t.project_id).all<any>();
+    return c.json({
+      pedidos: pedidos.map(({ conteudo_json, ...p }) => ({
+        ...p,
+        conteudo: lerConteudo(conteudo_json),
+        destinatarios: dests.filter((d) => d.pedido_id === p.id).map(({ pedido_id: _p, ...d }) => d),
+      })),
+    });
+  } catch (e: any) {
+    return erro500(c, 'Falha ao buscar a prova dos pedidos', e);
+  }
+});
+
 auditorApp.get('/auditor/:token/evidence/:evidenceId/download', async (c) => {
   try {
     const token = c.req.param('token');
