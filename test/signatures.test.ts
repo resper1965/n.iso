@@ -228,7 +228,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       const fora = { ...(await sessionFor({ id: 'usr-fora', email: 'fora@cliente.com', role: 'org_admin', client_project_id: 'proj-1' })), 'Content-Type': 'application/json' };
       const r2 = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' }, fora);
       expect(r2.status).toBe(403);
-      expect(await r2.text()).toContain('não designado na matriz');
+      expect(await r2.text()).toContain('não está designado na matriz');
 
       const ev = await env.DB.prepare("SELECT ciso_approved_by FROM evidence WHERE id='ev-1'").first<any>();
       expect(ev.ciso_approved_by).toBeNull();

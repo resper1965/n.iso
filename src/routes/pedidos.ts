@@ -2,12 +2,12 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import {
   logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
-  autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura,
+  type PapelAssinatura,
   sendEmail, escapeHtml, genToken, sha256Hex,
 } from '../helpers';
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import {
-  criarPedido, conferirVigencia, registrarDecisao, DIAS_LINK, type PedidoRow,
+  criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
 } from '../services/pedidos';
 
 /**
@@ -20,9 +20,7 @@ import {
  *   pedido quem é destinatário (por `user_id`, ou pelo e-mail enquanto não há conta ligada) E
  *   alcança o projeto dele. Pedido alheio é 404, não 403: não confirma que existe.
  *
- * Autoridade de aprovação PROVISÓRIA (fatia 4 refina): `ciente` basta ser destinatário; `ciso`/`ceo`
- * passam por `autoridadeDeAssinatura`/`recusaDeAssinatura`, a mesma regra das aprovações existentes
- * (falha fechado: sem designação na matriz, sem aprovação).
+ * Quem pede: `podePedir`; quem aprova: `autoridadeNoPedido` (ambas em `services/pedidos.ts`, fatia 4).
  */
 type Ctx = { Bindings: Bindings; Variables: Variables };
 type Usuario = Variables['user'];
@@ -30,13 +28,17 @@ type Usuario = Variables['user'];
 export const pedidosApp = new Hono<Ctx>();
 export const projectPedidosApp = new Hono<Ctx>();
 
-/** Quem pede (parte 4 do desenho). `platform_admin` não: opera a plataforma, não o cliente. */
-const PODE_PEDIR = new Set(['org_admin', 'consultor', 'consultant', 'consultoria_admin']);
+/** 403 com o motivo, se o usuário não pede neste projeto; `null` se pode. */
+async function recusaPedir(c: any): Promise<Response | null> {
+  const motivo = await podePedir(c.env.DB, c.get('user'), c.req.param('projectId') ?? '');
+  return motivo ? c.json({ error: motivo }, 403) : null;
+}
 
 projectPedidosApp.post('/', async (c) => {
   try {
+    const recusa = await recusaPedir(c);
+    if (recusa) return recusa;
     const user = c.get('user');
-    if (!PODE_PEDIR.has(user?.role ?? '')) return c.json({ error: 'Forbidden: papel sem permissão para pedir aprovação' }, 403);
     const projectId = c.req.param('projectId') ?? '';
     const valid = await validateBody(c, pedidoCriarSchema);
     if (!valid.success) return valid.response;
@@ -147,20 +149,11 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: s
       return c.json({ error: 'Senha incorreta' }, 401);
     }
 
-    let nome = dest.nome || dbUser.name || user.email;
-    let assinar: { papel: PapelAssinatura } | undefined;
-    const autoridade = await autoridadeDeAssinatura(db, pedido.project_id, user);
-    // Ciência também é ato do cliente: conta que administra a plataforma não a dá, nem sendo destinatária.
-    if (pedido.papel_exigido === 'ciente' && autoridade.papelDePlataforma) {
-      return c.json({ error: 'Operação proibida: conta de administração da plataforma não dá ciência por cliente.' }, 403);
-    }
-    if (pedido.papel_exigido !== 'ciente') {
-      const papel = pedido.papel_exigido as PapelAssinatura;
-      const recusa = recusaDeAssinatura(autoridade, papel);
-      if (recusa) return c.json({ error: recusa }, 403);
-      nome = autoridade.nome || nome;
-      if (decisao === 'aprovar') assinar = { papel };
-    }
+    const autoridade = await autoridadeNoPedido(db, pedido, user);
+    if (autoridade.recusa) return c.json({ error: autoridade.recusa }, 403);
+    const nome = autoridade.nome || dest.nome || dbUser.name || user.email;
+    const assinar: { papel: PapelAssinatura } | undefined =
+      decisao === 'aprovar' && pedido.papel_exigido !== 'ciente' ? { papel: pedido.papel_exigido } : undefined;
 
     const novoStatus = decisao === 'recusar' ? 'recusado' : pedido.papel_exigido === 'ciente' ? 'ciente' : 'aprovado';
     const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null;
@@ -203,7 +196,7 @@ pedidosApp.post('/:id/recusar', async (c) => {
 });
 
 // ─── Ciência em massa por link com código (fatia 3) ──────────────────────────────────────────────
-// A consultoria (os mesmos papéis de `PODE_PEDIR`) manda um documento a até 200 e-mails, sem conta.
+// Quem pede (`podePedir`) manda um documento a até 200 e-mails, sem conta.
 // Cada pessoa recebe um link pessoal: token CSPRNG só no FRAGMENTO da URL (o servidor nunca o recebe
 // no caminho nem na query), só o SHA-256 no banco. O lado público está em `routes/public-pedidos.ts`.
 
@@ -243,12 +236,11 @@ async function enviarLinks(c: any, titulo: string, links: Link[]): Promise<strin
   return falhas;
 }
 
-const podePedir = (c: any) => PODE_PEDIR.has(c.get('user')?.role ?? '');
-const SEM_PAPEL = { error: 'Forbidden: papel sem permissão para pedir ciência' };
 
 projectPedidosApp.post('/ciencia', async (c) => {
   try {
-    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const recusa = await recusaPedir(c);
+    if (recusa) return recusa;
     const user = c.get('user');
     const projectId = c.req.param('projectId') ?? '';
     const valid = await validateBody(c, pedidoCienciaLoteSchema);
@@ -278,7 +270,8 @@ projectPedidosApp.post('/ciencia', async (c) => {
 
 projectPedidosApp.get('/', async (c) => {
   try {
-    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const recusa = await recusaPedir(c);
+    if (recusa) return recusa;
     const { results } = await c.env.DB.prepare(
       `SELECT p.id, p.tipo, p.ref_id, p.titulo, p.papel_exigido, p.status, p.hash, p.substituido_por, p.criado_por, p.criado_em,
               COUNT(d.id) AS total,
@@ -306,7 +299,8 @@ const pedidoDoProjeto = (db: D1Database, projectId: string, id: string) =>
  */
 projectPedidosApp.get('/:id', async (c) => {
   try {
-    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const recusa = await recusaPedir(c);
+    if (recusa) return recusa;
     const db = c.env.DB;
     let p = await pedidoDoProjeto(db, c.req.param('projectId') ?? '', c.req.param('id'));
     if (!p) return c.json({ error: 'Pedido não encontrado' }, 404);
@@ -357,7 +351,8 @@ projectPedidosApp.get('/:id', async (c) => {
  */
 projectPedidosApp.post('/:id/reenviar', async (c) => {
   try {
-    if (!podePedir(c)) return c.json(SEM_PAPEL, 403);
+    const recusa = await recusaPedir(c);
+    if (recusa) return recusa;
     const db = c.env.DB;
     const user = c.get('user');
     const p = await pedidoDoProjeto(db, c.req.param('projectId') ?? '', c.req.param('id'));
