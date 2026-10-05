@@ -465,7 +465,8 @@ window.doLogout = function doLogout() {
         // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
         // chamava doLogout de novo.
         clearInterval(window._notifPoll);
-        S.token = null; S.user = null; S.activeProject = null;
+        S.token = null; S.user = null; S.activeProject = null; S.orgAtuacao = null;
+        try { sessionStorage.removeItem('niso_orgAtuacao'); } catch { /* sem storage */ }
         localStorage.removeItem('niso_token');
         localStorage.removeItem('niso_user');
         localStorage.removeItem('niso_activeProject');
@@ -596,6 +597,7 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(naviga
 const LOGOUT_SHORTCUT = IS_MAC ? '⇧⌘Q' : '⇧Ctrl+Q';
 
 const ICON_KEY = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.5-8.5"/><path d="m17 6 3 3"/></svg>';
+const ICON_LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const ICON_HISTORY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>';
 const ICON_LOGOUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -632,6 +634,9 @@ window.renderAccountMenu = function renderAccountMenu() {
             ${tenantRows ? `<div class="account-group">Tenant</div>${tenantRows}<div class="account-rule"></div>` : ''}
             <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openProfileModal"]'>
                 ${ICON_KEY}<span class="account-item-label">Minha conta e MFA</span>
+            </button>
+            <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openChangePasswordModal"]'>
+                ${ICON_LOCK}<span class="account-item-label">Trocar senha</span>
             </button>
             <button type="button" role="menuitem" class="account-item" data-action="accountMenuAction" data-args='["openSessionTrail"]'>
                 ${ICON_HISTORY}<span class="account-item-label">Trilha da minha sessão</span>
@@ -762,9 +767,12 @@ window.updateHeaderUser = function updateHeaderUser() {
                 let roleText = 'Usuário';
                 if (S.user.role === 'platform_admin' || S.user.role === 'admin') roleText = 'Administrador';
                 else if (S.user.role === 'consultor' || S.user.role === 'consultant') roleText = 'Consultor';
+                else if (S.user.role === 'comercial') roleText = 'Comercial';
+                else if (S.user.role === 'consultoria_admin') roleText = 'Admin da consultoria';
                 else if (S.user.role === 'org_admin') roleText = 'Gestor do Cliente';
                 else if (S.user.role === 'org_user') roleText = 'Colaborador do Cliente';
                 else if (S.user.role === 'client') roleText = 'Cliente';
+                else if (S.user.role === 'stakeholder') roleText = 'Stakeholder';
                 roleEl.textContent = roleText;
             }
         }
@@ -792,6 +800,13 @@ window.updateHeaderUser = function updateHeaderUser() {
         const groupSales = document.getElementById('group-sales');
         if (labelSales) labelSales.style.display = isClient ? 'none' : '';
         if (groupSales) groupSales.style.display = isClient ? 'none' : '';
+        // Leads e propostas são do comercial (somenteComercial no servidor); o
+        // consultor segue com Assessments e o resto do grupo.
+        const comercial = window.ehComercial();
+        ['nav-leads', 'nav-proposals', 'nav-catalogo', 'nav-config'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = comercial ? '' : 'none';
+        });
 
         // Configurações do grupo de sistema
         const labelSystem = document.getElementById('label-group-system');
@@ -828,16 +843,55 @@ window.updateHeaderUser = function updateHeaderUser() {
                 groupSystem.style.maxHeight = '';
             }
             if (navAuditTrail) navAuditTrail.style.display = '';
-            if (navSettings) navSettings.style.display = '';
+            // Configurações é a tabela de preços (custo interno, margem) da ness. (somenteOrgNess no
+            // servidor): comercial e platform_admin, não o administrador de outra consultoria.
+            if (navSettings) navSettings.style.display = window.ehComercial() && S.user.role !== 'consultoria_admin' ? '' : 'none';
+            // Organizações: exclusivo do platform_admin (rotas /platform/orgs).
+            const navOrgs = document.getElementById('nav-organizacoes');
+            if (navOrgs) navOrgs.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
             // API Keys: exclusivo do Platform Admin (nem consultor vê).
             if (navApiKeys) navApiKeys.style.display = (S.user && S.user.role === 'platform_admin') ? '' : 'none';
+            const navConectar = document.getElementById('nav-conectar-agente');
+            if (navConectar) navConectar.style.display = (S.user && (S.user.role === 'consultor' || S.user.role === 'consultant')) ? '' : 'none';
             if (navUsers) {
-                const canSeeUsers = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+                const canSeeUsers = S.user && ['platform_admin', 'admin', 'consultor', 'consultant', 'consultoria_admin'].includes(S.user.role);
                 navUsers.style.display = canSeeUsers ? '' : 'none';
                 const navUsersText = navUsers.querySelector('.sidebar-nav-text');
                 if (navUsersText) navUsersText.textContent = 'Usuários';
             }
         }
+
+        // Comercial não entrega adequação: o servidor recusa projeto, controle e
+        // evidência a ele (não é staff em requireProjectAccess). O menu mostra só
+        // o que ele alcança, em vez de telas que abririam vazias ou com erro.
+        if (S.user && S.user.role === 'comercial') {
+            const doComercial = new Set(['nav-dashboard', 'nav-leads', 'nav-assessments', 'nav-proposals', 'nav-catalogo', 'nav-config', 'nav-settings']);
+            document.querySelectorAll('.sidebar-nav[id^="nav-"]').forEach(el => {
+                el.style.display = doComercial.has(el.id) ? '' : 'none';
+            });
+            ['group-impl', 'group-ops', 'group-privacy', 'group-intel'].forEach(id => {
+                const g = document.getElementById(id);
+                if (g) g.style.display = 'none';
+                const rotulo = document.querySelector(`.sidebar-label[data-args='["${id}"]']`);
+                if (rotulo) rotulo.style.display = 'none';
+            });
+        }
+
+        // "Meus pedidos" para quem pode ser destinatário de pedido de aprovação/ciência (lista vazia mostra
+        // o estado vazio). platform_admin e comercial não decidem pedido de cliente.
+        const navMeus = document.getElementById('nav-meus');
+        if (navMeus) navMeus.style.display = ['org_admin', 'org_user', 'client', 'consultor', 'consultant', 'consultoria_admin'].includes(S.user?.role) ? '' : 'none';
+
+        // Stakeholder (mínimo privilégio): só "Meus pedidos" e o cartão de perfil (senha e MFA). O
+        // servidor já recusa o resto (allow-list de caminhos); o menu só não oferece o que daria 403.
+        if (S.user && S.user.role === 'stakeholder') {
+            document.querySelectorAll('.sidebar-nav[id^="nav-"]').forEach(el => { el.style.display = el.id === 'nav-meus' ? '' : 'none'; });
+            document.querySelectorAll('.sidebar-label, .sidebar-group').forEach(el => { el.style.display = 'none'; });
+            if (selectorContainer) selectorContainer.style.display = 'none';
+        }
+
+        // Seletor de organização e faixa "Atuando em": só o platform_admin (views/organizacoes.js).
+        if (window.atualizarSeletorOrg) window.atualizarSeletorOrg();
     }
 
 window.loadNotifications = async function loadNotifications() {
@@ -961,6 +1015,9 @@ window.handleNotificationClick = async function handleNotificationClick(id) {
             } else if (parts[1] === 'proposals') {
                 const proposalId = parts[2];
                 navigate('proposals', { currentProposalId: proposalId });
+            } else if (parts[1] === 'propostas') {
+                // notificações da proposta (visualizada, recusada, ajuste): a tela de Propostas abre a ficha
+                navigate('proposals', { propostaAbrir: parts[2] || null });
             } else if (parts[1] === 'assessments') {
                 const assessmentId = parts[2];
                 navigate('assessments', { currentAssessmentId: assessmentId });
@@ -1105,7 +1162,13 @@ window.doInviteClient = async function doInviteClient(projectId) {
         }
     }
 
-window.loadLeads = async function loadLeads() { try { S.leads = await api('GET', '/api/v1/leads'); } catch(e) { S.leads = []; } }
+// Espelho de `ehComercial` (src/helpers.ts). Só decide o que MOSTRAR; quem
+// barra de verdade é o servidor.
+window.ehComercial = function ehComercial() { return !!(S.user && ['platform_admin', 'comercial', 'consultoria_admin'].includes(S.user.role)); }
+
+// Leads são do comercial (somenteComercial no servidor): para os demais papéis
+// não pede — evita o 403 a cada login do consultor.
+window.loadLeads = async function loadLeads() { if (!window.ehComercial()) { S.leads = []; return; } try { S.leads = await api('GET', '/api/v1/leads'); } catch(e) { S.leads = []; } }
 
 window.loadAssessments = async function loadAssessments() { try { S.assessments = await api('GET', '/api/v1/assessments'); } catch(e) { S.assessments = []; } }
 
@@ -1327,7 +1390,9 @@ window.initApp = async function initApp() {
         if (await window.checkLegalGate()) return;
 
         document.getElementById('login-overlay').classList.add('hidden');
-        await loadAll();
+        const ehStakeholder = S.user && S.user.role === 'stakeholder';
+        // Stakeholder não alcança leads, projetos nem controles (403 em todos): não os pede.
+        if (!ehStakeholder) await loadAll();
 
         const isClient = S.user && (S.user.role === 'org_admin' || S.user.role === 'org_user' || S.user.role === 'client');
         if (isClient && S.user.client_project_id) {
@@ -1345,13 +1410,15 @@ window.initApp = async function initApp() {
         updateHeaderUser();
         updateActiveProjectWidget();
 
-        if (isClient && S.user.client_project_id) {
+        if (ehStakeholder) {
+            navigate('meus-pedidos');
+        } else if (isClient && S.user.client_project_id) {
             navigate('project-detail');
         } else {
             navigate('dashboard');
         }
         // ponytail: poll notifications every 60s
-        window._notifPoll = setInterval(loadNotifications, 60000);
+        if (!ehStakeholder) window._notifPoll = setInterval(loadNotifications, 60000);
         // Close dropdowns on outside click
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.dropdown-wrap')) {

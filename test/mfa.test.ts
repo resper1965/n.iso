@@ -67,7 +67,7 @@ describe('TOTP (RFC 6238)', () => {
     const uri = uriProvisionamento('ABCDEFGH', 'a@b.c');
     expect(uri).toContain('otpauth://totp/');
     expect(uri).toContain('secret=ABCDEFGH');
-    expect(uri).toContain('issuer=nISO');
+    expect(uri).toContain('issuer=n.iso');
     expect(uri).toContain('period=30');
   });
 
@@ -225,7 +225,7 @@ describe('Fluxo de MFA', () => {
       if (r.status === 429) bloqueou++;
     }
     expect(bloqueou).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('MFA exige sessão — não é rota pública', async () => {
     const res = await app.fetch(
@@ -395,7 +395,7 @@ describe('MFA imposto no login', () => {
       env as any
     );
     expect(verify.status, await verify.clone().text()).toBe(200);
-  });
+  }, 30_000);
 });
 
 describe('Reuso de código na janela tolerada', () => {

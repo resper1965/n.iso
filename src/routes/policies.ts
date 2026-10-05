@@ -546,7 +546,7 @@ policies.get('/api/v1/policies/templates/:templateName', async (c) => {
     const generator = new PolicyGeneratorService('.', c.env.ASSETS);
     const markdown = await generator.generate(templateName, {
       organizationName: '[Nome da Organização]',
-      policyOwner: 'Consultor nISO',
+      policyOwner: 'Consultor n.iso',
       approver: 'Direção Executiva',
       status: 'Draft',
       standardVersion: 'v2022'
@@ -577,7 +577,7 @@ policies.post('/api/v1/projects/:projectId/policies/generate-from-template', asy
     // Gerar conteúdo a partir do template com variáveis do projeto
     const markdown = await generator.generate(template_name, {
       organizationName: project.client_name,
-      policyOwner: user?.name || 'Consultor nISO',
+      policyOwner: user?.name || 'Consultor n.iso',
       approver: 'Direção Executiva',
       status: 'Draft',
       standardVersion: 'v2022'

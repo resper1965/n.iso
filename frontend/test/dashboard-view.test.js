@@ -38,7 +38,7 @@ describe('renderDashboard — onboarding do cliente', () => {
     await window.renderDashboard(c, h, a);
     expect(h.textContent).toBe('Dashboard Executivo');
     expect(a.innerHTML).toContain('Novo Lead');
-    expect(c.textContent).toContain('Bem-vindo à ness. nISO');
+    expect(c.textContent).toContain('Bem-vindo ao n.iso');
     expect(c.textContent).toContain('Aguardando Liberação');
     // Não chamou API no caminho de onboarding.
     expect(apiMock).not.toHaveBeenCalled();
@@ -68,12 +68,24 @@ describe('renderDashboard — onboarding do cliente', () => {
     // Proposta aprovada → badge "Assinado".
     expect(c.textContent).toContain('Assinado');
   });
+
+  it('proposta em andamento: sem o link do gerador antigo (410), só o aviso de que o comercial envia', async () => {
+    const { c, h, a } = montaDom();
+    S.user = { role: 'org_user' };
+    S.clientAssessmentId = 'as-1';
+    S.clientProposalId = 'pr-1';
+    S.clientProposalStatus = 'Draft';
+    await window.renderDashboard(c, h, a);
+    expect(c.innerHTML).not.toContain('generate-proposal');
+    expect(c.textContent).not.toContain('Revisar e Assinar');
+    expect(c.textContent).toContain('Proposta enviada pelo comercial');
+  });
 });
 
 describe('renderDashboard — visão do consultor', () => {
   it('agrega os contadores e calcula a taxa de conformidade', async () => {
     const { c, h, a } = montaDom();
-    S.user = { role: 'admin' }; // fora da lista de cliente → caminho consultor
+    S.user = { role: 'comercial' }; // comercial vê o funil → 4 chamadas
     // 4 chamadas na ordem: leads, assessments, projects, controls.
     apiMock
       .mockResolvedValueOnce([{ id: 'l1' }, { id: 'l2' }]) // leads
@@ -100,11 +112,25 @@ describe('renderDashboard — visão do consultor', () => {
     expect(c.textContent).toContain('Proj');
   });
 
+  it('consultor não busca nem vê o funil de leads (área do comercial)', async () => {
+    const { c, h, a } = montaDom();
+    S.user = { role: 'consultor' };
+    // 3 chamadas: assessments, projects, controls — leads não é pedido.
+    apiMock
+      .mockResolvedValueOnce([{ id: 'a1', client_name: 'ACME', status: 'completed' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await window.renderDashboard(c, h, a);
+    expect(apiMock).toHaveBeenCalledTimes(3);
+    expect(apiMock.mock.calls.map((ch) => ch[1])).not.toContain('/api/v1/leads');
+    expect(c.textContent).not.toContain('Leads Ativos');
+    expect(c.textContent).toContain('ACME');
+  });
+
   it('assume 93 controles quando a lista vem vazia (0% de conformidade)', async () => {
     const { c, h, a } = montaDom();
-    S.user = { role: 'admin' };
+    S.user = { role: 'consultor' };
     apiMock
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);

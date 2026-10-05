@@ -123,7 +123,7 @@ export const INATIVIDADE_CLIENTE_SEG = 30 * 60;
 export const INATIVIDADE_CONSULTOR_SEG = 8 * 60 * 60;
 
 /** Papéis do lado do cliente; o resto é gente que opera a plataforma. */
-const PAPEIS_CLIENTE = new Set(['client', 'org_user', 'org_admin', 'client_admin']);
+const PAPEIS_CLIENTE = new Set(['client', 'org_user', 'org_admin', 'client_admin', 'employee', 'stakeholder']);
 
 export function limiteInatividadeSeg(role: string | undefined): number {
   return PAPEIS_CLIENTE.has(role ?? '') ? INATIVIDADE_CLIENTE_SEG : INATIVIDADE_CONSULTOR_SEG;

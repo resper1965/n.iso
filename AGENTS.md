@@ -24,7 +24,7 @@ Entao:
   commit publicado, injetado no deploy:
 
   ```
-  curl -s https://niso.ness.workers.dev/health
+  curl -s https://niso.ness.com.br/health
   # {"status":"ok","version":"<sha>","deployment_id":"...","deployed_at":"..."}
   ```
 
@@ -36,7 +36,7 @@ Entao:
 
   ```
   curl -s -X POST -H "Content-Type: application/json" -d "{}" \
-    https://niso.ness.workers.dev/api/v1/auth/login
+    https://niso.ness.com.br/api/v1/auth/login
   ```
 
   Codigo atual devolve o envelope completo:
@@ -68,7 +68,26 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
   dominio em `src/routes/*.ts` (auth, users, leads, proposals, assessments,
   projects, evidence, vendors, training, ropa, audits, capa, certifications,
-  public, ai, governance, auditor, platform, risks, policies, integrations).
+  public, ai, governance, auditor, platform, risks, policies, integrations,
+  pedidos, public-pedidos).
+- **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
+  (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
+  Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
+  `conferirVigencia`, `registrarDecisao`). Rotas: `/api/v1/pedidos*` (o
+  destinatario; unico prefixo de dado do papel `stakeholder`),
+  `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
+  painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
+  token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
+  auditor externo, paginada). **A prova e imutavel**: o trigger
+  `pedido_dest_prova_imutavel` recusa UPDATE em linha decidida, e
+  `pedido_prova_imutavel` (0043) recusa mudar hash, conteudo e documento de
+  qualquer pedido e status/substituto de pedido fechado (`org_id` fica livre:
+  a transferencia de projeto o atualiza). DELETE fica livre no banco so para o
+  projeto cascatear. No fonte, todo `UPDATE pedidos` leva `status = 'aberto'` e
+  todo `UPDATE pedido_destinatarios` leva `status = 'pendente'` na WHERE do
+  proprio statement (a unica excecao e `UPDATE pedidos SET org_id = ?`), sem
+  DELETE nem REPLACE; `test/pedidos-prova.test.ts` le o fonte e reprova o que
+  fugir disso. Correcao e pedido novo.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
@@ -77,13 +96,19 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `policy-generator.ts`, `embeddings.ts`, `project-setup.ts`.
 - **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
 - **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
-  Duas páginas raiz, propósito diferente:
-  - `frontend/public/index.html` — landing pública (marketing + pricing ao
-    vivo via `/api/v1/public/pricing`), copiada verbatim pelo Vite. Serve `/`.
   - `frontend/login.html` — o app de verdade (login + SPA), entrada do Vite
     (`vite.config.js: rollupOptions.input`), com `src/main.js`, `router.js`,
     `state.js` (estado global `S`), `api.js`, `ui.js`, `globals.js`,
-    `src/views/*.js`. Serve `/login`.
+    `src/views/*.js`. Serve `/`, `/login` e toda rota desconhecida. Desde
+    2026-09-29 a tela de entrada É a landing: login na primeira dobra, seções
+    institucionais abaixo, tudo dentro de `#login-overlay`
+    (`docs/superpowers/specs/2026-09-29-landing-login-design.md`). **Não
+    recrie `frontend/public/index.html`**: ele voltaria a tomar `/` com CSS
+    próprio — foi assim que a landing antiga saiu da marca. Sem `index.html`,
+    `/` cai no catch-all de `src/index.ts`, que entrega `/login`
+    (`test/landing-raiz.test.ts`). Atenção: `vite.config.js` tem
+    `emptyOutDir: false`, então um `dist/index.html` de build antigo sobrevive
+    localmente — apague antes de testar a raiz com `wrangler dev`.
   - `frontend/public/politicas.html` — portal público de confirmação de
     leitura de política (LGPD art. 18 / ISO A.6.3). Serve `/politicas`
     (`/politicas.html` redireciona, 307, via `html_handling` do Workers
@@ -94,14 +119,33 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     Ciência de Políticas", não o do app.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **44 tabelas**. Migrations numeradas em
-  `migrations/`, ultima a **0020**. O estado real de producao e o historico da
+- **Schema**: `schema.sql` — **58 tabelas** (medido em 2026-10-05: o `schema.sql` aplicado num
+  SQLite em memoria, `SELECT count(*) FROM sqlite_master WHERE type='table'`; as linhas que comecam
+  por `CREATE TABLE` sao 58 nomes distintos). Migrations numeradas em
+  `migrations/`, ultima a **0043**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
   AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
+- **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
+  Worker nao le disco, entao `npm run skills:gerar` escreve `src/mcp/skills-gerado.ts` (commitado; o
+  `test/agente-skills.test.ts` falha se ficar velho). O agente as le pelo MCP com `niso_skill`,
+  atras do login. Skill nova = pasta nova + gerar + roteiro em `src/mcp/contexto.ts`.
+- **Documentacao do agente**: `docs/agente/` (uso, arquitetura com diagramas, seguranca e o
+  checklist de PR). Leia `docs/agente/seguranca.md` antes de criar rota nova: o principal do
+  agente carrega o `users.id` real do consultor, e rota de "minha conta" entra em
+  `FORA_DO_AGENTE`.
+- **MCP remoto** (consultor): agente com alcance de consultor preso a um projeto (`src/mcp/servidor.ts`); `/mcp` em `src/mcp/`; login OAuth em `/oauth/*`
+  (`src/routes/oauth-autorizacao.ts`); principal agente em
+  `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
+  tabela `agente_concessoes`; KV `OAUTH_KV`. Regra: **so `ROTAS_OAUTH` passam
+  pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. KV
+  `OAUTH_KV` (id `fc8dfff4…`) e `staging-OAUTH_KV` (id `9d9d24c0…`) criados em
+  2026-09-29 e declarados no `wrangler.jsonc`. Recurso fixo em
+  `niso.ness.com.br`; verificacao nos quatro clientes (Claude Code, Cursor,
+  Codex, Antigravity) ainda pendente ate o deploy.
 
 ## Decisoes de produto ja tomadas — nao reabrir
 
@@ -140,17 +184,20 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **~300 `any` em `src/`.** `tsc --noEmit` limpo diz pouco. Tipar o que voce
-  tocar e melhoria barata; nao precisa de permissao.
-- **1 de 58 arquivos de teste ainda mocka o D1**: `test/mcp-integration.test.ts`. Todos os demais que tocam banco usam o D1 real do
-  `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
+- **~510 `any` em `src/`** (medido em 2026-10-01: `: any`, `as any` e `<any>` em
+  `src/*.ts`). `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria
+  barata; nao precisa de permissao. Falta uma catraca que reprove o aumento.
+- **4 de 94 arquivos de teste ainda mockam o D1**: `api`, `integration`,
+  `mcp-integration` e `services-rag` (medido em 2026-10-01). Os demais que tocam
+  banco usam o D1 real do `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com quase nenhum teste** (~12k linhas). `test/e2e/` cobre so o fluxo
-  de MFA, roda fora do `npm test` e exige servidor e navegador. Todo o resto da
-  interface nao tem cobertura nenhuma.
-- **~46 leituras de corpo sem schema semantico** (`projects`, `policies`,
-  `assessments`, `platform`, `public`). O `bodyGuard` global cobre teto de
+- **Frontend com pouco teste.** `frontend/test/` tem 19 arquivos (jsdom) e
+  `test/e2e/` cobre so o fluxo de MFA, fora do `npm test`, com servidor e
+  navegador. A maior parte das telas nao tem cobertura.
+- **36 leituras de corpo (`c.req.json`) sem schema semantico em 12 arquivos**
+  (medido em 2026-10-01; mais em `policies` 7, `assessments` 6, `governance` 6,
+  `projects` 4). O `bodyGuard` global cobre teto de
   tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
 - ~~**324 handlers `onclick=` inline**~~ **RESOLVIDO.** A migracao para delegacao
   de eventos terminou (PRs #121–#134) e `'unsafe-inline'` saiu de `script-src`
@@ -159,13 +206,10 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   reabrem o buraco.
 - **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
   em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
-- ~~**9 vulnerabilidades no `npm audit`**~~ **RESOLVIDO** (2026-09): `npm audit`
-  esta em zero. A migracao para vitest 4 aconteceu e o ultimo advisory era do
-  proprio `hono` (<=4.12.33, ReDoS no middleware de CORS) — nao da cadeia de
-  build, ao contrario do que esta linha afirmava. Hoje em 4.13.5.
-  **Licao:** "todas na cadeia de teste e build" era verdade quando foi escrito e
-  deixou de ser sem que ninguem reavaliasse. Rode `npm audit` antes de repetir
-  a afirmacao.
+- **`npm audit` nao esta em zero** (2026-09-29): 4 advisories moderados do
+  `undici`, anteriores ao MCP remoto. Em 2026-09 o audit chegou a zero (vitest 4,
+  `hono` 4.13.5), mas deixou de ser verdade sem ninguem reavaliar. Rode
+  `npm audit` antes de repetir qualquer afirmacao sobre ele.
 
 ## Segundo fator (MFA) — e como destravar alguem
 
@@ -195,15 +239,20 @@ errar um digito destruia a sessao.
 
 - Marca: ness. (sempre minusculo, com ponto).
 - Layout: Enterprise Grade, header 56px com backdrop-filter.
-- Cores: #070b14 (fundo), #00ade8 (accent), #f5f5f7 (texto),
-  rgba(229,235,255,0.6) (muted).
-- Tipografia: Inter 300/400 para body, Montserrat 500/700 apenas headings.
-- Proibido: italicos, emojis/icones, peso 600 Montserrat, accent como background
-  de area.
-- Inputs: border-radius 10px, glassmorphism com backdrop-filter blur(24px).
-- Login: split-screen (branding esquerda, form direita).
+- **Fonte única dos tokens: `frontend/src/style.css` (`:root`).** Não repita
+  valores aqui — a cópia anterior (#070b14, "proibido peso 600") envelheceu e
+  a landing antiga seguiu a cópia, não o app. Hoje: `--bg #0b1326`,
+  `--surface #162244`, `--accent #00ade8`, `--text #f1f5f9`.
+- Tipografia: Inter no corpo; Montserrat 500 na marca, 600 em títulos.
+- Produto: `n.iso`, com o ponto em accent, como a marca `ness.`.
+- Proibido: italicos, emojis/icones, accent como background de area.
+- Inputs: border-radius 10px (`.form-input`).
+- Login: tela dividida — marca à esquerda, cartão à direita; empilha abaixo
+  de 900px.
 
 ## Documentos que valem a leitura
+
+- `docs/plano-2026-10-fechamento.md` — o que esta aberto, de quem e a ordem
 
 - `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
 - `SECURITY.md` — invariantes de seguranca que nao podem regredir

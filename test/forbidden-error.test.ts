@@ -29,9 +29,13 @@ describe('ForbiddenError', () => {
     ).bind('rsk-b', 'proj-b', 'Ativo B', 'Ameaça B', 3, 3, 'Medium').run();
   });
 
-  it('requireProjectAccess lança ForbiddenError, não Error genérico', () => {
+  it('requireProjectAccess lança ForbiddenError, não Error genérico', async () => {
     const usuario = { role: 'org_admin', client_project_id: 'proj-a' };
-    expect(() => requireProjectAccess(usuario, 'proj-b')).toThrow(ForbiddenError);
+    await expect(requireProjectAccess(env.DB, usuario, 'proj-b')).rejects.toThrow(ForbiddenError);
+  });
+
+  it('requireProjectAccess: consultor sem designação no projeto também é ForbiddenError (D5)', async () => {
+    await expect(requireProjectAccess(env.DB, { role: 'consultor', email: 'ninguem@ness.lat' }, 'proj-b')).rejects.toThrow(ForbiddenError);
   });
 
   it('requireResourceAccess lança ForbiddenError quando o recurso é de outro tenant', async () => {

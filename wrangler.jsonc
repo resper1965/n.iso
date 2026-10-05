@@ -11,6 +11,16 @@
 		"nodejs_compat",
 		"global_fetch_strictly_public"
 	],
+	// Domínios. `niso.ness.com.br` é o oficial (links, e-mails, MCP, monitor).
+	// `n-iso.ness.com.br` nasceu pelo painel e segue respondendo: declarado aqui
+	// para o deploy não o tratar como sobra. `workers_dev` explícito porque
+	// integrações e e-mails antigos apontam para `niso.ness.workers.dev`.
+	// `routes` não é herdado por `env.staging` — staging fica só no workers.dev.
+	"workers_dev": true,
+	"routes": [
+		{ "pattern": "niso.ness.com.br", "custom_domain": true },
+		{ "pattern": "n-iso.ness.com.br", "custom_domain": true }
+	],
 	"assets": {
 		"directory": "frontend/dist",
 		"binding": "ASSETS"
@@ -50,6 +60,11 @@
 		{
 			"binding": "SESSIONS",
 			"id": "f9cb3bf811374cfe9f9ad5780e1740c7"
+		},
+		{
+			// Grants e tokens do OAuth do MCP remoto (src/mcp, src/routes/oauth-autorizacao.ts).
+			"binding": "OAUTH_KV",
+			"id": "fc8dfff4340e4058ba9a3d904e11bed1"
 		}
 	],
 	"r2_buckets": [
@@ -134,6 +149,11 @@
 				{
 					"binding": "SESSIONS",
 					"id": "65176c8eef4140f7a64cb366a66311b4"
+				},
+				{
+					// OAuth do MCP remoto em staging (namespace separado do de produção).
+					"binding": "OAUTH_KV",
+					"id": "9d9d24c053484ee8bd996b9476172a44"
 				}
 			],
 			"r2_buckets": [

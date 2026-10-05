@@ -12,7 +12,12 @@ import { sessaoApp } from './routes/auth';
 import { authApp } from './routes/auth';
 import { usersApp } from './routes/users';
 import { leadsApp } from './routes/leads';
+import { funilApp } from './routes/funil';
 import { proposalsApp } from './routes/proposals';
+import { organizacaoApp } from './routes/organizacao';
+import { organizacoesApp } from './routes/organizacoes';
+import { servicosApp } from './routes/servicos';
+import { propostasApp, CSP_DOCUMENTO } from './routes/propostas';
 import { assessmentsApp } from './routes/assessments';
 import { projectsApp } from './routes/projects';
 import { controlsApp } from './routes/controls';
@@ -25,14 +30,18 @@ import { auditsApp, projectAuditsApp } from './routes/audits';
 import { capaApp, projectCapaApp } from './routes/capa';
 import { certificationsApp, projectCertificationsApp } from './routes/certifications';
 import { publicApp } from './routes/public';
+import { publicPropostasApp } from './routes/public-propostas';
+import { publicPedidosApp } from './routes/public-pedidos';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
+import { agentesApp } from './routes/agentes';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
 import { documentoOpenApi } from './openapi';
 import { mfaApp } from './routes/mfa';
 import { dataSubjectApp } from './routes/data-subject';
+import { pedidosApp, projectPedidosApp } from './routes/pedidos';
 
 
 import { readinessApp } from './routes/readiness';
@@ -43,10 +52,17 @@ import risks from './routes/risks';
 import policies from './routes/policies';
 import integrations from './routes/integrations';
 import { manutencaoDiaria } from './manutencao';
+import { oauthAutorizacao } from './routes/oauth-autorizacao';
+import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
+import { handlerMcp } from './mcp/servidor';
 
 export type Bindings = {
   DB: D1Database;
   SESSIONS: KVNamespace;
+  /** Grants, códigos e tokens do OAuth do MCP remoto (workers-oauth-provider). */
+  OAUTH_KV: KVNamespace;
+  /** Injetado pelo OAuthProvider nas rotas /oauth/*. */
+  OAUTH_PROVIDER?: import('@cloudflare/workers-oauth-provider').OAuthHelpers;
   VECTOR_INDEX: VectorizeIndex;
   STORAGE: R2Bucket;
   AI: Ai;
@@ -94,6 +110,8 @@ export type Bindings = {
   CF_VERSION_METADATA?: { id?: string; tag?: string; timestamp?: string };
   /** Bucket da trilha de auditoria arquivada (src/trilha.ts). */
   TRILHA?: R2Bucket;
+  /** Só em requisição interna do /mcp (src/mcp/servidor.ts). Ver src/middleware/agente.ts. */
+  AGENTE?: import('./middleware/agente').PropsAgente;
 };
 
 export type Variables = {
@@ -107,13 +125,19 @@ export type Variables = {
     name?: string;
     role: string;
     client_project_id?: string | null;
+    /** Principal do agente MCP (middleware/agente.ts): paridade de consultor, preso ao projeto. */
+    agente?: boolean;
     /** Sessão autenticada por senha mas ainda sem o segundo fator. */
     mfa_pending?: boolean;
     /** Instante de emissão, usado para revogação. */
     iat?: number;
     /** Última atividade vista pelo middleware; relógio da expiração por inatividade. */
     seen?: number;
+    /** `users.org_id`, gravado pelo login (migration 0040). Ausente em sessão anterior a ela. */
+    org_id?: string;
   };
+  /** Organização da requisição, resolvida por `exigirOrg` (services/organizacao.ts). */
+  orgId: string;
 };
 
 
@@ -130,6 +154,14 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // CSP nenhum. Os mesmos cabecalhos vivem em `frontend/public/_headers`, e
 // `test/cabecalhos-assets.test.ts` falha se os dois divergirem. Mudou aqui, muda
 // la.
+// O documento congelado da proposta sai com CSP próprio, mais estreito que o do app (sem script
+// nenhum). Registrado ANTES do secureHeaders porque ele sobrescreve o cabeçalho na volta; este
+// roda por fora e põe o do documento por último.
+app.use('/api/v1/propostas/:id/documento', async (c, next) => {
+  await next();
+  if (c.res.ok) c.res.headers.set('Content-Security-Policy', CSP_DOCUMENTO);
+});
+
 app.use('*', secureHeaders({
   // 1 ano, o minimo exigido para elegibilidade a lista de preload do HSTS.
   // Nao emitimos a diretiva `preload`: entrar na lista e um caminho so de ida
@@ -183,7 +215,7 @@ app.get('/.well-known/security.txt', (c) => {
       'Contact: https://github.com/resper1965/nISO/security/advisories/new',
       `Expires: ${expira}`,
       'Preferred-Languages: pt-BR, en',
-      'Canonical: https://niso.ness.workers.dev/.well-known/security.txt',
+      'Canonical: https://niso.ness.com.br/.well-known/security.txt',
       'Policy: https://github.com/resper1965/nISO/blob/main/SECURITY.md',
       '',
     ].join('\n'),
@@ -283,6 +315,10 @@ app.route('/api/v1/auth', authApp);
 
 // 4. Public sub-router (público)
 app.route('/api/v1/public', publicApp);
+// Link da proposta para o cliente, sem sessão: limite de taxa próprio por IP e por token (rateLimitD1).
+app.route('/api/v1/public/propostas', publicPropostasApp);
+// Link pessoal de ciência (pedidos, fatia 3), sem sessão: mesmo desenho, limite por IP e por token.
+app.route('/api/v1/public/pedidos', publicPedidosApp);
 
 /*
  * SCIM 2.0 (item 4.2). Montado em `/scim/v2/*` — o caminho que a RFC 7644
@@ -291,6 +327,10 @@ app.route('/api/v1/public', publicApp);
  * dois faria o caminho de sessão carregar um caso que não é dele.
  */
 app.route('/scim/v2', scimApp);
+
+// Tela de autorização do MCP remoto. Pública (o login é a própria tela) e fora
+// de /api/v1: chega aqui só pelo OAuthProvider, que injeta `OAUTH_PROVIDER`.
+app.route('/oauth', oauthAutorizacao);
 
 // 5. Auth Middleware para demais rotas /api/v1
 app.use('/api/v1/*', authMiddleware);
@@ -311,7 +351,13 @@ app.route('/api/v1/auth/mfa', mfaApp);
 app.route('/api/v1/auth/sessao', sessaoApp);
 
 app.route('/api/v1/leads', leadsApp);
+app.route('/api/v1/funil', funilApp);
 app.route('/api/v1/proposals', proposalsApp);
+app.route('/api/v1/org', organizacaoApp);
+// Organizações (consultorias): só platform_admin (fatia 5).
+app.route('/api/v1/platform/orgs', organizacoesApp);
+app.route('/api/v1/servicos', servicosApp);
+app.route('/api/v1/propostas', propostasApp);
 app.route('/api/v1/assessments', assessmentsApp);
 app.route('/api/v1/projects', projectsApp);
 app.route('/api/v1/projects/:projectId/readiness-check', readinessApp);
@@ -345,11 +391,17 @@ app.route('/api/v1/projects/:projectId/capa', projectCapaApp);
 
 app.route('/api/v1/projects/:projectId/data-subject', dataSubjectApp);
 
+// Pedidos de aprovação/ciência (acesso de stakeholders): a consultoria pede no projeto; o
+// destinatário decide em /pedidos (único caminho de dados do papel `stakeholder`).
+app.route('/api/v1/projects/:projectId/pedidos', projectPedidosApp);
+app.route('/api/v1/pedidos', pedidosApp);
+
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
 
 app.route('/api/v1', aiApp);
 app.route('/api/v1', governanceApp);
+app.route('/api/v1', agentesApp);
 app.route('/api/v1', auditorApp);
 app.route('/api/v1', platformApp);
 
@@ -372,10 +424,10 @@ app.route('', policies);
 app.route('', integrations);
 
 // 7. Static Files Fallback (catch-all — deve ser a última rota).
-// `dist/index.html` é a landing pública; `dist/login.html` é o shell do app
-// (login + SPA). Rota desconhecida cai na landing (fallback abaixo), não no
-// login — mostrar a home pública para link quebrado é mais correto que
-// derrubar em uma tela de autenticação sem contexto.
+// Não há `dist/index.html`: a tela de entrada É a landing (login na primeira
+// dobra, seções institucionais abaixo — spec 2026-09-29-landing-login-design).
+// `/` e rota desconhecida não casam com asset e caem no fallback abaixo, que
+// entrega `dist/login.html` pelo caminho `/login` (html_handling do Assets).
 app.get('/*', async (c) => {
   const path = new URL(c.req.url).pathname;
   if (path.startsWith('/api/')) {
@@ -390,7 +442,7 @@ app.get('/*', async (c) => {
   if (c.env.ASSETS) {
     const res = await c.env.ASSETS.fetch(c.req.raw);
     if (res.status === 404) {
-      const fallbackRequest = new Request(new URL('/', c.req.url).toString());
+      const fallbackRequest = new Request(new URL('/login', c.req.url).toString());
       return await c.env.ASSETS.fetch(fallbackRequest);
     }
     return res;
@@ -448,7 +500,57 @@ app.onError((err, c) => {
  * `triggers` do `wrangler.jsonc`). O `waitUntil` mantém a invocação viva até a
  * rotina terminar — sem ele o runtime pode encerrá-la no meio do DELETE.
  */
+const fetchHono = app.fetch.bind(app);
+
+/*
+ * OAuth 2.1 do MCP remoto (spec 2026-09-29-receita-agentes-mcp-remoto). O
+ * provider serve /oauth/token, /oauth/register e os metadados em
+ * /.well-known/oauth-*; /oauth/authorize é nosso (routes/oauth-autorizacao.ts).
+ * `resourceMetadata` é obrigatório na versão 1.x da biblioteca: o endereço
+ * canônico do recurso é o domínio oficial.
+ */
+export const provider = new OAuthProvider({
+  apiRoute: '/mcp',
+  apiHandler: { fetch: (req: Request, env: any, ctx: any) => handlerMcp(req, env, ctx, fetchHono) },
+  defaultHandler: { fetch: fetchHono as any },
+  authorizeEndpoint: '/oauth/authorize',
+  tokenEndpoint: '/oauth/token',
+  clientRegistrationEndpoint: '/oauth/register',
+  scopesSupported: ['niso:consultor'],
+  accessTokenTTL: 3600,
+  refreshTokenTTL: 30 * 86400,
+  resourceMetadata: { resource: 'https://niso.ness.com.br/mcp', resource_name: 'n.iso' },
+});
+
+/**
+ * Decodifica cada trecho `%XX` que for decodificável e deixa o resto como está
+ * — nunca lança. Cobre tudo o que o Hono decodifica para rotear (ele usa
+ * `decodeURI` trecho a trecho), e um pouco mais (`%2F`), o que só manda ao
+ * provider caminhos que ele devolve ao Hono sem efeito.
+ */
+const decodificarCaminho = (p: string) =>
+  p.replace(/(?:%[0-9A-Fa-f]{2})+/g, (m) => {
+    try {
+      return decodeURIComponent(m);
+    } catch {
+      return m;
+    }
+  });
+
+/**
+ * Só estes caminhos passam pelo OAuthProvider; o resto segue direto para o
+ * Hono. Decide pelo caminho DECODIFICADO: o Hono roteia `/%6Fauth/...` como
+ * `/oauth/...`, e esse caminho não pode chegar à tela de autorização por fora
+ * do provider.
+ */
+export const ROTAS_OAUTH = (cru: string) => {
+  const p = decodificarCaminho(cru);
+  return p === '/mcp' || p.startsWith('/mcp/') || p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-');
+};
+
 export default Object.assign(app, {
+  fetch: (req: Request, env: Bindings, ctx: ExecutionContext) =>
+    ROTAS_OAUTH(new URL(req.url).pathname) ? provider.fetch(req, env as any, ctx) : fetchHono(req, env, ctx),
   scheduled: (_evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(manutencaoDiaria(env));
   },

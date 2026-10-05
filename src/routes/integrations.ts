@@ -188,7 +188,8 @@ function safeCsvCell(val: any): string {
 
 integrations.get('/api/v1/projects/:projectId/webhooks', async (c) => {
   const projectId = c.req.param('projectId');
-  const result = await c.env.DB.prepare('SELECT * FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  // Sem `secret`: ele é devolvido UMA vez, na criação. A listagem é legível por todo membro do projeto.
+  const result = await c.env.DB.prepare('SELECT id, project_id, url, events, status, last_triggered_at, failure_count, created_at FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
   return c.json({ ok: true, webhooks: result.results });
 });
 
@@ -242,6 +243,8 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
   await requireResourceAccess(c.env.DB, 'webhooks', id, c.get('user'));
   const webhook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(id).first() as any;
   if (!webhook) return c.json({ error: 'Webhook not found' }, 404);
+  // Webhook inativo (a transferência de projeto desativa os da origem: URL e segredo são dela) não dispara.
+  if (webhook.status !== 'Active') return c.json({ error: 'Webhook inativo: cadastre um novo' }, 409);
 
   if (!isValidWebhookUrl(webhook.url)) {
     return c.json({ error: 'Invalid or forbidden webhook URL (SSRF Guard)' }, 400);

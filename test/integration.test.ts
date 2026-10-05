@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import app from '../src/index';
 
-// Minimal D1 mock
+// Minimal D1 mock. A consulta de designação (D5) responde "designado": o consultor da sessão
+// abaixo atua no projeto que estas rotas tocam. Todo o resto continua vazio.
 const mockD1 = {
   prepare: (sql: string) => ({
     bind: (...args: any[]) => ({
       all: async () => ({ results: [], success: true }),
-      first: async () => null,
+      first: async () => (sql.includes('project_governance') ? { project_id: args[1] } : null),
       run: async () => ({ success: true, meta: {} })
     }),
     all: async () => ({ results: [], success: true }),

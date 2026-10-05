@@ -67,6 +67,9 @@ export const ropaApprovalSchema = z.object({
   role: z.enum(['ciso', 'ceo']),
 }).passthrough();
 
+// Aprovação de DPIA: mesmo contrato da de ROPA (F9).
+export const dpiaApprovalSchema = ropaApprovalSchema;
+
 // ─── Treinamento ─────────────────────────────────────────────────────────────
 export const trainingSchema = z.object({
   employee_name: curto,
@@ -123,7 +126,8 @@ export const leadSchema = z.object({
   qsa: z.array(z.record(z.string(), z.unknown())).max(200).optional().nullable(),
 }).passthrough();
 
-export const leadStatusSchema = z.object({ status: curto }).passthrough();
+export const LEAD_STATUS = ['New', 'Assessment', 'Proposal', 'Won', 'Lost'] as const;
+export const leadStatusSchema = z.object({ status: z.enum(LEAD_STATUS) }).passthrough();
 
 export const cnpjSchema = z.object({
   // Aceita com ou sem pontuação: o handler normaliza com replace(/\D/g,'')
@@ -476,3 +480,199 @@ export const politicaTenantSchema = z.object({
   sessao_ttl_seg: z.coerce.number().int().min(300, 'TTL mínimo é 300 s').max(86400, 'TTL máximo é 86400 s').nullish(),
   ip_allowlist: z.string().max(2000).nullish(),
 }).passthrough();
+
+// Configuração comercial da organização (PUT parcial: tudo opcional). Texto é guardado cru;
+// o escape acontece só na saída para HTML.
+const valorDiaria = z.number().positive().max(100_000);
+export const configOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120).optional(),
+  cnpj: z.string().trim().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').nullable().optional(),
+  corDestaque: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor no formato #rrggbb').optional(),
+  seloNiso: z.boolean().optional(),
+  prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números').optional(),
+  proximoNumero: z.number().int().min(1).optional(),
+  preco: z.object({
+    diaria: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
+    porte: z.array(z.object({ maxPessoas: z.number().int().positive().nullable(), fator: z.number().min(0.5).max(5) })).min(1).max(8)
+      .refine((fs) => fs.every((f, i) => (i === fs.length - 1 ? f.maxPessoas === null : f.maxPessoas !== null && (i === 0 || f.maxPessoas > fs[i - 1].maxPessoas!))),
+        'Porte: o limite de pessoas precisa crescer a cada faixa, e só a última faixa (sem limite) fica em branco').optional(),
+    tetoDesconto: z.number().min(0).max(50).optional(),
+    custoInterno: z.object({ '1': valorDiaria, '2': valorDiaria, '3': valorDiaria }).partial().optional(),
+    overheadPct: z.number().min(0).max(1).optional(),
+    tributosPct: z.number().min(0).max(0.6).optional(),
+    margemAlvo: z.number().min(0).max(1).optional(),
+  }).optional(),
+  textos: z.object({
+    sobre: z.string().max(4000), comoTrabalhamos: z.string().max(6000), equipe: z.string().max(4000),
+    termos: z.string().max(30000), premissas: z.string().max(6000), pagamentoPadrao: z.string().max(500),
+  }).partial().optional(),
+  secoesDesligadas: z.array(z.enum(['como_trabalhamos', 'responsabilidades'])).max(2).optional(),
+}).strict();
+
+// Provisionamento de organização (fatia 5): só o platform_admin. A organização nasce com a
+// configuração padrão e SEM termos comerciais (o administrador dela escreve os dele); o termo de uso
+// da consultoria é registrado pela versão e pela data do aceite.
+export const criarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120),
+  slug: z.string().regex(/^[a-z0-9-]{3,40}$/, 'Slug com 3 a 40 letras minúsculas, números ou hífen'),
+  prefixoProposta: z.string().regex(/^[A-Z0-9]{2,10}$/, 'Prefixo com 2 a 10 letras maiúsculas ou números'),
+  cnpj: z.string().regex(/^\d{14}$/, 'CNPJ com 14 dígitos, só números').optional(),
+  adminEmail: z.string().trim().email('E-mail inválido').max(254),
+  adminNome: z.string().trim().min(1).max(120),
+  maxProjetos: z.number().int().min(1).max(10000),
+  maxUsuarios: z.number().int().min(1).max(10000),
+  termoVersao: z.string().trim().min(1).max(60),
+}).strict();
+
+export const atualizarOrgSchema = z.object({
+  nome: z.string().trim().min(1).max(120).optional(),
+  maxProjetos: z.number().int().min(1).max(10000).optional(),
+  maxUsuarios: z.number().int().min(1).max(10000).optional(),
+  status: z.enum(['Active', 'Suspended']).optional(),
+}).strict().refine((o) => Object.keys(o).length > 0, 'Nada a alterar');
+
+/** Transferência de projeto para outra organização (só platform_admin). */
+export const transferirProjetoSchema = z.object({
+  orgDestinoId: z.string().trim().min(1).max(80),
+  motivo: z.string().trim().min(5, 'Motivo com 5 a 500 caracteres').max(500, 'Motivo com 5 a 500 caracteres'),
+}).strict();
+
+// ---------------------------------------------------------------------------
+// Catálogo de serviços (spec do sistema de propostas, seção 3)
+// ---------------------------------------------------------------------------
+const listaCurta = z.array(z.string().trim().min(1).max(500)).max(40);
+const fase = z.object({
+  nome: z.string().trim().min(1).max(120),
+  objetivo: z.string().trim().max(1000).default(''),
+  atividades: z.string().trim().max(3000).default(''),
+  entregaveis: z.string().trim().max(3000).default(''),
+  criterioAceite: z.string().trim().max(1000).default(''),
+  pct: z.number().positive().max(100),
+  semanas: z.number().int().positive().max(104),
+}).strict();
+const dias = z.number().positive().max(2000);
+const diasPorFaixa = z.object({ '1': dias, '2': dias, '3': dias }).strict();
+const servicoBase = {
+  nome: z.string().trim().min(1).max(160),
+  norma: z.string().trim().max(80).default(''),
+  descricao: z.string().trim().max(3000).default(''),
+  premissas: listaCurta.default([]),
+  exclusoes: listaCurta.default([]),
+};
+export const servicoSchema = z.discriminatedUnion('tipo', [
+  z.object({ ...servicoBase, tipo: z.literal('projeto'), diasPorFaixa,
+    fases: z.array(fase).min(1).max(15)
+      .refine((fs) => Math.abs(fs.reduce((s, f) => s + f.pct, 0) - 100) < 0.01, 'A soma do % das fases precisa ser 100') }).strict(),
+  // O zod recusa dois membros com o mesmo literal 'avulso' na união discriminada
+  // (e z.union não expõe o discriminador), então o avulso é uma união discriminada
+  // aninhada por formaPreco.
+  z.discriminatedUnion('formaPreco', [
+    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('fixo'), valorFixo: z.number().positive().max(10_000_000),
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }).strict(),
+    z.object({ ...servicoBase, tipo: z.literal('avulso'), formaPreco: z.literal('esforco'), diasPorFaixa,
+      entregaveis: listaCurta.min(1), criterioAceite: z.string().trim().min(1).max(1000) }).strict(),
+  ]),
+  z.object({ ...servicoBase, tipo: z.literal('recorrente'), mensalidade: z.number().positive().max(10_000_000),
+    prazoMinimoMeses: z.number().int().min(1).max(60), inclusoMes: listaCurta.min(1) }).strict(),
+]);
+/** O que o cliente da API envia. */
+export type ServicoEntrada = z.input<typeof servicoSchema>;
+/** O que a API devolve. */
+export type Servico = z.infer<typeof servicoSchema> & { id: string; orgId: string; ativo: boolean };
+
+// ---------------------------------------------------------------------------
+// Proposta (spec do sistema de propostas, seções 4 e 5)
+// ---------------------------------------------------------------------------
+/** Cópia de SECOES_EDITAVEIS (documento-proposta.ts); test/propostas.test.ts confere que são iguais. */
+export const SECOES_EDITAVEIS_SCHEMA = ['sumario', 'objeto', 'como_trabalhamos', 'responsabilidades', 'sobre', 'premissas', 'termos', 'observacoes'] as const;
+const textoLivre = z.string().max(10_000);
+const itemProposta = z.object({
+  servicoId: z.string().min(1).max(64),
+  dias: z.number().positive().max(2000).optional(),
+  meses: z.number().int().min(1).max(120).optional(),
+  descontoPct: z.number().min(0).max(100).optional(),
+  textoCliente: z.string().max(5000).optional(),
+}).strict();
+const camposProposta = {
+  itens: z.array(itemProposta).max(30).optional(),
+  contexto: textoLivre.optional(),
+  escopo: textoLivre.optional(),
+  observacoes: textoLivre.optional(),
+  validadeDias: z.number().int().min(1).max(365).optional(),
+  pagamento: z.string().trim().min(1).max(500).optional(),
+  consultorEmail: z.string().trim().email().max(200).nullable().optional(),
+};
+export const propostaCriarSchema = z.object({ leadId: z.string().min(1).max(64), ...camposProposta }).strict();
+export const propostaEditarSchema = z.object({
+  ...camposProposta,
+  // null restaura o texto padrão da seção
+  secoesEditadas: z.object(Object.fromEntries(SECOES_EDITAVEIS_SCHEMA.map((id) => [id, z.string().max(30_000).nullable().optional()]))).strict().optional(),
+}).strict();
+// Sem trim: espaço no número é erro, não algo a consertar em silêncio. O formato fino (prefixo da organização) é conferido na rota.
+export const propostaGerarSchema = z.object({ numero: z.string().max(40).optional() }).strict();
+
+// Envio e aceite manual (fatia 4). O e-mail do cliente é só o destinatário; nome e cargo vão para a prova do aceite.
+export const propostaEnviarSchema = z.object({
+  email: z.string().trim().email().max(200),
+  mensagem: z.string().trim().max(2000).optional(),
+}).strict();
+export const propostaAceiteManualSchema = z.object({
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  comprovante: z.string().trim().min(3).max(1000),
+}).strict();
+
+// Rotas públicas do cliente (fatia 4). O token vai no corpo, nunca no caminho nem na query (o log
+// de requisição grava o caminho). Sem regex de formato: token malformado cai no mesmo 404 do desconhecido.
+const tokenProposta = z.string().min(1).max(200);
+export const propostaTokenSchema = z.object({ token: tokenProposta }).strict();
+export const propostaAceiteLinkSchema = z.object({
+  token: tokenProposta,
+  nome: z.string().trim().min(2).max(120),
+  cargo: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  poderes: z.literal(true),
+}).strict();
+export const propostaRecusaSchema = z.object({ token: tokenProposta, motivo: z.string().trim().max(1000).optional() }).strict();
+export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z.string().trim().min(1).max(2000) }).strict();
+
+// ─── Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2) ─────────────
+// `tipo` acompanha o CHECK da tabela `pedidos` (migration 0041): tipo novo exige migration.
+export const pedidoCriarSchema = z.object({
+  tipo: z.enum(['dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  })).min(1).max(50),
+});
+
+// Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
+// Teto de 200 por lote. `dpia` por conta continua em `pedidoCriarSchema` (a assinatura é só dele).
+export const pedidoCienciaLoteSchema = z.object({
+  tipo: z.enum(['politica', 'dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  }).strict()).min(1).max(200),
+}).strict();
+// Reenvio: sem `emails`, a todos os pendentes; com, só a esses (ex.: as falhas do envio).
+export const pedidoReenvioSchema = z.object({
+  emails: z.array(z.string().trim().email().max(320)).min(1).max(200).optional(),
+}).strict();
+// Rotas públicas do link: o token vem no CORPO, nunca na URL.
+const tokenPedido = z.string().min(1).max(200);
+export const pedidoTokenSchema = z.object({ token: tokenPedido }).strict();
+export const pedidoCienciaLinkSchema = z.object({
+  token: tokenPedido,
+  codigo: z.string().trim().regex(/^\d{6}$/),
+  nome: z.string().trim().min(2).max(200),
+}).strict();
+
+export const pedidoDecisaoSchema = z.object({
+  senha: z.string().min(1).max(500),
+  motivo: z.string().trim().max(2000).optional().nullable(),
+});

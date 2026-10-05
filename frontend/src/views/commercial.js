@@ -17,14 +17,15 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             const leads = await api('GET', '/api/v1/leads').catch(() => []);
             const leadsArr = Array.isArray(leads) ? leads : [];
             
-            const totalLeads = leadsArr.length;
-            const newLeads = leadsArr.filter(l => l.status === 'new' || l.status === 'qualificado').length;
-            const proposalLeads = leadsArr.filter(l => l.status === 'proposta_enviada' || l.status === 'ganho').length;
-
+            // Status reais do banco (leads.status): New, Assessment, Proposal, Won, Lost.
+            const conta = (s) => leadsArr.filter(l => (l.status || 'New') === s).length;
             const statsHtml = window.renderStatCards([
-                { label: 'Total de Oportunidades', value: totalLeads, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
-                { label: 'Leads Qualificados', value: newLeads, color: '#34c759', subtext: 'Prontos para assessment' },
-                { label: 'Propostas em Negociação', value: proposalLeads, color: '#ffcc00', subtext: 'Contratos em pré-vendas' }
+                { label: 'Total de Oportunidades', value: leadsArr.length, color: 'var(--accent)', subtext: 'Empresas no pipeline' },
+                { label: 'Novos', value: conta('New'), color: '#34c759', subtext: 'Ainda sem diagnóstico' },
+                { label: 'Em diagnóstico', value: conta('Assessment'), color: '#34c759', subtext: 'Assessment em andamento' },
+                { label: 'Com proposta', value: conta('Proposal'), color: '#ffcc00', subtext: 'Contratos em pré-vendas' },
+                { label: 'Ganhos', value: conta('Won'), color: '#34c759', subtext: 'Proposta aceita' },
+                { label: 'Perdidos', value: conta('Lost'), color: '#ef4444', subtext: 'Recusados ou encerrados' }
             ]);
 
             const tableHtml = window.renderDataTable(
@@ -33,20 +34,79 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                     `<strong>${escapeHTML(l.company_name || l.razao_social || 'Sem nome')}</strong>`,
                     escapeHTML(l.contact_name || l.email || '---'),
                     escapeHTML(l.cnpj || l.porte || '---'),
-                    window.renderStatusBadge(l.status || 'new', l.status === 'ganho' ? 'success' : 'info'),
+                    window.renderStatusBadge(l.status || 'New', l.status === 'Won' ? 'success' : l.status === 'Lost' ? 'danger' : 'info'),
                     `<button class="btn btn-ghost btn-sm" data-action="openLeadDetail" data-args='["${l.id}"]'>Ver Detalhes &rarr;</button>`
                 ]),
                 { emptyState: 'Nenhum lead comercial cadastrado no momento.' }
             );
 
+            // Preço e motivo de perda: só quem a rota /funil admite (consultor comum leva 403).
+            const funil = PAPEIS_FUNIL.includes(S.user?.role) ? `
+                <section class="fn-bloco" id="fn-funil" aria-labelledby="fn-titulo">
+                    <h2 class="fn-titulo" id="fn-titulo">Funil</h2>
+                    <form class="fn-periodo" id="fn-form" data-action-submit="__fnAplicar" data-arg-event data-prevent novalidate>
+                        <div class="fn-campo"><label class="fn-rotulo" for="fn-de">De</label><input class="form-input" type="date" id="fn-de"></div>
+                        <div class="fn-campo"><label class="fn-rotulo" for="fn-ate">Até</label><input class="form-input" type="date" id="fn-ate"></div>
+                        <button class="btn btn-primary btn-sm" type="submit">Aplicar</button>
+                    </form>
+                    <p class="fn-erro" id="fn-erro" role="alert"></p>
+                    <div id="fn-corpo"><div class="loading"></div></div>
+                </section>` : '';
+
             c.innerHTML = `
                 ${statsHtml}
                 ${tableHtml}
+                ${funil}
             `;
+            if (funil) carregarFunil('');
         } catch (e) {
             c.innerHTML = '<div class="error">Erro ao carregar leads: ' + escapeHTML(e.message) + '</div>';
         }
     }
+
+    const PAPEIS_FUNIL = ['platform_admin', 'comercial', 'consultoria_admin'];
+    const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const ROTULO_PROPOSTA = { rascunho: 'Rascunho', aguardando_aprovacao: 'Aguardando aprovação', gerada: 'Gerada', enviada: 'Enviada', visualizada: 'Visualizada', aceita: 'Aceita', recusada: 'Recusada', expirada: 'Expirada', substituida: 'Substituída' };
+
+    async function carregarFunil(consulta) {
+        const corpo = document.getElementById('fn-corpo');
+        const erro = document.getElementById('fn-erro');
+        if (!corpo) return;
+        erro.textContent = '';
+        try {
+            const f = await api('GET', '/api/v1/funil' + consulta);
+            document.getElementById('fn-de').value = f.periodo.de;
+            document.getElementById('fn-ate').value = f.periodo.ate;
+            const cartoes = window.renderStatCards([
+                { label: 'Pipeline: projeto', value: brl(f.pipeline.totalProjeto), subtext: `${f.pipeline.propostas} proposta(s) em aberto` },
+                { label: 'Pipeline: mensalidade', value: brl(f.pipeline.mensalidade), subtext: 'Recorrente, não somado ao projeto' },
+                { label: 'Ganho: projeto', value: brl(f.ganho.totalProjeto), color: '#34c759', subtext: `${f.ganho.propostas} aceita(s) no período` },
+                { label: 'Ganho: mensalidade', value: brl(f.ganho.mensalidade), color: '#34c759', subtext: 'Recorrente' },
+                { label: 'Ciclo médio', value: f.cicloMedioDias == null ? '---' : `${String(f.cicloMedioDias).replace('.', ',')} dias`, subtext: 'Lead criado até aceite' }
+            ]);
+            const tabela = (cols, rows, vazio) => window.renderDataTable(cols, rows, { emptyState: vazio, dense: true });
+            corpo.innerHTML = `
+                ${cartoes}
+                <div class="fn-tabelas">
+                    <div><h3 class="fn-sub">Conversão</h3>${tabela(['Etapa', { label: 'Leads', align: 'right' }, { label: '% da anterior', align: 'right' }],
+                        f.conversao.map(e => [escapeHTML(e.etapa), String(e.leads), `${String(e.percentualDaAnterior).replace('.', ',')}%`]), 'Sem dados no período.')}</div>
+                    <div><h3 class="fn-sub">Motivos de perda</h3>${tabela(['Motivo', { label: 'Propostas', align: 'right' }],
+                        f.perdas.map(p => [escapeHTML(p.motivo), String(p.quantidade)]), 'Nenhuma proposta recusada no período.')}</div>
+                    <div><h3 class="fn-sub">Propostas por status</h3>${tabela(['Status', { label: 'Propostas', align: 'right' }],
+                        Object.entries(f.propostasPorStatus).map(([s, n]) => [escapeHTML(ROTULO_PROPOSTA[s] || s), String(n)]), 'Sem propostas.')}</div>
+                </div>`;
+        } catch (e) {
+            corpo.innerHTML = '';
+            erro.textContent = e.message || 'Não foi possível carregar o funil.';
+        }
+    }
+
+    window.__fnAplicar = () => {
+        const de = document.getElementById('fn-de').value;
+        const ate = document.getElementById('fn-ate').value;
+        const q = new URLSearchParams({ ...(de && { de }), ...(ate && { ate }) }).toString();
+        return carregarFunil(q ? '?' + q : '');
+    };
 
     async function deleteLead(id) {
         if (!confirm('Deseja excluir este lead permanentemente?')) return;
@@ -310,7 +370,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                     <div class="wizard-sidebar">
                         ${sidebarHtml}
                         <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-dim)">
-                            ${as.status !== 'converted' ? `<button class="btn btn-primary" style="width:100%" data-action="promoteToProject" data-args='["${as.id}"]'>ðŸš€ Converter para Projeto</button>` : '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>'}
+                            ${as.status === 'converted' ? '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>' : ''}
                         </div>
                     </div>
                     <div class="wizard-content">
@@ -427,249 +487,6 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
         S.blockAnswers[key] = selected.join('||');
     }
 
-    async function renderProposals(c, h, a) {
-        h.textContent = 'Propostas';
-        a.innerHTML = '';
-        c.innerHTML = '<div class="loading"></div>';
-        try {
-            const [assessments, proposals, leads] = await Promise.all([
-                api('GET', '/api/v1/assessments'),
-                api('GET', '/api/v1/proposals').catch(() => []),
-                api('GET', '/api/v1/leads').catch(() => [])
-            ]);
-
-            // Section 1: Gerar Nova Proposta (from assessments)
-            let gerarHtml = '';
-            if (Array.isArray(assessments) && assessments.length > 0) {
-                gerarHtml = `
-                <div class="card fade-in" style="margin-bottom:1.5rem">
-                    <h3 style="margin-bottom:1rem;font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em">Gerar Nova Proposta</h3>
-                    <table class="data-table">
-                        <thead><tr><th>Cliente</th><th>Status</th><th style="text-align:right">Acoes</th></tr></thead>
-                        <tbody>
-                            ${assessments.map(as => `<tr>
-                                <td style="font-weight:500">${escapeHTML(as.client_name || 'Sem nome')}</td>
-                                <td><span class="status-badge status-${as.status || 'in_progress'}">${as.status || 'Em andamento'}</span></td>
-                                <td style="text-align:right">
-                                    <button class="btn" data-action="viewPricing" data-args='["${as.id}"]'>Precificar</button>
-                                    <button class="btn btn-primary" style="margin-left:0.25rem" data-action="generateProposalFromAssessment" data-args='["${as.id}"]'>Gerar Proposta</button>
-                                </td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
-            }
-
-            // Section 2: Propostas Geradas
-            let proposalsHtml = '';
-            if (Array.isArray(proposals) && proposals.length > 0) {
-                proposalsHtml = `
-                <div class="card fade-in" style="margin-bottom:1.5rem">
-                    <h3 style="margin-bottom:1rem;font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em">Propostas Geradas</h3>
-                    <table class="data-table">
-                        <thead><tr><th>Cliente</th><th>CNPJ</th><th>Valor</th><th>Status</th><th>Data</th><th style="text-align:right">Acoes</th></tr></thead>
-                        <tbody>
-                            ${proposals.map(p => {
-                                const nome = p.razao_social || p.company_name || '---';
-                                const cnpjFmt = (p.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
-                                const data = p.created_at ? p.created_at.split(' ')[0] : '---';
-                                const statusCls = p.status === 'Draft' ? 'in_progress' : p.status === 'Sent' ? 'sent' : p.status === 'Signed' ? 'completed' : p.status;
-                                return `<tr>
-                                    <td style="font-weight:500">${escapeHTML(nome)}</td>
-                                    <td style="font-size:0.8rem;color:var(--muted)">${escapeHTML(cnpjFmt||'---')}</td>
-                                    <td style="color:var(--accent);font-weight:600">R$ ${(p.total_price||0).toLocaleString('pt-BR')}</td>
-                                    <td><span class="status-badge status-${statusCls}">${p.status}</span></td>
-                                    <td style="font-size:0.8rem">${data}</td>
-                                    <td style="text-align:right">
-                                        <button class="btn" data-action="viewSavedProposal" data-args='["${p.id}"]'>Ver</button>
-                                        ${p.status === 'Draft' ? `<button class="btn" style="margin-left:0.25rem" data-action="updateProposalStatus" data-args='["${p.id}","Sent"]'>Enviar</button>` : ''}
-                                        ${p.status === 'Sent' ? `<button class="btn btn-primary" style="margin-left:0.25rem" data-action="updateProposalStatus" data-args='["${p.id}","Signed"]'>Aprovar</button>` : ''}
-                                        <button class="btn" style="margin-left:0.25rem;color:#ff4d4f" data-action="deleteProposal" data-args='["${p.id}"]'>Excluir</button>
-                                    </td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
-            }
-
-            // Section 3: Leads / Pipeline
-            let leadsHtml = '';
-            if (Array.isArray(leads) && leads.length > 0) {
-                leadsHtml = `
-                <div class="card fade-in">
-                    <h3 style="margin-bottom:1rem;font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Pipeline de Leads</h3>
-                    <table class="data-table">
-                        <thead><tr><th>Empresa</th><th>CNPJ</th><th>Porte / CNAE</th><th>Status</th><th style="text-align:right">Acoes</th></tr></thead>
-                        <tbody>
-                            ${leads.map(l => {
-                                const cnpjFmt = (l.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
-                                const scope = [l.porte, l.cnae_fiscal_descricao ? l.cnae_fiscal_descricao.substring(0,30) : ''].filter(Boolean).join(' — ') || '---';
-                                return `<tr>
-                                    <td style="font-weight:500">${escapeHTML(l.razao_social||l.company_name)}</td>
-                                    <td style="font-size:0.8rem;color:var(--muted)">${escapeHTML(cnpjFmt||'---')}</td>
-                                    <td style="font-size:0.8rem">${escapeHTML(scope)}</td>
-                                    <td><span class="status-badge status-${l.status}">${l.status}</span></td>
-                                    <td style="text-align:right"><button class="btn" data-action="openLeadDetail" data-args='["${l.id}"]'>Ver</button></td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
-            }
-
-            c.innerHTML = (gerarHtml + proposalsHtml + leadsHtml) || '<div class="card fade-in"><div class="empty-state">Nenhuma proposta ou assessment disponivel.</div></div>';
-        } catch (e) {
-            c.innerHTML = '<div class="error">Erro ao carregar propostas</div>';
-        }
-    }
-
-    async function viewSavedProposal(id) {
-        try {
-            const p = await api('GET', '/api/v1/proposals/' + id);
-            if (p.content_html) {
-                openModal(`
-                    <div class="modal-header">
-                        <span class="modal-title">Proposta ${escapeHTML(p.status)}</span>
-                        <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" data-action="printProposal">Imprimir / PDF</button>
-                            <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
-                        </div>
-                    </div>
-                    <iframe id="proposal-frame" srcdoc="" style="width:100%;height:75vh;border:1px solid var(--border);border-radius:12px;background:#fff"></iframe>
-                `, 'modal-large');
-                document.getElementById('proposal-frame').srcdoc = p.content_html;
-                window.printProposal = () => document.getElementById('proposal-frame').contentWindow.print();
-            }
-        } catch(e) { showToast('Erro: ' + e.message, 'error'); }
-    }
-
-    async function updateProposalStatus(id, status) {
-        try {
-            await api('PUT', '/api/v1/proposals/' + id, { status });
-            showToast('Status atualizado para ' + status);
-            render();
-        } catch(e) { showToast('Erro: ' + e.message, 'error'); }
-    }
-
-    async function deleteProposal(id) {
-        if (!confirm('Excluir esta proposta permanentemente?')) return;
-        try {
-            await api('DELETE', '/api/v1/proposals/' + id);
-            showToast('Proposta excluida');
-            render();
-        } catch(e) { showToast('Erro: ' + e.message, 'error'); }
-    }
-
-    async function viewPricing(id) {
-        try {
-            const p = await api('GET', `/api/v1/assessments/${id}/pricing`);
-            window._pricingEco = p.eco || {};
-            const eco = p.eco || {};
-            const tier = p.tier || {};
-            const scope = p.scopeInfo || {};
-            const hc = eco.margemPct >= 0.20 ? 'var(--success)' : eco.margemPct >= 0.10 ? 'var(--warning)' : 'var(--danger)';
-
-            const fases = (p.fases || []).map(f => `
-                <tr>
-                    <td style="font-weight:500">${escapeHTML(f.nome || f.name || f.fase)}</td>
-                    <td style="color:var(--muted)">${f.semanas}s</td>
-                    <td style="color:var(--muted)">${f.pdNess} PD</td>
-                    <td style="color:var(--accent);font-weight:600;text-align:right">R$ ${(f.valorFase/1000).toFixed(1)}k</td>
-                </tr>`).join('');
-
-            openModal(`
-                <div class="modal-header">
-                    <span class="modal-title">Precifica\u00e7\u00e3o \u2014 <span style="color:var(--accent)">${escapeHTML(tier.name)}</span></span>
-                    <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
-                </div>
-
-                <div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap">
-                    <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
-                        <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Score</div>
-                        <div style="font-size:1.1rem; font-weight:300; color:var(--text)">${p.score}<span style="font-size:0.75rem;color:var(--muted)">/${p.scoreMax}</span></div>
-                    </div>
-                    <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
-                        <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Dura\u00e7\u00e3o</div>
-                        <div style="font-size:1.1rem; font-weight:300; color:var(--text)">${escapeHTML(tier.duracao)}</div>
-                    </div>
-                    <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
-                        <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Escopo</div>
-                        <div style="font-size:1.1rem; font-weight:300; color:var(--text)">${escapeHTML(scope.label || '< 50')}</div>
-                    </div>
-                    <div style="flex:1; min-width:100px; padding:0.75rem 1rem; background:var(--surface); border:1px solid var(--border); border-radius:12px">
-                        <div style="font-size:0.45rem; text-transform:uppercase; letter-spacing:0.15em; color:var(--muted); margin-bottom:0.25rem">Margem</div>
-                        <div style="font-size:1.1rem; font-weight:300; color:${hc}" id="pv-margem-card">${Math.round(eco.margemPct * 100)}%</div>
-                    </div>
-                </div>
-
-                <div style="text-align:center; margin-bottom:1.5rem">
-                    <div style="font-size:2.5rem; font-weight:300; color:var(--accent); letter-spacing:-0.03em" id="pv-price">R$ ${p.precoFinal.toLocaleString('pt-BR')}</div>
-                    <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.2em; color:var(--muted); margin:0.5rem 0 1rem">ajuste o valor</div>
-                    <input type="range" class="pricing-slider" id="slide-price" min="${Math.round(p.precoFinal * 0.4)}" max="${Math.round(p.precoFinal * 2.5)}" step="500" value="${p.precoFinal}" data-action-input="pricingSlide" style="width:80%">
-                </div>
-
-                <div style="display:flex; gap:2rem; justify-content:center; margin-bottom:1.5rem; font-size:0.75rem; color:var(--muted)">
-                    <span>Receita: <strong style="color:var(--text)" id="pv-receita">R$ ${(eco.receitaLiquida/1000).toFixed(1)}k</strong></span>
-                    <span>Custo: <strong style="color:var(--text)">R$ ${(eco.custoTotal/1000).toFixed(1)}k</strong></span>
-                    <span>Lucro: <strong id="pv-lucro" style="color:${hc}">R$ ${(eco.margemOp/1000).toFixed(1)}k</strong></span>
-                    <span id="pv-status" class="status-badge" style="background:${hc}22;color:${hc};font-size:0.72rem;padding:0.1rem 0.4rem">${eco.margemPct >= 0.20 ? 'Saud\u00e1vel' : 'Ajustar'}</span>
-                </div>
-
-                <div style="display:flex; gap:1.5rem; justify-content:center; margin-bottom:1.5rem; font-size:0.72rem; color:var(--muted); opacity:0.7">
-                    <span>Base: ${tier.pdNess} PDs</span>
-                    <span>Maturidade: x${(p.score / (p.scoreMax||1) * 0.4 + 0.8).toFixed(2)}</span>
-                    <span>Escopo: x${scope.fator || '1.0'}</span>
-                    <span>Taxa PD: R$ ${eco.taxaBlendada}</span>
-                </div>
-
-                <table class="pricing-table">
-                    <thead><tr><th>Fase</th><th>Tempo</th><th>Esfor\u00e7o</th><th style="text-align:right">Valor</th></tr></thead>
-                    <tbody>${fases}</tbody>
-                </table>
-
-                <div style="display:flex; gap:1rem; align-items:flex-end; margin-top:1.5rem">
-                    <div style="flex:1">
-                        <label class="form-label">N\u00ba da Proposta</label>
-                        <input type="text" id="pv-proposal-num" class="form-input" placeholder="Ex: PROP-2026-001" style="padding:0.5rem 0.75rem">
-                    </div>
-                    <button class="btn btn-primary" style="flex:0 0 auto" data-action="savePricingVal" data-args='["${id}"]'>Salvar</button>
-                    <button class="btn" style="flex:0 0 auto; border:1px solid var(--accent); color:var(--accent)" data-action="generateProposalFromAssessment" data-args='["${id}"]'>Gerar Proposta</button>
-                </div>
-            `, 'modal-large');
-
-            window.pricingSlide = () => {
-                const price = parseInt(document.getElementById('slide-price').value);
-                const eco = window._pricingEco;
-                const trib = eco.totalTributosPct || 0.15;
-                const rec = price - (price * trib);
-                const lucro = rec - eco.custoTotal;
-                const pct = lucro / price;
-                const hc = pct >= 0.20 ? 'var(--success)' : pct >= 0.10 ? 'var(--warning)' : 'var(--danger)';
-                document.getElementById('pv-price').textContent = 'R$ ' + price.toLocaleString('pt-BR');
-                document.getElementById('pv-receita').textContent = 'R$ ' + (rec/1000).toFixed(1) + 'k';
-                document.getElementById('pv-lucro').textContent = 'R$ ' + (lucro/1000).toFixed(1) + 'k';
-                document.getElementById('pv-lucro').style.color = hc;
-                document.getElementById('pv-margem-card').textContent = Math.round(pct * 100) + '%';
-                document.getElementById('pv-margem-card').style.color = hc;
-                const st = document.getElementById('pv-status');
-                st.textContent = pct >= 0.20 ? 'Saud\u00e1vel' : 'Ajustar';
-                st.style.color = hc; st.style.background = hc + '22';
-            };
-
-            window.savePricingVal = async (aid) => {
-                const price = parseInt(document.getElementById('slide-price').value);
-                const proposalNum = document.getElementById('pv-proposal-num').value.trim();
-                try {
-                    await api('PUT', `/api/v1/assessments/${aid}/pricing`, { precoFinal: price, notas: proposalNum ? `Proposta: ${proposalNum}` : '' });
-                    showToast('Salvo!');
-                    forceCloseModal();
-                } catch(e) { alert(e.message); }
-            };
-
-        } catch(e) { alert('Erro: ' + e.message); }
-    }
-
     async function savePricingOverride(id) {
         const precoFinal = parseFloat(document.getElementById('p-price').value);
         const desconto = parseFloat(document.getElementById('p-discount').value);
@@ -681,113 +498,6 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
             loadAll();
             render();
         } catch(e) { showToast('Erro ao salvar ajustes: ' + e.message, 'error'); }
-    }
-
-    async function generateProposalFromAssessment(id) {
-        // Fetch assessment and linked lead data for pre-filling
-        let lead = {};
-        try {
-            const as = await api('GET', '/api/v1/assessments/' + id);
-            if (as.lead_id) lead = await api('GET', '/api/v1/leads/' + as.lead_id);
-        } catch(e) { console.warn('Could not fetch lead data:', e); }
-        const fmtCnpj = (lead.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
-        // Step 1: Show prompt form to collect proposal metadata
-        openModal(`
-            <div class="modal-header">
-                <span class="modal-title">Dados da Proposta</span>
-                <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem">
-                <div class="form-group">
-                    <label class="form-label">N\u00ba da Proposta</label>
-                    <input type="text" id="pp-num" class="form-input" placeholder="PROP-2026-001">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Validade (dias)</label>
-                    <input type="number" id="pp-validade" class="form-input" value="30">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Raz\u00e3o Social do Cliente</label>
-                    <input type="text" id="pp-razao" class="form-input" value="${escapeHTML(lead.razao_social||lead.company_name||'')}" placeholder="Empresa Ltda.">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">CNPJ</label>
-                    <input type="text" id="pp-cnpj" class="form-input" value="${escapeHTML(fmtCnpj)}" placeholder="00.000.000/0001-00">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Respons\u00e1vel (Cliente)</label>
-                    <input type="text" id="pp-resp-cliente" class="form-input" value="${escapeHTML(lead.contact_name||'')}" placeholder="Nome completo">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Cargo (Cliente)</label>
-                    <input type="text" id="pp-cargo-cliente" class="form-input" placeholder="CTO, CISO, Diretor...">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Respons\u00e1vel ness.</label>
-                    <input type="text" id="pp-resp-ness" class="form-input" value="ness.">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Cargo ness.</label>
-                    <input type="text" id="pp-cargo-ness" class="form-input" value="Lead Consultant">
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Condi\u00e7\u00e3o de Pagamento</label>
-                <select id="pp-pagamento" class="form-input">
-                    <option value="40/30/30">40% kick-off, 30% entrega documental, 30% p\u00f3s-auditoria</option>
-                    <option value="50/50">50% kick-off, 50% na conclus\u00e3o</option>
-                    <option value="30/30/20/20">30% kick-off, 30% meio, 20% entrega, 20% p\u00f3s-cert</option>
-                    <option value="mensal">Parcelas mensais iguais</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Observa\u00e7\u00f5es Adicionais</label>
-                <textarea id="pp-obs" class="form-input" rows="2" placeholder="Notas espec\u00edficas para esta proposta..."></textarea>
-            </div>
-            <button class="btn btn-primary" style="width:100%; margin-top:0.5rem" data-action="submitProposalPrompt" data-args='["${id}"]'>Gerar Proposta</button>
-        `, 'modal-large');
-    }
-
-    async function submitProposalPrompt(id) {
-        const meta = {
-            proposalNum: document.getElementById('pp-num').value.trim(),
-            validade: document.getElementById('pp-validade').value,
-            razaoSocial: document.getElementById('pp-razao').value.trim(),
-            cnpj: document.getElementById('pp-cnpj').value.trim(),
-            respCliente: document.getElementById('pp-resp-cliente').value.trim(),
-            cargoCliente: document.getElementById('pp-cargo-cliente').value.trim(),
-            respNess: document.getElementById('pp-resp-ness').value.trim(),
-            cargoNess: document.getElementById('pp-cargo-ness').value.trim(),
-            condicaoPagamento: document.getElementById('pp-pagamento').value,
-            observacoes: document.getElementById('pp-obs').value.trim()
-        };
-        try {
-            forceCloseModal();
-            showToast('Gerando proposta...');
-            const res = await api('POST', `/api/v1/assessments/${id}/generate-proposal`, meta);
-            if (res.html) {
-                openModal(`
-                    <div class="modal-header">
-                        <span class="modal-title">Proposta Draft</span>
-                        <div style="display:flex;gap:0.5rem">
-                            <button class="btn" style="font-size:0.72rem;padding:0.3rem 0.75rem;border:1px solid var(--accent);color:var(--accent)" data-action="printProposal">Imprimir / PDF</button>
-                            <button class="btn-ghost" data-action="forceCloseModal">\u2715</button>
-                        </div>
-                    </div>
-                    <iframe id="proposal-frame" srcdoc="" style="width:100%;height:80vh;border:1px solid var(--border);border-radius:12px;background:#fff"></iframe>
-                `, 'modal-large');
-                document.getElementById('proposal-frame').srcdoc = res.html;
-                window.printProposal = () => {
-                    const oldTitle = document.title;
-                    document.title = res.proposal_num || 'Proposta';
-                    document.getElementById('proposal-frame').contentWindow.print();
-                    document.title = oldTitle;
-                };
-            } else {
-                showToast('Proposta salva com sucesso');
-                navigate('proposals');
-            }
-        } catch(e) { showToast('Erro: ' + e.message, 'error'); }
     }
 
     async function renderSelfServiceAssessment(token) {
@@ -936,13 +646,6 @@ window.selectNessOption = selectNessOption;
 window.goToBlock = goToBlock;
 window.setWizardAnswer = setWizardAnswer;
 window.toggleWizardChip = toggleWizardChip;
-window.renderProposals = renderProposals;
-window.viewSavedProposal = viewSavedProposal;
-window.updateProposalStatus = updateProposalStatus;
-window.deleteProposal = deleteProposal;
-window.viewPricing = viewPricing;
 window.savePricingOverride = savePricingOverride;
-window.generateProposalFromAssessment = generateProposalFromAssessment;
-window.submitProposalPrompt = submitProposalPrompt;
 window.renderSelfServiceAssessment = renderSelfServiceAssessment;
 window.renderSelfServiceBlock = renderSelfServiceBlock;

@@ -3,6 +3,10 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
 import { navigate, render } from '../router.js';
 
+// Espelho de `ehComercial` (src/helpers.ts): o funil de leads é do comercial.
+// Local, e não `window.ehComercial`, para a view não depender da ordem de carga.
+const ehComercial = () => !!(S.user && ['platform_admin', 'comercial', 'consultoria_admin'].includes(S.user.role));
+
     async function renderDashboard(c, h, a) {
         h.textContent = 'Dashboard Executivo';
         a.innerHTML = `<button class="btn btn-primary" data-action="openCreateLeadModal">+ Novo Lead</button>
@@ -27,7 +31,7 @@ import { navigate, render } from '../router.js';
 
             let html = `
                 <div class="fade-in" style="max-width:800px; margin:0 auto; padding:2rem 0">
-                    <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo à ness. nISO</h2>
+                    <h2 style="font-family:'Montserrat'; font-weight:700; font-size:2rem; margin-bottom:0.5rem; color:var(--text)">Bem-vindo ao n.iso</h2>
                     <p style="color:var(--text-dim); font-size:0.95rem; margin-bottom:2.5rem">Seu ambiente de governança de segurança da informação (SGSI) está em fase de preparação.</p>
                     <div style="display:flex; flex-direction:column; gap:1.5rem">
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
@@ -47,14 +51,14 @@ import { navigate, render } from '../router.js';
                                 <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Aprovação da proposta comercial baseada no escopo mapeado e assinatura digital para início da adequação.</p>
                             </div>
                             <div style="text-align:right">
-                                ${proposalStatus === 'Approved' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Assinado</span>' : S.clientProposalId ? '<a class="btn btn-primary" href="/api/v1/assessments/' + S.clientAssessmentId + '/generate-proposal" target="_blank" style="text-decoration:none; display:inline-block">Revisar e Assinar</a>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Assessment</span>'}
+                                ${proposalStatus === 'Approved' ? '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Assinado</span>' : S.clientProposalId ? '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Proposta enviada pelo comercial</span>' : '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Assessment</span>'}
                             </div>
                         </div>
                         <div class="card" style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02)">
                             <div>
                                 <div style="font-size:0.75rem; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px">Fase 3</div>
                                 <h3 style="font-family:'Montserrat'; font-weight:500; font-size:1.15rem; margin:0.25rem 0 0.5rem 0">Início do SGSI & Projetos</h3>
-                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no nISO, checklists de conformidade e ativação dos assistentes de IA.</p>
+                                <p style="color:var(--text-dim); font-size:0.85rem; margin:0">Criação automatizada de todas as 41 fases do projeto no n.iso, checklists de conformidade e ativação dos assistentes de IA.</p>
                             </div>
                             <div style="text-align:right">
                                 <span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Bloqueado até assinatura</span>
@@ -69,7 +73,7 @@ import { navigate, render } from '../router.js';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const [leads, assessments, projects, controls] = await Promise.all([
-                api('GET', '/api/v1/leads').catch(() => []),
+                ehComercial() ? api('GET', '/api/v1/leads').catch(() => []) : [],
                 api('GET', '/api/v1/assessments').catch(() => []),
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
@@ -88,7 +92,8 @@ import { navigate, render } from '../router.js';
             const complianceRate = totalControls > 0 ? Math.round((approvedControls / totalControls) * 100) : 0;
 
             const statsHtml = window.renderStatCards([
-                { label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' },
+                // Só o comercial vê o funil; para o consultor o cartão mostraria 0 e enganaria.
+                ...(ehComercial() ? [{ label: 'Leads Ativos', value: leadsCount, color: 'var(--accent)', subtext: 'Oportunidades em pré-venda' }] : []),
                 { label: 'Levantamentos', value: assessmentsCount, color: '#ffcc00', subtext: 'Assessments cadastrados' },
                 { label: 'Projetos em Curso', value: projectsCount, color: '#34c759', subtext: 'Implementações ISO ativas' },
                 { label: 'Taxa de Conformidade', value: `${complianceRate}%`, color: complianceRate >= 80 ? '#34c759' : complianceRate >= 50 ? '#ffcc00' : '#00ade8', subtext: `${approvedControls} de ${totalControls} controles` }
@@ -101,7 +106,6 @@ import { navigate, render } from '../router.js';
                     {
                         label: 'Ações', align: 'right', render: (row) => `
                             <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="openAssessmentDetail" data-args='["${row.id}"]'>Ver</button>
-                            <button class="btn btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.7rem;" data-action="generateProposalFromAssessment" data-args='["${row.id}"]'>Proposta</button>
                         `
                     }
                 ],

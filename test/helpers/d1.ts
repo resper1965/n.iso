@@ -79,8 +79,10 @@ export async function sessionFor(user: Record<string, unknown>): Promise<Record<
   // inatividade. Sem eles a fixture produzia uma sessão de formato que o login
   // nunca emite — e que o middleware, com razão, recusa.
   // Quem quiser testar sessão velha passa o próprio `seen`.
+  // `org_id`: o login grava `users.org_id` (NOT NULL, default `org_ness`) em toda sessão, e sessão de
+  // equipe sem ele depois de `SESSAO_COM_ORG_DESDE` é negada. Sessão LEGADA: passe `org_id: undefined`.
   const agora = Date.now();
-  const sessao = { iat: agora, seen: agora, ...user };
+  const sessao = { iat: agora, seen: agora, org_id: 'org_ness', ...user };
   await env.SESSIONS.put(`session_${id}`, JSON.stringify(sessao));
   return { Authorization: `Bearer ${id}` };
 }
@@ -97,6 +99,20 @@ export async function seedTwoProjects(): Promise<void> {
     env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?, ?, ?, ?, ?)`
     ).bind('proj-b', 'Cliente B', 'ISO 27001', 'controller', 'Active'),
+  ]);
+}
+
+/**
+ * D5: consultor só alcança projeto em que consta como `consultor` na governança, com conta ativa
+ * em `users`. Cria as duas linhas (a conta só se ainda não existir). Os projetos têm de existir.
+ */
+export async function designarConsultor(email: string, ...projetos: string[]): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, name, role) VALUES (?, ?, 'x', 'Consultor', 'consultor')`)
+      .bind(`cons:${email}`, email),
+    ...projetos.map((p) =>
+      env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES (?, 'Consultor', ?, 'consultor', 'Consultor')`)
+        .bind(p, email)),
   ]);
 }
 

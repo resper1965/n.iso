@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError } from '../helpers';
-import { validateBody, ropaSchema, ropaApprovalSchema } from '../schemas';
+import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { COLUNAS_REVOGACAO } from './controls';
+import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -75,6 +76,42 @@ projectRopaApp.post('/', async (c) => {
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
     return c.json({ error: 'Falha ao criar ROPA', detail: e.message }, 500);
+  }
+});
+
+// Revogar a aprovação (F6, decisão D1): ato do humano, pela interface, de platform_admin e do
+// administrador do cliente. NÃO pede a senha do aprovador (como a revogação de controle), mas o
+// motivo é obrigatório e vai para a trilha com o projeto. Sem assinatura nenhuma sobrando, o ROPA
+// volta a rascunho; com uma sobrando (a aprovação grava `Approved` já na primeira), continua aprovado.
+projectRopaApp.post('/:recordId/revoke-approval', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_REVOGAR_APROVACAO.has(user?.role ?? '')) {
+      return c.json({ error: 'Forbidden: revogar aprovação é do administrador do cliente ou da plataforma' }, 403);
+    }
+    const projectId = c.req.param('projectId');
+    const recordId = c.req.param('recordId');
+    const valid = await validateBody(c, revogarRopaSchema);
+    if (!valid.success) return valid.response;
+    const { role, reason } = valid.data;
+
+    const atual = await c.env.DB.prepare('SELECT ciso_approved_by, ceo_approved_by FROM ropa_records WHERE id = ? AND project_id = ?')
+      .bind(recordId, projectId).first<{ ciso_approved_by: string | null; ceo_approved_by: string | null }>();
+    if (!atual) return c.json({ error: 'ROPA não encontrado' }, 404);
+
+    const limpaCiso = role !== 'ceo';
+    const limpaCeo = role !== 'ciso';
+    const sobra = (!limpaCiso && !!atual.ciso_approved_by) || (!limpaCeo && !!atual.ceo_approved_by);
+    const colunas = [limpaCiso ? COLUNAS_REVOGACAO.ciso : '', limpaCeo ? COLUNAS_REVOGACAO.ceo : ''].filter(Boolean).join(', ');
+    await c.env.DB.prepare(`UPDATE ropa_records SET ${colunas}, status = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+      .bind(sobra ? 'Approved' : 'Draft', recordId, projectId).run();
+
+    const quais = role === 'todas' ? 'todas as aprovações' : role === 'ciso' ? 'a aprovação do Líder SGSI' : 'a aprovação da Direção Executiva';
+    await logAudit(c.env.DB, 'ropa.approval_revoked', user.email, `ROPA ${recordId}: revogada ${quais}${sobra ? '' : '; voltou a Draft'}.`, reason, c.req.header('CF-Connecting-IP') ?? '', projectId);
+    return c.json({ ok: true, role, status: sobra ? 'Approved' : 'Draft' });
+  } catch (e: any) {
+    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
+    return c.json({ error: 'Erro ao revogar aprovação do ROPA', detail: e.message }, 500);
   }
 });
 

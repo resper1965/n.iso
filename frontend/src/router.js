@@ -34,7 +34,7 @@ export     function navigate(view, data) {
         if (S.view === 'dashboard') renderDashboard(c, h, a);
         else if (S.view === 'leads') renderLeads(c, h, a);
         else if (S.view === 'assessments') renderAssessments(c, h, a);
-        else if (S.view === 'proposals') renderProposals(c, h, a);
+        else if (S.view === 'proposals') renderPropostas(c, h, a);  // o fluxo antigo (renderProposals) saiu na fatia 4
         else if (S.view === 'projects') renderProjects(c, h, a);
         else if (S.view === 'monitor') renderMonitor(c, h, a);
         else if (S.view === 'assets') renderAssets(c, h, a);
@@ -56,8 +56,13 @@ export     function navigate(view, data) {
         else if (S.view === 'ai-chat') renderAIChat(c, h, a);
         else if (S.view === 'knowledge') renderKnowledge(c, h, a);
         else if (S.view === 'settings') renderSettings(c, h, a);
+        else if (S.view === 'meus-pedidos') renderMeusPedidos(c, h, a);
         else if (S.view === 'users') renderUsers(c, h, a);
         else if (S.view === 'api-keys') renderApiKeys(c, h, a);
+        else if (S.view === 'conectar-agente') renderConectarAgente(c, h, a);
+        else if (S.view === 'catalogo') renderCatalogo(c, h, a);
+        else if (S.view === 'config-comercial') renderConfigComercial(c, h, a);
+        else if (S.view === 'organizacoes') renderOrganizacoes(c, h, a);
         else if (S.view === 'assessment-detail') renderAssessmentDetail(c, h, a);
         else if (S.view === 'self-service') renderSelfServiceAssessment(S.currentAssessmentId);
         else if (S.view === 'project-detail') renderProjectDetail(c, h, a);

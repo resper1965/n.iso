@@ -19,9 +19,11 @@ export const dataSubjectApp = new Hono<{ Bindings: Bindings; Variables: Variable
 
 const PAPEIS_AUTORIZADOS = ['platform_admin', 'consultor', 'org_admin'];
 
-/** Requisição de titular expõe PII: papel read-only não pode executar. */
+/** Requisição de titular expõe PII: papel read-only não pode executar. O agente
+ *  tem paridade de consultor, preso ao projeto pelo projectAccessMiddleware. */
 function autorizado(c: any): boolean {
-  return PAPEIS_AUTORIZADOS.includes(c.get('user')?.role);
+  const u = c.get('user');
+  return PAPEIS_AUTORIZADOS.includes(u?.role) || u?.agente === true;
 }
 
 /**

@@ -2272,6 +2272,8 @@ import { navigate } from '../router.js';
                     ${manualFormHtml}
                 </div>
 
+                <div id="ciencia-link-box"></div>
+
                 <div class="card">
                     <div class="card-label">Histórico de Ciencia de Políticas</div>
                     <div style="overflow-x:auto;">
@@ -2293,6 +2295,8 @@ import { navigate } from '../router.js';
                 </div>
             </div>
         `;
+        // Ciência por link (pedidos, fatia 3): só para quem pode pedir; o servidor decide de novo.
+        if (window.podePedirAprovacao?.(S.user)) window.renderCienciaLink?.(document.getElementById('ciencia-link-box'), proj.id);
     }
 
     window.copyPublicPolicyPortalLink = function(projectId) {

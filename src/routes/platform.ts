@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehEquipeNess, somenteNess } from '../helpers';
-import { validateBody, assetSchema, dpiaSchema } from '../schemas';
+import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema } from '../schemas';
+import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
+import { assinaturaDpia, substituirPedidosDoDocumento } from '../services/pedidos';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
+import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
 
 export const platformApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -69,11 +72,40 @@ platformApp.put('/dpia/:id', async (c) => {
     await c.env.DB.prepare(
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
     ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
+    // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
+    await substituirPedidosDoDocumento(c.env.DB, 'dpia', id);
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_updated', user?.email || 'system', `DPIA ${id} updated`);
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar DPIA', e);
+  }
+});
+
+// Revogar a aprovação do DPIA (F6, decisão D1): humano, pela interface, platform_admin e administrador
+// do cliente. Limpa assinaturas e aprovação do DPO e volta o DPIA a rascunho; o motivo é obrigatório
+// e vai para a trilha com o projeto.
+platformApp.post('/projects/:id/dpia/:assessmentId/revoke-approval', async (c) => {
+  try {
+    const user = c.get('user');
+    if (!PODE_REVOGAR_APROVACAO.has(user?.role ?? '')) {
+      return c.json({ error: 'Forbidden: revogar aprovação é do administrador do cliente ou da plataforma' }, 403);
+    }
+    const projectId = c.req.param('id');
+    const assessmentId = c.req.param('assessmentId');
+    const valid = await validateBody(c, revogarDpiaSchema);
+    if (!valid.success) return valid.response;
+
+    const existe = await c.env.DB.prepare('SELECT 1 FROM dpia_assessments WHERE id = ? AND project_id = ?').bind(assessmentId, projectId).first();
+    if (!existe) return c.json({ error: 'DPIA não encontrado' }, 404);
+
+    await c.env.DB.prepare(
+      `UPDATE dpia_assessments SET dpo_signature = NULL, ceo_signature = NULL, dpo_approved_by = NULL, dpo_approved_at = NULL, status = 'Draft' WHERE id = ? AND project_id = ?`
+    ).bind(assessmentId, projectId).run();
+    await logAudit(c.env.DB, 'dpia.approval_revoked', user.email, `DPIA ${assessmentId}: aprovação e assinaturas revogadas; voltou a Draft.`, valid.data.reason, c.req.header('CF-Connecting-IP') ?? '', projectId);
+    return c.json({ ok: true, status: 'Draft' });
+  } catch (e: any) {
+    return erro500(c, 'Erro ao revogar aprovação do DPIA', e);
   }
 });
 
@@ -87,20 +119,25 @@ platformApp.post('/projects/:id/dpia/:assessmentId/approve', async (c) => {
     // governança DESTE projeto, não do papel de plataforma. Sem esta checagem,
     // qualquer editor do projeto carimbava a aprovação (falha de segregação de
     // funções). Mesmo padrão de evidência, controles e ROPA.
+    const valid = await validateBody(c, dpiaApprovalSchema);
+    if (!valid.success) return valid.response;
+    const { role } = valid.data;
+
     const autoridade = await autoridadeDeAssinatura(c.env.DB, projectId, user);
-    const recusa = recusaDeAssinatura(autoridade, 'ciso');
+    const recusa = recusaDeAssinatura(autoridade, role);
     if (recusa) return c.json({ error: recusa }, 403);
 
     const dbUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(user.email).first<any>();
     // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
     const approvedBy = autoridade.nome || dbUser?.name || user.email;
-    const now = new Date().toISOString();
 
-    await c.env.DB.prepare(
-      'UPDATE dpia_assessments SET status = ?, dpo_approved_by = ?, dpo_approved_at = ? WHERE id = ? AND project_id = ?'
-    ).bind('Approved', approvedBy, now, assessmentId, projectId).run();
+    // A mesma assinatura que o pedido de aprovação (routes/pedidos.ts) aciona.
+    const assinatura = await assinaturaDpia(c.env.DB, projectId, assessmentId, role, approvedBy);
+    if (!assinatura) return c.json({ error: 'DPIA não encontrado' }, 404);
+    await assinatura.run();
 
-    await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado pelo DPO (${approvedBy})`);
+    const quem = role === 'ciso' ? 'pelo DPO / Líder SGSI' : 'pela Direção Executiva';
+    await logAudit(c.env.DB, 'dpia.approved', user.email, `DPIA ${assessmentId} aprovado ${quem} (${approvedBy}); papel: ${role}`, '', c.req.header('CF-Connecting-IP') ?? '', projectId);
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Erro ao aprovar DPIA', e);
@@ -181,15 +218,42 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
  * digest; comparar só metadado seria teatro, porque quem reescreve o objeto
  * reescreve o metadado junto.
  *
- * Restrita à equipe ness.: o resultado diz quantos dias existem e onde a cadeia
+ * Restrita à equipe da ness. (`somenteOrgNess`: a cadeia é da plataforma inteira, e a equipe de
+ * outra consultoria, inclusive o consultoria_admin, não a lê): o resultado diz quantos dias existem e onde a cadeia
  * quebra, que é informação de operação da plataforma, não de um tenant.
  */
-platformApp.get('/admin/trilha/verificar', somenteNess, async (c) => {
+platformApp.get('/admin/trilha/verificar', somenteNess, exigirOrg, somenteOrgNess, async (c) => {
   try {
     const r = await verificarCadeia(c.env);
     return c.json({ ok: true, ...r }, r.intacta ? 200 : 409);
   } catch (e: any) {
     return erro500(c, 'Falha ao verificar a cadeia da trilha', e);
+  }
+});
+
+/**
+ * Transfere o projeto para outra organização (fatia 5, spec §9): só o platform_admin. A consultoria
+ * de origem perde o acesso na hora (designações dela e agentes do projeto saem no mesmo batch);
+ * propostas, contratos e usuários do cliente ficam. Ver services/transferencia-projeto.ts.
+ */
+platformApp.post('/platform/projects/:id/transferir', async (c) => {
+  if (c.get('user')?.role !== 'platform_admin') return c.json({ error: 'Forbidden: só o administrador da plataforma transfere projetos' }, 403);
+  try {
+    const v = await validateBody(c, transferirProjetoSchema);
+    if (!v.success) return v.response;
+    const r = await transferirProjeto(c.env.DB, {
+      projetoId: c.req.param('id'), orgDestinoId: v.data.orgDestinoId, motivo: v.data.motivo,
+      atorEmail: c.get('user').email, ip: c.req.header('CF-Connecting-IP') ?? '',
+    });
+    if (r.ok) return c.json(r);
+    switch (r.motivo) {
+      case 'nao_encontrado': return c.json({ error: 'Projeto ou organização de destino não encontrado' }, 404);
+      case 'destino_invalido': return c.json({ error: 'A organização de destino não está ativa' }, 409);
+      case 'mesma_org': return c.json({ error: 'O projeto já é dessa organização' }, 409);
+      case 'corrida': return c.json(MSG_CORRIDA, 409);
+    }
+  } catch (e: any) {
+    return erro500(c, 'Falha ao transferir o projeto', e);
   }
 });
 
@@ -226,12 +290,18 @@ platformApp.get('/dashboard', async (c) => {
   if (user && (user.role === 'org_admin' || user.role === 'org_user' || user.role === 'client')) {
     return c.json({ error: 'Forbidden: Client role cannot access global platform dashboard' }, 403);
   }
+  // Consultor conta só os projetos em que está designado (D5); lead, só o comercial.
+  const v = projetosVisiveis(user);
+  const doProjeto = v ? `AND project_id IN (${v.sql})` : '';
+  const conta = (sql: string) => (v ? c.env.DB.prepare(sql).bind(v.bind) : c.env.DB.prepare(sql)).first() as Promise<any>;
+  // Leads: só o comercial, e só os da organização dele (sem organização, nenhum).
+  const orgLeads = ehComercial(user) ? await resolverOrg(c) : null;
   const [projects, leads, controls, evidence, risks] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM projects').first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM leads').first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed'").first() as Promise<any>,
-    c.env.DB.prepare("SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending'").first() as Promise<any>,
-    c.env.DB.prepare('SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15').first() as Promise<any>
+    conta(`SELECT COUNT(*) as count FROM projects WHERE 1=1 ${v ? `AND id IN (${v.sql})` : ''}`),
+    (orgLeads ? c.env.DB.prepare('SELECT COUNT(*) as count FROM leads WHERE org_id = ?').bind(orgLeads) : c.env.DB.prepare('SELECT 0 as count')).first() as Promise<any>,
+    conta(`SELECT COUNT(*) as count FROM compliance_controls WHERE status = 'Completed' ${doProjeto}`),
+    conta(`SELECT COUNT(*) as count FROM evidence WHERE evaluation_status = 'pending' ${doProjeto}`),
+    conta(`SELECT COUNT(*) as count FROM risks WHERE impact * probability >= 15 ${doProjeto}`),
   ]);
   return c.json({
     projects: projects?.count || 0,
@@ -254,19 +324,23 @@ platformApp.get('/dashboard/stats', async (c) => {
     // o escopo do cliente. A string pode ser VAZIA, e é esse o ponto —
     // `WHERE id = ''` não casa com nada, então cliente sem projeto conta zero
     // em vez de contar a plataforma inteira.
-    const escopo: string | null = ehEquipeNess(user) ? null : (user?.client_project_id ?? '');
+    //
+    // Desde a D5 a decisão é de `projetosVisiveis`: o consultor conta só os
+    // projetos em que está designado; só o platform_admin conta tudo.
+    const v = projetosVisiveis(user);
 
-    const whereResource = escopo === null ? '' : 'WHERE project_id = ?';
-    const whereProject = escopo === null ? '' : 'WHERE id = ?';
-    const params = escopo === null ? [] : [escopo];
+    const whereResource = v ? `WHERE project_id IN (${v.sql})` : '';
+    const whereProject = v ? `WHERE id IN (${v.sql})` : '';
+    const params = v ? [v.bind] : [];
+    const orgLeads = ehComercial(user) ? await resolverOrg(c) : null;
 
     const stats = await c.env.DB.batch<{ count: number }>([
-      // O funil comercial é da ness. (ver `somenteNess` em helpers.ts): cliente
-      // não vê lead — nem o conteúdo, nem quantos existem. A contagem era
-      // global para todo mundo. O `SELECT 0` mantém o alinhamento posicional do
+      // O funil comercial é do comercial da ness. (ver `somenteComercial` em
+      // helpers.ts): cliente e consultor não veem lead — nem o conteúdo, nem
+      // quantos existem. O `SELECT 0` mantém o alinhamento posicional do
       // batch, para os índices abaixo não dependerem do papel de quem pergunta.
-      escopo === null
-        ? c.env.DB.prepare('SELECT count(*) as count FROM leads')
+      orgLeads
+        ? c.env.DB.prepare('SELECT count(*) as count FROM leads WHERE org_id = ?').bind(orgLeads)
         : c.env.DB.prepare('SELECT 0 as count'),
       c.env.DB.prepare(`SELECT count(*) as count FROM projects ${whereProject}`).bind(...params),
       c.env.DB.prepare(`SELECT count(*) as count FROM compliance_controls ${whereResource} ${whereResource ? "AND" : "WHERE"} status = 'Completed'`).bind(...params),
@@ -387,9 +461,12 @@ platformApp.get('/client/proposal', async (c) => {
 // Notifications
 platformApp.get('/notifications', async (c) => {
   const user = c.get('user');
+  // Notificação é do destinatário. A de difusão (`user_id` nulo) é legado da era só-ness. (nenhum
+  // caminho a cria hoje): fica para a equipe da ness. e o platform_admin, não para outra consultoria.
+  const veDifusao = orgDoUsuario(user) === ORG_NESS ? 1 : 0;
   const { results } = await c.env.DB.prepare(
-    'SELECT * FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT 50'
-  ).bind(user?.id || null).all();
+    'SELECT * FROM notifications WHERE user_id = ? OR (user_id IS NULL AND ? = 1) ORDER BY created_at DESC LIMIT 50'
+  ).bind(user?.id || null, veDifusao).all();
   return c.json({ ok: true, notifications: results || [] });
 });
 
@@ -398,8 +475,8 @@ platformApp.put('/notifications/:id/read', async (c) => {
   const user = c.get('user');
   // Escopo ao dono: sem o filtro, qualquer autenticado marcaria como lida a
   // notificação de outro usuário (IDOR). Só o destinatário (ou broadcast) pode.
-  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND (user_id = ? OR user_id IS NULL)')
-    .bind(id, user?.id || null).run();
+  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND (user_id = ? OR (user_id IS NULL AND ? = 1))')
+    .bind(id, user?.id || null, orgDoUsuario(user) === ORG_NESS ? 1 : 0).run();
   return c.json({ ok: true });
 });
 
@@ -415,13 +492,15 @@ platformApp.get('/portfolio', async (c) => {
     //    `users.role` é TEXT livre — um papel fora da lista, como `ciso`
     //    (que a própria suíte usa), enxergava a carteira de TODOS os tenants.
     //
-    // Agora quem decide é `ehEquipeNess`: só a equipe ness. vê a plataforma
-    // inteira, e todo o resto é escopado ao próprio projeto. Papel desconhecido
-    // cai no lado seguro. Com o escopo vazio, `WHERE id = ''` não casa com
-    // nada — escopo ausente significa NADA, nunca TUDO.
-    const stmt = ehEquipeNess(user)
-      ? c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC')
-      : c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(user?.client_project_id ?? '');
+    // Agora quem decide é `projetosVisiveis`: só o platform_admin vê a
+    // plataforma inteira; o consultor, os projetos em que está designado (D5);
+    // todo o resto, o próprio projeto. Papel desconhecido cai no lado seguro.
+    // Com o escopo vazio, `IN (SELECT '')` não casa com nada — escopo ausente
+    // significa NADA, nunca TUDO.
+    const v = projetosVisiveis(user);
+    const stmt = v
+      ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${v.sql}) ORDER BY created_at DESC`).bind(v.bind)
+      : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
     const { results } = await stmt.all();
     return c.json({ ok: true, portfolio: results || [], projects: results || [] });
   } catch (e: any) {
@@ -434,7 +513,9 @@ platformApp.get('/phases/config', (c) => {
 });
 
 // Phase config & Auditor token
-platformApp.get('/pricing-config', async (c) => {
+// Tabela de preços da ness. (custo interno, tributos, margem): comercial apenas.
+// Estava sem trava nenhuma — qualquer sessão, inclusive de cliente, lia com 200.
+platformApp.get('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = 'pricing_config'").first<{value:string}>();
@@ -451,7 +532,7 @@ platformApp.get('/pricing-config', async (c) => {
   }
 });
 
-platformApp.put('/pricing-config', async (c) => {
+platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
   try {
     await c.env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME)").run();
     const body = await c.req.json();

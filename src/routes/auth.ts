@@ -1,16 +1,17 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, SESSION_TTL_SEC, erro500 } from '../helpers';
+import { genId, genToken, genNumericCode, rateLimit, rateLimitD1, hashPassword, verifyPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, SESSION_TTL_SEC, erro500 } from '../helpers';
+import { equipeDeOrgSuspensa, ORG_SUSPENSA } from '../services/organizacao';
 
 /** IP do cliente para rate limiting (Cloudflare popula CF-Connecting-IP) */
-function clientIp(c: any): string {
+export function clientIp(c: any): string {
   return c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
 }
 import { authMiddleware } from '../middleware/auth';
 import { validateBody, loginSchema, setupSchema, resetRequestSchema, resetConfirmSchema, primeiroAcessoSchema, mudarSenhaSchema } from '../schemas';
 import {
   decisaoLogin, mensagemCredencialInvalida, mensagemBloqueio,
-  BLOQUEIO_SEG, JANELA_FALHAS_SEG,
+  BLOQUEIO_SEG, JANELA_FALHAS_SEG, type DecisaoLogin,
 } from '../auth-policy';
 
 export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -20,7 +21,7 @@ export const authApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
  * contasse conta existente, o próprio número de tentativas restantes diria ao
  * atacante quais e-mails são válidos.
  */
-function chavesTentativa(email: string, ip: string) {
+export function chavesTentativa(email: string, ip: string) {
   const conta = email.trim().toLowerCase();
   return {
     conta,
@@ -30,12 +31,39 @@ function chavesTentativa(email: string, ip: string) {
 }
 
 /**
+ * Conta uma falha de credencial e, no limite, bloqueia a conta+IP. Compartilhada
+ * com a tela OAuth do agente (routes/oauth-autorizacao.ts): as duas portas de
+ * senha somam as mesmas falhas e respeitam o mesmo bloqueio.
+ */
+export async function registrarFalhaLogin(
+  c: any, chaves: ReturnType<typeof chavesTentativa>, falhasAntes: number, desafioVerificavel: boolean, ip: string
+): Promise<DecisaoLogin> {
+  const total = falhasAntes + 1;
+  await c.env.SESSIONS.put(chaves.falhas, String(total), { expirationTtl: JANELA_FALHAS_SEG });
+  const depois = decisaoLogin(total, desafioVerificavel);
+  if (depois.bloqueado) {
+    await c.env.SESSIONS.put(chaves.bloqueio, '1', { expirationTtl: BLOQUEIO_SEG });
+    // Conta E IP na trilha: é o par que o auditor precisa para distinguir
+    // usuário que esqueceu a senha de tentativa de força bruta distribuída.
+    await logAudit(
+      c.env.DB, 'auth.lockout', chaves.conta,
+      `Bloqueio temporário de ${BLOQUEIO_SEG / 60} min após ${total} tentativas incorretas (IP ${ip})`
+    );
+  }
+  return depois;
+}
+
+/**
  * Confere o desafio anti-abuso. Sem segredo configurado não há o que conferir,
  * e o desafio não é exigido nem anunciado (ver decisaoLogin) — o bloqueio
  * temporário é que segura a força bruta.
  *
  * O nome do fornecedor fica aqui, na implementação; a interface não o menciona.
  */
+/** `users.org_id` da conta (sessão recarimbada leva o campo do banco, não o da sessão antiga). */
+const orgIdDoBanco = async (c: any, id: string): Promise<string | null> =>
+  (await c.env.DB.prepare('SELECT org_id FROM users WHERE id = ?').bind(id).first())?.org_id ?? null;
+
 async function desafioResolvido(c: any, token: string | undefined, ip: string): Promise<boolean> {
   const secret = c.env.TURNSTILE_SECRET_KEY;
   if (!secret) return true;
@@ -165,24 +193,12 @@ authApp.post('/login', async (c) => {
     }
 
     const user = await c.env.DB.prepare(
-      'SELECT id, email, name, role, client_project_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
+      'SELECT id, email, name, role, client_project_id, org_id, password_hash, requires_password_change, totp_enabled, ativo FROM users WHERE email = ?'
     ).bind(email).first() as any;
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {
-      const total = falhas + 1;
-      await c.env.SESSIONS.put(chaves.falhas, String(total), { expirationTtl: JANELA_FALHAS_SEG });
-      const depois = decisaoLogin(total, desafioVerificavel);
-
-      if (depois.bloqueado) {
-        await c.env.SESSIONS.put(chaves.bloqueio, '1', { expirationTtl: BLOQUEIO_SEG });
-        // Conta E IP na trilha: é o par que o auditor precisa para distinguir
-        // usuário que esqueceu a senha de tentativa de força bruta distribuída.
-        await logAudit(
-          c.env.DB, 'auth.lockout', chaves.conta,
-          `Bloqueio temporário de ${BLOQUEIO_SEG / 60} min após ${total} tentativas incorretas (IP ${ip})`
-        );
-        return c.json({ error: mensagemBloqueio(), locked: true }, 429);
-      }
+      const depois = await registrarFalhaLogin(c, chaves, falhas, desafioVerificavel, ip);
+      if (depois.bloqueado) return c.json({ error: mensagemBloqueio(), locked: true }, 429);
 
       // Mensagem única: nunca diz se o e-mail existe ou se foi a senha.
       return c.json({
@@ -200,6 +216,10 @@ authApp.post('/login', async (c) => {
     if (user.ativo === 0) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
+
+    // Equipe de consultoria SUSPENSA não entra. Aqui a mensagem diz o motivo: a senha já foi
+    // provada, então não revela nada a quem sonda, e a pessoa precisa saber com quem falar.
+    if (await equipeDeOrgSuspensa(c.env.DB, user)) return c.json(ORG_SUSPENSA, 403);
 
     // Credencial correta zera a contagem: a janela existe para tentativa
     // seguida de erro, não para punir quem errou uma vez ontem.
@@ -235,7 +255,9 @@ authApp.post('/login', async (c) => {
     // o teto absoluto de 24 h continua sendo o `expirationTtl` abaixo, que a
     // renovação NÃO estica: é ele que garante a revalidação diária.
     const agora = Date.now();
-    const sessao = { ...user, iat: agora, seen: agora, ...(exigeMfa ? { mfa_pending: true } : {}) };
+    // `org_id` explícito (users.org_id, NOT NULL): sessão de equipe sem ele é negada depois de
+    // `SESSAO_COM_ORG_DESDE`.
+    const sessao = { ...user, org_id: user.org_id, iat: agora, seen: agora, ...(exigeMfa ? { mfa_pending: true } : {}) };
     await c.env.SESSIONS.put(`session_${token}`, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     await c.env.SESSIONS.put(token, JSON.stringify(sessao), { expirationTtl: SESSION_TTL_SEC });
     
@@ -254,6 +276,18 @@ authApp.post('/reset-password-first', async (c) => {
     if (!v.success) return v.response;
     const { newPassword } = v.data;
 
+    // Esta rota troca a senha SEM pedir a atual, então só vale no primeiro acesso
+    // (`requires_password_change = 1`). Fora dele, qualquer sessão aberta — uma
+    // sessão roubada, por exemplo — definiria senha nova e tomaria a conta. A troca
+    // comum é `change-password`, que exige a senha atual. O flag não viaja na sessão
+    // (o login o apaga), então a fonte é o banco.
+    const conta = await c.env.DB.prepare('SELECT requires_password_change FROM users WHERE id = ?')
+      .bind(user.id).first<{ requires_password_change: number | null }>();
+    if (conta?.requires_password_change !== 1) {
+      await logAudit(c.env.DB, 'auth.reset_primeiro_recusado', user.email, 'Troca de senha sem a atual recusada: a conta não está em primeiro acesso');
+      return c.json({ error: 'Esta troca só vale no primeiro acesso. Use a troca de senha normal, que pede a senha atual.' }, 403);
+    }
+
     const newHash = await hashPassword(newPassword);
     
     await c.env.DB.prepare(
@@ -261,6 +295,19 @@ authApp.post('/reset-password-first', async (c) => {
     ).bind(newHash, user.id).run();
 
     await invalidateUserSessions(c.env.SESSIONS, user.id);
+    await revogarAgentesPorTrocaDeSenha(c.env.DB, user.id);
+    // A revogação derruba também ESTA sessão, e o `globals.js` segue com o mesmo
+    // token para dentro do app: a pessoa voltava ao login achando que a senha
+    // nova não pegou. Recarimbar `iat` mantém só ela viva — quem acabou de
+    // provar a senha nova equivale a um login novo, daí o TTL cheio.
+    const sessionId = c.get('sessionId');
+    if (sessionId) {
+      const agora = Date.now();
+      // `iat` novo exige `org_id` (corte de `SESSAO_COM_ORG_DESDE`): a sessão antiga pode não tê-lo.
+      const renovada = JSON.stringify({ ...user, org_id: await orgIdDoBanco(c, user.id), iat: agora, seen: agora });
+      await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
+      await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
+    }
 
     await logAudit(c.env.DB, 'auth.password_changed_first', user.email, `Senha do primeiro acesso redefinida com sucesso`);
     return c.json({ ok: true, message: 'Senha redefinida com sucesso' });
@@ -296,13 +343,14 @@ authApp.post('/forgot-password', async (c) => {
     }
     await c.env.SESSIONS.put(`reset_token:${token}`, JSON.stringify({ email: user.email }), { expirationTtl: 3600 });
 
-    console.log(`[PASSWORD RESET] Token para ${user.email}: ${token}`);
+    // O código NÃO vai para o log: com a observabilidade ligada, quem lê os logs
+    // trocaria a senha de qualquer conta. Falha de envio é registrada no sendEmail.
 
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e7; border-radius: 10px; color: #333;">
-        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0; text-align: center;">Recuperação de Senha - nISO</h2>
+        <h2 style="color: #00ade8; font-weight: 500; margin-top: 0; text-align: center;">Recuperação de senha · n.iso</h2>
         <p>Olá, <strong>${escapeHtml(user.name)}</strong>,</p>
-        <p>Você solicitou a redefinição de sua senha de acesso ao portal do <strong>nISO</strong>.</p>
+        <p>Você solicitou a redefinição de sua senha de acesso ao portal do <strong>n.iso</strong>.</p>
         <p>Use o código de verificação de 6 dígitos abaixo para concluir a alteração (válido por 1 hora):</p>
         <div style="background-color: #f4f4f7; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; font-family: monospace; font-size: 2rem; letter-spacing: 5px; font-weight: bold; color: #00ade8;">
           ${token}
@@ -310,7 +358,7 @@ authApp.post('/forgot-password', async (c) => {
         <p style="color: #8e8e93; font-size: 0.85rem; text-align: center;">Se você não solicitou esta redefinição, por favor desconsidere este e-mail de forma segura.</p>
       </div>
     `;
-    await sendEmail(c, email, 'Recuperação de Senha - nISO', emailHtml);
+    await sendEmail(c, email, 'Recuperação de senha · n.iso', emailHtml);
 
     if (c.env.ENVIRONMENT === 'development' || c.env.ENVIRONMENT === 'test') {
       return c.json({ ok: true, reset_token: token, message: 'Código de recuperação gerado (Desenvolvimento)' });
@@ -348,7 +396,10 @@ authApp.post('/reset-password', async (c) => {
     // de "minha conta foi comprometida". Sem isto, quem roubou a sessão continua
     // dentro por até 24h mesmo depois da troca.
     const dono = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<any>();
-    if (dono) await invalidateUserSessions(c.env.SESSIONS, dono.id);
+    if (dono) {
+      await invalidateUserSessions(c.env.SESSIONS, dono.id);
+      await revogarAgentesPorTrocaDeSenha(c.env.DB, dono.id);
+    }
 
     await c.env.SESSIONS.delete(`reset_token:${token}`);
 
@@ -389,7 +440,19 @@ authApp.post('/change-password', async (c) => {
     const newHash = await hashPassword(newPassword);
     await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE email = ?')
       .bind(newHash, user.email).run();
-      
+    // Sessão roubada não pode sobreviver à troca de senha (até 24 h): derruba
+    // todas as emitidas antes e recarimba só esta, como o primeiro acesso faz.
+    await invalidateUserSessions(c.env.SESSIONS, user.id);
+    await revogarAgentesPorTrocaDeSenha(c.env.DB, user.id);
+    const sessionId = c.get('sessionId');
+    if (sessionId) {
+      const agora = Date.now();
+      // `iat` novo exige `org_id` (corte de `SESSAO_COM_ORG_DESDE`): a sessão antiga pode não tê-lo.
+      const renovada = JSON.stringify({ ...user, org_id: await orgIdDoBanco(c, user.id), iat: agora, seen: agora });
+      await c.env.SESSIONS.put(`session_${sessionId}`, renovada, { expirationTtl: SESSION_TTL_SEC });
+      await c.env.SESSIONS.put(sessionId, renovada, { expirationTtl: SESSION_TTL_SEC });
+    }
+
     await logAudit(c.env.DB, 'auth.password_changed', user.email, 'Senha alterada com sucesso');
     return c.json({ ok: true });
   } catch (e: any) {

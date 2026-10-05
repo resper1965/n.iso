@@ -148,6 +148,7 @@ window.__adminCopiarApiKey = () => {
                     const projectName = u.client_project_id ? (projMap[u.client_project_id] || u.client_project_id) : '—';
                     const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
                                       u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
+                                      u.role === 'comercial' ? 'Comercial' :
                                       u.role === 'org_admin' ? 'Gestor Cliente' : 
                                       u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
                     return [
@@ -242,24 +243,28 @@ window.__adminCopiarApiKey = () => {
             </option>
         `).join('');
 
-        const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
-        
-        let roleOptions = '';
-        if (isSystemAdmin) {
-            roleOptions = `
-                <option value="">Selecione um papel</option>
-                <option value="platform_admin" ${user && user.role === 'platform_admin' ? 'selected' : ''}>Administrador de Plataforma</option>
-                <option value="consultant" ${user && (user.role === 'consultant' || user.role === 'consultor') ? 'selected' : ''}>Consultor</option>
-                <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente</option>
-                <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
-            `;
-        } else {
-            roleOptions = `
-                <option value="">Selecione um papel</option>
-                <option value="org_admin" ${user && user.role === 'org_admin' ? 'selected' : ''}>Gestor do Cliente</option>
-                <option value="org_user" ${user && user.role === 'org_user' ? 'selected' : ''}>Colaborador do Cliente</option>
-            `;
-        }
+        // Papéis que quem usa pode atribuir — espelho de soPlatformAdmin (users.ts), que é quem barra:
+        // platform_admin, qualquer um; consultoria_admin, a equipe da própria organização e o cliente
+        // (nunca platform_admin); os demais gestores, só usuário de cliente. O valor é o do
+        // PAPEIS_DE_CONTA do servidor (`consultor`, não a grafia legada `consultant`).
+        const papelAtual = S.user && S.user.role === 'admin' ? 'platform_admin' : S.user?.role;
+        const isSystemAdmin = papelAtual === 'platform_admin' || papelAtual === 'consultoria_admin';
+        const PAPEIS = [
+            ['platform_admin', 'Administrador de Plataforma', ['platform_admin']],
+            ['consultoria_admin', 'Administrador da consultoria', ['platform_admin', 'consultoria_admin']],
+            ['consultor', 'Consultor', ['platform_admin', 'consultoria_admin']],
+            ['comercial', 'Comercial', ['platform_admin', 'consultoria_admin']],
+            ['org_admin', 'Gestor do Cliente', null],
+            ['org_user', 'Colaborador do Cliente', null],
+        ];
+        const papelDoUsuario = user && user.role === 'consultant' ? 'consultor' : user?.role;
+        const roleOptions = '<option value="">Selecione um papel</option>' + PAPEIS
+            .filter(([, , quem]) => !quem || quem.includes(papelAtual))
+            .map(([v, rotulo]) => `<option value="${v}" ${papelDoUsuario === v ? 'selected' : ''}>${rotulo}</option>`).join('');
+        // platform_admin: a conta de equipe nasce na organização do seletor do cabeçalho (X-Org-Id).
+        const notaOrg = papelAtual === 'platform_admin'
+            ? `<p class="org-dica" id="user-m-org-nota">Conta de equipe (administrador, consultor, comercial) nasce na organização em que você atua: ${S.orgAtuacao ? escapeHTML(window.nomeOrgAtuacao?.() || S.orgAtuacao) : 'a ness.'}. Para outra, troque no seletor do cabeçalho.</p>`
+            : '';
 
         const activeProjId = S.activeProject ? S.activeProject.id : (S.user ? S.user.client_project_id : null);
         let govMembers = [];
@@ -334,6 +339,7 @@ window.__adminCopiarApiKey = () => {
                     <select id="user-m-role" class="form-input" data-action-change="toggleUserProjectSelect" data-arg-val>
                         ${roleOptions}
                     </select>
+                    ${notaOrg}
                 </div>
                 
                 <div class="form-group" id="user-m-project-group" style="display: ${showProjectSelect ? 'block' : 'none'}">
@@ -356,7 +362,7 @@ window.__adminCopiarApiKey = () => {
     window.toggleUserProjectSelect = function(role) {
         const group = document.getElementById('user-m-project-group');
         if (group) {
-            const isSystemAdmin = S.user && (S.user.role === 'platform_admin' || S.user.role === 'admin' || S.user.role === 'consultor' || S.user.role === 'consultant');
+            const isSystemAdmin = S.user && ['platform_admin', 'admin', 'consultor', 'consultant', 'consultoria_admin'].includes(S.user.role);
             if (isSystemAdmin && (role === 'org_admin' || role === 'org_user' || role === 'client')) {
                 group.style.display = 'block';
             } else {

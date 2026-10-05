@@ -9,7 +9,8 @@
          à tela de entrada tomava um 404, visível no console de quem abrisse o
          DevTools — e a aba ficava sem ícone. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#00ade8">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
     <!-- marked v15.0.12, servido pelo nosso domínio (frontend/public/marked.min.js).
          Antes vinha de cdn.jsdelivr.net/npm/marked/ — URL sem versão e sem SRI, o que
@@ -22,7 +23,17 @@
 <body>
     <a href="#content" class="skip-link">Pular para o conteudo</a>
 
+    <!-- A tela de entrada É a landing (spec 2026-09-29-landing-login-design):
+         login na primeira dobra, seções institucionais abaixo, tudo dentro do
+         overlay — que some ao entrar e leva as seções junto. -->
     <div id="login-overlay">
+        <div class="entry-fold">
+        <div class="entry-brand">
+            <div class="entry-mark">n<span>.</span>iso</div>
+            <h1 class="entry-title">Conformidade ISO conduzida, do diagnóstico à certificação.</h1>
+            <p class="entry-lede">O ambiente onde sua organização e a ness<span class="entry-dot">.</span> trabalham juntas: controles, evidências, riscos e políticas em um só lugar.</p>
+            <a class="entry-more" href="#conheca">conheça o n<span class="entry-dot">.</span>iso</a>
+        </div>
         <div class="login-form-side">
             <!-- Entrada com senha (conta local) -->
             <div class="login-box" id="standard-login-box">
@@ -195,6 +206,40 @@
                 </div>
             </div>
         </div>
+        </div>
+
+        <section class="entry-section" id="conheca" aria-labelledby="pilares-titulo">
+            <h2 class="entry-h2" id="pilares-titulo">O que o n<span class="entry-dot">.</span>iso organiza</h2>
+            <div class="entry-pillars">
+                <div class="entry-pillar">
+                    <h3>Conformidade</h3>
+                    <p>Declaração de aplicabilidade e controles do Anexo A da ISO 27001:2022, acompanhados em tempo real.</p>
+                </div>
+                <div class="entry-pillar">
+                    <h3>Evidência e auditoria</h3>
+                    <p>Cada evidência com registro de integridade e trilha de auditoria, pronta para o auditor.</p>
+                </div>
+                <div class="entry-pillar">
+                    <h3>Privacidade</h3>
+                    <p>ISO 27701 e registro das operações de tratamento, alinhados à LGPD.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="entry-section" aria-labelledby="passos-titulo">
+            <h2 class="entry-h2" id="passos-titulo">Como a ness<span class="entry-dot">.</span> conduz</h2>
+            <ol class="entry-steps">
+                <li><span class="entry-step-n">01</span><h3>Diagnóstico</h3><p>Maturidade atual, escopo e esforço até a certificação.</p></li>
+                <li><span class="entry-step-n">02</span><h3>Plano e aplicabilidade</h3><p>Controles aplicáveis, responsáveis e cronograma.</p></li>
+                <li><span class="entry-step-n">03</span><h3>Implementação e evidências</h3><p>Políticas, riscos e evidências reunidos no mesmo lugar.</p></li>
+                <li><span class="entry-step-n">04</span><h3>Auditoria e certificação</h3><p>Pendências tratadas e dossiê pronto para o auditor.</p></li>
+            </ol>
+        </section>
+
+        <footer class="entry-foot">
+            <span class="login-sign-house">ness<span>.</span></span>
+            <span class="login-sign-links"><a href="/politicas">privacidade</a> · <a href="/politicas">termos</a></span>
+        </footer>
     </div>
 
     <nav class="sidebar" id="sidebar" aria-label="Navegação principal">
@@ -214,6 +259,10 @@
             </div>
         </div>
         <div class="sidebar-nav-list">
+            <div class="sidebar-nav" id="nav-meus" data-action="navigate" data-args='["meus-pedidos"]' style="display:none">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+                <span class="sidebar-nav-text">Meus pedidos</span>
+            </div>
             <div class="sidebar-nav active" id="nav-dashboard" data-action="navigate" data-args='["dashboard"]'>
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 <span class="sidebar-nav-text">Dashboard</span>
@@ -237,6 +286,14 @@
                 <div class="sidebar-nav" id="nav-proposals" data-action="navigate" data-args='["proposals"]'>
                     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     <span class="sidebar-nav-text">Propostas</span>
+                </div>
+                <div class="sidebar-nav" id="nav-catalogo" data-action="navigate" data-args='["catalogo"]' style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <span class="sidebar-nav-text">Catálogo</span>
+                </div>
+                <div class="sidebar-nav" id="nav-config" data-action="navigate" data-args='["config-comercial"]' style="display:none">
+                    <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                    <span class="sidebar-nav-text">Configuração comercial</span>
                 </div>
             </div>
 
@@ -342,9 +399,17 @@
                     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
                     <span class="sidebar-nav-text">Trilha de Logs</span>
                 </div>
+                <div class="sidebar-nav" id="nav-organizacoes" data-action="navigate" data-args='["organizacoes"]' style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+                    <span class="sidebar-nav-text">Organizações</span>
+                </div>
                 <div class="sidebar-nav" id="nav-users" data-action="navigate" data-args='["users"]' style="display:none">
                     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span class="sidebar-nav-text">Usuários</span>
+                </div>
+                <div class="sidebar-nav" id="nav-conectar-agente" data-action="navigate" data-args='["conectar-agente"]' style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <span class="sidebar-nav-text">Conectar agente</span>
                 </div>
                 <div class="sidebar-nav" id="nav-settings" data-action="navigate" data-args='["settings"]'>
                     <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -376,6 +441,7 @@
                 <div id="header-project-badge" style="display:none;cursor:pointer;font-size:0.55rem;padding:0.2rem 0.6rem;border-radius:6px;background:rgba(0,173,232,0.12);color:var(--accent);border:1px solid rgba(0,173,232,0.25);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis" data-action="openActiveProjectModal"></div>
             </div>
             <div class="header-right">
+                <div class="org-seletor" id="org-seletor" hidden></div>
                 <div class="header-actions" id="header-actions"></div>
                 <div style="position:relative">
                     <div class="notif-badge" id="notif-badge" data-action="toggleNotifications" role="button" aria-label="Notificações" aria-haspopup="true"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="notif-count" id="notif-count" style="display:none">0</span></div>
@@ -383,6 +449,7 @@
                 </div>
             </div>
         </header>
+        <div class="org-faixa" id="org-faixa" role="status" hidden></div>
         <div style="display:flex;flex:1;overflow:hidden">
             <!-- `aria-live` saiu do #content: o container troca de innerHTML
                  inteiro a cada navegação, então o leitor de tela lia a view

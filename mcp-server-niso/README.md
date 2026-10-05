@@ -24,6 +24,36 @@ As duas camadas respondem a perguntas diferentes e nenhuma substitui a outra:
 - **No worker** — o que a chave de API pode de fato fazer, em qual projeto. É a
   fronteira de segurança. Vale mesmo que alguém chame a API direto, sem MCP.
 
+## Servidor remoto (recomendado para consultor)
+
+O consultor nao precisa instalar nada nem guardar chave de API: o nISO expoe o
+MCP em `https://niso.ness.com.br/mcp` com login OAuth. Na primeira chamada o
+cliente abre o navegador, o consultor entra no n.iso e escolhe o cliente
+(um cliente por conexao). O administrador do cliente enxerga o acesso e pode
+revoga-lo. O recurso e fixo no dominio oficial: nao funciona em outro dominio.
+
+O metodo de trabalho tambem chega pelo MCP: `niso_skill` lista e entrega as skills do
+consultor (hoje `prontidao-certificacao`, a pre-avaliacao de prontidao para Stage 1 e 2),
+com referencias e o validador de achados. Nada para instalar; o texto mora em
+`agent-skills/` e e atualizado junto com o deploy.
+
+O agente remoto tem o alcance do consultor humano no projeto escolhido no login: le qualquer area com `niso_ler` e grava com `niso_executar` ou com as ferramentas especificas. Apagar, gerar em lote, eliminar dados do titular e revogar aprovacoes exigem `confirmado_pelo_usuario: true`, que o agente so envia depois de mostrar o que sera feito e receber o 'sim'. Fora do alcance: usuarios, SSO, politica de seguranca, SCIM, chaves de API, webhooks, credencial de auditor externo (auditor-token), conta pessoal (login, termos, notificacoes), criar projeto, painel global, area comercial, /agentes e registro de achado de auditoria. Para outro projeto, refaca o login.
+
+| Cliente | Onde | Trecho | Estado |
+|---|---|---|---|
+| Claude Code | terminal | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` | exercitado em producao (30/09/2026) |
+| Cursor | `.cursor/mcp.json` | `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` | documenta MCP remoto com OAuth |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.niso]` + `url = "https://niso.ness.com.br/mcp"` | a confirmar |
+| Antigravity | `~/.gemini/config/mcp_config.json` | `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }` | a confirmar |
+
+O Claude Code foi exercitado contra a producao em 30/09/2026 (conexao, leitura e
+escrita). Cursor, Codex e Antigravity ainda nao tiveram o login OAuth confirmado:
+"a confirmar" significa que o suporte ao login do cliente nao esta documentado; se
+falhar, o bloco sera marcado como nao suportado. O servidor local abaixo continua
+para integracoes e auditor.
+
+Guia completo do agente remoto (uso, arquitetura e seguranca): [`docs/agente/`](../docs/agente/README.md).
+
 ## Instalação
 
 ```bash
@@ -46,7 +76,7 @@ Claude Code | `.mcp.json` na raiz do projeto
       "command": "node",
       "args": ["/caminho/absoluto/para/mcp-server-niso/build/index.js"],
       "env": {
-        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_BASE_URL": "https://niso.ness.com.br",
         "NISO_API_KEY": "...",
         "NISO_ROLE": "consultant",
         "NISO_PROJECT_ID": "proj-..."
@@ -58,7 +88,7 @@ Claude Code | `.mcp.json` na raiz do projeto
 
 Variável | Default | O que faz
 ---|---|---
-`NISO_BASE_URL` | `https://niso.ness.workers.dev` | Base da API. Aponte para `http://localhost:8787` em desenvolvimento.
+`NISO_BASE_URL` | `https://niso.ness.com.br` | Base da API. Aponte para `http://localhost:8787` em desenvolvimento.
 `NISO_API_KEY` | — | Chave de API do projeto. Sem ela o servidor sobe, mas toda chamada volta 401.
 `NISO_ROLE` | vazio (todas as ferramentas) | `consultant` ou `auditor`. Ver abaixo.
 `NISO_READONLY` | `false` | `1`/`true` → só as 9 ferramentas de leitura, ignorando `NISO_ROLE`. Observador puro.
@@ -105,7 +135,7 @@ Os dois recebem também o limite de projeto: a chave de API é vinculada a **um*
 projeto, e nenhum agente alcança outro. Com `NISO_PROJECT_ID`, o contexto nomeia
 qual.
 
-Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 22 ferramentas
+Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 24 ferramentas
 estão na mesma sessão e que isso mistura os dois lados que a norma separa.
 
 ## Chave de API: `read` não escreve

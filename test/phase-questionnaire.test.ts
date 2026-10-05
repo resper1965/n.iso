@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, designarConsultor } from './helpers/d1';
 import { PHASE_QUESTIONS } from '../src/phase-questions';
 
 /**
@@ -18,6 +18,7 @@ describe('Questionário da jornada por fase (D1 real)', () => {
     await env.DB.prepare(
       `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','Cliente','ISO 27001','controller','Active')`
     ).run();
+    await designarConsultor('c@ness.io', 'p1');
     headers = { ...(await sessionFor({ id: 'u1', email: 'c@ness.io', role: 'consultor', iat: Date.now() })), 'Content-Type': 'application/json' };
   });
 

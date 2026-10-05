@@ -12,11 +12,16 @@
     "test:coverage": "vitest run --coverage",
     "cf-typegen": "wrangler types",
     "openapi": "node scripts/gerar-openapi.mjs && node scripts/gerar-contrato-mcp.mjs",
+    "skills:gerar": "node scripts/gerar-skills.mjs",
     "db:backup": "wrangler d1 export niso-db --remote --output backups/niso-backup.sql",
     "db:backup:local": "wrangler d1 export niso-db --local --output backups/local-backup.sql"
   },
   "dependencies": {
     "@cloudflare/vitest-pool-workers": "^0.20.3",
+    "@cloudflare/workers-oauth-provider": "^1.2.1",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.24.0",
+    "docx": "^9.8.1",
     "hono": "^4.13.7",
     "typescript": "^5.5.2",
     "wrangler": "^4.107.0",

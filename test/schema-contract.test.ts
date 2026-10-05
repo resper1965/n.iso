@@ -200,4 +200,125 @@ describe('schema contract (real D1)', () => {
         .bind('ak2', 'p1', 'samehash', 'k2').run()
     ).rejects.toThrow();
   });
+  it('management_reviews tem as colunas de assinatura que existem em produção (F10)', async () => {
+    const { results } = await env.DB.prepare("SELECT name FROM pragma_table_info('management_reviews')").all<any>();
+    const colunas = results.map((r) => r.name);
+    for (const c of ['ciso_signed_by', 'ciso_signed_at', 'ciso_signed_ip', 'ceo_signed_by', 'ceo_signed_at', 'ceo_signed_ip']) {
+      expect(colunas).toContain(c);
+    }
+  });
+  it('organizations e tabelas comerciais trazem as colunas da organização', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['cnpj', 'cor_destaque', 'selo_niso', 'prefixo_proposta', 'proximo_numero', 'config_preco', 'textos', 'secoes_desligadas']) {
+      expect(await colunas('organizations'), c).toContain(c);
+    }
+    for (const t of ['leads', 'assessments', 'proposals', 'contracts']) {
+      expect(await colunas(t), t).toContain('org_id');
+    }
+    const ness = await env.DB.prepare(`SELECT name, prefixo_proposta, proximo_numero FROM organizations WHERE id = 'org_ness'`).first<any>();
+    expect(ness).toEqual({ name: 'ness.', prefixo_proposta: 'NESS', proximo_numero: 1 });
+  });
+  it('multiconsultoria (0040): org_id em users e projects, termo e logo em organizations, índices', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name, "notnull", dflt_value FROM pragma_table_info('${t}')`).all<any>()).results;
+    for (const t of ['users', 'projects']) {
+      const c = (await colunas(t)).find((r: any) => r.name === 'org_id');
+      expect(c, t).toMatchObject({ notnull: 1, dflt_value: "'org_ness'" });
+    }
+    const org = (await colunas('organizations')).map((r: any) => r.name);
+    for (const c of ['termo_aceito_em', 'termo_versao', 'logo_chave']) expect(org, c).toContain(c);
+    for (const n of ['idx_projects_org', 'idx_users_org']) {
+      expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
+    }
+  });
+  it('servicos existe e o CHECK recusa tipo desconhecido', async () => {
+    const t = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='servicos'").first();
+    expect(t).toBeTruthy();
+    await expect(
+      env.DB.prepare(`INSERT INTO servicos (id, org_id, nome, tipo) VALUES ('s1', 'org_ness', 'x', 'pacote')`).run()
+    ).rejects.toThrow();
+  });
+  it('propostas e proposta_itens: colunas, CHECK de status e unicidade de número por organização', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['org_id', 'lead_id', 'assessment_id', 'numero', 'revisao', 'status', 'cliente', 'secoes_editadas', 'documento_conteudo', 'documento_html', 'documento_hash', 'desconto_aprovado_por', 'criada_por']) {
+      expect(await colunas('propostas'), c).toContain(c);
+    }
+    for (const c of ['proposta_id', 'ordem', 'servico_id', 'servico', 'valor_base', 'desconto_pct', 'valor', 'texto_cliente']) {
+      expect(await colunas('proposta_itens'), c).toContain(c);
+    }
+    const ins = (id: string, org: string, numero: string | null, status = 'rascunho') =>
+      env.DB.prepare(`INSERT INTO propostas (id, org_id, numero, status, cliente, criada_por) VALUES (?, ?, ?, ?, 'x', 'u')`).bind(id, org, numero, status).run();
+    await expect(ins('pr_x', 'org_ness', 'NESS-2026-001', 'outra')).rejects.toThrow();
+    await ins('pr_a', 'org_ness', 'NESS-2026-001');
+    await expect(ins('pr_b', 'org_ness', 'NESS-2026-001')).rejects.toThrow();
+    await ins('pr_c', 'outra_org', 'NESS-2026-001');
+    await ins('pr_d', 'org_ness', null);
+    await ins('pr_e', 'org_ness', null);
+    await env.DB.prepare(`DELETE FROM propostas WHERE id IN ('pr_a','pr_c','pr_d','pr_e')`).run();
+  });
+  it('colunas de envio, aceite e contrato (0039): CHECK de aceite_origem e índices únicos', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['token_hash', 'link_gerado_em', 'enviada_em', 'enviada_para', 'visualizada_em', 'aceite_nome', 'aceite_cargo', 'aceite_email', 'aceite_ip', 'aceite_em', 'aceite_origem', 'aceite_comprovante', 'recusa_motivo', 'ajuste_mensagem', 'contrato_id', 'projeto_id']) {
+      expect(await colunas('propostas'), c).toContain(c);
+    }
+    for (const c of ['proposta_id', 'documento_hash', 'valor_projeto', 'mensalidade', 'prazo_minimo_meses', 'servicos', 'projeto_id']) {
+      expect(await colunas('contracts'), c).toContain(c);
+    }
+    expect(await colunas('projects')).toContain('proposta_id');
+
+    const ins = (id: string, token: string | null, origem: string | null = null) =>
+      env.DB.prepare(`INSERT INTO propostas (id, org_id, numero, cliente, criada_por, token_hash, aceite_origem) VALUES (?, 'org_ness', ?, 'x', 'u', ?, ?)`).bind(id, id, token, origem).run();
+    await expect(ins('pt_x', null, 'x')).rejects.toThrow();
+    await ins('pt_a', 'h1', 'link');
+    await ins('pt_b', null, 'manual');
+    await expect(ins('pt_c', 'h1')).rejects.toThrow();
+    await ins('pt_d', null);
+    await ins('pt_e', null);
+
+    const ctr = (id: string, proposta: string | null) =>
+      env.DB.prepare(`INSERT INTO contracts (id, proposta_id) VALUES (?, ?)`).bind(id, proposta).run();
+    await ctr('ct_a', 'pt_a');
+    await expect(ctr('ct_b', 'pt_a')).rejects.toThrow();
+    await ctr('ct_c', null);
+    await ctr('ct_d', null);
+    await env.DB.prepare(`DELETE FROM contracts WHERE id IN ('ct_a','ct_c','ct_d')`).run();
+    await env.DB.prepare(`DELETE FROM propostas WHERE id LIKE 'pt_%'`).run();
+  });
+  it('a org_ness nasce com os termos iniciais', async () => {
+    const r = await env.DB.prepare(`SELECT textos FROM organizations WHERE id = 'org_ness'`).first<any>();
+    const t = JSON.parse(r.textos);
+    expect(t.termos).toContain('## Foro');
+    expect(t.termos).toContain('## Obrigações da ness.');
+    expect(JSON.stringify(t)).not.toMatch(/\{org\}|de ness\./);
+    expect(t.pagamentoPadrao).toBe('40/30/30');
+    for (const k of ['sobre', 'comoTrabalhamos', 'premissas']) expect(t[k].length, k).toBeGreaterThan(50);
+  });
+  it('pedidos e pedido_destinatarios (0041, 0042): colunas da prova, CHECKs e índices', async () => {
+    const colunas = async (t: string) =>
+      (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>()).results.map((r) => r.name);
+    for (const c of ['id', 'org_id', 'project_id', 'tipo', 'ref_id', 'titulo', 'papel_exigido', 'conteudo_json', 'hash', 'status', 'substituido_por', 'criado_por', 'criado_em']) {
+      expect(await colunas('pedidos'), c).toContain(c);
+    }
+    for (const c of ['id', 'pedido_id', 'nome', 'email', 'user_id', 'token_hash', 'status', 'decidido_em', 'canal', 'ip', 'user_agent', 'hash_lido', 'mfa_usado', 'motivo', 'aberto_em', 'token_expira_em']) {
+      expect(await colunas('pedido_destinatarios'), c).toContain(c);
+    }
+    const ins = (id: string, status = 'aberto', papel = 'ciso') =>
+      env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, criado_por)
+        VALUES (?, 'org_ness', 'p1', 'dpia', 'd1', 't', ?, '{}', 'h', ?, 'u')`).bind(id, papel, status).run();
+    await expect(ins('pd_x', 'outro')).rejects.toThrow();
+    await expect(ins('pd_y', 'aberto', 'rei')).rejects.toThrow();
+    await ins('pd_a');
+    // 0042: politica entra no CHECK de tipo.
+    await env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, criado_por) VALUES ('pd_pol', 'org_ness', 'p1', 'politica', 'c1', 't', 'ciente', '{}', 'h', 'u')`).run();
+    await env.DB.prepare(`DELETE FROM pedidos WHERE id = 'pd_pol'`).run();
+    await expect(env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email, canal) VALUES ('pdd1', 'pd_a', 'a@x.io', 'fax')`).run()).rejects.toThrow();
+    await env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email) VALUES ('pdd2', 'pd_a', 'a@x.io')`).run();
+    for (const n of ['idx_pedidos_projeto', 'idx_pedidos_documento', 'idx_pedido_dest_pedido', 'idx_pedido_dest_email', 'idx_pedido_dest_user', 'idx_pedido_dest_token']) {
+      expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").bind(n).first(), n).toBeTruthy();
+    }
+    await env.DB.prepare(`DELETE FROM pedidos WHERE id = 'pd_a'`).run();
+  });
 });

@@ -10,14 +10,13 @@
 // busca favicon, então o 404 nunca acontecia para o teste ver. Ler o HTML e
 // conferir o disco não depende de o navegador se interessar pelo arquivo.
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { resolve, join } from 'node:path';
 
-// `cwd` é a raiz do vitest, que é `frontend/` aqui e no CI.
-const raiz = process.cwd();
+// Sem `node:fs`: o Vite entrega o texto (HTML) e a lista de arquivos de `public/` (funciona em qualquer SO).
+const HTMLS = import.meta.glob(['../login.html', '../public/*.html'], { query: '?raw', import: 'default', eager: true });
+const EM_PUBLIC = new Set(Object.keys(import.meta.glob('../public/*', { query: '?url', import: 'default' })).map((c) => c.replace('../public', '')));
 
 /** HTML de origem: o da aplicação mais os das páginas públicas. */
-const PAGINAS = ['login.html', ...readdirSync(join(raiz, 'public')).filter((f) => f.endsWith('.html')).map((f) => `public/${f}`)];
+const PAGINAS = Object.keys(HTMLS).map((c) => c.replace('../', ''));
 
 /**
  * `/src/...` é código que o Vite empacota e reescreve no build — o caminho do
@@ -31,17 +30,19 @@ const SEM_EXTENSAO = (caminho) => !/\.\w+$/.test(caminho);
 
 describe('recursos referenciados pelo HTML', () => {
   it('encontrou as páginas (senão o teste não mediria nada)', () => {
-    expect(PAGINAS.length).toBeGreaterThan(2);
+    // Nomes, não contagem: a landing estática saiu (a tela de entrada é a
+    // landing), e "mais de 2" passou a falhar sem nada ter quebrado.
+    expect(PAGINAS).toEqual(expect.arrayContaining(['login.html', 'public/politicas.html']));
   });
 
   for (const pagina of PAGINAS) {
     it(`${pagina}: todo arquivo local referenciado existe`, () => {
-      const html = readFileSync(resolve(raiz, pagina), 'utf8');
+      const html = HTMLS['../' + pagina];
       const referencias = [...html.matchAll(/(?:href|src)="(\/[^"]*)"/g)].map((m) => m[1]);
 
       const faltando = referencias
         .filter((r) => !EMPACOTADO.test(r) && !SEM_EXTENSAO(r))
-        .filter((r) => !existsSync(join(raiz, 'public', r)));
+        .filter((r) => !EM_PUBLIC.has(r));
 
       expect(
         faltando,
