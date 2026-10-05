@@ -348,6 +348,8 @@ export interface AutoridadeAssinatura {
   ehDirecao: boolean;
   /** Nome como consta na matriz, para o carimbo da assinatura. */
   nome: string | null;
+  /** Cargo(s) como constam na matriz, para dizer na recusa o que a pessoa é ali. */
+  cargo: string | null;
   /** A conta administra a plataforma — e por isso não assina nada nela. */
   papelDePlataforma: boolean;
 }
@@ -357,20 +359,31 @@ export async function autoridadeDeAssinatura(
   projectId: string,
   user: { email?: string; role?: string }
 ): Promise<AutoridadeAssinatura> {
-  const gov = await db
-    .prepare('SELECT name, job_title FROM project_governance WHERE project_id = ? AND email = ?')
-    .bind(projectId, user.email || '')
-    .first<any>();
+  // E-mail sem caixa nem espaço: a matriz é digitada à mão ('Ana@Cliente.com '), a conta não. E-mail
+  // vazio não casa com nada. A pessoa pode ter mais de uma linha (consultor e DPO): todas contam, e
+  // por isso a segregação também olha todas (quem é Líder SGSI em alguma linha não assina como Direção).
+  const email = (user.email || '').trim().toLowerCase();
+  const { results: linhas } = email
+    ? await db
+      .prepare('SELECT name, job_title FROM project_governance WHERE project_id = ? AND lower(trim(email)) = ? ORDER BY rowid')
+      .bind(projectId, email)
+      .all<{ name: string | null; job_title: string | null }>()
+    : { results: [] as { name: string | null; job_title: string | null }[] };
 
-  const cargo = (gov?.job_title || '').toLowerCase();
+  const cargos = linhas.map((g) => g.job_title || '').filter(Boolean);
+  const cargo = cargos.join(' | ').toLowerCase();
   return {
-    designado: !!gov,
+    designado: linhas.length > 0,
     ehLiderSgsi: cargo.includes('sgsi') || cargo.includes('dpo') || cargo.includes('ciso'),
     ehDirecao: cargo.includes('ceo') || cargo.includes('diret') || cargo.includes('execut'),
-    nome: gov?.name ?? null,
+    nome: linhas.find((g) => g.name)?.name ?? null,
+    cargo: cargos.join(', ') || null,
     papelDePlataforma: PAPEIS_DE_PLATAFORMA.has(user.role || ''),
   };
 }
+
+/** Recusa a conta que administra a plataforma: operar não é aprovar, nem dar ciência. */
+export const RECUSA_PLATAFORMA = 'Operação proibida: conta de administração da plataforma não aprova nem dá ciência por cliente. Use a conta profissional designada na matriz de Governança do projeto.';
 
 /**
  * Motivo da recusa, ou `null` se a assinatura é legítima. Falha fechado: sem
@@ -383,22 +396,21 @@ export function recusaDeAssinatura(a: AutoridadeAssinatura, papel: PapelAssinatu
   //
   // Consultor NÃO entra nesta lista: entregar serviço a cliente e assinar como
   // DPO daquele cliente é a mesma pessoa exercendo o papel que a matriz lhe deu.
-  if (a.papelDePlataforma) {
-    return 'Operação proibida: conta de administração da plataforma não assina documentos de conformidade. Use a conta profissional designada na matriz de Governança.';
-  }
+  if (a.papelDePlataforma) return RECUSA_PLATAFORMA;
   if (!a.designado) {
-    return 'Operação proibida: usuário não designado na matriz de Governança deste projeto.';
+    return 'Você não está designado na matriz de Governança deste projeto. Peça ao administrador do projeto que inclua o seu e-mail na matriz, com o seu cargo.';
   }
+  const seuCargo = a.cargo ? `Seu cargo na matriz de Governança deste projeto é "${a.cargo}".` : 'Seu cargo não está preenchido na matriz de Governança deste projeto.';
   // Segregação antes da checagem de cargo: quem acumula os dois títulos ainda
   // assim não assina os dois papéis.
   if (papel === 'ceo' && a.ehLiderSgsi) {
-    return 'Operação proibida: o Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções).';
+    return 'Operação proibida: o Líder SGSI não pode assinar como Direção Executiva (Segregação de Funções). Esta aprovação precisa de outra pessoa, com cargo de Direção na matriz.';
   }
   if (papel === 'ciso' && !a.ehLiderSgsi) {
-    return 'Apenas o Líder SGSI / DPO designado pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.';
+    return `Esta aprovação exige o Líder SGSI, DPO ou CISO designado. ${seuCargo}`;
   }
   if (papel === 'ceo' && !a.ehDirecao) {
-    return 'Apenas a Direção Executiva designada pode realizar esta assinatura. Verifique o cargo registrado na matriz de Governança do projeto.';
+    return `Esta aprovação exige a Direção Executiva designada (CEO, diretor ou executivo). ${seuCargo}`;
   }
   return null;
 }
