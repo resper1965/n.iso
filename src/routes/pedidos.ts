@@ -8,7 +8,7 @@ import {
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import {
   criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
-  substituirPedidosDoDocumento, type TipoPedido,
+  substituirPedidosDoDocumento, type TipoPedido, type Vigencia,
 } from '../services/pedidos';
 
 /**
@@ -33,7 +33,40 @@ type Usuario = Variables['user'];
  */
 export async function conferirPedidosDoDocumento(c: any, tipo: TipoPedido, refIds: string | string[], projectId?: string): Promise<void> {
   try {
-    await substituirPedidosDoDocumento(c.env.DB, tipo, refIds, projectId);
+    for (const { antigo, vig } of await substituirPedidosDoDocumento(c.env.DB, tipo, refIds, projectId)) {
+      await avisarSubstituicao(c, antigo, vig);
+    }
+  } catch (e) {
+    registraErro(c, e);
+  }
+}
+
+/** `conferirVigencia` + aviso aos destinatários por link, se esta conferência substituiu o pedido. */
+export async function conferirEAvisar(c: any, p: PedidoRow): Promise<Vigencia> {
+  const vig = await conferirVigencia(c.env.DB, p);
+  await avisarSubstituicao(c, p, vig);
+  return vig;
+}
+
+/**
+ * Pedido de ciência por link acabou de ser substituído (por ESTA chamada): o substituto nasce sem
+ * token, então quem recebeu link no antigo ficaria sem caminho. Emite link novo a esses pendentes e
+ * manda o e-mail. Sem envio configurado, nada é emitido e o painel mostra quantos estão sem link
+ * (`sem_link`). Falha aqui não desfaz a substituição: fica registrada e o "Reenviar" cobre.
+ */
+async function avisarSubstituicao(c: any, antigo: PedidoRow, vig: Vigencia): Promise<void> {
+  if (vig.vigente || !vig.criado || !vig.substituido_por || antigo.papel_exigido !== 'ciente') return;
+  try {
+    const db: D1Database = c.env.DB;
+    const { results } = await db.prepare('SELECT email FROM pedido_destinatarios WHERE pedido_id = ? AND token_hash IS NOT NULL')
+      .bind(antigo.id).all<{ email: string }>();
+    if (!results.length || !c.env.RESEND_API_KEY) return;
+    const links = await emitirLinks(db, vig.substituido_por, new Set(results.map((r) => r.email)));
+    const titulo = (await db.prepare('SELECT titulo FROM pedidos WHERE id = ?').bind(vig.substituido_por).first<{ titulo: string }>())?.titulo ?? antigo.titulo;
+    const falhas = await enviarLinks(c, titulo, links);
+    await logAudit(db, 'pedido.ciencia_substituida', 'sistema',
+      `Pedido ${antigo.id} substituído por ${vig.substituido_por} (documento alterado): link novo a ${links.length} pendente(s), ${falhas.length} falha(s) de envio`,
+      '', '', antigo.project_id);
   } catch (e) {
     registraErro(c, e);
   }
@@ -125,7 +158,7 @@ pedidosApp.get('/:id', async (c) => {
     if (!meu) return c.json({ error: 'Pedido não encontrado' }, 404);
     let { pedido } = meu;
     // Abrir já confere se o documento mudou: a pessoa não lê uma versão que não vale mais.
-    const vig = await conferirVigencia(c.env.DB, pedido);
+    const vig = await conferirEAvisar(c, pedido);
     if (!vig.vigente) pedido = { ...pedido, status: vig.status, substituido_por: vig.substituido_por ?? pedido.substituido_por };
     const { conteudo_json, ...resto } = pedido;
     return c.json({ pedido: { ...resto, conteudo: JSON.parse(conteudo_json) }, destinatario: meu.dest });
@@ -148,7 +181,7 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: s
     const valid = { data: corpo };
     const { pedido, dest } = meu;
 
-    const vig = await conferirVigencia(db, pedido);
+    const vig = await conferirEAvisar(c, pedido);
     if (!vig.vigente) {
       const msg = vig.status === 'substituido'
         ? 'O documento mudou depois deste pedido. Abra o pedido novo, com o texto atual.'
@@ -180,7 +213,7 @@ async function decidir(c: any, decisao: 'aprovar' | 'recusar', corpo: { senha: s
       // Algo mudou entre a conferência e a gravação (documento, pedido ou outra decisão): nada foi
       // gravado. Confere de novo para devolver o motivo e, se for o caso, abrir o pedido substituto.
       const atual = await db.prepare('SELECT * FROM pedidos WHERE id = ?').bind(pedido.id).first<PedidoRow>();
-      const vig2 = atual ? await conferirVigencia(db, atual) : null;
+      const vig2 = atual ? await conferirEAvisar(c, atual) : null;
       if (vig2 && !vig2.vigente) {
         return c.json({ error: 'O pedido mudou enquanto você decidia. Abra-o de novo.', status: vig2.status, substituido_por: vig2.substituido_por ?? null }, 409);
       }
@@ -226,6 +259,21 @@ function emailCiencia(titulo: string, nome: string | null, link: string): string
     <p><a href="${e(link)}" style="background-color: #00ade8; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ler e dar ciência</a></p>
     <p style="font-size: 12px; color: #64748b;">O link vale por ${DIAS_LINK} dias. Se você recebeu um link anterior para este documento, ele deixou de valer.</p>
   </div>`;
+}
+
+/** Token novo aos pendentes do pedido (todos, ou só os de `so`); devolve os links em claro, para o e-mail. */
+async function emitirLinks(db: D1Database, pedidoId: string, so: Set<string> | null): Promise<Link[]> {
+  const { results: pend } = await db.prepare(`SELECT id, email, nome FROM pedido_destinatarios WHERE pedido_id = ? AND status = 'pendente'`)
+    .bind(pedidoId).all<{ id: string; email: string; nome: string | null }>();
+  const links: Link[] = [];
+  for (const d of pend) {
+    if (so && !so.has(d.email)) continue;
+    const token = genToken();
+    const r = await db.prepare(`UPDATE pedido_destinatarios SET token_hash = ?, token_expira_em = datetime('now', '+${DIAS_LINK} days')
+      WHERE id = ? AND status = 'pendente'`).bind(await sha256Hex(token), d.id).run();
+    if (r.meta?.changes) links.push({ email: d.email, nome: d.nome, token });
+  }
+  return links;
 }
 
 /** Manda os links; devolve os e-mails cujo envio falhou (ficam pendentes, para reenviar). */
@@ -318,7 +366,7 @@ projectPedidosApp.get('/:id', async (c) => {
     const db = c.env.DB;
     let p = await pedidoDoProjeto(db, c.req.param('projectId') ?? '', c.req.param('id'));
     if (!p) return c.json({ error: 'Pedido não encontrado' }, 404);
-    const vig = await conferirVigencia(db, p);
+    const vig = await conferirEAvisar(c, p);
     if (!vig.vigente) p = { ...p, status: vig.status, substituido_por: vig.substituido_por ?? p.substituido_por };
 
     const { results: dests } = await db.prepare(
@@ -343,9 +391,17 @@ projectPedidosApp.get('/:id', async (c) => {
       for (const r of results) if (!antigo.has(r.email)) antigo.set(r.email, { user_name: r.user_name, acknowledged_at: r.acknowledged_at, hash: null });
     }
 
+    // Pendente de ciência sem link e sem conta não tem como responder (substituto sem envio configurado,
+    // ou envio que falhou): o painel avisa para usar "Reenviar".
+    const semLink = p.papel_exigido === 'ciente' && p.status === 'aberto'
+      ? (await db.prepare(`SELECT COUNT(*) AS n FROM pedido_destinatarios WHERE pedido_id = ? AND status = 'pendente' AND token_hash IS NULL AND user_id IS NULL`)
+        .bind(p.id).first<{ n: number }>())?.n ?? 0
+      : 0;
+
     const { conteudo_json: _conteudo, ...pedido } = p;
     return c.json({
       pedido,
+      sem_link: semLink,
       destinatarios: dests.map((d) => ({
         ...d,
         situacao: d.status === 'pendente' ? (d.aberto_em ? 'pendente' : 'nao_abriu') : d.status,
@@ -377,20 +433,11 @@ projectPedidosApp.post('/:id/reenviar', async (c) => {
     if (!valid.success) return valid.response;
     // Com `emails` (ex.: as `falhas` do envio), só esses ganham link novo: quem já recebeu mantém o seu.
     const so = valid.data.emails ? new Set(valid.data.emails.map((e) => e.trim().toLowerCase())) : null;
-    const vig = await conferirVigencia(db, p);
+    const vig = await conferirEAvisar(c, p);
     if (!vig.vigente) {
       return c.json({ error: 'Este pedido não está mais aberto.', status: vig.status, substituido_por: vig.substituido_por ?? null }, 409);
     }
-    const { results: pend } = await db.prepare(`SELECT id, email, nome FROM pedido_destinatarios WHERE pedido_id = ? AND status = 'pendente'`)
-      .bind(p.id).all<{ id: string; email: string; nome: string | null }>();
-    const links: Link[] = [];
-    for (const d of pend) {
-      if (so && !so.has(d.email)) continue;
-      const token = genToken();
-      const r = await db.prepare(`UPDATE pedido_destinatarios SET token_hash = ?, token_expira_em = datetime('now', '+${DIAS_LINK} days')
-        WHERE id = ? AND status = 'pendente'`).bind(await sha256Hex(token), d.id).run();
-      if (r.meta?.changes) links.push({ email: d.email, nome: d.nome, token });
-    }
+    const links = await emitirLinks(db, p.id, so);
     const falhas = await enviarLinks(c, p.titulo, links);
     await logAudit(db, 'pedido.lembrete', user.email,
       `Pedido ${p.id}: lembrete a ${links.length} pendente(s), ${falhas.length} falha(s) de envio`, '', c.req.header('CF-Connecting-IP') ?? '', p.project_id);

@@ -11,7 +11,8 @@ import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { sha256Hex, rateLimitD1, erro500, genNumericCode, sendEmail, escapeHtml, constantTimeEqual, logAudit } from '../helpers';
 import { validateBody, pedidoTokenSchema, pedidoCienciaLinkSchema } from '../schemas';
-import { conferirVigencia, registrarDecisao, type PedidoRow } from '../services/pedidos';
+import { registrarDecisao, type PedidoRow } from '../services/pedidos';
+import { conferirEAvisar } from './pedidos';
 
 export const publicPedidosApp = new Hono<{ Bindings: Bindings }>();
 type Ctx = Context<{ Bindings: Bindings }>;
@@ -61,7 +62,7 @@ async function resolver(c: Ctx, token: string): Promise<Response | { d: Dest; p:
   const d: Dest = { id: d_id, email: d_email, nome: d_nome, status: d_status, decidido_em: d_decidido_em, hash_lido: d_hash_lido, token_hash: d_token_hash };
   if (p.status === 'substituido' || p.status === 'cancelado') return c.json(INVALIDO, 404);
   if (d.status === 'pendente') {
-    if (p.status !== 'aberto' || !(await conferirVigencia(db, p)).vigente) return c.json(INVALIDO, 404);
+    if (p.status !== 'aberto' || !(await conferirEAvisar(c, p)).vigente) return c.json(INVALIDO, 404);
   }
   return { d, p };
 }

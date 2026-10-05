@@ -350,6 +350,40 @@ describe('painel e reenvio', () => {
     expect((await statusDe(atual)).status).toBe('aberto');
   });
 
+  it('substituído por edição: quem tinha link recebe link novo do pedido novo, que funciona', async () => {
+    await resetPolitica();
+    const a = await lote(['sub1@cliente.com', 'sub2@cliente.com']);
+    const velho = tokenDe('sub1@cliente.com');
+    enviados = [];
+    expect((await chamar(consultor, 'POST', `/api/v1/projects/${P}/controls/${POL}/policy`, { text: 'Texto que muda' })).status).toBe(200);
+    // Todo pedido aberto deste documento é substituído; os dois deste lote estão entre os avisados.
+    expect(enviados.map((e) => e.to)).toEqual(expect.arrayContaining(['sub1@cliente.com', 'sub2@cliente.com']));
+    const novo = tokenDe('sub1@cliente.com');
+    expect(novo).not.toBe(velho);
+    const novoId = (await env.DB.prepare('SELECT substituido_por FROM pedidos WHERE id = ?').bind(a.id).first<any>()).substituido_por;
+    const ver = await publico('ver', { token: novo });
+    expect(ver.status, await ver.clone().text()).toBe(200);
+    expect((await ver.json<any>()).conteudo.description).toBe('Texto que muda');
+    expect((await publico('ver', { token: velho })).status).toBe(404);
+    const painel = await (await chamar(consultor, 'GET', `/api/v1/projects/${P}/pedidos/${novoId}`)).json<any>();
+    expect(painel.sem_link).toBe(0);
+  });
+
+  it('substituído sem envio configurado: nenhum link emitido e o painel avisa quantos ficaram sem link', async () => {
+    await resetPolitica();
+    const a = await lote(['sl1@cliente.com', 'sl2@cliente.com']);
+    await env.DB.prepare(`UPDATE compliance_controls SET description = 'Texto sem envio' WHERE id = ?`).bind(POL).run();
+    enviados = [];
+    const semEnvio = (caminho: string) => app.fetch(new Request('http://localhost' + caminho, {
+      headers: { 'CF-Connecting-IP': ipNovo(), ...consultor },
+    }), workerEnv());
+    const velho = await (await semEnvio(`/api/v1/projects/${P}/pedidos/${a.id}`)).json<any>();
+    expect(velho.pedido.status).toBe('substituido');
+    expect(enviados).toEqual([]);
+    const novo = await (await semEnvio(`/api/v1/projects/${P}/pedidos/${velho.pedido.substituido_por}`)).json<any>();
+    expect(novo.sem_link).toBe(2);
+  });
+
   it('envio: falha passageira é tentada de novo; falha persistente fica em falhas', async () => {
     await resetPolitica();
     resendFalhaUmaVez = new Set(['passa@cliente.com']);
