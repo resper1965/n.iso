@@ -68,7 +68,22 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
   dominio em `src/routes/*.ts` (auth, users, leads, proposals, assessments,
   projects, evidence, vendors, training, ropa, audits, capa, certifications,
-  public, ai, governance, auditor, platform, risks, policies, integrations).
+  public, ai, governance, auditor, platform, risks, policies, integrations,
+  pedidos, public-pedidos).
+- **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
+  (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
+  Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
+  `conferirVigencia`, `registrarDecisao`). Rotas: `/api/v1/pedidos*` (o
+  destinatario; unico prefixo de dado do papel `stakeholder`),
+  `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
+  painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
+  token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
+  auditor externo). **A prova e imutavel**: o trigger `pedido_dest_prova_imutavel`
+  recusa UPDATE em linha decidida; DELETE fica livre no banco so para o projeto
+  cascatear. Nenhuma rota apaga pedido/destinatario nem atualiza decisao ou
+  pedido fechado — todo `UPDATE pedidos` leva `status = 'aberto'` e todo
+  `UPDATE pedido_destinatarios` leva `status = 'pendente'`; `test/pedidos-prova.test.ts`
+  reprova o fonte que fugir disso. Correcao e pedido novo.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
@@ -100,8 +115,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     Ciência de Políticas", não o do app.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **53 tabelas** (medido em 2026-10-01: linhas `CREATE TABLE`). Migrations numeradas em
-  `migrations/`, ultima a **0034**. O estado real de producao e o historico da
+- **Schema**: `schema.sql` — **58 tabelas** (medido em 2026-10-05: o `schema.sql` aplicado num
+  SQLite em memoria, `SELECT count(*) FROM sqlite_master WHERE type='table'`; as linhas que comecam
+  por `CREATE TABLE` sao 58 nomes distintos). Migrations numeradas em
+  `migrations/`, ultima a **0042**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
