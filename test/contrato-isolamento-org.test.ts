@@ -67,6 +67,10 @@ const CORPOS: Record<string, (alvo: Org) => unknown> = {
   'POST /api/v1/controls/:id/approve': () => ({ password: SENHA }),
   'PUT /api/v1/controls/:id/approve': () => ({ password: SENHA }),
   'PUT /api/v1/leads/:id/status': () => ({ status: 'Lost' }),
+  // pedido alheio: a guarda é o destinatário + projeto (404) antes da senha
+  'POST /api/v1/pedidos/:id/aprovar': () => ({ senha: SENHA }),
+  'POST /api/v1/pedidos/:id/recusar': () => ({ senha: SENHA }),
+  'POST /api/v1/projects/:projectId/pedidos': (alvo) => ({ tipo: 'dpia', ref_id: alvo.rec, papel_exigido: 'ciente', destinatarios: [{ email: `stk@${alvo.m}.lat` }] }),
   'POST /api/v1/leads/:id/enrich-cnpj': () => ({ cnpj: '11222333000181' }),
   // tenta trazer o projeto alheio para a organização de quem chama: só platform_admin transfere
   'POST /api/v1/platform/projects/:id/transferir': (alvo) => ({ orgDestinoId: alvo === B ? NESS.org : B.org, motivo: 'varredura de isolamento' }),
@@ -143,6 +147,7 @@ const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   legal_documents: { classification: 'comum' },
   servicos: { tipo: 'avulso' },
   propostas: { status: 'rascunho' },
+  pedidos: { tipo: 'dpia', papel_exigido: 'ciente' },
 };
 
 /**
@@ -268,6 +273,11 @@ beforeAll(async () => {
     await env.STORAGE.put(chave, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new TextEncoder().encode(`${o.m}-logo`)]));
     await env.DB.prepare('UPDATE organizations SET logo_chave = ? WHERE id = ?').bind(chave, o.org).run();
   }
+  // Pedido de uma organização endereçado (por engano) ao stakeholder da OUTRA: ser destinatário não
+  // basta, o projeto do pedido tem de ser o dele. Sem esta linha a varredura por id de /pedidos só
+  // provaria "não é destinatário".
+  await env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email) VALUES ('cruz-1', ?, ?), ('cruz-2', ?, ?)`)
+    .bind(B.rec, `stk@${NESS.m}.lat`, NESS.rec, `stk@${B.m}.lat`).run();
   for (const [de, alheio] of [[NESS, B], [B, NESS]] as const) {
     const m = de.m;
     for (const [papel, uid] of [['consultor', 'cons'], ['comercial', 'com'], ['consultoria_admin', 'cadm']] as const) {
@@ -308,7 +318,7 @@ describe('contrato de isolamento entre organizações', () => {
       consultor: ['/api/v1/projects/:p/risks'],
       comercial: ['/api/v1/servicos/:r', '/api/v1/org/logo'],
       consultoria_admin: ['/api/v1/projects/:p/risks', '/api/v1/servicos/:r', '/api/v1/leads/:r', '/api/v1/org/config', '/api/v1/org/logo'],
-      stakeholder: ['/api/v1/auth/me'],
+      stakeholder: ['/api/v1/auth/me', '/api/v1/pedidos'],
       agente: ['/api/v1/projects/:p/risks'],
       'chave-api': ['/api/v1/projects/:p/risks'],
     };

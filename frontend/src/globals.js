@@ -877,6 +877,11 @@ window.updateHeaderUser = function updateHeaderUser() {
             });
         }
 
+        // "Meus pedidos" para quem pode ser destinatário de pedido de aprovação/ciência (lista vazia mostra
+        // o estado vazio). platform_admin e comercial não decidem pedido de cliente.
+        const navMeus = document.getElementById('nav-meus');
+        if (navMeus) navMeus.style.display = ['org_admin', 'org_user', 'client', 'consultor', 'consultant', 'consultoria_admin'].includes(S.user?.role) ? '' : 'none';
+
         // Stakeholder (mínimo privilégio): só "Meus pedidos" e o cartão de perfil (senha e MFA). O
         // servidor já recusa o resto (allow-list de caminhos); o menu só não oferece o que daria 403.
         if (S.user && S.user.role === 'stakeholder') {
