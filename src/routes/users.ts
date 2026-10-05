@@ -265,6 +265,10 @@ usersApp.put('/:id', async (c) => {
       values.push(name);
     }
     if (email !== undefined) {
+      // Variante de caixa de OUTRA conta passaria no UNIQUE e, pela busca sem caixa do login, tomaria a conta dela.
+      if (await c.env.DB.prepare('SELECT 1 FROM users WHERE lower(trim(email)) = ? AND id <> ?').bind(email, id).first()) {
+        return c.json({ error: 'Email já cadastrado' }, 400);
+      }
       updates.push('email = ?');
       values.push(email);
     }

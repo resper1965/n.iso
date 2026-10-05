@@ -128,9 +128,10 @@ authApp.post('/setup', async (c) => {
     const hash = await hashPassword(password);
     
     await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, 'consultant')
+      `INSERT INTO users (id, email, password_hash, name, role) SELECT ?, ?, ?, ?, 'consultant'
+       WHERE NOT EXISTS (SELECT 1 FROM users WHERE lower(trim(email)) = ?)
        ON CONFLICT(email) DO NOTHING`
-    ).bind(id, email, hash, name).run();
+    ).bind(id, email, hash, name, email).run();
     
     return c.json({ ok: true, message: 'Seed user created or already exists' }, 201);
   } catch (e: any) {

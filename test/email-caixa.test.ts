@@ -48,6 +48,23 @@ describe('e-mail sem caixa', () => {
     expect(n?.n).toBe(1);
   });
 
+  it('editar OUTRA conta para variante de caixa da conta antiga é recusado; a dona continua entrando', async () => {
+    await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id) VALUES ('u-outro', 'outro@caixa.com', 'x', 'Outro', 'consultor', 'org_ness')`).run();
+    const r = await chamar('PUT', '/api/v1/admin/users/u-outro', { email: 'velho@caixa.com' }, adm);
+    expect(r.status, await r.clone().text()).toBe(400);
+    expect((await env.DB.prepare(`SELECT email FROM users WHERE id = 'u-outro'`).first<any>()).email).toBe('outro@caixa.com');
+    expect((await chamar('POST', '/api/v1/auth/login', { email: 'velho@caixa.com', password: SENHA })).status).toBe(200);
+    // Editar a própria conta mantendo o e-mail (em outra caixa) não colide consigo mesma.
+    expect((await chamar('PUT', '/api/v1/admin/users/u-outro', { email: 'OUTRO@caixa.com' }, adm)).status).toBe(200);
+  });
+
+  it('setup não cria variante de caixa de conta existente', async () => {
+    const r = await chamar('POST', '/api/v1/auth/setup', { email: 'velho@caixa.com', password: SENHA, name: 'X', setupKey: 'k' }, {}, { SETUP_KEY: 'k' });
+    expect(r.status).toBe(201);
+    const n = await env.DB.prepare(`SELECT COUNT(*) AS n FROM users WHERE lower(email) = 'velho@caixa.com'`).first<{ n: number }>();
+    expect(n?.n).toBe(1);
+  });
+
   it('recuperação de senha acha a conta antiga sem caixa', async () => {
     const r = await chamar('POST', '/api/v1/auth/forgot-password', { email: 'VELHO@caixa.com' }, {}, { ENVIRONMENT: 'development' });
     expect(r.status).toBe(200);
