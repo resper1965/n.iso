@@ -29,9 +29,12 @@ const chaveOtp = (destId: string) => `pedido_otp_${destId}`;
 /** `fulano@empresa.com` vira `f*****@empresa.com`: a pessoa reconhece, quem só tem o link não ganha o e-mail. */
 const mascarar = (email: string) => email.replace(/^(.)[^@]*/, (_m, a) => `${a}*****`);
 
-// Limite por IP antes de ler o corpo: variar o corpo não contorna.
+// Limite por IP antes de ler o corpo: variar o corpo não contorna. Teto largo de propósito: um lote
+// de até 200 pessoas da mesma empresa sai por um IP só (NAT), e cada uma faz ver + código + ciência.
+// Contra adivinhar token, quem segura é o espaço de 256 bits e o limite por token (20/10 min).
+const MAX_POR_IP = 600;
 publicPedidosApp.use('*', async (c, next) => {
-  if (!(await rateLimitD1(c.env.DB, `pedido-publico:ip:${ipDe(c) || 'sem-ip'}`, 30, JANELA_SEG))) return c.json(MUITAS, 429);
+  if (!(await rateLimitD1(c.env.DB, `pedido-publico:ip:${ipDe(c) || 'sem-ip'}`, MAX_POR_IP, JANELA_SEG))) return c.json(MUITAS, 429);
   await next();
 });
 

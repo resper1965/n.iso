@@ -153,9 +153,25 @@ describe('link público', () => {
     expect((await env.DB.prepare('SELECT status FROM pedidos WHERE id = ?').bind(r.id).first<any>()).status).toBe('substituido');
   });
 
-  it('limite por IP: a 31ª tentativa é 429; o limite por token corta antes da 21ª', async () => {
+  it('empresa atrás de NAT: 12 pessoas do mesmo IP leem, pedem código e dão ciência sem 429', async () => {
+    await resetPolitica();
+    const ip = '10.201.0.1';
+    const emails = Array.from({ length: 12 }, (_, i) => `nat${i}@cliente.com`);
+    await lote(emails);
+    for (const e of emails) {
+      const token = tokenDe(e);
+      expect((await publico('ver', { token }, ip)).status, e).toBe(200);
+      expect((await publico('codigo', { token }, ip)).status, e).toBe(200);
+      expect((await publico('ciencia', { token, codigo: codigoDe(e), nome: 'Pessoa NAT' }, ip)).status, e).toBe(200);
+    }
+  });
+
+  it('limite por IP: 600 em 10 min, a 601ª é 429; o limite por token corta antes da 21ª', async () => {
     const ip = '10.200.0.1';
-    for (let i = 0; i < 30; i++) expect((await publico('ver', { token: genToken() }, ip)).status).toBe(404);
+    // Janela já com 599 chamadas deste IP (600 chamadas reais seria lento): a 600ª passa, a 601ª não.
+    await env.DB.prepare(`INSERT INTO rate_limits (key, count, window_start) VALUES (?, 599, ?)`)
+      .bind(`pedido-publico:ip:${ip}`, Math.floor(Date.now() / 1000)).run();
+    expect((await publico('ver', { token: genToken() }, ip)).status).toBe(404);
     expect((await publico('ver', { token: genToken() }, ip)).status).toBe(429);
     const t = genToken();
     for (let i = 0; i < 20; i++) expect((await publico('ver', { token: t })).status).toBe(404);
