@@ -26,6 +26,7 @@ const MAX_TENTATIVAS_POR_CODIGO = 5;
 
 const ipDe = (c: Ctx) => c.req.header('CF-Connecting-IP') ?? '';
 const chaveOtp = (destId: string) => `pedido_otp_${destId}`;
+const chaveTentativas = (destId: string) => `pedido-otp:tentativa:${destId}`;
 /** `fulano@empresa.com` vira `f*****@empresa.com`: a pessoa reconhece, quem só tem o link não ganha o e-mail. */
 const mascarar = (email: string) => email.replace(/^(.)[^@]*/, (_m, a) => `${a}*****`);
 
@@ -94,6 +95,8 @@ publicPedidosApp.post('/codigo', async (c) => {
     // O código vai SÓ ao e-mail do destinatário: limitar evita relay de spam pelo link.
     if (!(await rateLimitD1(c.env.DB, `pedido-otp:envio:${d.id}`, MAX_CODIGOS_POR_JANELA, 3600))) return c.json(MUITAS, 429);
     const codigo = genNumericCode(6);
+    // Código novo, tentativas novas (o envio já tem teto próprio: 5 por hora).
+    await c.env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(chaveTentativas(d.id)).run();
     await c.env.SESSIONS.put(chaveOtp(d.id), JSON.stringify({ h: await sha256Hex(codigo), exp: Date.now() + OTP_SEG * 1000 }), { expirationTtl: OTP_SEG });
     const enviado = await sendEmail(c, d.email, 'Seu código para dar ciência',
       `<p>Seu código para confirmar a ciência de <strong>${escapeHtml(p.titulo)}</strong>:</p><p><strong>${codigo}</strong></p><p>Ele expira em 15 minutos. Se você não pediu, ignore este e-mail.</p>`);
@@ -111,7 +114,11 @@ publicPedidosApp.post('/ciencia', async (c) => {
     const { d, p } = r;
     if (d.status !== 'pendente') return c.json({ error: 'A ciência deste documento já foi registrada.' }, 409);
     // Toda tentativa conta, certa ou errada: 6 dígitos não aguentam força bruta sem teto.
-    if (!(await rateLimitD1(c.env.DB, `pedido-otp:tentativa:${d.id}`, MAX_TENTATIVAS_POR_CODIGO, OTP_SEG))) return c.json(MUITAS, 429);
+    // Estourou: queima o código guardado; só um código novo (que zera as tentativas) libera.
+    if (!(await rateLimitD1(c.env.DB, chaveTentativas(d.id), MAX_TENTATIVAS_POR_CODIGO, OTP_SEG))) {
+      await c.env.SESSIONS.delete(chaveOtp(d.id));
+      return c.json(MUITAS, 429);
+    }
     const guardado = await c.env.SESSIONS.get(chaveOtp(d.id));
     const otp = guardado ? JSON.parse(guardado) as { h: string; exp: number } : null;
     if (!otp || otp.exp < Date.now() || !constantTimeEqual(otp.h, await sha256Hex(v.data.codigo))) return c.json(CODIGO_INVALIDO, 400);

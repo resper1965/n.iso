@@ -243,6 +243,12 @@ describe('link público', () => {
     const errado = codigo === '000000' ? '111111' : '000000';
     for (let i = 0; i < 5; i++) expect((await publico('ciencia', { token, codigo: errado, nome: 'Bruno' })).status).toBe(400);
     expect((await publico('ciencia', { token, codigo, nome: 'Bruno' })).status).toBe(429);
+    // Estourou: o código guardado foi queimado; só um código novo libera.
+    const r = await env.DB.prepare(`SELECT d.id FROM pedido_destinatarios d WHERE d.email = 'bruto@cliente.com'`).first<any>();
+    expect(await env.SESSIONS.get(`pedido_otp_${r.id}`)).toBeNull();
+    await publico('codigo', { token });
+    const novo = codigoDe('bruto@cliente.com');
+    expect((await publico('ciencia', { token, codigo: novo, nome: 'Bruno' })).status).toBe(200);
   });
 
   it('dupla ciência concorrente: uma só grava', async () => {
