@@ -200,3 +200,151 @@ window.enviarPedidoAprovacao = async function enviarPedidoAprovacao(_evento, pro
     forceCloseModal();
     showToast('Pedido enviado. Os destinatários o veem em Meus pedidos.');
 };
+
+// ─── Ciência por link com código (fatia 3): lote para quem não tem conta, e acompanhamento ───────
+
+const SITUACAO = { ciente: 'Ciente', pendente: 'Abriu, pendente', nao_abriu: 'Não abriu', aprovado: 'Concluído', recusado: 'Recusado' };
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Bloco da tela "Ciência de Políticas": pedidos de ciência do projeto e o botão de criar um lote. */
+window.renderCienciaLink = async function renderCienciaLink(alvo, projectId) {
+    if (!alvo) return;
+    let pedidos = [];
+    try {
+        pedidos = ((await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos`)).pedidos || [])
+            .filter((p) => p.papel_exigido === 'ciente');
+    } catch (e) {
+        alvo.innerHTML = `<p style="color:var(--text-dim)">Não foi possível carregar os pedidos de ciência: ${escapeHTML(e.message)}</p>`;
+        return;
+    }
+    alvo.innerHTML = `<div class="card" style="margin-bottom:1.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:0.75rem">
+            <div class="card-label" style="margin:0">Ciência por link (quem não tem conta)</div>
+            <button type="button" class="btn btn-primary" data-action="abrirCienciaLink" data-args='${args(projectId)}'>Nova ciência por link</button>
+        </div>
+        ${pedidos.length ? `<table class="data-table"><thead><tr><th>Documento</th><th>Situação</th><th>Cientes</th><th>Pendentes</th><th>Não abriram</th><th></th></tr></thead><tbody>
+            ${pedidos.map((p) => `<tr>
+                <td>${escapeHTML(p.titulo)}<div style="font-size:11px;color:var(--text-dim)">${escapeHTML(data(p.criado_em))}</div></td>
+                <td>${escapeHTML(STATUS[p.status] || p.status)}</td>
+                <td>${escapeHTML(String(p.cientes ?? 0))} de ${escapeHTML(String(p.total ?? 0))}</td>
+                <td>${escapeHTML(String(p.pendentes ?? 0))}</td>
+                <td>${escapeHTML(String(p.nao_abriram ?? 0))}</td>
+                <td style="text-align:right"><button type="button" class="btn-secondary" data-action="abrirAcompanhamento" data-args='${args(projectId, p.id)}'>Acompanhamento</button></td>
+            </tr>`).join('')}
+        </tbody></table>` : '<p style="font-size:13px;color:var(--text-dim)">Nenhum pedido de ciência por link neste projeto.</p>'}
+    </div>`;
+};
+
+window.abrirCienciaLink = async function abrirCienciaLink(projectId) {
+    let politicas = [];
+    try {
+        // api.js desembrulha `{ ok, controls: [...] }` e devolve a lista.
+        const r = await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/controls`);
+        politicas = (Array.isArray(r) ? r : r?.controls || []).filter((c) => c.description && String(c.description).trim());
+    } catch (e) {
+        showToast('Erro ao carregar as políticas: ' + e.message, 'error');
+        return;
+    }
+    openModal(`
+        <form id="cl-form" data-action-submit="enviarCienciaLink" data-arg-event data-args='${args(projectId)}' data-prevent style="padding:1.5rem 1.75rem;max-width:560px" novalidate>
+            <h3 style="font-family:var(--font-head);font-weight:600;font-size:17px;margin:0 0 16px">Nova ciência por link</h3>
+            <div class="form-group">
+                <label class="form-label" for="cl-doc">Política</label>
+                <select class="form-input" id="cl-doc">
+                    ${politicas.map((c) => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.title || c.id)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="cl-emails">E-mails (um por linha, ou separados por vírgula; até 200)</label>
+                <textarea class="form-input" id="cl-emails" rows="6"></textarea>
+            </div>
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 16px">Cada pessoa recebe um link pessoal, lê o texto atual e confirma com um código enviado ao próprio e-mail. Se a política mudar, o pedido é substituído e é preciso reenviar.</p>
+            <p class="login-error" id="cl-erro" role="alert" aria-live="polite"></p>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button type="button" class="btn btn-secondary" data-action="forceCloseModal">Cancelar</button>
+                <button type="submit" class="btn btn-primary"${politicas.length ? '' : ' disabled'}>Enviar links</button>
+            </div>
+        </form>`);
+};
+
+window.enviarCienciaLink = async function enviarCienciaLink(_evento, projectId) {
+    const vistos = new Set();
+    const destinatarios = [];
+    const invalidos = [];
+    for (const bruto of el('cl-emails').value.split(/[\s,;]+/)) {
+        const email = bruto.trim().toLowerCase();
+        if (!email || vistos.has(email)) continue;
+        vistos.add(email);
+        if (EMAIL.test(email)) destinatarios.push({ email }); else invalidos.push(email);
+    }
+    if (!destinatarios.length) {
+        el('cl-erro').textContent = 'Informe ao menos um e-mail válido';
+        return;
+    }
+    if (destinatarios.length > 200) {
+        el('cl-erro').textContent = 'No máximo 200 e-mails por envio';
+        return;
+    }
+    let r;
+    try {
+        r = await api('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/ciencia`, {
+            tipo: 'politica', ref_id: el('cl-doc').value, destinatarios,
+        });
+    } catch (e) {
+        el('cl-erro').textContent = e.message;
+        return;
+    }
+    forceCloseModal();
+    const extra = [r.falhas?.length ? `${r.falhas.length} envio(s) falharam; use Reenviar` : '', invalidos.length ? `${invalidos.length} e-mail(s) inválido(s) ignorado(s)` : '']
+        .filter(Boolean).join('. ');
+    showToast(`Links enviados a ${r.enviados} pessoa(s).${extra ? ' ' + extra + '.' : ''}`);
+    redesenha();
+};
+
+window.abrirAcompanhamento = async function abrirAcompanhamento(projectId, id) {
+    let r;
+    try {
+        r = await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/${encodeURIComponent(id)}`);
+    } catch (e) {
+        showToast('Erro ao abrir o acompanhamento: ' + e.message, 'error');
+        return;
+    }
+    const { pedido: p, destinatarios: ds } = r;
+    const nota = (d) => [
+        d.versao_anterior ? `ciente da versão anterior em ${data(d.versao_anterior.decidido_em)}` : '',
+        d.portal_antigo ? `ciência pelo portal antigo em ${data(d.portal_antigo.acknowledged_at)} (versão não registrada)` : '',
+    ].filter(Boolean).join('; ');
+    const aberto = p.status === 'aberto';
+    openModal(`
+        <div style="padding:1.5rem 1.75rem;max-width:760px">
+            <h3 style="font-family:var(--font-head);font-weight:600;font-size:17px;margin:0 0 4px">${escapeHTML(p.titulo)}</h3>
+            <p style="font-size:12px;color:var(--text-dim);margin:0 0 4px">Situação: ${escapeHTML(STATUS[p.status] || p.status)}</p>
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 16px;word-break:break-all">Versão (SHA-256): <span style="font-family:var(--font-mono)">${escapeHTML(p.hash)}</span></p>
+            ${p.status === 'substituido' ? '<p class="login-error" role="status">O documento mudou depois deste pedido. Abra o pedido novo na lista para acompanhar e reenviar.</p>' : ''}
+            <div style="max-height:50vh;overflow:auto">
+                <table class="data-table"><thead><tr><th>E-mail</th><th>Situação</th><th>Quando</th><th>Observação</th></tr></thead><tbody>
+                ${ds.map((d) => `<tr>
+                    <td>${escapeHTML(d.email)}${d.nome ? `<div style="font-size:11px;color:var(--text-dim)">${escapeHTML(d.nome)}</div>` : ''}</td>
+                    <td>${escapeHTML(SITUACAO[d.situacao] || d.situacao)}</td>
+                    <td>${escapeHTML(data(d.decidido_em))}</td>
+                    <td style="font-size:12px;color:var(--text-dim)">${escapeHTML(nota(d))}</td>
+                </tr>`).join('')}
+                </tbody></table>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                <button type="button" class="btn btn-secondary" data-action="forceCloseModal">Fechar</button>
+                ${aberto && p.papel_exigido === 'ciente' ? `<button type="button" class="btn btn-primary" data-action="reenviarCiencia" data-args='${args(projectId, p.id)}'>Reenviar aos pendentes</button>` : ''}
+            </div>
+        </div>`);
+};
+
+window.reenviarCiencia = async function reenviarCiencia(projectId, id) {
+    try {
+        const r = await api('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/${encodeURIComponent(id)}/reenviar`);
+        showToast(`Lembrete enviado a ${r.enviados} pendente(s). Os links anteriores deixaram de valer.${r.falhas?.length ? ` ${r.falhas.length} envio(s) falharam.` : ''}`);
+    } catch (e) {
+        showToast('Erro ao reenviar: ' + e.message, 'error');
+        return;
+    }
+    await window.abrirAcompanhamento(projectId, id);
+};

@@ -257,7 +257,8 @@ projectPedidosApp.post('/ciencia', async (c) => {
     await logAudit(c.env.DB, 'pedido.ciencia_lote', user.email,
       `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, ciência por link) para ${criado.links.length} destinatário(s), ${falhas.length} falha(s) de envio; hash ${criado.hash}`,
       '', c.req.header('CF-Connecting-IP') ?? '', projectId);
-    return c.json({ ok: true, id: criado.id, hash: criado.hash, enviados: criado.links.length - falhas.length, falhas }, 201);
+    // Sem `ok: true`: com ele o api.js do frontend desembrulha o primeiro array (`falhas`) e perde o resto.
+    return c.json({ id: criado.id, hash: criado.hash, enviados: criado.links.length - falhas.length, falhas }, 201);
   } catch (e: any) {
     return erro500(c, 'Erro ao criar o pedido de ciência', e);
   }
@@ -367,7 +368,7 @@ projectPedidosApp.post('/:id/reenviar', async (c) => {
     const falhas = await enviarLinks(c, p.titulo, links);
     await logAudit(db, 'pedido.lembrete', user.email,
       `Pedido ${p.id}: lembrete a ${links.length} pendente(s), ${falhas.length} falha(s) de envio`, '', c.req.header('CF-Connecting-IP') ?? '', p.project_id);
-    return c.json({ ok: true, enviados: links.length - falhas.length, falhas });
+    return c.json({ enviados: links.length - falhas.length, falhas }); // sem `ok: true`: ver POST /ciencia
   } catch (e: any) {
     return erro500(c, 'Erro ao reenviar o pedido de ciência', e);
   }

@@ -42,7 +42,106 @@ window.addEventListener('DOMContentLoaded', () => {
     const item = e.target.closest('.policy-item');
     if (item && item.dataset.idx !== undefined) selectPolicy(Number(item.dataset.idx));
   });
+  // Link pessoal de ciência (pedido da consultoria): o token vem no FRAGMENTO, que o navegador
+  // não manda ao servidor nem põe no Referer; daqui ele segue só no corpo do POST.
+  const token = window.location.hash.slice(1);
+  if (/^[0-9a-f]{64}$/.test(token)) iniciarLink(token);
 });
+
+// ─── Ciência por link pessoal ─────────────────────────────────────────────────────────────────
+const linkEl = (id) => document.getElementById(id);
+
+async function postLink(acao, corpo) {
+  const res = await fetch(`/api/v1/public/pedidos/${acao}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(data.error || 'Não foi possível concluir. Tente de novo.');
+    e.status = res.status;
+    throw e;
+  }
+  return data;
+}
+
+function avisoLink(texto, erro) {
+  const box = linkEl('msg-link');
+  box.className = erro ? 'alert-box alert-error' : 'alert-box';
+  box.textContent = texto;
+}
+
+function concluidoLink(texto) {
+  linkEl('link-pendente').classList.add('hidden');
+  const fim = linkEl('link-concluido');
+  fim.textContent = texto;
+  fim.classList.remove('hidden');
+}
+
+const quando = (s) => (s ? new Date(String(s).replace(' ', 'T') + (String(s).includes('Z') ? '' : 'Z')).toLocaleString('pt-BR') : '');
+
+function conteudoLink(tipo, conteudo) {
+  if (tipo === 'politica') {
+    return `<h2 style="margin: 0 0 1rem;">${escapeHTML(conteudo.title)}</h2>
+      <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #1e293b;">${escapeHTML(conteudo.description) || 'Documento sem texto.'}</div>`;
+  }
+  return Object.entries(conteudo || {}).filter(([, v]) => v !== null && v !== '')
+    .map(([k, v]) => `<div style="margin-bottom: 1rem;"><div style="font-size: 0.7rem; text-transform: uppercase; color: #64748b;">${escapeHTML(k)}</div>
+      <div style="white-space: pre-wrap; color: #1e293b;">${escapeHTML(String(v))}</div></div>`).join('');
+}
+
+async function iniciarLink(token) {
+  linkEl('step-request-otp').classList.add('hidden');
+  linkEl('step-link').classList.remove('hidden');
+  let d;
+  try {
+    d = await postLink('ver', { token });
+  } catch (err) {
+    avisoLink(err.status === 404 ? 'Este link é inválido ou expirou. Peça um novo a quem enviou.' : err.message, true);
+    return;
+  }
+  linkEl('link-titulo').textContent = d.titulo || 'Ciência de documento';
+  if (d.estado !== 'pendente') {
+    concluidoLink(`Ciência registrada em ${quando(d.decidido_em)}. Versão lida (SHA-256): ${d.hash_lido || ''}`);
+    return;
+  }
+  linkEl('link-sub').textContent = `Leia o documento abaixo. Para confirmar, enviaremos um código a ${d.email}.`;
+  linkEl('link-documento').innerHTML = conteudoLink(d.tipo, d.conteudo);
+  linkEl('link-hash').textContent = d.hash;
+  if (d.nome) linkEl('link-nome').value = d.nome;
+  linkEl('link-leitura').classList.remove('hidden');
+
+  linkEl('btn-link-codigo').addEventListener('click', async () => {
+    try {
+      const r = await postLink('codigo', { token });
+      avisoLink(`Código enviado para ${r.enviado_para}. Ele vale por 15 minutos.`);
+      linkEl('form-link-ciencia').classList.remove('hidden');
+      linkEl('btn-link-codigo').textContent = 'Reenviar código';
+      linkEl('link-codigo').focus();
+    } catch (err) {
+      avisoLink(err.message, true);
+    }
+  });
+  linkEl('link-aceite').addEventListener('change', (e) => {
+    linkEl('btn-link-confirmar').disabled = !e.target.checked;
+    linkEl('btn-link-confirmar').style.opacity = e.target.checked ? '1' : '0.5';
+  });
+  linkEl('form-link-ciencia').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nome = linkEl('link-nome').value.trim();
+    const codigo = linkEl('link-codigo').value.trim();
+    if (nome.length < 2) { avisoLink('Informe o seu nome completo.', true); linkEl('link-nome').focus(); return; }
+    if (!/^\d{6}$/.test(codigo)) { avisoLink('Informe o código de 6 dígitos.', true); linkEl('link-codigo').focus(); return; }
+    try {
+      const r = await postLink('ciencia', { token, codigo, nome });
+      linkEl('msg-link').classList.add('hidden');
+      concluidoLink(`Ciência registrada em ${quando(r.decidido_em)}. Versão lida (SHA-256): ${r.hash_lido}`);
+    } catch (err) {
+      avisoLink(err.status === 404 ? 'Este link deixou de valer (o documento pode ter mudado). Peça um novo a quem enviou.' : err.message, true);
+    }
+  });
+}
 
 function showStep(stepNum) {
   document.getElementById('step-request-otp').classList.add('hidden');

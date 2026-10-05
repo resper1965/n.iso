@@ -127,3 +127,44 @@ describe('pedir aprovação (consultoria)', () => {
     expect(window.podePedirAprovacao({ role: 'consultor' })).toBe(true);
   });
 });
+
+describe('ciência por link (consultoria, fatia 3)', () => {
+  it('nova ciência: escolhe a política, separa os e-mails da lista e envia o lote', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: true, controls: [
+      { id: 'c1', title: 'Política de Segurança', description: 'Texto' },
+      { id: 'c2', title: 'Sem texto', description: '' },
+    ] }));
+    await window.abrirCienciaLink('p1');
+    expect([...el('cl-doc').options].map((o) => o.value)).toEqual(['c1']);
+    el('cl-emails').value = 'ana@cliente.com; bia@cliente.com\nana@cliente.com, invalido';
+    fetchMock.mockResolvedValueOnce(json({ id: 'pd7', hash: 'h', enviados: 2, falhas: [] }, 201));
+    el('cl-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await espera();
+    const [url, init] = fetchMock.mock.calls.at(-1);
+    expect(url).toMatch(/\/api\/v1\/projects\/p1\/pedidos\/ciencia$/);
+    expect(JSON.parse(init.body)).toEqual({ tipo: 'politica', ref_id: 'c1', destinatarios: [{ email: 'ana@cliente.com' }, { email: 'bia@cliente.com' }] });
+  });
+
+  it('acompanhamento: situação por pessoa escapada, versão anterior, e reenviar aos pendentes', async () => {
+    fetchMock.mockResolvedValueOnce(json({
+      pedido: { id: 'pd7', titulo: 'Política: <b>x</b>', status: 'aberto', papel_exigido: 'ciente', hash: 'h'.repeat(64) },
+      destinatarios: [
+        { email: 'ana@cliente.com', situacao: 'ciente', decidido_em: '2026-10-04T10:00:00Z', canal: 'link', versao_anterior: null, portal_antigo: null },
+        { email: '<img src=x onerror=alert(1)>@c.com', situacao: 'nao_abriu', versao_anterior: { decidido_em: '2026-09-01T10:00:00Z', hash_lido: 'v'.repeat(64) }, portal_antigo: null },
+        { email: 'olga@cliente.com', situacao: 'pendente', versao_anterior: null, portal_antigo: { acknowledged_at: '2026-01-01 10:00:00', hash: null } },
+      ],
+    }));
+    await window.abrirAcompanhamento('p1', 'pd7');
+    const txt = el('modal-content').textContent;
+    expect(txt).toMatch(/Ciente/);
+    expect(txt).toMatch(/Não abriu/);
+    expect(txt).toMatch(/versão anterior/i);
+    expect(txt).toMatch(/versão não registrada/i);
+    expect(document.querySelector('#modal-content img')).toBeNull();
+    fetchMock.mockResolvedValueOnce(json({ enviados: 2, falhas: [] }));
+    fetchMock.mockResolvedValueOnce(json({ pedido: { id: 'pd7', titulo: 't', status: 'aberto', papel_exigido: 'ciente', hash: 'h' }, destinatarios: [] }));
+    document.querySelector('[data-action="reenviarCiencia"]').click();
+    await espera();
+    expect(fetchMock.mock.calls[1][0]).toMatch(/\/api\/v1\/projects\/p1\/pedidos\/pd7\/reenviar$/);
+  });
+});
