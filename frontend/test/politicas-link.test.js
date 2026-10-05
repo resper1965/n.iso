@@ -50,6 +50,9 @@ describe('portal /politicas: ciência por link', () => {
     expect(url).toBe('/api/v1/public/pedidos/ver');
     expect(url).not.toContain(TOKEN);
     expect(JSON.parse(init.body)).toEqual({ token: TOKEN });
+    // O token sai da barra de endereço (histórico, captura de tela, cópia do link) e fica só em memória.
+    expect(window.location.hash).toBe('');
+    expect(window.location.href).not.toContain(TOKEN);
     expect(el('step-request-otp').classList.contains('hidden')).toBe(true);
     expect(el('link-documento').innerHTML).toContain('&lt;img');
     expect(el('link-documento').querySelector('img')).toBeNull();

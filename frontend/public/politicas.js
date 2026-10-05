@@ -45,7 +45,12 @@ window.addEventListener('DOMContentLoaded', () => {
   // Link pessoal de ciência (pedido da consultoria): o token vem no FRAGMENTO, que o navegador
   // não manda ao servidor nem põe no Referer; daqui ele segue só no corpo do POST.
   const token = window.location.hash.slice(1);
-  if (/^[0-9a-f]{64}$/.test(token)) iniciarLink(token);
+  if (/^[0-9a-f]{64}$/.test(token)) {
+    // Tira o token da barra de endereço (histórico, captura de tela, link copiado); segue em memória.
+    // Recarregar a página perde o link: abra de novo pelo e-mail.
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    iniciarLink(token);
+  }
 });
 
 // ─── Ciência por link pessoal ─────────────────────────────────────────────────────────────────
