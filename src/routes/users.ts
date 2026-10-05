@@ -168,6 +168,10 @@ usersApp.post('/', async (c) => {
     if (!orgNovo) return c.json(SEM_ORG, 403);
     // O limite do plano conta só a EQUIPE da consultoria; conta de cliente não entra.
     if (!ehCliente && await limiteDoPlanoAtingido(c.env.DB, orgNovo, 'usuarios')) return c.json(LIMITE_USUARIOS, 409);
+    // O UNIQUE da coluna é sensível a caixa: conta antiga `CEO@x.com` não barraria `ceo@x.com`.
+    if (await c.env.DB.prepare('SELECT 1 FROM users WHERE lower(trim(email)) = ?').bind(email).first()) {
+      return c.json({ error: 'Email já cadastrado' }, 400);
+    }
 
     const id = genId();
     const hash = await hashPassword(password);
@@ -261,6 +265,10 @@ usersApp.put('/:id', async (c) => {
       values.push(name);
     }
     if (email !== undefined) {
+      // Variante de caixa de OUTRA conta passaria no UNIQUE e, pela busca sem caixa do login, tomaria a conta dela.
+      if (await c.env.DB.prepare('SELECT 1 FROM users WHERE lower(trim(email)) = ? AND id <> ?').bind(email, id).first()) {
+        return c.json({ error: 'Email já cadastrado' }, 400);
+      }
       updates.push('email = ?');
       values.push(email);
     }
