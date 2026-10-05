@@ -43,6 +43,93 @@ async function fotoDaProva(): Promise<unknown> {
   return { dests, pedidos };
 }
 
+/**
+ * Literais de string do fonte (crase, aspas simples e duplas), comentários fora. A expressão de um
+ * `${…}` vira `__DIN__`; strings dentro dela entram como literais próprios.
+ */
+function literais(txt: string): string[] {
+  const out: string[] = [];
+  const ler = (i: number): number => {
+    const q = txt[i];
+    let s = '';
+    i++;
+    while (i < txt.length && txt[i] !== q) {
+      if (txt[i] === '\\') { s += txt[i + 1] ?? ''; i += 2; continue; }
+      if (q !== '`' && txt[i] === '\n') break; // aspas simples/duplas não atravessam linha
+      if (q === '`' && txt[i] === '$' && txt[i + 1] === '{') {
+        let prof = 1;
+        i += 2;
+        while (i < txt.length && prof > 0) {
+          const c = txt[i];
+          if (c === '`' || c === "'" || c === '"') { i = ler(i); continue; }
+          if (c === '{') prof++;
+          else if (c === '}') prof--;
+          i++;
+        }
+        s += '__DIN__';
+        continue;
+      }
+      s += txt[i++];
+    }
+    out.push(s);
+    return i + 1;
+  };
+  for (let i = 0; i < txt.length;) {
+    const c = txt[i];
+    if (c === '/' && txt[i + 1] === '/') { const f = txt.indexOf('\n', i); i = f < 0 ? txt.length : f; continue; }
+    if (c === '/' && txt[i + 1] === '*') { const f = txt.indexOf('*/', i + 2); i = f < 0 ? txt.length : f + 2; continue; }
+    if (c === '`' || c === "'" || c === '"') { i = ler(i); continue; }
+    i++;
+  }
+  return out;
+}
+
+/** Texto da cláusula WHERE de nível zero (fora de subconsulta), sem os grupos entre parênteses. */
+function whereDeTopo(sql: string): string | null {
+  let prof = 0;
+  for (let i = 0; i < sql.length; i++) {
+    if (sql[i] === '(') prof++;
+    else if (sql[i] === ')') prof--;
+    else if (prof === 0 && /^WHERE\b/i.test(sql.slice(i)) && /[\s)]/.test(sql[i - 1] ?? ' ')) {
+      let w = sql.slice(i + 5);
+      while (/\([^()]*\)/.test(w)) w = w.replace(/\([^()]*\)/g, '');
+      return w;
+    }
+  }
+  return null;
+}
+
+/**
+ * Escritas proibidas sobre pedido/destinatário num arquivo-fonte, statement a statement (literal SQL
+ * partido em `;`): DELETE; INSERT OR REPLACE / REPLACE / UPSERT; UPDATE sem a guarda de status na
+ * WHERE de nível zero do próprio statement (`'aberto'` em `pedidos`, `'pendente'` em
+ * `pedido_destinatarios`, sem OR); e escrita em tabela dinâmica (`${…}`) num arquivo que cita uma
+ * tabela de pedido como string ou deriva tabelas de `sqlite_master`.
+ */
+function achadosNoFonte(arq: string, txt: string): string[] {
+  const achados: string[] = [];
+  const lits = literais(txt);
+  const citaPedido = lits.some((l) => /^(pedidos|pedido_destinatarios)$/i.test(l.trim()) || /sqlite_master/i.test(l));
+  const TAB = String.raw`["\x60\[]?(pedidos|pedido_destinatarios)\b`;
+  for (const lit of lits) {
+    for (const bruto of lit.split(';')) {
+      const st = bruto.replace(/\s+/g, ' ').trim();
+      const ver = (msg: string) => achados.push(`${arq}: ${msg}: ${st.slice(0, 100)}`);
+      if (new RegExp(String.raw`\bDELETE FROM ${TAB}`, 'i').test(st)) ver('DELETE');
+      if (new RegExp(String.raw`\b(INSERT OR REPLACE|REPLACE) INTO ${TAB}`, 'i').test(st)) ver('REPLACE');
+      if (new RegExp(String.raw`\bINSERT INTO ${TAB}`, 'i').test(st) && /\bON CONFLICT\b/i.test(st)) ver('UPSERT');
+      if (citaPedido && /\b(UPDATE|DELETE FROM|INTO) ["`[]?__DIN__/i.test(st)) ver('tabela dinâmica');
+      const up = new RegExp(String.raw`\bUPDATE ${TAB}`, 'i').exec(st);
+      if (up) {
+        const w = whereDeTopo(st.slice(up.index));
+        const guarda = up[1].toLowerCase() === 'pedidos' ? /\bstatus\s*=\s*'aberto'/i : /\bstatus\s*=\s*'pendente'/i;
+        if (!w || !guarda.test(w) || /\bOR\b/i.test(w)) ver('UPDATE sem guarda de status na WHERE');
+      }
+    }
+  }
+  return achados;
+}
+
 let hashPol: string;
 let cadm: Record<string, string>;
 const U = {
@@ -101,17 +188,34 @@ describe('prova imutável', () => {
 
   it('nenhum fonte apaga pedido/destinatário, nem atualiza decisão ou pedido fechado', () => {
     const fontes = import.meta.glob('../src/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-    const achados: string[] = [];
-    for (const [arq, txt] of Object.entries(fontes)) {
-      if (/DELETE\s+FROM\s+pedido/i.test(txt)) achados.push(`${arq}: DELETE FROM pedido…`);
-      // Cada UPDATE vai até o fim da string SQL (crase): a guarda de status tem de estar no próprio statement.
-      for (const m of txt.matchAll(/UPDATE\s+(pedido_destinatarios|pedidos)\b[^`]*/gi)) {
-        const guarda = m[1] === 'pedidos' ? /status\s*=\s*'aberto'/ : /status\s*=\s*'pendente'/;
-        if (!guarda.test(m[0])) achados.push(`${arq}: ${m[0].slice(0, 80)}`);
-      }
-    }
+    const achados = Object.entries(fontes).flatMap(([arq, txt]) => achadosNoFonte(arq, txt));
     expect(Object.keys(fontes).length).toBeGreaterThan(30);
+    // O leitor enxerga as escritas reais (services/pedidos.ts, routes/pedidos.ts, public-pedidos.ts): sem isso passaria vazio.
+    const updates = Object.values(fontes).flatMap(literais).filter((l) => /\bUPDATE\s+(pedidos|pedido_destinatarios)\b/i.test(l));
+    expect(updates.length).toBeGreaterThanOrEqual(6);
     expect(achados).toEqual([]);
+  });
+
+  it('o leitor de fonte pega cada escrita ruim (fixture)', () => {
+    const ruins = [
+      "db.prepare(`UPDATE pedidos SET status = 'aberto' WHERE id = ?`)",
+      "db.prepare(`UPDATE pedido_destinatarios SET status = 'pendente', ip = NULL WHERE id = ?`)",
+      "db.prepare(`UPDATE pedidos SET hash = ? WHERE id = ? AND EXISTS (SELECT 1 FROM pedidos WHERE status = 'aberto')`)",
+      "db.prepare(`UPDATE pedido_destinatarios SET nome = ? WHERE id = ? OR status = 'pendente'`)",
+      "db.prepare('UPDATE pedido_destinatarios SET nome = ? WHERE id = ?')",
+      "db.prepare(`SELECT 1; UPDATE pedidos SET hash = ? WHERE id = ?; SELECT status = 'aberto'`)",
+      "db.prepare(`INSERT OR REPLACE INTO pedido_destinatarios (id, status) VALUES (?, 'pendente')`)",
+      "db.prepare(`REPLACE INTO pedidos (id) VALUES (?)`)",
+      "db.prepare(`DELETE FROM \"pedido_destinatarios\" WHERE id = ?`)",
+      "const t = 'pedido_destinatarios'; db.prepare(`DELETE FROM ${t} WHERE id = ?`)",
+    ];
+    for (const r of ruins) expect(achadosNoFonte('fixture.ts', r), r).not.toEqual([]);
+    const boas = [
+      "db.prepare(`UPDATE pedidos SET status = 'cancelado' WHERE id = ? AND status = 'aberto'`)",
+      "db.prepare(`UPDATE pedido_destinatarios SET aberto_em = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pendente'`)",
+      "db.prepare(`UPDATE pedidos SET status = CASE WHEN EXISTS (SELECT 1 FROM x WHERE status = 'y') THEN 'a' END WHERE id = ?1 AND status = 'aberto'`)",
+    ];
+    for (const b of boas) expect(achadosNoFonte('fixture.ts', b), b).toEqual([]);
   });
 
   it('varredura: nenhuma rota que não é GET altera ou apaga a prova', async () => {
