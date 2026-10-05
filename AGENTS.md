@@ -78,12 +78,16 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
   painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
   token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
-  auditor externo). **A prova e imutavel**: o trigger `pedido_dest_prova_imutavel`
-  recusa UPDATE em linha decidida; DELETE fica livre no banco so para o projeto
-  cascatear. Nenhuma rota apaga pedido/destinatario nem atualiza decisao ou
-  pedido fechado — todo `UPDATE pedidos` leva `status = 'aberto'` e todo
-  `UPDATE pedido_destinatarios` leva `status = 'pendente'`; `test/pedidos-prova.test.ts`
-  reprova o fonte que fugir disso. Correcao e pedido novo.
+  auditor externo, paginada). **A prova e imutavel**: o trigger
+  `pedido_dest_prova_imutavel` recusa UPDATE em linha decidida, e
+  `pedido_prova_imutavel` (0043) recusa mudar hash, conteudo e documento de
+  qualquer pedido e status/substituto de pedido fechado (`org_id` fica livre:
+  a transferencia de projeto o atualiza). DELETE fica livre no banco so para o
+  projeto cascatear. No fonte, todo `UPDATE pedidos` leva `status = 'aberto'` e
+  todo `UPDATE pedido_destinatarios` leva `status = 'pendente'` na WHERE do
+  proprio statement (a unica excecao e `UPDATE pedidos SET org_id = ?`), sem
+  DELETE nem REPLACE; `test/pedidos-prova.test.ts` le o fonte e reprova o que
+  fugir disso. Correcao e pedido novo.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
@@ -118,7 +122,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Schema**: `schema.sql` — **58 tabelas** (medido em 2026-10-05: o `schema.sql` aplicado num
   SQLite em memoria, `SELECT count(*) FROM sqlite_master WHERE type='table'`; as linhas que comecam
   por `CREATE TABLE` sao 58 nomes distintos). Migrations numeradas em
-  `migrations/`, ultima a **0042**. O estado real de producao e o historico da
+  `migrations/`, ultima a **0043**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
 - **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
