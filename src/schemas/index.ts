@@ -45,3 +45,4 @@ export * from './users';
 export * from './integrations';
 export * from './resources';
 export * from './domain';
+export * from './corpos';

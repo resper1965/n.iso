@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../index';
 
 import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO, genId, genToken, hashPassword, invalidateUserSessions, revogarAgentesPorTrocaDeSenha } from '../helpers';
 import { enviarBoasVindas, nomeDaOrg } from './users';
-import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema } from '../schemas';
+import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema, stakeholderAtualizarSchema, revisaoCriarSchema, revisaoAtualizarSchema, metricaCriarSchema, metricaAtualizarSchema, cienciaPoliticaSchema } from '../schemas';
 
 export const governanceApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -37,7 +37,9 @@ governanceApp.put('/stakeholders/:id', async (c) => {
   const id = c.req.param('id');
   try {
     await requireResourceAccess(c.env.DB, 'stakeholders', id, c.get('user'));
-    const { name, type, category, requirements, influence, communication_method } = await c.req.json();
+    const v = await validateBody(c, stakeholderAtualizarSchema);
+    if (!v.success) return v.response;
+    const { name, type, category, requirements, influence, communication_method } = v.data;
     await c.env.DB.prepare(`UPDATE stakeholders SET name = COALESCE(?, name), type = COALESCE(?, type), category = COALESCE(?, category),
       requirements = COALESCE(?, requirements), influence = COALESCE(?, influence), communication_method = COALESCE(?, communication_method),
       updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(
@@ -427,8 +429,9 @@ governanceApp.get('/projects/:id/management-reviews', async (c) => {
 governanceApp.post('/projects/:id/management-reviews', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { review_date, attendees } = await c.req.json();
-    if (!review_date) return c.json({ error: 'review_date is required' }, 400);
+    const v = await validateBody(c, revisaoCriarSchema);
+    if (!v.success) return v.response;
+    const { review_date, attendees } = v.data;
     
     const [controls, capas, risks, training] = await Promise.all([
       c.env.DB.prepare('SELECT status, COUNT(*) as cnt FROM compliance_controls WHERE project_id = ? GROUP BY status').bind(projectId).all(),
@@ -497,7 +500,9 @@ governanceApp.put('/management-reviews/:id', async (c) => {
   const id = c.req.param('id');
   try {
     await requireResourceAccess(c.env.DB, 'management_reviews', id, c.get('user'));
-    const { decisions, action_items, status, minutes_url, attendees } = await c.req.json();
+    const v = await validateBody(c, revisaoAtualizarSchema);
+    if (!v.success) return v.response;
+    const { decisions, action_items, status, minutes_url, attendees } = v.data;
     await c.env.DB.prepare(`
       UPDATE management_reviews 
       SET decisions = COALESCE(?, decisions), 
@@ -533,7 +538,9 @@ governanceApp.get('/projects/:id/metrics', async (c) => {
 governanceApp.post('/projects/:id/metrics', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
+    const v = await validateBody(c, metricaCriarSchema);
+    if (!v.success) return v.response;
+    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = v.data;
     if (!metric_name) return c.json({ error: 'Metric Name is required' }, 400);
 
     const metricId = crypto.randomUUID().replace(/-/g, '');
@@ -551,8 +558,10 @@ governanceApp.put('/metrics/:id', async (c) => {
   const id = c.req.param('id');
   try {
     await requireResourceAccess(c.env.DB, 'performance_metrics', id, c.get('user'));
-    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = await c.req.json();
-    
+    const v = await validateBody(c, metricaAtualizarSchema);
+    if (!v.success) return v.response;
+    const { metric_name, target_value, current_value, frequency, last_measured_at, owner, status } = v.data;
+
     await c.env.DB.prepare(
       'UPDATE performance_metrics SET metric_name = COALESCE(?, metric_name), target_value = COALESCE(?, target_value), current_value = COALESCE(?, current_value), frequency = COALESCE(?, frequency), last_measured_at = COALESCE(?, last_measured_at), owner = COALESCE(?, owner), status = COALESCE(?, status), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(metric_name || null, target_value !== undefined ? target_value : null, current_value !== undefined ? current_value : null, frequency || null, last_measured_at || null, owner || null, status || null, id).run();
@@ -586,7 +595,9 @@ governanceApp.get('/projects/:id/policy-acknowledgments', async (c) => {
 governanceApp.post('/projects/:id/policy-acknowledgments', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const { policy_type, user_name, user_email } = await c.req.json();
+    const v = await validateBody(c, cienciaPoliticaSchema);
+    if (!v.success) return v.response;
+    const { policy_type, user_name, user_email } = v.data;
     if (!policy_type || !user_name || !user_email) return c.json({ error: 'Policy Type, User Name and Email are required' }, 400);
 
     const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
