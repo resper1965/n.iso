@@ -321,6 +321,7 @@ window.abrirAcompanhamento = async function abrirAcompanhamento(projectId, id) {
             <p style="font-size:12px;color:var(--text-dim);margin:0 0 4px">Situação: ${escapeHTML(STATUS[p.status] || p.status)}</p>
             <p style="font-size:11px;color:var(--text-dim);margin:0 0 16px;word-break:break-all">Versão (SHA-256): <span style="font-family:var(--font-mono)">${escapeHTML(p.hash)}</span></p>
             ${p.status === 'substituido' ? '<p class="login-error" role="status">O documento mudou depois deste pedido. Abra o pedido novo na lista para acompanhar e reenviar.</p>' : ''}
+            ${aberto && r.sem_link ? `<p class="login-error" role="status">${Number(r.sem_link)} pendente(s) sem link válido: o documento mudou e o link anterior deixou de valer, ou o envio falhou. Use "Reenviar aos pendentes".</p>` : ''}
             <div style="max-height:50vh;overflow:auto">
                 <table class="data-table"><thead><tr><th>E-mail</th><th>Situação</th><th>Quando</th><th>Observação</th></tr></thead><tbody>
                 ${ds.map((d) => `<tr>

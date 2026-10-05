@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { senhaNovaSchema } from './auth';
+import { senhaNovaSchema, emailNormalizado } from './auth';
 
 /**
  * Papéis que uma conta pode RECEBER pela API. Lista fechada: `users.role` é TEXT livre, e um papel
@@ -13,7 +13,7 @@ const papel = z.enum(PAPEIS_DE_CONTA, 'Papel inválido');
 // `.strict()`: campo fora do contrato (como `org_id`) é 400, não silêncio. A organização da conta é
 // decidida pelo servidor (a de quem cria, ou a do projeto do cliente), nunca pelo corpo.
 export const createUserSchema = z.object({
-  email: z.string().email('E-mail inválido'),
+  email: emailNormalizado(),
   password: senhaNovaSchema,
   name: z.string().min(1, 'Nome é obrigatório'),
   role: papel,
@@ -31,7 +31,7 @@ export const createUserSchema = z.object({
  */
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email('E-mail inválido').optional(),
+  email: emailNormalizado().optional(),
   role: papel.optional(),
   password: senhaNovaSchema.optional(),
   client_project_id: z.string().nullable().optional()
