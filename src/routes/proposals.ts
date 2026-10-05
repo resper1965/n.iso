@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, logAudit, somenteComercial, erro500 } from '../helpers';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
-import { validateBody, proposalSchema, proposalUpdateSchema } from '../schemas';
+import { validateBody, proposalSchema, proposalUpdateSchema, precificacaoConfigSchema } from '../schemas';
 import { exigirOrg, somenteOrgNess } from '../services/organizacao';
 
 export const proposalsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -67,8 +67,9 @@ proposalsApp.get('/config/pricing', async (c) => {
 
 proposalsApp.put('/config/pricing', async (c) => {
   try {
-    const body = await c.req.json();
-    const json = JSON.stringify(body);
+    const v = await validateBody(c, precificacaoConfigSchema);
+    if (!v.success) return v.response;
+    const json = JSON.stringify(v.data);
     await c.env.DB.prepare(
       "INSERT INTO settings (key, value, updated_at) VALUES ('pricing_config', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')"
     ).bind(json, json).run();

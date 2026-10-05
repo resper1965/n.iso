@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../index';
 import { logAudit, requireProjectAccess } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
-import { validateBody, chatSchema } from '../schemas';
+import { validateBody, chatSchema, mcpExecutarSchema } from '../schemas';
 import { chatModel } from '../config/models';
 
 export const aiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -276,7 +276,10 @@ aiApp.get('/mcp', async (c) => {
 });
 
 aiApp.post('/mcp/execute', async (c) => {
-  const { tool, arguments: args } = await c.req.json();
+  const v = await validateBody(c, mcpExecutarSchema);
+  if (!v.success) return v.response;
+  const { tool } = v.data;
+  const args: any = v.data.arguments;
 
   // Esta rota é montada em /api/v1 (fora de /projects/:projectId), então o
   // projectAccessMiddleware NÃO roda aqui. O project_id vem do CORPO — sem a

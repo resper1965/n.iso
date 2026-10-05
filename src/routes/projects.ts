@@ -9,7 +9,7 @@ import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
 import { NA_STATUS } from '../services/soa-logic';
-import { validateBody, checklistProgressSchema, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema } from '../schemas';
+import { validateBody, checklistProgressSchema, dpiaSchema, projectPhaseSchema, interviewSchema, evidenceMetaSchema, scopeChangeSchema, auditorTokenSchema, politicaTenantSchema, ssoConfigSchema, projetoCriarSchema, projetoAtualizarSchema, revogarAprovacaoSchema, reatribuirResponsavelSchema } from '../schemas';
 import { registerAssetRoutes } from './project-assets';
 import { encryptSecret, decryptSecret, isEncrypted } from '../secret-crypto';
 import { COLUNAS_REVOGACAO } from './controls';
@@ -301,14 +301,9 @@ export async function getRepositoryToken(env: Bindings, projectId: string): Prom
 
 projectsApp.post('/', async (c) => {
   try {
-    const body = await c.req.json<{
-      project_name?: string;
-      client_name: string;
-      sector?: string;
-      scope?: string;
-      standards?: string;
-      org_role?: string;
-    }>();
+    const v = await validateBody(c, projetoCriarSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
 
     if (!body.client_name) {
       return c.json({ error: 'client_name é obrigatório' }, 400);
@@ -399,14 +394,9 @@ projectsApp.put('/:id', async (c) => {
         return c.json({ error: 'Forbidden: Cannot edit this project' }, 403);
       }
     }
-    const body = await c.req.json<{
-      status?: string;
-      project_name?: string;
-      repository_url?: string;
-      repository_token?: string;
-      standards?: string;
-      scope?: string;
-    }>();
+    const v = await validateBody(c, projetoAtualizarSchema);
+    if (!v.success) return v.response;
+    const body = v.data;
     // `standards` não é editável por aqui — é derivado do control-set (definido
     // pelos endpoints seed-27701-2025 / migrate). Erro EXPLÍCITO em vez do
     // genérico "Nothing to update", que confundia (o campo estava presente).
@@ -448,10 +438,11 @@ projectsApp.put('/:id', async (c) => {
 projectsApp.post('/:id/revoke-approvals', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const body = await c.req.json().catch(() => ({} as any));
-    const role = body?.role;
-    const reason = String(body?.reason ?? '').trim();
-    const ids: string[] = Array.isArray(body?.control_ids) ? body.control_ids.filter((x: any) => typeof x === 'string' && x) : [];
+    const v = await validateBody(c, revogarAprovacaoSchema);
+    if (!v.success) return v.response;
+    const role = v.data.role;
+    const reason = (v.data.reason ?? '').trim();
+    const ids: string[] = (v.data.control_ids ?? []).filter(Boolean);
     if (role !== 'ciso' && role !== 'ceo') return c.json({ error: "Campo 'role' deve ser 'ciso' ou 'ceo'" }, 400);
     if (!reason) return c.json({ error: "Campo 'reason' é obrigatório" }, 400);
     if (!ids.length) return c.json({ error: "Campo 'control_ids' não pode ser vazio" }, 400);
@@ -478,11 +469,12 @@ projectsApp.post('/:id/revoke-approvals', async (c) => {
 projectsApp.patch('/:id/controls', async (c) => {
   try {
     const projectId = c.req.param('id');
-    const body = await c.req.json().catch(() => ({} as any));
+    const v = await validateBody(c, reatribuirResponsavelSchema);
+    if (!v.success) return v.response;
     // owner_from: valor atual a casar (obrigatório, não-vazio). owner_to: novo
     // valor (obrigatório; string vazia limpa o responsável).
-    const ownerFrom = typeof body?.owner_from === 'string' ? body.owner_from.trim() : '';
-    const ownerTo = typeof body?.owner_to === 'string' ? body.owner_to : undefined;
+    const ownerFrom = (v.data.owner_from ?? '').trim();
+    const ownerTo = v.data.owner_to;
     if (!ownerFrom) return c.json({ error: "Campo 'owner_from' é obrigatório (responsável atual a reatribuir)" }, 400);
     if (ownerTo === undefined) return c.json({ error: "Campo 'owner_to' é obrigatório (novo responsável; string vazia limpa)" }, 400);
 
