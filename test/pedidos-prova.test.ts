@@ -103,7 +103,7 @@ function whereDeTopo(sql: string): string | null {
  * Escritas proibidas sobre pedido/destinatário num arquivo-fonte, statement a statement (literal SQL
  * partido em `;`): DELETE; INSERT OR REPLACE / REPLACE / UPSERT; UPDATE sem a guarda de status na
  * WHERE de nível zero do próprio statement (`'aberto'` em `pedidos`, `'pendente'` em
- * `pedido_destinatarios`, sem OR); e escrita em tabela dinâmica (`${…}`) num arquivo que cita uma
+ * `pedido_destinatarios`, sem OR; só `SET org_id = ?` em `pedidos` dispensa: transferência); e escrita em tabela dinâmica (`${…}`) num arquivo que cita uma
  * tabela de pedido como string ou deriva tabelas de `sqlite_master`.
  */
 function achadosNoFonte(arq: string, txt: string): string[] {
@@ -120,7 +120,9 @@ function achadosNoFonte(arq: string, txt: string): string[] {
       if (new RegExp(String.raw`\bINSERT INTO ${TAB}`, 'i').test(st) && /\bON CONFLICT\b/i.test(st)) ver('UPSERT');
       if (citaPedido && /\b(UPDATE|DELETE FROM|INTO) ["`[]?__DIN__/i.test(st)) ver('tabela dinâmica');
       const up = new RegExp(String.raw`\bUPDATE ${TAB}`, 'i').exec(st);
-      if (up) {
+      // `UPDATE pedidos SET org_id = ?` sozinho é a transferência de projeto: org_id não é prova.
+      const soOrg = up && up[1].toLowerCase() === 'pedidos' && /^UPDATE \S+ SET org_id = \?\d* WHERE /i.test(st.slice(up.index));
+      if (up && !soOrg) {
         const w = whereDeTopo(st.slice(up.index));
         const guarda = up[1].toLowerCase() === 'pedidos' ? /\bstatus\s*=\s*'aberto'/i : /\bstatus\s*=\s*'pendente'/i;
         if (!w || !guarda.test(w) || /\bOR\b/i.test(w)) ver('UPDATE sem guarda de status na WHERE');
@@ -208,11 +210,13 @@ describe('prova imutável', () => {
       "db.prepare(`REPLACE INTO pedidos (id) VALUES (?)`)",
       "db.prepare(`DELETE FROM \"pedido_destinatarios\" WHERE id = ?`)",
       "const t = 'pedido_destinatarios'; db.prepare(`DELETE FROM ${t} WHERE id = ?`)",
+      "db.prepare(`UPDATE pedidos SET org_id = ?, status = 'aberto' WHERE project_id = ?`)",
     ];
     for (const r of ruins) expect(achadosNoFonte('fixture.ts', r), r).not.toEqual([]);
     const boas = [
       "db.prepare(`UPDATE pedidos SET status = 'cancelado' WHERE id = ? AND status = 'aberto'`)",
       "db.prepare(`UPDATE pedido_destinatarios SET aberto_em = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pendente'`)",
+      "db.prepare(`UPDATE pedidos SET org_id = ? WHERE project_id = ? AND ${DESTA}`)",
       "db.prepare(`UPDATE pedidos SET status = CASE WHEN EXISTS (SELECT 1 FROM x WHERE status = 'y') THEN 'a' END WHERE id = ?1 AND status = 'aberto'`)",
     ];
     for (const b of boas) expect(achadosNoFonte('fixture.ts', b), b).toEqual([]);
