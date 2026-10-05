@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword, sha256Hex } from '../src/helpers';
 import { transferirProjeto, MSG_CORRIDA } from '../src/services/transferencia-projeto';
+import { conferirVigencia } from '../src/services/pedidos';
 import { applySchema, workerEnv, sessionFor } from './helpers/d1';
 
 /**
@@ -163,6 +164,25 @@ describe('POST /api/v1/platform/projects/:id/transferir', () => {
     for (const trecho of ['chaves de API revogadas: 1', 'webhooks desativados: 1', 'SSO desativado: sim', 'SCIM revogado: sim']) {
       expect(t.details).toContain(trecho);
     }
+  });
+
+  it('pedidos (abertos e fechados) vão para a organização de destino; substituto nasce na organização do projeto', async () => {
+    await semearProjeto('p-t8');
+    const ped = (id: string, status: string, hash = 'h') => env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, status, criado_por)
+      VALUES (?, 'org_ness', 'p-t8', 'politica', 'cc-t8', 't', 'ciente', '{}', ?, ?, 'u')`).bind(id, hash, status);
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, description) VALUES ('cc-t8', 'p-t8', 'ISO 27001', 'Política', 'v1')`),
+      ped('pd-t8-ap', 'aprovado'), ped('pd-t8-ab', 'aberto'),
+    ]);
+    expect((await transferir('p-t8', { orgDestinoId: 'org_b', motivo: MOTIVO }, S.pa)).status).toBe(200);
+    expect(await todos('SELECT id, org_id FROM pedidos WHERE project_id = ? ORDER BY id', 'p-t8'))
+      .toEqual([{ id: 'pd-t8-ab', org_id: 'org_b' }, { id: 'pd-t8-ap', org_id: 'org_b' }]);
+
+    // Linha que ficou com a organização antiga (lida antes da transferência): o substituto não herda.
+    await ped('pd-t8-velho', 'aberto', 'hash-que-nao-bate').run();
+    const v = await conferirVigencia(env.DB, (await um('SELECT * FROM pedidos WHERE id = ?', 'pd-t8-velho'))!);
+    expect(v).toMatchObject({ vigente: false, status: 'substituido' });
+    expect((await um('SELECT org_id FROM pedidos WHERE id = ?', (v as any).substituido_por))?.org_id).toBe('org_b');
   });
 
   it('repetição, destino inexistente ou suspenso e projeto inexistente: recusa sem efeito', async () => {

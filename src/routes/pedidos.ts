@@ -48,7 +48,7 @@ projectPedidosApp.post('/', async (c) => {
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
     const criado = await criarPedido(c.env.DB, {
-      orgId: projeto.org_id, projectId, tipo: b.tipo, refId: b.ref_id, papel: b.papel_exigido,
+      projectId, tipo: b.tipo, refId: b.ref_id, papel: b.papel_exigido,
       destinatarios: b.destinatarios, criadoPor: user.email,
     });
     if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
@@ -252,7 +252,7 @@ projectPedidosApp.post('/ciencia', async (c) => {
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
     const criado = await criarPedido(c.env.DB, {
-      orgId: projeto.org_id, projectId, tipo: b.tipo, refId: b.ref_id, papel: 'ciente',
+      projectId, tipo: b.tipo, refId: b.ref_id, papel: 'ciente',
       destinatarios: b.destinatarios, criadoPor: user.email, comLink: true,
     });
     if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);

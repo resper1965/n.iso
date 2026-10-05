@@ -14,8 +14,9 @@ import { applySchema, sessionFor, workerEnv } from './helpers/d1';
  * `contrato-isolamento-topo.test.ts`, para que tabela nova entre sozinha.
  *
  * Toda linha de uma organização carrega o marcador dela (`zzn`/`zzb`) no id e no texto. Três
- * varreduras, nos dois sentidos, para consultor, comercial e consultoria_admin de cada organização,
- * para um agente MCP e para uma chave de API (presos a projeto da própria organização):
+ * varreduras, nos dois sentidos, para consultor, comercial, consultoria_admin, org_admin e stakeholder
+ * de cada organização, para um agente MCP, uma chave de API e o auditor externo (token do portal),
+ * todos presos a projeto da própria organização:
  *
  * 1. **Por id**: rota com parâmetro, forjada com o id REAL da organização alheia → 4xx.
  *    2xx é entrega; 5xx é recusa virando erro. 400 (corpo recusado antes da guarda) e 429 (limite)
@@ -232,7 +233,8 @@ async function semearPessoas(o: Org, senha: string): Promise<void> {
   ]);
 }
 
-type Principal = { nome: string; de: Org; alheio: Org; headers: Record<string, string>; extraEnv?: Record<string, unknown> };
+// `token`: o auditor externo não tem sessão; a credencial é o token do portal, preso a um projeto.
+type Principal = { nome: string; de: Org; alheio: Org; headers: Record<string, string>; extraEnv?: Record<string, unknown>; token?: string };
 const PRINCIPAIS: Principal[] = [];
 
 async function chamar(p: Principal, metodo: string, caminho: string, corpo?: unknown): Promise<Response> {
@@ -246,13 +248,13 @@ async function chamar(p: Principal, metodo: string, caminho: string, corpo?: unk
   );
 }
 
-/** Troca os parâmetros pelos ids da organização `o`. */
-function forjar(caminho: string, o: Org): string {
+/** Troca os parâmetros pelos ids da organização `o`; `token`, se dado, é o do próprio auditor. */
+function forjar(caminho: string, o: Org, token?: string): string {
   // O primeiro parâmetro depois de /projects/ é o projeto (`:id` ou `:projectId`), também em /platform/projects.
   const c = caminho.replace(/^\/api\/v1\/(platform\/)?projects\/:\w+/, (_t, plat = '') => `/api/v1/${plat}projects/${o.proj}`);
   return c.replace(/:(\w+)/g, (_t, nome: string) => {
     // Token público é a autorização por desenho; um válido testaria o desenho, não a guarda.
-    if (nome.toLowerCase().includes('token')) return 'token-forjado-inexistente';
+    if (nome.toLowerCase().includes('token')) return token ?? 'token-forjado-inexistente';
     if (nome === 'num' || nome === 'phase') return '1';
     if (nome === 'projectId') return o.proj;
     return o.rec;
@@ -302,6 +304,15 @@ beforeAll(async () => {
       extraEnv: { AGENTE: { concessaoId: `${m}-conc`, userId: `${m}-cons`, email: `cons@${m}.lat`, projectId: de.proj } },
     });
     PRINCIPAIS.push({ nome: `chave-api@${de.org}`, de, alheio, headers: { 'X-API-Key': `chave-${m}` } });
+    // Cliente dono do projeto (fatia 5 do acesso de stakeholders): pede e acompanha pedidos.
+    PRINCIPAIS.push({
+      nome: `org_admin@${de.org}`, de, alheio,
+      headers: await sessionFor({ id: `${m}-cli`, email: `cli@${m}.lat`, role: 'org_admin', client_project_id: de.proj, org_id: de.org }),
+    });
+    // Auditor externo: token VÁLIDO do projeto da própria organização (portal `/api/v1/auditor/:token/*`).
+    await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?, ?, ?, '2099-01-01T00:00:00Z')`)
+      .bind(`${m}-aud`, de.proj, `tok-aud-${m}`).run();
+    PRINCIPAIS.push({ nome: `auditor@${de.org}`, de, alheio, headers: {}, token: `tok-aud-${m}` });
   }
 }, 120_000);
 
@@ -326,10 +337,12 @@ describe('contrato de isolamento entre organizações', () => {
       stakeholder: ['/api/v1/auth/me', '/api/v1/pedidos'],
       agente: ['/api/v1/projects/:p/risks'],
       'chave-api': ['/api/v1/projects/:p/risks'],
+      org_admin: ['/api/v1/projects/:p/risks', '/api/v1/projects/:p/pedidos'],
+      auditor: ['/api/v1/auditor/:t/pedidos', '/api/v1/auditor/:t/project', '/api/v1/auditor/:t/notes'],
     };
     for (const p of PRINCIPAIS) {
       for (const molde of proprio[p.nome.split('@')[0]]) {
-        const res = await chamar(p, 'GET', molde.replace(':p', p.de.proj).replace(':r', p.de.rec));
+        const res = await chamar(p, 'GET', molde.replace(':p', p.de.proj).replace(':r', p.de.rec).replace(':t', p.token ?? ''));
         expect(res.status, `${p.nome} ${molde}: ${await res.clone().text()}`).toBe(200);
       }
     }
@@ -354,7 +367,10 @@ describe('contrato de isolamento entre organizações', () => {
     const naoChegou = new Set<string>();
     for (const p of PRINCIPAIS) {
       for (const r of rotas) {
-        const res = await chamar(p, r.metodo, forjar(r.caminho, p.alheio), CORPOS[r.chave]?.(p.alheio));
+        // Auditor: rota cujo único parâmetro é o token dele devolve o PRÓPRIO projeto (varredura de listas);
+        // as demais recebem o token dele com o id alheio (ex.: evidência alheia pelo portal → 4xx).
+        if (p.token && !/:\w/.test(r.caminho.replace(/:\w*token\w*/gi, ''))) continue;
+        const res = await chamar(p, r.metodo, forjar(r.caminho, p.alheio, p.token), CORPOS[r.chave]?.(p.alheio));
         if (res.status < 400 || res.status >= 500) entregou.push(`${res.status} ${r.chave}  [${p.nome}]`);
         else if ((res.status === 400 || res.status === 429) && !(r.chave in NAO_PROVADAS_POR_CORPO)) naoChegou.add(`${res.status} ${r.chave}`);
       }
@@ -375,6 +391,9 @@ describe('contrato de isolamento entre organizações', () => {
       for (const [chave, corpo] of Object.entries(CRIA_COM_REFERENCIA)) {
         const [metodo, caminho] = chave.split(' ');
         const res = await chamar(p, metodo, caminho, corpo(p.alheio));
+        // org_admin não escolhe projeto: a conta nasce no PRÓPRIO projeto dele, ignorando o do corpo
+        // (users.ts). 201 aí não é vazamento; a prova é a linha criada, conferida aqui e no teste seguinte.
+        if (res.status === 201 && p.nome.startsWith('org_admin@') && (await res.clone().json<any>()).client_project_id === p.de.proj) continue;
         if (res.status < 400 || res.status >= 500) aceitou.push(`${res.status} ${chave}  [${p.nome}]`);
       }
     }
@@ -402,7 +421,7 @@ describe('contrato de isolamento entre organizações', () => {
     let respostas2xx = 0;
     for (const p of PRINCIPAIS) {
       for (const r of rotas) {
-        const res = await chamar(p, 'GET', forjar(r.caminho, p.de));
+        const res = await chamar(p, 'GET', forjar(r.caminho, p.de, p.token));
         if (res.ok) respostas2xx++;
         const texto = (await res.text()).toLowerCase();
         if (texto.includes(p.alheio.m)) {
