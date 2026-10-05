@@ -1155,7 +1155,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    tipo TEXT NOT NULL CHECK (tipo IN ('dpia')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica')),
     ref_id TEXT NOT NULL,
     titulo TEXT NOT NULL,
     papel_exigido TEXT NOT NULL CHECK (papel_exigido IN ('ciso', 'ceo', 'ciente')),
@@ -1176,6 +1176,8 @@ CREATE TABLE IF NOT EXISTS pedido_destinatarios (
     email TEXT NOT NULL,
     user_id TEXT,
     token_hash TEXT,
+    token_expira_em DATETIME,
+    aberto_em DATETIME,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'ciente', 'aprovado', 'recusado')),
     decidido_em DATETIME,
     canal TEXT CHECK (canal IS NULL OR canal IN ('conta', 'link')),
@@ -1189,3 +1191,10 @@ CREATE INDEX IF NOT EXISTS idx_pedido_dest_pedido ON pedido_destinatarios(pedido
 CREATE INDEX IF NOT EXISTS idx_pedido_dest_email ON pedido_destinatarios(email);
 CREATE INDEX IF NOT EXISTS idx_pedido_dest_user ON pedido_destinatarios(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pedido_dest_token ON pedido_destinatarios(token_hash) WHERE token_hash IS NOT NULL;
+-- Prova imutável (0042): decisão gravada não muda; correção é um pedido novo.
+CREATE TRIGGER IF NOT EXISTS pedido_dest_prova_imutavel
+BEFORE UPDATE ON pedido_destinatarios
+WHEN OLD.status <> 'pendente'
+BEGIN
+    SELECT RAISE(ABORT, 'prova de pedido decidido e imutavel');
+END;

@@ -374,3 +374,30 @@ Conferência depois de aplicar: `PRAGMA table_info(pedidos)` e
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0042 — ciência por link com código (acesso de stakeholders, fatia 3, 2026-10-04)
+
+Rebuild de `pedidos` e `pedido_destinatarios` (exige a 0041 aplicada antes).
+`pedidos.tipo` passa a aceitar `politica` (ref_id = `compliance_controls.id`):
+CHECK só muda por rebuild no SQLite. `pedido_destinatarios` ganha `aberto_em`
+(painel: "não abriu") e `token_expira_em` (o link pessoal vence em 30 dias;
+reenviar emite outro). Trigger `pedido_dest_prova_imutavel`: linha com
+`status <> 'pendente'` não aceita UPDATE (DELETE não é bloqueado: apagar o
+projeto apaga os pedidos em cascata).
+
+Ordem do rebuild, para não perder linha: com FK ativa, `DROP TABLE pedidos`
+faz DELETE implícito e o `ON DELETE CASCADE` apagaria os destinatários. Por
+isso as tabelas novas nascem ligadas entre si (`pedido_destinatarios_new` ->
+`pedidos_new`), a filha antiga cai primeiro, depois a mãe, e o `RENAME`
+reescreve a FK da filha para `pedidos`. `test/migration-0042.test.ts` prova
+sobre o banco da 0041 com linhas: nada some e a FK aponta para `pedidos`.
+
+Conferência depois de aplicar:
+`SELECT COUNT(*) FROM pedido_destinatarios` igual ao de antes,
+`PRAGMA table_info(pedido_destinatarios)` com `aberto_em` e `token_expira_em`,
+`PRAGMA foreign_key_list(pedido_destinatarios)` apontando para `pedidos`.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1
+migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
+--remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
+recusa migration pendente.

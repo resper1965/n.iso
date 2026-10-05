@@ -649,6 +649,29 @@ export const pedidoCriarSchema = z.object({
   })).min(1).max(50),
 });
 
+// Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
+// Teto de 200 por lote. `dpia` por conta continua em `pedidoCriarSchema` (a assinatura é só dele).
+export const pedidoCienciaLoteSchema = z.object({
+  tipo: z.enum(['politica', 'dpia']),
+  ref_id: z.string().trim().min(1).max(200),
+  destinatarios: z.array(z.object({
+    email: z.string().trim().email().max(320),
+    nome: z.string().trim().max(200).optional().nullable(),
+  }).strict()).min(1).max(200),
+}).strict();
+// Reenvio: sem `emails`, a todos os pendentes; com, só a esses (ex.: as falhas do envio).
+export const pedidoReenvioSchema = z.object({
+  emails: z.array(z.string().trim().email().max(320)).min(1).max(200).optional(),
+}).strict();
+// Rotas públicas do link: o token vem no CORPO, nunca na URL.
+const tokenPedido = z.string().min(1).max(200);
+export const pedidoTokenSchema = z.object({ token: tokenPedido }).strict();
+export const pedidoCienciaLinkSchema = z.object({
+  token: tokenPedido,
+  codigo: z.string().trim().regex(/^\d{6}$/),
+  nome: z.string().trim().min(2).max(200),
+}).strict();
+
 export const pedidoDecisaoSchema = z.object({
   senha: z.string().min(1).max(500),
   motivo: z.string().trim().max(2000).optional().nullable(),

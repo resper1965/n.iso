@@ -287,6 +287,38 @@
       </form>
     </div>
 
+    <!-- CIÊNCIA POR LINK PESSOAL (#token): ler o documento, receber o código e confirmar -->
+    <div class="card card-reader hidden" id="step-link">
+      <div class="title" id="link-titulo">Ciência de documento</div>
+      <div class="subtitle" id="link-sub"></div>
+      <div class="alert-box hidden" id="msg-link" role="status" aria-live="polite"></div>
+
+      <div id="link-leitura" class="hidden">
+        <div class="document-paper" id="link-documento"></div>
+        <div style="font-size: 0.75rem; color: var(--text-dim); margin: 0.75rem 0 0; word-break: break-all;">Versão (SHA-256): <span id="link-hash"></span></div>
+
+        <div class="ack-section" id="link-pendente">
+          <button type="button" class="btn-secondary" id="btn-link-codigo">Enviar código ao meu e-mail</button>
+          <form id="form-link-ciencia" class="hidden" style="margin-top: 1rem;" novalidate>
+            <div class="form-group">
+              <label for="link-nome">Seu nome completo</label>
+              <input type="text" id="link-nome" required maxlength="200" autocomplete="name" />
+            </div>
+            <div class="form-group">
+              <label for="link-codigo">Código de 6 dígitos enviado ao seu e-mail</label>
+              <input type="text" id="link-codigo" class="otp-input" inputmode="numeric" maxlength="6" required placeholder="000000" autocomplete="one-time-code" />
+            </div>
+            <label class="ack-checkbox">
+              <input type="checkbox" id="link-aceite" />
+              <span>Declaro que li integralmente, compreendi e concordo em cumprir este documento.</span>
+            </label>
+            <button type="submit" class="btn-primary" id="btn-link-confirmar" disabled style="opacity: 0.5;">Confirmar ciência</button>
+          </form>
+        </div>
+      </div>
+      <div class="signed-banner hidden" id="link-concluido"></div>
+    </div>
+
     <!-- ETAPA 3: CENTRAL DE LEITURA & CIÊNCIA -->
     <div class="card card-reader hidden" id="step-reader">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
