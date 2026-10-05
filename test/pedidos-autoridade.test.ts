@@ -43,6 +43,7 @@ beforeAll(async () => {
     ['a-ana', 'ana@cliente.com', 'Ana', 'stakeholder', P],
     ['a-multi', 'multi@cliente.com', 'Multi', 'stakeholder', P],
     ['a-gerente', 'gerente@cliente.com', 'Gil', 'stakeholder', P],
+    ['a-lc', 'lc@cliente.com', 'Lucas', 'stakeholder', P],
   ];
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES (?, 'Cliente', 'ISO 27701', 'controller', 'Active', 'org_ness')`).bind(P),
@@ -62,12 +63,16 @@ beforeAll(async () => {
       ('ag-multi1', ?1, 'Multi', 'multi@cliente.com', 'consultor', 'Consultor'),
       ('ag-multi2', ?1, 'Multi', 'multi@cliente.com', 'executivo', 'CISO'),
       ('ag-adm', ?1, 'Adm', 'adm@ness.lat', 'executivo', 'CISO'),
-      ('ag-gerente', ?1, 'Gil', 'gerente@cliente.com', 'operacional', 'Gerente de TI')`).bind(P, P2),
+      ('ag-gerente', ?1, 'Gil', 'gerente@cliente.com', 'operacional', 'Gerente de TI'),
+      ('ag-lc1', ?1, 'Lucas', 'lc@cliente.com', 'executivo', 'CEO'),
+      ('ag-lc2', ?1, 'Lucas', 'lc@cliente.com', 'executivo', 'Líder SGSI')`).bind(P, P2),
   ]);
   for (const [id, email, , papel, proj] of usuarios) {
     U[id] = { id, email, role: papel, client_project_id: proj, org_id: 'org_ness' };
     S[id] = await sessionFor(U[id]);
   }
+  await env.DB.prepare(`INSERT INTO organizations (id, name, slug) VALUES ('org_b', 'Consultoria B', 'b')`).run().catch(() => undefined);
+  U['a-cadmb'] = { id: 'a-cadmb', email: 'cadm@b.lat', role: 'consultoria_admin', client_project_id: null, org_id: 'org_b' };
 }, 60_000);
 
 const pedir = (h: Record<string, string>, papel: string, emails: string[], projeto = P) =>
@@ -89,7 +94,7 @@ describe('quem pede: uma regra só', () => {
   });
 
   it('podePedir: stakeholder, consultor de outro projeto, platform_admin e comercial recusam com motivo', async () => {
-    for (const id of ['a-dpo', 'a-cons2', 'a-adm', 'a-com']) {
+    for (const id of ['a-dpo', 'a-cons2', 'a-adm', 'a-com', 'a-cadmb']) {
       const motivo = await podePedir(env.DB, U[id], P);
       expect(motivo, id).toBeTruthy();
     }
@@ -131,6 +136,13 @@ describe('quem aprova, por papel exigido', () => {
     const ger = await aprovarComo('a-gerente', 'ceo');
     expect(ger.res.status).toBe(403);
     expect(ger.corpo.error).toContain('Direção');
+  });
+
+  it("linhas 'CEO' e 'Líder SGSI' da mesma pessoa: 'ceo' recusa (segregação olha todas as linhas), 'ciso' aprova", async () => {
+    const ceo = await aprovarComo('a-lc', 'ceo');
+    expect(ceo.res.status).toBe(403);
+    expect(ceo.corpo.error).toContain('Segregação de Funções');
+    expect((await aprovarComo('a-lc', 'ciso')).res.status).toBe(200);
   });
 
   it('platform_admin nunca aprova nem dá ciência, mesmo designado na matriz e destinatário', async () => {
