@@ -5,6 +5,7 @@ import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { MemoryService } from '../services/memory';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
+import { conferirPedidosDoDocumento } from './pedidos';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -67,6 +68,7 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(result.content, normId, controlId, projectId).run();
+    await conferirPedidosDoDocumento(c, 'politica', [normId, controlId], projectId);
 
     // Insert new version in policy_versions
     try {
@@ -376,6 +378,7 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
           await c.env.DB.prepare(
             'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
           ).bind(result.content, normId, controlId, projectId).run();
+          await conferirPedidosDoDocumento(c, 'politica', [normId, controlId], projectId);
 
           // Registrar histórico de versão
           try {
@@ -457,6 +460,7 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version',
   await c.env.DB.prepare(
     'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
   ).bind(row.policy_text, normId, controlIdRaw, projectId).run();
+  await conferirPedidosDoDocumento(c, 'politica', [normId, controlIdRaw], projectId);
   
   const countRow = await c.env.DB.prepare(
     'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
@@ -510,6 +514,7 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
     ).bind(text, canonicalId, projectId).run();
+    await conferirPedidosDoDocumento(c, 'politica', canonicalId, projectId);
 
     // Registra a nova versão no histórico
     const countRow = await c.env.DB.prepare(
@@ -588,6 +593,7 @@ policies.post('/api/v1/projects/:projectId/policies/generate-from-template', asy
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
     ).bind(markdown, normId, control_id, projectId).run();
+    await conferirPedidosDoDocumento(c, 'politica', [normId, control_id], projectId);
 
     // Insert new version in policy_versions
     try {

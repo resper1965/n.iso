@@ -3,11 +3,12 @@ import { Bindings, Variables } from '../index';
 import {
   logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
   type PapelAssinatura,
-  sendEmail, escapeHtml, genToken, sha256Hex,
+  sendEmail, escapeHtml, genToken, sha256Hex, registraErro,
 } from '../helpers';
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import {
   criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
+  substituirPedidosDoDocumento, type TipoPedido,
 } from '../services/pedidos';
 
 /**
@@ -24,6 +25,19 @@ import {
  */
 type Ctx = { Bindings: Bindings; Variables: Variables };
 type Usuario = Variables['user'];
+
+/**
+ * Documento gravado (política no controle, DPIA): confere na hora os pedidos abertos dele, para o
+ * substituto aparecer sem esperar alguém abrir o antigo. Não derruba a escrita que já aconteceu: se
+ * falhar, só registra; a conferência se repete ao abrir e ao decidir.
+ */
+export async function conferirPedidosDoDocumento(c: any, tipo: TipoPedido, refIds: string | string[], projectId?: string): Promise<void> {
+  try {
+    await substituirPedidosDoDocumento(c.env.DB, tipo, refIds, projectId);
+  } catch (e) {
+    registraErro(c, e);
+  }
+}
 
 export const pedidosApp = new Hono<Ctx>();
 export const projectPedidosApp = new Hono<Ctx>();

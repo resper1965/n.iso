@@ -4,6 +4,7 @@ import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiv
 import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
 import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
+import { conferirPedidosDoDocumento } from './pedidos';
 
 // Sub-router de controles, montado em /api/v1/controls (FORA de
 // /api/v1/projects/:projectId/*, portanto o projectAccessMiddleware não roda
@@ -119,6 +120,8 @@ controlsApp.put('/:id', async (c) => {
     updates.push("updated_at = datetime('now')");
     values.push(id);
     await c.env.DB.prepare(`UPDATE compliance_controls SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+    // Título e texto são o conteúdo do pedido de política (`DOCUMENTOS.politica`).
+    if (title || description !== undefined) await conferirPedidosDoDocumento(c, 'politica', id, atual.project_id);
 
     const ator = c.get('user')?.email ?? 'system';
 

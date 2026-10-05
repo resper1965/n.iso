@@ -330,6 +330,26 @@ describe('painel e reenvio', () => {
     expect((await chamar(consultor, 'POST', `/api/v1/projects/${P}/pedidos/${r.id}/reenviar`)).status).toBe(409);
   });
 
+  it('editar a política pelas rotas substitui o pedido na hora, sem esperar alguém abrir', async () => {
+    const statusDe = async (id: string) =>
+      (await env.DB.prepare('SELECT status, substituido_por FROM pedidos WHERE id = ?').bind(id).first<any>());
+    await resetPolitica();
+    const a = await lote(['ed1@cliente.com']);
+    const r1 = await chamar(consultor, 'POST', `/api/v1/projects/${P}/controls/${POL}/policy`, { text: 'Texto editado' });
+    expect(r1.status, await r1.clone().text()).toBe(200);
+    const s1 = await statusDe(a.id);
+    expect(s1.status).toBe('substituido');
+
+    const r2 = await chamar(consultor, 'PUT', `/api/v1/controls/${POL}`, { title: 'Política de Segurança v2' });
+    expect(r2.status, await r2.clone().text()).toBe(200);
+    expect((await statusDe(s1.substituido_por)).status).toBe('substituido');
+
+    // Escrita que não muda o conteúdo (responsável) não substitui.
+    const atual = (await statusDe(s1.substituido_por)).substituido_por;
+    expect((await chamar(consultor, 'PUT', `/api/v1/controls/${POL}`, { owner: 'Fulano' })).status).toBe(200);
+    expect((await statusDe(atual)).status).toBe('aberto');
+  });
+
   it('envio: falha passageira é tentada de novo; falha persistente fica em falhas', async () => {
     await resetPolitica();
     resendFalhaUmaVez = new Set(['passa@cliente.com']);
