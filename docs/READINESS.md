@@ -66,7 +66,7 @@
 
 Evidência de que produção reflete o `main` (não só "o deploy foi tentado"):
 
-- `GET https://niso.ness.workers.dev/health` → `{"status":"ok"}`.
+- `GET https://niso.ness.com.br/health` → `{"status":"ok"}`.
 - `/login` serve o shell contendo `nav-api-keys` → a **tela de API keys (#61)** está no ar.
 - O bundle `/assets/login-*.js` contém `openJornadaQuestionnaire` → o **questionário
   voltou** em produção (a regressão era produção defasada; o deploy automático corrigiu).
