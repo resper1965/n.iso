@@ -76,10 +76,18 @@ describe('API hardening (triagem de defeitos)', () => {
     expect(ev.evaluation_score).toBeNull();
   });
 
-  it('5b) PUT /evidence/:id para controle de OUTRO projeto → 403 (aterramento)', async () => {
+  it('5b) PUT /evidence/:id para controle de OUTRO projeto → recusado como inexistente (aterramento)', async () => {
     const res = await req('PUT', '/api/v1/evidence/ev-1', { control_id: 'ctrl-p2' });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
+    const corpoAlheio = await res.json();
     const ev = await env.DB.prepare("SELECT control_id FROM evidence WHERE id='ev-1'").first<any>();
     expect(ev.control_id).toBe('ctrl-1'); // inalterado
+
+    // Mesma resposta, byte a byte, para id que não existe: o status e o texto
+    // não podem revelar que `ctrl-p2` existe em outro tenant.
+    const inexistente = await req('PUT', '/api/v1/evidence/ev-1', { control_id: 'ctrl-nao-existe' });
+    expect(inexistente.status).toBe(400);
+    expect(await inexistente.json()).toEqual(corpoAlheio);
+    expect(corpoAlheio).toEqual({ error: 'Controle não encontrado neste projeto' });
   });
 });
