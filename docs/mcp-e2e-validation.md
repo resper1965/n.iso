@@ -26,7 +26,7 @@ buildado (`cd mcp-server-niso && npm run build`):
       "args": ["<path>/mcp-server-niso/build/index.js"],
       "env": {
         "NISO_API_KEY": "<chave-e2e-consultor>",
-        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_BASE_URL": "https://niso.ness.com.br",
         "NISO_ROLE": "consultant",
         "NISO_PROJECT_ID": "<id-do-projeto-de-teste>"
       }
@@ -36,7 +36,7 @@ buildado (`cd mcp-server-niso && npm run build`):
       "args": ["<path>/mcp-server-niso/build/index.js"],
       "env": {
         "NISO_API_KEY": "<chave-e2e-auditor>",
-        "NISO_BASE_URL": "https://niso.ness.workers.dev",
+        "NISO_BASE_URL": "https://niso.ness.com.br",
         "NISO_ROLE": "auditor"
       }
     }
@@ -83,7 +83,7 @@ recusas (casos 3 e 7) valem mesmo sem auditoria/controle real — bastam as chav
 e o id do projeto.
 
 ```bash
-NISO_BASE_URL=https://niso.ness.workers.dev \
+NISO_BASE_URL=https://niso.ness.com.br \
 PROJ=<id-do-projeto-de-teste> \
 KEY_CONSULTANT=<chave-e2e-consultor> \
 KEY_AUDITOR=<chave-e2e-auditor> \

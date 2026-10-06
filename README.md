@@ -1,8 +1,8 @@
 # nISO — Agentic GRC System
 
-[![CI](https://github.com/resper1965/nISO/actions/workflows/ci.yml/badge.svg)](https://github.com/resper1965/nISO/actions/workflows/ci.yml)
-[![Deploy](https://github.com/resper1965/nISO/actions/workflows/deploy.yml/badge.svg)](https://github.com/resper1965/nISO/actions/workflows/deploy.yml)
-[![CodeQL](https://github.com/resper1965/nISO/actions/workflows/codeql.yml/badge.svg)](https://github.com/resper1965/nISO/actions/workflows/codeql.yml)
+[![CI](https://github.com/resper1965/n.iso/actions/workflows/ci.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/ci.yml)
+[![Deploy](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml)
+[![CodeQL](https://github.com/resper1965/n.iso/actions/workflows/codeql.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/codeql.yml)
 ![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)
 ![Stack](https://img.shields.io/badge/stack-Cloudflare%20Workers%20%2B%20D1%20%2B%20R2-f38020.svg)
 
@@ -11,8 +11,8 @@ Aplicabilidade, matriz de risco, cofre de evidências e trilha de auditoria. É 
 evolução do sistema de adequação da **ness.**, reescrito numa arquitetura
 agêntica e serverless sobre a stack da Cloudflare.
 
-> **Produção:** [`niso.ness.com.br`](https://niso.ness.com.br) — também
-> respondendo em `n-iso.ness.com.br` e `niso.ness.workers.dev`.
+> **Produção:** [`niso.ness.com.br`](https://niso.ness.com.br). Os hosts antigos
+> `n-iso.ness.com.br` e `niso.ness.workers.dev` redirecionam (308) para ele.
 > `GET /health` devolve o SHA do commit publicado, e é assim que se confere o
 > que está no ar.
 
@@ -98,7 +98,7 @@ npm run deploy                                      # build do frontend + wrangl
 Depois de publicar, confira o que está no ar:
 
 ```bash
-curl -s https://n-iso.ness.com.br/health
+curl -s https://niso.ness.com.br/health
 ```
 
 ## Automação

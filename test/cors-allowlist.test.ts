@@ -19,9 +19,9 @@ describe('CORS allowlist (S3)', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('https://niso.ness.com.br');
   });
 
-  it('permite o domínio alternativo', async () => {
+  it('NÃO permite o domínio legado (ele redireciona 308 para o canônico)', async () => {
     const res = await req('https://n-iso.ness.com.br');
-    expect(res.headers.get('access-control-allow-origin')).toBe('https://n-iso.ness.com.br');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
   it('permite loopback localhost (dev Vite) em qualquer porta', async () => {
