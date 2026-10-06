@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
@@ -1031,12 +1031,14 @@ projectsApp.post('/:id/dpia', async (c) => {
     const valid = await validateBody(c, dpiaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['ropa_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = genId();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       `INSERT INTO dpia_assessments (id, project_id, ropa_id, processing_name, data_category_risk, necessity_proportionality, technical_measures, residual_risk_level, dpo_recommendations, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?)`
-    ).bind(id, projectId, body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, now).run();
+    ).bind(id, projectId, body.ropa_id || null, body.processing_name ?? null, body.data_category_risk ?? null, body.necessity_proportionality ?? null, body.technical_measures ?? null, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, now).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`, '', '', projectId);
     return c.json({ ok: true, id }, 201);

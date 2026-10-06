@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, erro500, ForbiddenError } from '../helpers';
+import { genId, logAudit, requireResourceAccess, erro500, ForbiddenError, refForaDoProjeto } from '../helpers';
 import { validateBody, createRiskSchema, riskUpdateSchema } from '../schemas';
 
 const risks = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -16,7 +16,7 @@ risks.get('/api/v1/projects/:projectId/risks', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
      FROM risks r 
-     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
+     LEFT JOIN compliance_controls cc ON r.control_id = cc.id AND cc.project_id = r.project_id
      WHERE r.project_id = ? 
      ORDER BY r.impact * r.probability DESC`
   ).bind(c.req.param('projectId')).all();
@@ -29,6 +29,8 @@ risks.post('/api/v1/projects/:projectId/risks', async (c) => {
     const valid = await validateBody(c, createRiskSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['control_id', 'asset_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = genId();
     const impact = body.impact ?? 3;
     const probability = body.probability ?? 3;
@@ -40,7 +42,7 @@ risks.post('/api/v1/projects/:projectId/risks', async (c) => {
     ).bind(
       id,
       projectId,
-      body.asset_id ?? null,
+      body.asset_id || null,
       body.asset,
       body.threat,
       body.vulnerability ?? null,
@@ -49,7 +51,7 @@ risks.post('/api/v1/projects/:projectId/risks', async (c) => {
       level,
       body.treatment ?? 'Mitigate',
       body.treatment_plan ?? null,
-      body.control_id ?? null,
+      body.control_id || null,
       body.owner ?? null,
       body.accepted_by ?? null,
       body.accepted_at ?? null
@@ -101,11 +103,14 @@ risks.put('/api/v1/risks/:id', async (c) => {
     // Buscar o project_id para registrar no histórico
     const currentRisk = await c.env.DB.prepare('SELECT project_id FROM risks WHERE id = ?').bind(id).first() as any;
     const projectId = currentRisk?.project_id;
+    // O projeto vem do risco gravado, nunca do corpo.
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['control_id', 'asset_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
 
     await c.env.DB.prepare(
       `UPDATE risks SET asset_id=?, asset=?, threat=?, vulnerability=?, impact=?, probability=?, risk_level=?, treatment=?, treatment_plan=?, control_id=?, owner=?, status=?, accepted_by=?, accepted_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
     ).bind(
-      body.asset_id ?? null,
+      body.asset_id || null,
       body.asset,
       body.threat,
       body.vulnerability ?? null,
@@ -114,7 +119,7 @@ risks.put('/api/v1/risks/:id', async (c) => {
       level,
       body.treatment ?? 'Mitigate',
       body.treatment_plan ?? null,
-      body.control_id ?? null,
+      body.control_id || null,
       body.owner ?? null,
       body.status ?? 'Open',
       body.accepted_by ?? null,

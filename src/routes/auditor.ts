@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, refForaDoProjeto } from '../helpers';
 import { validateBody, auditorNoteSchema, auditorResponseSchema } from '../schemas';
 
 export const auditorApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -34,7 +34,9 @@ auditorApp.post('/auditor/:token/notes', async (c) => {
     if (!v.success) return v.response;
     const { control_id, note_type, content } = v.data as any;
     if (!content) return c.json({ error: 'content is required' }, 400);
-    
+    const fora = await refForaDoProjeto(c.env.DB, t.project_id, { control_id }, ['control_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
+
     const id = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
     await c.env.DB.prepare(`
       INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content)

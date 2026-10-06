@@ -104,17 +104,20 @@ export const audiUpdateSchema = z.object({
   notes: opcional,
 }).passthrough();
 
+// Sem o transform de `opcional`: o PUT é parcial (setParcial) e precisa distinguir campo ausente
+// (preserva) de null explícito (limpa). Com o transform, todo ausente chegava como null.
+const parcial = z.string().nullish();
 export const capaUpdateSchema = z.object({
-  audit_id: opcional,
-  risk_id: opcional,
-  control_id: opcional,
+  audit_id: parcial,
+  risk_id: parcial,
+  control_id: parcial,
   title: z.string().min(1, 'Título é obrigatório'),
-  description: opcional,
-  severity: opcional,
-  assigned_to: opcional,
-  due_date: opcional,
+  description: parcial,
+  severity: parcial,
+  assigned_to: parcial,
+  due_date: parcial,
   status: z.string().min(1, 'Status é obrigatório'),
-  resolution: opcional,
+  resolution: parcial,
 }).passthrough();
 
 export const trainingUpdateSchema = z.object({
