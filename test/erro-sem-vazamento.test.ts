@@ -331,13 +331,13 @@ describe('catraca: mensagem de exceção em resposta de src/routes', () => {
   });
 
   // Cada padrão é de uma linha só. Cobre:
-  //  - `detail: e.message` e `detail: result.content` (o content de agente com
-  //    success:false carrega o erro cru do provedor de IA);
+  //  - `detail(s): e.message` e `detail(s): result.content` (o content de
+  //    agente com success:false carrega o erro cru do provedor de IA);
   //  - `${e.message}` interpolado em resposta (HTML ou JSON);
   //  - `error: e.message` numa resposta 5xx (o 403 de ForbiddenError/Recusa
   //    devolve a própria mensagem de propósito e fica de fora).
   const PADROES = [
-    /detail:\s*\w+\??\.(message|content)\b/,
+    /details?:\s*\w+\??\.(message|content)\b/,
     /\$\{\s*(e|err|error)\??\.message\s*\}/,
     /error:\s*(e|err|error)\??\.message\b.*\b5\d\d\s*\)/,
   ];
@@ -352,6 +352,8 @@ describe('catraca: mensagem de exceção em resposta de src/routes', () => {
     for (const linha of [
       "return c.json({ error: 'x', detail: e.message }, 500);",
       "return c.json({ error: 'x', detail: result.content }, 500);",
+      "return c.json({ error: 'x', details: result.content }, 500);",
+      "return c.json({ error: 'x', details: err.message }, 500);",
       'return c.html(`<h3>Erro: ${e.message}</h3>`, 500);',
       'return c.json({ ok: false, error: e.message }, 502);',
     ]) expect(PADROES.some((p) => p.test(linha)), linha).toBe(true);
