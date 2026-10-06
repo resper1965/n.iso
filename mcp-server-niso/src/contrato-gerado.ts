@@ -33,7 +33,6 @@ export const ROTAS = {
   'POST /api/v1/leads/{id}/enrich-cnpj': { obrigatorios: ['cnpj'] },
   'POST /api/v1/legal/accept': { obrigatorios: ['documentIds'] },
   'POST /api/v1/legal/documents': { obrigatorios: ['classification', 'kind', 'title', 'version'] },
-  'POST /api/v1/mcp/execute': { obrigatorios: ['tool'] },
   'POST /api/v1/pedidos/{id}/aprovar': { obrigatorios: ['senha'] },
   'POST /api/v1/pedidos/{id}/recusar': { obrigatorios: ['senha'] },
   'POST /api/v1/platform/orgs': { obrigatorios: ['adminEmail', 'adminNome', 'maxProjetos', 'maxUsuarios', 'nome', 'prefixoProposta', 'slug', 'termoVersao'] },

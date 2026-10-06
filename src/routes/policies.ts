@@ -4,7 +4,6 @@ import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
 import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
-import { MemoryService } from '../services/memory';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 import { conferirPedidosDoDocumento } from './pedidos';
 
@@ -36,24 +35,13 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
       orgMemory = (answers || []).map(a => `${a.question_key}: ${a.answer}`).join('\n');
     }
 
-    // ponytail: RAG memory — retrieve prior policies + client documents for context
-    let ragContext = '';
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      const policyCtx = await memory.retrieveContext(projectId, `policy ${controlId}`, 'policy', 3);
-      // Sem filtro de tipo: documentos ingeridos pelo KnowledgeService são classificados
-      // como interview/procedure/evidence/etc., não 'client_doc'.
-      const clientCtx = await memory.retrieveContext(projectId, `${controlId} organograma sistemas ativos seguranca`, undefined, 3);
-      ragContext = [policyCtx, clientCtx].filter(Boolean).join('\n---\n');
-    } catch(e) { /* vectorize may not be populated yet */ }
-
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const result = await agent.run(
       `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
       {
         organizationId: projectId,
         controlId,
-        organizationalMemory: [orgMemory, ragContext].filter(Boolean).join('\n---\n') || undefined,
+        organizationalMemory: orgMemory || undefined,
       }
     );
 
@@ -61,12 +49,6 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
       // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
       return erro500(c, 'Falha ao gerar política', new Error(result.content));
     }
-
-    // ponytail: store generated policy in RAG for future context
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      await memory.storeFact(projectId, `Política ${controlId}: ${result.content.substring(0, 500)}`, 'policy', { controlId });
-    } catch(e) { /* non-blocking */ }
 
     // Save policy markdown directly to compliance_controls.description
     const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -154,13 +136,6 @@ policies.post('/api/v1/projects/:projectId/generate-document', async (c) => {
       } catch(e) { /* ignore database error */ }
     }
 
-    // ponytail: RAG context for richer generation
-    let ragContext = '';
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      ragContext = await memory.retrieveContext(projectId, `${item.text} ${fieldsSummary.substring(0, 200)}`, 'policy', 3) || '';
-    } catch(e) { /* vectorize may not be populated yet */ }
-
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const prompt = `Gere um documento completo em formato markdown para "${item.text}" da organização "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).
 
@@ -168,8 +143,6 @@ DADOS FORNECIDOS PELO USUÁRIO:
 ${fieldsSummary}
 
 ${interviewsSummary ? '\nDADOS COLETADOS NAS ENTREVISTAS POR TRILHA:\n' + interviewsSummary + '\n' : ''}
-
-${ragContext ? 'CONTEXTO ADICIONAL DA ORGANIZAÇÃO:\n' + ragContext + '\n' : ''}
 
 REQUISITOS:
 - Documento profissional, completo e pronto para auditoria ISO 27001:2022
@@ -234,12 +207,6 @@ policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
          is_checked = 1, checked_by = EXCLUDED.checked_by, checked_at = CURRENT_TIMESTAMP,
          evidence_id = EXCLUDED.evidence_id, notes = EXCLUDED.notes`
     ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
-
-    // Store in RAG
-    try {
-      const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-      await memory.storeFact(projectId, `Doc aprovado ${item.text}: ${content.substring(0, 500)}`, 'policy', { itemId });
-    } catch(e) { /* non-blocking */ }
 
     await logAudit(c.env.DB, 'document.approved', userEmail, `Documento "${fileName}" aprovado via wizard para item ${itemId}`);
 
@@ -361,18 +328,12 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
     // ponytail: sequential to respect Cloudflare AI rate limits
     for (const controlId of controlIds) {
       try {
-        let ragContext = '';
-        try {
-          const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-          ragContext = await memory.retrieveContext(projectId, `policy ${controlId}`, 'policy', 3);
-        } catch (_) { /* vectorize may not be populated yet */ }
-
         const result = await agent.run(
           `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
           {
             organizationId: projectId,
             controlId,
-            organizationalMemory: [orgMemory, ragContext].filter(Boolean).join('\n---\n') || undefined,
+            organizationalMemory: orgMemory || undefined,
           }
         );
 
@@ -401,10 +362,6 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
           }
 
           await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Bulk policy generated: ${controlId}, project ${projectId}`);
-          try {
-            const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
-            await memory.storeFact(projectId, `Política ${controlId}: ${result.content.substring(0, 500)}`, 'policy', { controlId });
-          } catch (_) { /* non-blocking */ }
           policies.push({ control_id: controlId, success: true, content_preview: result.content.substring(0, 200) });
         } else {
           failed++;

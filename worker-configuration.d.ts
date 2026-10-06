@@ -5,7 +5,6 @@ interface __BaseEnv_Env {
 	SESSIONS: KVNamespace;
 	STORAGE: R2Bucket;
 	DB: D1Database;
-	VECTOR_INDEX: VectorizeIndex;
 	ANALYTICS: AnalyticsEngineDataset;
 	AI: Ai;
 	ASSETS: Fetcher;

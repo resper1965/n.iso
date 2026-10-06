@@ -234,12 +234,6 @@ export const gerarPoliticaSchema = z.object({
   controlId: idOpcional,
 }).passthrough();
 
-export const ingestSchema = z.object({
-  title: curto,
-  content: longo.min(1),
-  source: curtoOpcional,
-}).passthrough();
-
 // ─── Auditor externo ─────────────────────────────────────────────────────────
 export const auditorNoteSchema = z.object({
   control_id: curtoOpcional,
