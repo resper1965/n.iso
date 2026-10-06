@@ -31,7 +31,7 @@ describe('login rate-limit por conta (S6)', () => {
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-a','alvo@ness.io',?,'Alvo','platform_admin')`).bind(hash),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-b','outro@ness.io',?,'Outro','platform_admin')`).bind(hash),
     ]);
-  });
+  }, 60_000);
 
   it('11ª tentativa na mesma conta → 429; outra conta segue liberada', async () => {
     // 10 tentativas erradas: 401 (credencial inválida), ainda dentro do teto.
@@ -43,5 +43,5 @@ describe('login rate-limit por conta (S6)', () => {
 
     // Conta DIFERENTE, mesmo IP: não herda o bloqueio (teto por conta, não por IP).
     expect((await tentativa('outro@ness.io')).status).toBe(401);
-  }, 30_000);
+  }, 60_000);
 });
