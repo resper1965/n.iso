@@ -91,3 +91,40 @@ describe('riscos: control_id e asset_id do corpo', () => {
   });
 });
 
+describe('CAPA: audit_id, risk_id e control_id do corpo', () => {
+  // Corpo completo: campo ausente vira `undefined` no bind, que o D1 recusa (500) — defeito à parte.
+  const base = { title: 'Corrigir', description: 'd', severity: 'High', assigned_to: 'x@a.com', due_date: '2026-12-31', status: 'Open' };
+
+  it('POST recusa as três referências de outro projeto, sem gravar', async () => {
+    for (const [campo, alheio] of [['audit_id', 'au-b'], ['risk_id', 'r-b'], ['control_id', 'ctl-b']]) {
+      await recusa(`/api/v1/projects/${A}/capa`, 'POST', base, campo, alheio);
+    }
+    expect(await conta(`SELECT COUNT(*) n FROM corrective_actions`)).toBe(1);
+  });
+
+  it('PUT recusa as três referências de outro projeto, sem alterar', async () => {
+    for (const [campo, alheio] of [['audit_id', 'au-b'], ['risk_id', 'r-b'], ['control_id', 'ctl-b']]) {
+      await recusa('/api/v1/capa/capa-a', 'PUT', base, campo, alheio);
+    }
+    const c = await env.DB.prepare(`SELECT audit_id, risk_id, control_id, title FROM corrective_actions WHERE id = 'capa-a'`).first();
+    expect(c).toEqual({ audit_id: null, risk_id: null, control_id: null, title: 'CAPA A' });
+  });
+
+  it('B apagar o próprio risco não apaga CAPA de A (o cascade não alcança)', async () => {
+    await req(`/api/v1/projects/${A}/capa`, 'POST', { ...base, risk_id: 'r-b' });
+    await req('/api/v1/capa/capa-a', 'PUT', { ...base, risk_id: 'r-b' });
+    const hb = await sessionFor({ id: 'u-b', email: 'adm@b.com', role: 'org_admin', client_project_id: 'proj-b' });
+    const del = await pedir(worker, '/api/v1/risks/r-b', { method: 'DELETE', headers: hb });
+    expect(del.status).toBe(200);
+    expect(await conta(`SELECT COUNT(*) n FROM corrective_actions WHERE project_id = 'proj-a'`)).toBe(1);
+  });
+
+  it('legítimo: referências do próprio projeto e nenhuma', async () => {
+    const corpo = { ...base, audit_id: 'au-a', risk_id: 'r-a', control_id: 'ctl-a' };
+    expect((await req(`/api/v1/projects/${A}/capa`, 'POST', corpo)).status).toBe(201);
+    expect((await req(`/api/v1/projects/${A}/capa`, 'POST', base)).status).toBe(201);
+    expect((await req('/api/v1/capa/capa-a', 'PUT', corpo)).status).toBe(200);
+    expect(await env.DB.prepare(`SELECT risk_id FROM corrective_actions WHERE id = 'capa-a'`).first()).toEqual({ risk_id: 'r-a' });
+  });
+});
+
