@@ -4,7 +4,7 @@ import app from '../src/index';
 import { applySchema, sessionFor, seedTwoProjects } from './helpers/d1';
 import {
   projetoCriarSchema, projetoAtualizarSchema, revogarAprovacaoSchema, assessmentRespostasPublicasSchema,
-  assessmentPrecoSchema, documentoGerarSchema, precificacaoConfigSchema, mcpExecutarSchema, metricaCriarSchema,
+  assessmentPrecoSchema, documentoGerarSchema, precificacaoConfigSchema, metricaCriarSchema,
 } from '../src/schemas';
 
 /**
@@ -42,8 +42,6 @@ describe('Schemas de corpo (T3)', () => {
     expect(precificacaoConfigSchema.safeParse({ tetoDesconto: 10 }).success).toBe(true);
     expect(precificacaoConfigSchema.safeParse([1, 2]).success).toBe(false);
     expect(precificacaoConfigSchema.safeParse('x').success).toBe(false);
-    expect(mcpExecutarSchema.safeParse({ tool: 't', arguments: { project_id: 'p' } }).success).toBe(true);
-    expect(mcpExecutarSchema.safeParse({ tool: 't', arguments: 'p' }).success).toBe(false);
     expect(metricaCriarSchema.safeParse({ metric_name: 'm', target_value: '10' }).success).toBe(false);
   });
 });

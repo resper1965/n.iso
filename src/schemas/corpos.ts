@@ -169,10 +169,3 @@ export const evidenciaAssinarSchema = z.object({
   password: z.string().max(500).optional(),
   role: z.string().max(20).optional().nullable(),
 });
-
-// ─── ai ─────────────────────────────────────────────────────────────────────
-/** Envelope do MCP: o corpo de `arguments` é polimórfico por ferramenta. */
-export const mcpExecutarSchema = z.object({
-  tool: z.string().max(100),
-  arguments: z.record(z.string(), z.unknown()).optional(),
-});

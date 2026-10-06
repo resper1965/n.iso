@@ -14,7 +14,7 @@ const IDS_SIDEBAR = [
     'nav-project', 'nav-monitor', 'nav-soa', 'nav-governance', 'nav-stakeholders',
     'nav-context', 'nav-assets', 'nav-risks', 'nav-vendors', 'nav-training',
     'nav-acknowledgments', 'nav-policies', 'nav-audits', 'nav-capa', 'nav-mgmt',
-    'nav-evidence', 'nav-ropa', 'nav-dpia', 'nav-ai', 'nav-knowledge',
+    'nav-evidence', 'nav-ropa', 'nav-dpia', 'nav-ai',
     'nav-audit-trail', 'nav-users', 'nav-settings',
 ];
 
@@ -25,7 +25,7 @@ const VIEWS = [
     'renderMonitor', 'renderAssets', 'renderMetrics', 'renderAuditTrail', 'renderAcknowledgments',
     'renderPoliciesDashboard', 'renderRisks', 'renderVendors', 'renderTraining', 'renderROPA',
     'renderDPIA', 'renderAudits', 'renderCAPA', 'renderEvidence', 'renderControls',
-    'renderGovernance', 'renderCertification', 'renderAIChat', 'renderKnowledge', 'renderSettings',
+    'renderGovernance', 'renderCertification', 'renderAIChat', 'renderSettings',
     'renderUsers', 'renderAssessmentDetail', 'renderSelfServiceAssessment', 'renderProjectDetail',
     'renderSoA', 'renderStakeholders', 'renderContext', 'renderAuditExecution',
     'renderManagementReview', 'renderPropostas', 'updateActiveProjectWidget', 'updateHeaderUser',
