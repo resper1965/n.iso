@@ -20,9 +20,9 @@
     "@cloudflare/vitest-pool-workers": "^0.20.3",
     "@cloudflare/workers-oauth-provider": "^1.2.1",
     "@modelcontextprotocol/server": "^2.0.0",
-    "agents": "^0.24.0",
+    "agents": "^0.26.0",
     "docx": "^9.8.1",
-    "hono": "^4.13.11",
+    "hono": "^4.13.12",
     "typescript": "^5.5.2",
     "wrangler": "^4.107.0",
     "zod": "^4.6.5"
