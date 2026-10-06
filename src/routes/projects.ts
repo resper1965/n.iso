@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../index';
 
 import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
-import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
+import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
@@ -583,7 +583,15 @@ projectsApp.get('/:id/interviews/:track', async (c) => {
   const projectId = c.req.param('id');
   const track = c.req.param('track');
   const result = await c.env.DB.prepare('SELECT * FROM project_interviews WHERE project_id = ? AND track = ? ORDER BY id ASC').bind(projectId, track).all();
-  return c.json({ ok: true, interviews: result.results });
+  // `questions` é o que a tela de entrevistas lê: o banco de perguntas da trilha, com a última
+  // resposta salva (casada pelo texto da pergunta) quando houver.
+  const salvas = new Map<string, { question: string; answer: string; interviewee: string | null; gap_detected: number | string }>();
+  for (const r of result.results as { question: string; answer: string; interviewee: string | null; gap_detected: number | string }[]) salvas.set(r.question, r);
+  const questions = (INTERVIEW_TRACKS[track] || []).map((q) => {
+    const s = salvas.get(q.question);
+    return s ? { ...q, answer: s.answer, interviewee: s.interviewee, gap_detected: Number(s.gap_detected) } : q;
+  });
+  return c.json({ ok: true, interviews: result.results, questions });
 });
 
 projectsApp.post('/:id/interviews', async (c) => {

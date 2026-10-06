@@ -182,17 +182,6 @@ import { navigate } from '../router.js';
         } catch(e) { alert('Erro: ' + e.message); }
     }
 
-    async function downloadExecutiveReport(projectId) {
-        try {
-            const data = await api('GET', `/api/v1/projects/${projectId}/executive-report`);
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `executive-report-${projectId}.json`; a.click();
-            URL.revokeObjectURL(url);
-        } catch(e) { alert('Erro: ' + e.message); }
-    }
-
     async function showGapAnalysis(projectId) {
         try {
             const data = await api('GET', `/api/v1/projects/${projectId}/gap-analysis`);
@@ -1860,7 +1849,6 @@ window.__monDeleteMetric = (id) => {
 window.renderMonitor = renderMonitor;
 window.renderPortfolio = renderPortfolio;
 window.exportCSV = exportCSV;
-window.downloadExecutiveReport = downloadExecutiveReport;
 window.showGapAnalysis = showGapAnalysis;
 window.renderCertification = renderCertification;
 window.initCertification = initCertification;
