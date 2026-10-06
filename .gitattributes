@@ -3,3 +3,7 @@
 # autocrlf do Windows quebra o parser. SQL e sempre LF.
 *.sql text eol=lf
 migrations/** text eol=lf
+# Artefatos gerados: byte a byte iguais entre Windows e Linux, senao o teste de
+# contrato que compara o gerado com o versionado falha so na maquina local.
+docs/openapi.json text eol=lf
+mcp-server-niso/src/contrato-gerado.ts text eol=lf

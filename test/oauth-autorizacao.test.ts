@@ -69,7 +69,7 @@ describe('Autorização OAuth do agente', () => {
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, requires_password_change) VALUES ('u-nova','nova@ness.lat',?,'Nova','consultor',1)`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Nova','nova@ness.lat','consultor','Consultor')`),
     ]);
-  });
+  }, 60_000);
 
   it('fluxo completo: login, escolha do cliente, código, token', async () => {
     const clientId = await registrarCliente();

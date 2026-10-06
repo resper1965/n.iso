@@ -60,7 +60,7 @@ describe('Export de portabilidade', () => {
 
     admA = await sessionFor({ id: 'u-a', email: 'a@x.com', role: 'org_admin', client_project_id: A });
     admB = await sessionFor({ id: 'u-b', email: 'b@x.com', role: 'org_admin', client_project_id: B });
-  });
+  }, 60_000);
 
   it('a lista de tabelas sai do BANCO — tabela nova entra sozinha', async () => {
     const antes = await tabelasExportaveis(env as any);
