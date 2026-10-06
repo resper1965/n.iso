@@ -19,7 +19,7 @@ type Regra = { teste: (p: string) => boolean; max: number; janelaSec: number; no
 
 const REGRAS: Regra[] = [
   // Inferência custa por token e é o caminho mais caro do produto.
-  { nome: 'ia', teste: p => /\/(chat|generate-policy|generate-policies-bulk|generate-soa|migrate-27701|evaluate|ingest)$/.test(p), max: 30, janelaSec: 3600 },
+  { nome: 'ia', teste: p => /\/(chat|generate-policy|generate-policies-bulk|migrate-27701|evaluate|ingest)$/.test(p), max: 30, janelaSec: 3600 },
   // Upload: o teto de tamanho já existe por arquivo; isto limita o volume.
   { nome: 'upload', teste: p => p.endsWith('/upload'), max: 100, janelaSec: 3600 },
   // Export varre tabelas inteiras.
