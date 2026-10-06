@@ -18,7 +18,7 @@ controla quem entra. Um `org_admin` que pudesse configurá-lo passaria a poder
 emitir token para qualquer e-mail do domínio.
 
 ```bash
-curl -X PUT https://niso.ness.workers.dev/api/v1/projects/<id>/sso \
+curl -X PUT https://niso.ness.com.br/api/v1/projects/<id>/sso \
   -H "Authorization: Bearer <sessao-ness>" -H "Content-Type: application/json" \
   -d '{
     "issuer": "https://login.microsoftonline.com/<tenant>/v2.0",
@@ -33,8 +33,14 @@ curl -X PUT https://niso.ness.workers.dev/api/v1/projects/<id>/sso \
 No IdP, o **redirect URI** é:
 
 ```
-https://niso.ness.workers.dev/api/v1/public/sso/callback
+https://niso.ness.com.br/api/v1/public/sso/callback
 ```
+
+É sempre este endereço, qualquer que seja o host pelo qual se acessou o n.iso
+(`APP_URL`, em `src/config/url.ts`). IdP que tinha cadastrado o callback em
+`niso.ness.workers.dev` ou `n-iso.ness.com.br` precisa trocar para este: os
+hosts antigos agora redirecionam (308) e o `redirect_uri` enviado ao IdP é o
+canônico, que não casaria com o cadastro antigo.
 
 `papel_padrao` só aceita papel de cliente. Papel de plataforma é recusado com
 400 — provisionamento automático não pode criar acesso de plataforma.
@@ -64,9 +70,9 @@ errado" ajuda quem ataca mais do que quem tenta entrar.
 ## Configurar o SCIM
 
 ```bash
-curl -X POST https://niso.ness.workers.dev/api/v1/projects/<id>/scim-token \
+curl -X POST https://niso.ness.com.br/api/v1/projects/<id>/scim-token \
   -H "Authorization: Bearer <sessao-ness>"
-# → { "token": "scim_...", "base_url": "https://niso.ness.workers.dev/scim/v2" }
+# → { "token": "scim_...", "base_url": "https://niso.ness.com.br/scim/v2" }
 ```
 
 O token aparece **uma vez** e é guardado só como hash. Emitir de novo substitui

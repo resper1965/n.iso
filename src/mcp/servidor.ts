@@ -4,6 +4,7 @@ import { TOOLS, ferramentaPermitida, executarFerramenta, type Transporte, type F
 import { concessaoValida, CABECALHO_CONFIRMADO, type PropsAgente } from '../middleware/agente';
 import { INSTRUCOES, montarContexto } from './contexto';
 import { SKILLS } from './skills-gerado';
+import { appUrl } from '../config/url';
 
 type FetchHono = (r: Request, e: any, c?: any) => Response | Promise<Response>;
 
@@ -235,6 +236,16 @@ export async function handlerMcp(req: Request, env: any, ctx: any, fetchHono: Fe
   return createMcpHandler(criar, {
     route: '/mcp',
     responseMode: 'json',
-    allowedHostnames: ['niso.ness.com.br', 'n-iso.ness.com.br', 'niso.ness.workers.dev', 'localhost', '127.0.0.1'],
+    allowedHostnames: hostsPermitidosMcp(env),
   })(req, env, ctx);
 }
+
+/**
+ * Hosts aceitos pelo /mcp (proteção contra DNS rebinding): só o do `APP_URL`. Os legados redirecionam
+ * antes de chegar aqui. Loopback só fora de produção — o dev local roda com ENVIRONMENT=production
+ * (wrangler.jsonc) e, para testar o MCP em localhost, usa `--var ENVIRONMENT:development`.
+ */
+export const hostsPermitidosMcp = (env: { APP_URL?: string; ENVIRONMENT?: string }) => [
+  new URL(appUrl(env)).hostname,
+  ...(env.ENVIRONMENT === 'production' ? [] : ['localhost', '127.0.0.1']),
+];

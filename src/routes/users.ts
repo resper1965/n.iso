@@ -3,6 +3,7 @@ import { Bindings, Variables } from '../index';
 
 import { genId, hashPassword, logAudit, sendEmail, escapeHtml, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, erro500, ehConsultor, ehAdminDaOrg, consultorDesignado, PROJETOS_DO_CONSULTOR_SQL, PAPEIS_EQUIPE_ORG } from '../helpers';
 import { validateBody, createUserSchema, updateUserSchema } from '../schemas';
+import { appUrl } from '../config/url';
 import { orgDoUsuario, resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_USUARIOS } from '../services/organizacao';
 
 export const usersApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -124,7 +125,7 @@ export function enviarBoasVindas(c: any, email: string, name: string, password: 
         </div>
         <p style="color: #ff3b30; font-size: 0.85rem;">* Por motivos de segurança, você deverá redefinir sua senha obrigatoriamente no primeiro login.</p>
         <p style="margin-top: 25px;">
-          <a href="https://niso.ness.com.br" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no n.iso</a>
+          <a href="${appUrl(c.env)}" style="background-color: #00ade8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Entrar no n.iso</a>
         </p>
       </div>
     `;

@@ -46,7 +46,7 @@ fabricar exports falsos anularia o objetivo.
 Com Ed25519 a chave privada nunca sai do Worker; a pública é publicada:
 
 ```bash
-curl https://niso.ness.workers.dev/api/v1/public/export-public-key
+curl https://niso.ness.com.br/api/v1/public/export-public-key
 # {"alg":"Ed25519","chave":{"kty":"OKP","crv":"Ed25519","x":"..."}}
 ```
 
@@ -59,7 +59,7 @@ que a chave servida é a mesma que o repositório declara.
 // Node 22+, sem dependência
 import { webcrypto as c } from 'node:crypto';
 const { manifesto, dados } = JSON.parse(await fs.readFile('export.json', 'utf8'));
-const { chave } = await (await fetch('https://niso.ness.workers.dev/api/v1/public/export-public-key')).json();
+const { chave } = await (await fetch('https://niso.ness.com.br/api/v1/public/export-public-key')).json();
 
 const pub = await c.subtle.importKey('jwk', chave, { name: 'Ed25519' }, false, ['verify']);
 const ok  = await c.subtle.verify(
