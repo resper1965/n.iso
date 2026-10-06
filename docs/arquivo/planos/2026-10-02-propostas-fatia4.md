@@ -1,5 +1,7 @@
 # Sistema de propostas, fatia 4 (link, aceite e fechamento) — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #252.
+
 > **Para agentes:** SUB-SKILL OBRIGATÓRIA: `superpowers:subagent-driven-development`. Passos com `- [ ]`.
 
 **Objetivo:** o comercial envia a proposta gerada ao cliente por e-mail ou por link; o cliente, sem conta, lê a versão congelada e aceita, recusa ou pede ajuste; o aceite dispara **uma única rotina de fechamento** que cria o contrato, o projeto (com o consultor já designado), registra a mensalidade e marca o lead como ganho. O "Aprovar" e o "Converter" antigos, que criavam projeto por conta própria, saem.

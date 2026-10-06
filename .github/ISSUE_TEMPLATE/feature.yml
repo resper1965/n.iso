@@ -1,5 +1,5 @@
 name: Melhoria ou funcionalidade
-description: Algo que o nISO deveria fazer e ainda não faz.
+description: Algo que o n.iso deveria fazer e ainda não faz.
 labels: ["enhancement"]
 body:
   - type: textarea

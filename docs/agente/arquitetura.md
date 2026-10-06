@@ -127,7 +127,8 @@ flowchart TD
 ```
 
 `concessaoValida` checa, numa só função (`src/middleware/agente.ts`): concessão
-não revogada e não expirada, usuário ativo, papel `consultor`, e a pessoa
+não revogada e não expirada, usuário ativo, papel `consultor` (o `consultoria_admin` não
+conecta agente), projeto da organização do consultor, e a pessoa
 **ainda** designada como consultor na governança do projeto. Tirar alguém da
 governança derruba o agente dela na chamada seguinte, sem esperar o token expirar.
 

@@ -1,6 +1,6 @@
 # Política de Segurança
 
-O nISO processa dados de conformidade e **dados pessoais sob a LGPD** (registros de
+O n.iso processa dados de conformidade e **dados pessoais sob a LGPD** (registros de
 ROPA e DPIA, evidências de auditoria). Uma falha aqui não afeta só o sistema — afeta
 os titulares de dados dos nossos clientes. Trate relatos de segurança com essa
 gravidade.
@@ -11,7 +11,7 @@ gravidade.
 
 1. **GitHub Security Advisory** (preferencial) — aba *Security* → *Report a vulnerability*.
    Cria um canal privado com os mantenedores.
-2. **E-mail** — `security@ness.lat`, com "nISO" no assunto.
+2. **E-mail** — `security@ness.lat`, com "n.iso" no assunto.
 
 Inclua, se possível: passos para reproduzir, impacto observado, versão/commit
 afetado e se há exploração ativa.

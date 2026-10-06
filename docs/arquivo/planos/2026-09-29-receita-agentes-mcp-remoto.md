@@ -1,5 +1,7 @@
 # Receita dos agentes: MCP remoto com login — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #213 (spec no #212).
+
 > **Estado (2026-10-01): implementada e, em parte, superada.** O OAuth, a concessão, a
 > revalidação a cada chamada e a revogação seguem como descritos aqui. A regra "o agente
 > não apaga e não gera em lote" foi **substituída** em 30/09/2026: o agente passou a ter o

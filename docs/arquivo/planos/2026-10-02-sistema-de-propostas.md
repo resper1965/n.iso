@@ -1,5 +1,7 @@
 # Sistema de propostas — Plano de implementação (fatias 1 e 2)
 
+> **Arquivado em 2026-10-06:** executado em PR #247 e #248 (fatias 1 e 2; as fatias 3 a 5 têm plano próprio).
+
 > **Para agentes:** SUB-SKILL OBRIGATÓRIA: `superpowers:subagent-driven-development` (recomendado) ou `superpowers:executing-plans`. Passos com `- [ ]`.
 
 **Objetivo:** dar ao comercial uma organização configurável (identidade, numeração, preço, textos) e um catálogo de serviços, a base sobre a qual a proposta, o aceite e o funil (fatias 3 a 5) serão construídos.

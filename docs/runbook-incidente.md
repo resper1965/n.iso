@@ -1,4 +1,4 @@
-# Runbook de incidente — nISO
+# Runbook de incidente — n.iso
 
 > Para quando o sistema está quebrado, não para leitura de fim de semana.
 > Cada passo tem comando; nenhum diz "investigue".
@@ -10,10 +10,11 @@
 ## 0. Primeiro minuto
 
 ```bash
-# O worker responde?
-curl -s -o /dev/null -w "%{http_code}\n" https://niso.ness.com.br/health
+# O worker responde, e com qual versão? `version` é o SHA do commit publicado
+# ("dev" = deploy feito fora do workflow). Compare com o SHA que você espera.
+curl -s https://niso.ness.com.br/health
 
-# O código no ar é o esperado? (a sonda distingue versão; /health não)
+# O comportamento é o do código atual? (prova comportamento, não só o rótulo)
 curl -s -X POST -H "Content-Type: application/json" -d '{}' \
   https://niso.ness.com.br/api/v1/auth/login
 ```
@@ -31,7 +32,7 @@ npx wrangler tail --format json | grep '"nivel":"error"'
 
 ## 1. Quem aciona o quê
 
-O nISO não tem plantão formal. Isto é o que existe de fato:
+O n.iso não tem plantão formal. Isto é o que existe de fato:
 
 | Sinal | Quem vê | Onde |
 | :--- | :--- | :--- |

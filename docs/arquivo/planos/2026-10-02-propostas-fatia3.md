@@ -1,5 +1,7 @@
 # Sistema de propostas, fatia 3 (a proposta) — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #250.
+
 > **Para agentes:** SUB-SKILL OBRIGATÓRIA: `superpowers:subagent-driven-development`. Passos com `- [ ]`.
 
 **Objetivo:** o comercial monta uma proposta a partir de um lead (com ou sem diagnóstico), escolhendo serviços do catálogo; o sistema calcula o preço com memória, deixa a consultoria reescrever as seções de texto do documento, gera o documento completo congelado (HTML + hash), oferece o download em Word (.docx) como cópia de trabalho e controla revisões e a aprovação de desconto acima do teto.

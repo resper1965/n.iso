@@ -2,7 +2,7 @@
 
 Consolida o que ficou aberto depois do ciclo do agente consultor (#204 a #227): o
 que é seu, o que é de um agente, em que ordem, e quando cada item está pronto.
-Segue o formato do [`backlog-plan.md`](backlog-plan.md), que continua valendo para o
+Segue o formato do [`backlog-plan.md`](arquivo/backlog-plan.md) (arquivado em 2026-10-06), que valia para o
 débito de agosto.
 
 Esforço: **S** ≤2h · **M** meio dia · **L** ≥1 dia. Prioridade: **P1** (fazer já) → **P4**.
@@ -13,13 +13,51 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 
 ---
 
+## Estado em 2026-10-06
+
+Conferido contra `git log --oneline origin/main` (o número do PR está no título de cada
+commit). "Aberto" quer dizer sem PR que o feche; os itens do dono não deixam rastro no
+repositório e precisam ser confirmados por ele.
+
+| ID | Estado | Evidência |
+|----|--------|-----------|
+| H1 | feito | apagado em 01/10/2026 (seção H1) |
+| H2 | aberto, do dono | MFA da conta `platform_admin`: confirmar no login |
+| H3, H4 | abertos, do dono | checkout principal e stashes antigos (`docs/superpowers/arrumacao/inventario-github.md`, seções 4 e 5) |
+| H5 | feito | #228 e a reescrita do `AGENTS.md` na arrumação final (números com o comando ao lado) |
+| C1 | feito | #229 |
+| C2, C3 | descartados | premissa errada, com teste (#230) |
+| C4 | feito | #231 |
+| C5, C6, C7 | feitos | #230 |
+| F1 | feito | #232, refinado em #233, #236 e #240 |
+| F2 | aberto, do dono + agente | Claude Code verificado; Cursor, Codex e Antigravity "A confirmar" (CHANGELOG) |
+| F3 | feito | #234 |
+| F4 | aberto | depende da decisão D2 |
+| F5 | aberto | depende de uso real |
+| F6 | feito | #235 |
+| F7 | feito | #241 |
+| F9 | feito | #238 |
+| F10 | feito | #239 |
+| D5 | feito | #242 |
+| T1 | feito (catraca) | #279; `TETO` hoje 558 em `test/any-catraca.test.ts` |
+| T2 | feito | #280; nenhum teste mocka o D1 inteiro (comando no `AGENTS.md`) |
+| T3 | feito | #259; sobram 6 leituras cruas que validam campo a campo (`AGENTS.md`) |
+| T4 | feito | #281 |
+| T5 | aberto | PII em texto livre fora do alcance dos direitos do titular |
+| T6 | feito | #237 e #278 |
+
+A tabela "Resumo" abaixo é a do plano original (01/10/2026) e não foi atualizada linha a linha;
+vale a tabela acima.
+
+---
+
 ## Resumo
 
 | ID | Item | Dono | Esforço | Prio | Depende de |
 |----|------|------|---------|------|------------|
 | **Onda 0 — higiene** | | | | | |
 | H1 | Apagar o script de senha da pasta temporária | agente | — | feito | — |
-| H2 | Ligar o MFA em a conta `platform_admin` do dono | **você** | S | **P1** | — |
+| H2 | Ligar o MFA na conta `platform_admin` do dono | **você** | S | **P1** | — |
 | H3 | Checkout principal: sair do branch antigo e decidir três arquivos soltos | **você** | S | P2 | — |
 | H4 | Decidir os dois stashes antigos (era do PR #32) | **você** | S | P4 | — |
 | H5 | Números velhos do `AGENTS.md` | agente | S | P2 | — |
@@ -61,7 +99,7 @@ por item. A Onda 2 intercala com a 1. A Onda 3 corre em paralelo, em fatias pequ
 `definir-senha-admin.mjs` definia a senha de uma conta administrativa e ficou na pasta
 temporária da sessão. Foi apagado em 01/10/2026 (confirmado: 0 restantes).
 
-### H2 · MFA em a conta `platform_admin` do dono · você · P1
+### H2 · MFA na conta `platform_admin` do dono · você · P1
 **Por quê.** É a conta `platform_admin`: designa consultor em qualquer projeto, vê todos os
 clientes e mexe em SSO. Está sem segundo fator, então uma senha vazada basta para tomar tudo.
 **Como.** Entre, abra o cartão de perfil no rodapé da barra lateral, ative o segundo fator

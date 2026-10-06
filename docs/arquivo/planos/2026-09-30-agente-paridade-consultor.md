@@ -1,5 +1,7 @@
 # Agente com paridade de consultor — Implementation Plan
 
+> **Arquivado em 2026-10-06:** executado em PR #221.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** O agente do MCP remoto lê e grava tudo o que o consultor humano faz, preso ao projeto da conexão, com confirmação para apagar e gerar em lote.

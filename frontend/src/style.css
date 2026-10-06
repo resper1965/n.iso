@@ -79,7 +79,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; display: flex; height: 100vh; font-weight: 300; }
 
-        /* â€”â€”â€” LOGIN â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— LOGIN ———————————————————————————————————————— */
         /* ——— AUTENTICAÇÃO ———————————————————————————————————————————
            Cartão centralizado, não mais hero + coluna. É a tela onde o usuário
            decide confiar antes de entregar credencial: nada compete com ela. */
@@ -266,7 +266,7 @@
         .header-title { font-family: var(--font-head); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
         .header-actions { display: flex; align-items: center; gap: 0.5rem; }
 
-        /* â€”â€”â€” NOTIFICATIONS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— NOTIFICATIONS ———————————————————————————————— */
         .notif-badge { position: relative; cursor: pointer; padding: 0.4rem; border-radius: 8px; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
         .notif-badge:hover { background: var(--surface-hover); }
         .notif-count { position: absolute; top: 0; right: 0; background: var(--danger); color: #fff; font-size: 0.5rem; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
@@ -277,13 +277,13 @@
         .notif-item.unread { border-left: 3px solid var(--accent); }
         .notif-time { font-size: 0.6rem; color: var(--text-dim); margin-top: 0.25rem; }
 
-        /* â€”â€”â€” CONTENT â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— CONTENT —————————————————————————————————————— */
         .content { flex: 1; overflow-y: auto; padding: 2rem; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
         .content::-webkit-scrollbar { width: 6px; }
         .content::-webkit-scrollbar-track { background: transparent; }
         .content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 
-        /* â€”â€”â€” CONTEXT PANEL â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— CONTEXT PANEL ———————————————————————————————— */
         .context-panel { width: 320px; background: rgba(5,8,15,0.9); backdrop-filter: var(--glass-blur); border-left: 1px solid var(--border); overflow-y: auto; transition: width 0.3s, padding 0.3s; padding: 1.5rem; }
         .context-panel.collapsed { width: 0; padding: 0; overflow: hidden; }
         .toggle-context { position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; z-index: 10; }
@@ -293,19 +293,19 @@
         .ctx-tag-green { background: rgba(34,197,94,0.1); color: var(--success); border-color: rgba(34,197,94,0.2); }
         .ctx-label { font-size: 0.6rem; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; margin-top: 1rem; }
 
-        /* â€”â€”â€” CARDS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— CARDS ————————————————————————————————————————— */
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; backdrop-filter: var(--glass-blur); transition: all 0.3s; margin-bottom: 1rem; }
         .card:hover { border-color: rgba(255,255,255,0.12); }
         .card-label { font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.75rem; font-family: 'Montserrat', sans-serif; }
 
-        /* â€”â€”â€” STATS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— STATS ———————————————————————————————————————— */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         .stat-card { cursor: pointer; text-align: center; }
         .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
         .stat-label { font-size: 0.7rem; color: var(--text-dim); font-weight: 400; margin-bottom: 0.5rem; }
         .stat-value { font-size: 2rem; font-weight: 700; font-family: 'Montserrat', sans-serif; color: var(--text); }
 
-        /* â€”â€”â€” BUTTONS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— BUTTONS —————————————————————————————————————— */
         .btn { padding: 0.5rem 1.2rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: 'Inter', sans-serif; display: inline-flex; align-items: center; gap: 0.4rem; }
         .btn:hover { background: var(--surface-hover); border-color: rgba(255,255,255,0.15); }
         .btn-primary { padding: 0.5rem 1.2rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500; cursor: pointer; transition: all 0.2s; background: var(--accent); color: #000; border: 1px solid var(--accent); font-family: 'Inter', sans-serif; display: inline-flex; align-items: center; gap: 0.4rem; }
@@ -315,7 +315,7 @@
         .btn-ghost { background: none; border: none; color: var(--accent); padding: 0.4rem 0.8rem; font-size: 0.7rem; cursor: pointer; }
         .btn-ghost:hover { background: rgba(0,173,232,0.08); border-radius: 8px; }
 
-        /* â€”â€”â€” FORMS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— FORMS ———————————————————————————————————————— */
         .form-group { margin-bottom: 1.25rem; }
         .form-label { display: block; font-size: 0.7rem; font-weight: 400; color: var(--text-dim); margin-bottom: 0.4rem; }
         .form-input { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.85rem; outline: none; font-family: 'Inter', sans-serif; transition: 0.2s; }
@@ -326,13 +326,13 @@
         select option, select optgroup { background-color: #070b14 !important; color: #f5f5f7 !important; }
         select optgroup { color: var(--accent) !important; font-style: normal; font-weight: 600; }
 
-        /* â€”â€”â€” DATA TABLES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— DATA TABLES —————————————————————————————————— */
         .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         .data-table th { text-align: left; padding: 0.6rem 0.75rem; color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
         .data-table td { padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
         .data-table tr:hover td { background: rgba(255,255,255,0.02); }
 
-        /* â€”â€”â€” MODALS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— MODALS ——————————————————————————————————————— */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
         .modal-overlay.open { display: flex; }
         .modal { background: rgba(12,16,28,0.98); backdrop-filter: var(--glass-blur); border: 1px solid var(--border); border-radius: 20px; max-width: 560px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 2rem; animation: modalIn 0.3s ease-out; }
@@ -341,30 +341,30 @@
         .modal-title { font-family: 'Montserrat', sans-serif; font-size: 1.1rem; font-weight: 500; }
         @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
-        /* â€”â€”â€” BADGES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— BADGES ——————————————————————————————————————— */
         .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.6rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); }
         .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.65rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; }
         .badge-implemented { background: rgba(34, 197, 94, 0.12); color: #22c55e; border-color: rgba(34, 197, 94, 0.25); }
         .badge-pending { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.25); }
 
-        /* â€”â€”â€” LISTS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— LISTS ———————————————————————————————————————— */
         .list-item { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: 0.2s; background: var(--surface); }
         .list-item:hover { border-color: rgba(255,255,255,0.12); background: var(--surface-hover); }
         .item-name { font-size: 0.85rem; font-weight: 400; }
         .item-meta { font-size: 0.7rem; color: var(--text-dim); }
 
-        /* â€”â€”â€” PROGRESS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— PROGRESS ————————————————————————————————————— */
         .progress-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
 
-        /* â€”â€”â€” PHASES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— PHASES ——————————————————————————————————————— */
         .phase-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 0.5rem; transition: 0.2s; cursor: pointer; }
         .phase-item:hover { border-color: rgba(255,255,255,0.12); }
         .phase-num { width: 28px; height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: var(--text-dim); font-family: 'Montserrat', sans-serif; flex-shrink: 0; }
         .phase-title { font-size: 0.8rem; flex: 1; }
         .phase-status { font-size: 0.6rem; font-weight: 500; padding: 0.2rem 0.5rem; border-radius: 6px; }
 
-        /* â€”â€”â€” WIZARD â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— WIZARD ——————————————————————————————————————— */
         .wizard-layout { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; min-height: 60vh; }
         .wizard-sidebar { display: flex; flex-direction: column; gap: 0.25rem; }
         .wizard-step { padding: 0.6rem 1rem; border-radius: 10px; font-size: 0.8rem; cursor: pointer; transition: 0.2s; color: var(--text-dim); }
@@ -378,13 +378,13 @@
         .step-dot.done { background: var(--success); }
         .step-label { font-size: 0.75rem; }
 
-        /* â€”â€”â€” YESNO â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— YESNO ———————————————————————————————————————— */
         .yesno-group { display: flex; gap: 0.5rem; }
         .yesno-btn { padding: 0.5rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; font-size: 0.8rem; transition: 0.2s; font-family: 'Inter', sans-serif; }
         .yesno-btn:hover { border-color: var(--accent); color: var(--text); }
         .yesno-active { background: rgba(0,173,232,0.15); border-color: var(--accent); color: var(--accent); }
 
-        /* â€”â€”â€” CUSTOM SELECT â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— CUSTOM SELECT ———————————————————————————————— */
         .ness-select { position: relative; }
         .ness-select-trigger { width: 100%; padding: 0.7rem 1rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); cursor: pointer; font-size: 0.85rem; text-align: left; font-family: 'Inter', sans-serif; }
         .ness-select-options { position: absolute; top: 100%; left: 0; right: 0; background: rgba(12,16,28,0.98); border: 1px solid var(--border); border-radius: 10px; max-height: 200px; overflow-y: auto; z-index: 300; display: none; margin-top: 0.25rem; }
@@ -393,13 +393,13 @@
         .ness-select-option:hover { background: var(--surface-hover); }
         .ness-select-option.selected { color: var(--accent); }
 
-        /* â€”â€”â€” MULTI CHIPS â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— MULTI CHIPS —————————————————————————————————— */
         .multi-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
         .chip { padding: 0.35rem 0.8rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); font-size: 0.75rem; cursor: pointer; transition: 0.2s; }
         .chip:hover { border-color: var(--accent); color: var(--text); }
         .chip-active, .chip.selected { background: rgba(0,173,232,0.12); border-color: var(--accent); color: var(--accent); }
 
-        /* â€”â€”â€” DROPDOWN â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— DROPDOWN ————————————————————————————————————— */
         .dropdown-wrap { position: relative; display: inline-block; }
         .dropdown-trigger { cursor: pointer; }
         .dropdown-menu { position: absolute; top: 100%; right: 0; background: rgba(12,16,28,0.98); border: 1px solid var(--border); border-radius: 10px; min-width: 160px; z-index: 400; display: none; margin-top: 0.25rem; overflow: hidden; }
@@ -407,7 +407,7 @@
         .dropdown-item { padding: 0.6rem 1rem; cursor: pointer; font-size: 0.8rem; transition: 0.15s; color: var(--text); }
         .dropdown-item:hover { background: var(--surface-hover); }
 
-        /* â€”â€”â€” STATES â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— STATES ——————————————————————————————————————— */
         .loading { text-align: center; padding: 3rem; color: var(--text-dim); font-size: 0.85rem; }
         .loading::after { content: ''; display: block; width: 24px; height: 24px; margin: 1rem auto 0; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -559,7 +559,7 @@
         .empty-state { text-align: center; padding: 3rem; color: var(--text-dim); }
         .empty-state h3 { font-family: 'Montserrat', sans-serif; font-weight: 500; font-size: 1rem; margin-bottom: 0.5rem; color: var(--text); }
 
-        /* â€”â€”â€” TOAST â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— TOAST ———————————————————————————————————————— */
         /* Toast: canto inferior ESQUERDO, para não disputar espaço com a barra
            de lote (centro) nem com o drawer (direita). 4200ms — o desfazer
            precisa de tempo de leitura antes de sumir. */
@@ -591,16 +591,16 @@
         .table-container tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
         .table-container tbody tr:last-child td { border-bottom: 0; }
 
-        /* â€”â€”â€” PRICING â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— PRICING —————————————————————————————————————— */
         .pricing-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         .pricing-table th, .pricing-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
         .pricing-table th { color: var(--text-dim); font-weight: 500; font-size: 0.65rem; text-transform: uppercase; }
         .pricing-slider { width: 100%; accent-color: var(--accent); }
 
-        /* â€”â€”â€” GROUP PROJECT ONLY â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— GROUP PROJECT ONLY ———————————————————————————— */
         .group-project-only { /* controlled by JS display toggle */ }
 
-        /* â€”â€”â€” MATRIZ DE RISCO 5X5 TÃ‰RMICA â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— MATRIZ DE RISCO 5X5 TÉRMICA ——————————————————— */
         .matrix-container {
             display: flex;
             gap: 2rem;
@@ -744,11 +744,11 @@
             border-radius: 4px;
         }
 
-        /* â€”â€”â€” A11Y â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— A11Y ————————————————————————————————————————— */
         .skip-link { position: absolute; left: -9999px; background: var(--accent); color: #000; padding: 1rem; z-index: 10000; }
         .skip-link:focus { left: 0; }
 
-        /* â€”â€”â€” DoD DRAWER â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” */
+        /* ——— DoD DRAWER —————————————————————————————————— */
         .dod-drawer-overlay {
             position: fixed;
             inset: 0;

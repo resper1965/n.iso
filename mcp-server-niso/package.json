@@ -1,7 +1,7 @@
 {
   "name": "mcp-server-niso",
   "version": "1.0.0",
-  "description": "MCP server for nISO GRC System",
+  "description": "MCP server for n.iso GRC System",
   "main": "build/index.js",
   "type": "module",
   "scripts": {

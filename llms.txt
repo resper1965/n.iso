@@ -1,19 +1,22 @@
-# nISO — Agentic GRC System
-> Agentic GRC platform for ISO 27001/27701 certification delivery on Cloudflare.
+# n.iso — Agentic GRC System
+> Plataforma da ness. para conduzir a adequação e a certificação ISO 27001/27701, sobre a stack da Cloudflare.
 
-## Core Files
-- [src/index.ts](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/index.ts): Main Hono API entry point (Auth, RBAC, CRUD).
-- [src/services/pricing.ts](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/services/pricing.ts): ISO certification pricing engine and scoring logic.
-- [src/agents/](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/src/agents/): AI Agents for policy generation and evidence evaluation.
-- [schema.sql](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/schema.sql): D1 database schema (23 tables).
-- [frontend/dist/index.html](file:///c:/Users/resper/OneDrive/Área de Trabalho/DESENVOLVIMENTO/niso/frontend/dist/index.html): Vanilla JS SPA frontend.
+## Arquivos centrais
+- [AGENTS.md](AGENTS.md): contexto canônico do projeto, com o comando que mede cada número.
+- [src/index.ts](src/index.ts): composition root do Worker (Hono): cabeçalhos, CORS, autenticação, rotas.
+- [src/routes/](src/routes/): um arquivo de rota por domínio.
+- [src/mcp/](src/mcp/): MCP remoto do agente consultor (login OAuth em /oauth/*).
+- [src/agents/](src/agents/): agentes de IA (política, evidência, avaliação, prontidão).
+- [schema.sql](schema.sql): schema do D1; migrations em [migrations/](migrations/).
+- [frontend/login.html](frontend/login.html): a SPA em JavaScript sem framework (views em frontend/src/views/).
+- [docs/openapi.json](docs/openapi.json): contrato da API, gerado dos schemas Zod.
 
-## Key Concepts
-- **Person-Days (PD)**: Effort metric used for pricing and project timeline.
-- **Evidence Vault**: R2-backed repository with SHA-256 integrity checks.
-- **SoA Engine**: Logic to map 2013 controls to 2022 and generate compliance status.
-- **Multi-tenancy**: Isolated projects via `client_project_id` and RBAC.
+## Conceitos
+- **Declaração de Aplicabilidade (SoA)**: motor de regras do Annex A 2022.
+- **Cofre de evidências**: R2 com integridade SHA-256 e assinatura eletrônica.
+- **Multi-tenant**: isolamento por projeto e por organização (multiconsultoria), provado por teste.
+- **Pedidos de aprovação e ciência**: conteúdo congelado e prova imutável por destinatário.
 
-## Tech Stack
-- **Backend**: Hono (Workers), D1 (DB), R2 (Storage), Workers AI.
-- **Frontend**: Vanilla JS, Glassmorphism CSS, Inter/Montserrat typography.
+## Stack
+- **Backend**: Hono no Cloudflare Workers, D1, KV, R2, Workers AI.
+- **Frontend**: JavaScript sem framework, Vite, tipografia Inter/Montserrat, tema escuro da marca.
