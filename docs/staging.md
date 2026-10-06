@@ -58,9 +58,6 @@ drift antigo, registrado em `docs/drift-schema-conhecido.txt` e vigiado por
 
 ## Limitações declaradas
 
-- **Sem Vectorize.** As rotas de IA que consultam a base de conhecimento (RAG)
-  falham em staging. Apontar staging para o índice de produção faria ingestão de
-  teste gravar vetor no índice do cliente, o que é pior que a falha.
 - **Sem cron.** Desligado com `"crons": []` no `env.staging`. Este documento
   afirmava antes que o cron "não é herdado pelo env" — errado, e o primeiro
   deploy provou: subiu com `schedule: 10 4 * * *`. Dois workers purgando bancos

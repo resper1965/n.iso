@@ -15,5 +15,5 @@
 - **Multi-tenancy**: Isolated projects via `client_project_id` and RBAC.
 
 ## Tech Stack
-- **Backend**: Hono (Workers), D1 (DB), R2 (Storage), Vectorize (RAG), Workers AI.
+- **Backend**: Hono (Workers), D1 (DB), R2 (Storage), Workers AI.
 - **Frontend**: Vanilla JS, Glassmorphism CSS, Inter/Montserrat typography.

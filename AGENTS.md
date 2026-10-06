@@ -62,7 +62,7 @@ que o padrao realmente casou antes de escrever o numero.
 
 ## Stack
 
-Cloudflare Workers (Hono) + D1 + KV + R2 + Vectorize + Workers AI. Frontend SPA
+Cloudflare Workers (Hono) + D1 + KV + R2 + Workers AI. Frontend SPA
 Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
@@ -91,9 +91,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services**: `pricing.ts`, `memory.ts` (RAG Vectorize), `soa-logic.ts`
+- **Services**: `pricing.ts`, `soa-logic.ts`
   (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
-  `policy-generator.ts`, `embeddings.ts`, `project-setup.ts`.
+  `policy-generator.ts`, `project-setup.ts`.
 - **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
 - **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
   - `frontend/login.html` — o app de verdade (login + SPA), entrada do Vite
@@ -125,8 +125,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `migrations/`, ultima a **0043**. O estado real de producao e o historico da
   reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
   tocar em migration.
-- **Bindings**: DB (D1), SESSIONS (KV), VECTOR_INDEX (Vectorize), STORAGE (R2),
-  AI, ASSETS.
+- **Bindings**: DB (D1), SESSIONS (KV), STORAGE (R2), AI, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
 - **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
@@ -169,11 +168,12 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   fica desabilitado (falha fechada). Nunca commitar segredo em `wrangler.jsonc`.
 - Segredos e tokens usam CSPRNG (`genToken`/`genNumericCode`), nunca
   `Math.random`.
-- Embedding do RAG: use SEMPRE a constante `EMBEDDING_MODEL`
-  (`src/services/embeddings.ts`). MemoryService e KnowledgeService precisam do
-  mesmo modelo — vetores de modelos diferentes nao sao comparaveis. Hoje e
-  bge-m3 (multilingue, PT-BR), 1024 dimensoes. Trocar de modelo exige RECRIAR o
-  indice Vectorize com a nova dimensao e reingerir (runbook no topo do arquivo).
+- **Vetorizacao (Vectorize/RAG) removida em 2026-10-06**: o indice de producao
+  tinha 1 vetor e nenhum indice de metadados (toda consulta filtrada por
+  `project_id` voltava vazia), a tela "Knowledge Base" chamava rotas que nao
+  existiam, chat/agentes/MCP nao usavam vetor, e vetores nunca eram apagados na
+  exclusao de projeto nem no pedido do titular. Busca futura comeca por texto no
+  D1, nao por embedding. A tabela `project_knowledge` ficou orfa (ver CHANGELOG).
 - Schema muda em **dois** lugares: `schema.sql` e uma migration. Em `schema.sql`,
   indice **depois** da tabela — `CREATE INDEX` antes do `CREATE TABLE` derruba a
   criacao de banco novo e so aparece em banco novo.
