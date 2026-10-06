@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
@@ -28,8 +28,7 @@ ropaApp.put('/:id', async (c) => {
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar ROPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar ROPA', e);
   }
 });
 
@@ -42,8 +41,7 @@ ropaApp.delete('/:id', async (c) => {
     await logAudit(c.env.DB, 'ropa_deleted', user?.email || 'system', `ROPA ${id} deleted`);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao excluir ROPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao excluir ROPA', e);
   }
 });
 
@@ -75,7 +73,7 @@ projectRopaApp.post('/', async (c) => {
     await logAudit(c.env.DB, 'ropa_created', user?.email || 'system', `ROPA ${id} created`);
     return c.json({ ok: true, id }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha ao criar ROPA', detail: e.message }, 500);
+    return erro500(c, 'Falha ao criar ROPA', e);
   }
 });
 
@@ -110,8 +108,7 @@ projectRopaApp.post('/:recordId/revoke-approval', async (c) => {
     await logAudit(c.env.DB, 'ropa.approval_revoked', user.email, `ROPA ${recordId}: revogada ${quais}${sobra ? '' : '; voltou a Draft'}.`, reason, c.req.header('CF-Connecting-IP') ?? '', projectId);
     return c.json({ ok: true, role, status: sobra ? 'Approved' : 'Draft' });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Erro ao revogar aprovação do ROPA', detail: e.message }, 500);
+    return erro500(c, 'Erro ao revogar aprovação do ROPA', e);
   }
 });
 
@@ -160,7 +157,7 @@ projectRopaApp.post('/:recordId/approve', async (c) => {
 
     return c.json({ ok: true });
   } catch (e: any) {
-    return c.json({ error: 'Erro ao aprovar ROPA', detail: e.message }, 500);
+    return erro500(c, 'Erro ao aprovar ROPA', e);
   }
 });
 
@@ -246,7 +243,10 @@ projectRopaApp.get('/report', async (c) => {
       </html>
     `;
     return c.html(html);
-  } catch (e: any) {
-    return c.html(`<h3>Erro ao gerar relatório ROPA: ${e.message}</h3>`, 500);
+  } catch (e) {
+    return c.html(
+      `<h3>Erro ao gerar relatório ROPA</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`,
+      500
+    );
   }
 });
