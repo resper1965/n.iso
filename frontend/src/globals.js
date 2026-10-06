@@ -1745,11 +1745,11 @@ window.renderSelfServiceBlock = function renderSelfServiceBlock(c, blocks) {
 
         c.innerHTML = `<div style="max-width:700px;margin:2rem auto;padding:0 1rem" class="fade-in">
             <div style="text-align:center;margin-bottom:2rem">
-                <div class="logo" style="font-size:1.5rem;margin-bottom:0.5rem">n<span style="color:var(--accent)">.</span>ISO</div>
+                <div class="logo" style="font-size:1.5rem;margin-bottom:0.5rem">n<span style="color:var(--accent)">.</span>iso</div>
                 <div style="font-size:0.75rem;color:var(--muted)">Assessment Self-Service para ${escapeHTML(window._ssData.client_name)}</div>
                 <div style="margin-top:0.5rem;font-size:0.6rem;color:var(--muted)">Bloco ${idx + 1} de ${total}</div>
                 <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:0.75rem">
-                    <div style="width:${Math.round(((idx + 1) / total) * 100)}%;height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s"></div>
+                    <div style="width:100%;height:100%;background:var(--accent);border-radius:2px;transform-origin:left;transform:scaleX(${((idx + 1) / total).toFixed(3)});transition:transform 0.3s"></div>
                 </div>
             </div>
             <div class="card" style="padding:1.5rem">
