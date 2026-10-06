@@ -3,7 +3,13 @@
 // injeção, então os dublamos e verificamos o comportamento real: geração de
 // embedding, upsert com os metadados certos, montagem do contexto recuperado,
 // e a ingestão (classificação por IA + INSERT no D1 + vetorização best-effort).
-import { describe, it, expect, vi } from 'vitest';
+//
+// O D1 é o real do pool (schema.sql aplicado): o INSERT em project_knowledge
+// precisa casar com o schema de verdade. AI e Vectorize continuam dublados —
+// o pool não tem esses bindings.
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { env as poolEnv } from 'cloudflare:test';
+import { applySchema } from './helpers/d1';
 import { embed, EMBEDDING_MODEL } from '../src/services/embeddings';
 import { MemoryService } from '../src/services/memory';
 import { KnowledgeService } from '../src/services/knowledge-service';
@@ -65,9 +71,19 @@ describe('MemoryService', () => {
 });
 
 describe('KnowledgeService', () => {
+  beforeAll(async () => {
+    await applySchema();
+    // project_knowledge.project_id tem FK para projects.
+    await poolEnv.DB.batch(['proj-1', 'proj-2', 'proj-3'].map((id) =>
+      poolEnv.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
+        .bind(id, `Cliente ${id}`, 'ISO 27001', 'controller', 'Active')));
+  });
+
+  const linha = (id: string) =>
+    poolEnv.DB.prepare('SELECT project_id, title, type, content, metadata FROM project_knowledge WHERE id = ?').bind(id).first<any>();
+
   function fakeEnv(aiResponse: string) {
     const runCalls: any[] = [];
-    const bound: any[] = [];
     const env = {
       AI: {
         run: vi.fn(async (model: string, payload: any) => {
@@ -77,18 +93,14 @@ describe('KnowledgeService', () => {
           return { data: [[0.5, 0.6]] };
         }),
       },
-      DB: {
-        prepare: vi.fn(() => ({
-          bind: vi.fn((...args: any[]) => { bound.push(args); return { run: vi.fn(async () => ({})) }; }),
-        })),
-      },
+      DB: poolEnv.DB,
       VECTOR_INDEX: { upsert: vi.fn(async () => ({})), query: vi.fn(async () => ({ matches: [] })) },
     };
-    return { env, runCalls, bound };
+    return { env, runCalls };
   }
 
   it('ingest classifica com IA, grava no D1 e vetoriza', async () => {
-    const { env, bound } = fakeEnv('Aqui vai: {"type":"policy","summary":"resumo","entities":["TI"],"controls":["A.5.1"]}');
+    const { env } = fakeEnv('Aqui vai: {"type":"policy","summary":"resumo","entities":["TI"],"controls":["A.5.1"]}');
     const svc = new KnowledgeService(env as any);
     const entry = await svc.ingest('proj-1', 'Política de Acesso', 'conteúdo do documento');
 
@@ -96,12 +108,12 @@ describe('KnowledgeService', () => {
     expect(entry.title).toBe('Política de Acesso');
     expect(entry.type).toBe('policy'); // extraído do JSON da IA
     expect(entry.metadata).toMatchObject({ type: 'policy', summary: 'resumo' });
-    // INSERT recebeu os campos na ordem (id, project_id, title, type, content, metadata).
-    expect(env.DB.prepare).toHaveBeenCalledOnce();
-    const [args] = bound;
-    expect(args[1]).toBe('proj-1');
-    expect(args[2]).toBe('Política de Acesso');
-    expect(args[3]).toBe('policy');
+    // A linha gravada no D1 real tem os campos nas colunas certas.
+    const gravada = await linha(entry.id);
+    expect(gravada).toMatchObject({
+      project_id: 'proj-1', title: 'Política de Acesso', type: 'policy', content: 'conteúdo do documento',
+    });
+    expect(JSON.parse(gravada.metadata)).toMatchObject({ type: 'policy', summary: 'resumo' });
     // Vetorização best-effort ocorreu.
     expect(env.VECTOR_INDEX.upsert).toHaveBeenCalledOnce();
   });
@@ -111,6 +123,7 @@ describe('KnowledgeService', () => {
     const svc = new KnowledgeService(env as any);
     const entry = await svc.ingest('proj-2', 'Doc', 'conteúdo');
     expect(entry.type).toBe('other');
+    expect((await linha(entry.id))?.type).toBe('other');
   });
 
   it('search consulta o índice filtrando por projeto e devolve os matches', async () => {
