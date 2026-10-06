@@ -27,6 +27,17 @@ describe('Resumo das entrevistas e mapa da app', () => {
     expect(corpo.summary).toEqual([{ track: 'governanca', total: 2, gaps: 1 }]);
   });
 
+  // O INSERT gravava `notes` e `updated_at`, colunas que project_interviews não tem: 500 sempre.
+  it('POST /interviews grava as respostas', async () => {
+    const r = await worker.fetch(new Request('http://localhost/api/v1/projects/p-a/interviews', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: [{ track: 'pessoas', question: 'Q3', answer: 'R3', gap_detected: 1 }] }),
+    }), { ...workerEnv(), AGENTE: P } as any);
+    expect(r.status, await r.clone().text()).toBe(200);
+    const l = await env.DB.prepare(`SELECT answer, gap_detected FROM project_interviews WHERE track = 'pessoas'`).first<any>();
+    expect([l.answer, Number(l.gap_detected)]).toEqual(['R3', 1]);
+  });
+
   it('o mapa cobre as áreas do consultor e não a comercial', () => {
     for (const area of ['interviews', 'phase-answers', 'journey-dossier', 'versions', '/content', 'ropa', 'dpia', 'assets', 'vendors', 'training', 'audits', 'capa', 'stakeholders', 'management-reviews', 'certification', 'scope-changes', 'data-subject']) {
       expect(MAPA_DA_APP, area).toContain(area);

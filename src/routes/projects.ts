@@ -594,10 +594,10 @@ projectsApp.post('/:id/interviews', async (c) => {
     const { answers } = v.data as any;
     
     const stmt = c.env.DB.prepare(
-      `INSERT INTO project_interviews (id, project_id, track, question, answer, interviewee, gap_detected, notes, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      `INSERT INTO project_interviews (id, project_id, track, question, answer, interviewee, gap_detected)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
-    const batch = answers.map((a: any) => stmt.bind(genId(), projectId, a.track, a.question, a.answer, a.interviewee || null, a.gap_detected ? 1 : 0, a.notes || null));
+    const batch = answers.map((a: any) => stmt.bind(genId(), projectId, a.track, a.question, a.answer, a.interviewee || null, a.gap_detected ? 1 : 0));
     await c.env.DB.batch(batch);
     await logAudit(c.env.DB, 'interviews.saved', c.get('user')?.email ?? 'system', `Salvas ${answers.length} respostas de entrevista para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, count: answers.length });
