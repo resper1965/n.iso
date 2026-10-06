@@ -230,6 +230,21 @@ describe('500 correlaciona em vez de vazar', () => {
     await exigeSemProvedor(res, 'Falha ao gerar política');
   });
 
+  it('webhooks: teste que falha devolve 502 sem a mensagem da exceção', async () => {
+    await env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events, status) VALUES (?,?,?,?,?)`)
+      .bind('wh-vaz', PROJ, 'https://93.184.216.34/hook', '["test"]', 'Active').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED texto-interno-abc'));
+    const res = await req('/api/v1/webhooks/test/wh-vaz', { method: 'POST', headers: admin });
+    expect(res.status).toBe(502);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.ok).toBe(false);
+    expect(JSON.stringify(corpo)).not.toMatch(/ECONNREFUSED|texto-interno/);
+    expect(typeof corpo.request_id).toBe('string');
+    const wh = await env.DB.prepare('SELECT failure_count FROM webhooks WHERE id = ?').bind('wh-vaz').first<{ failure_count: number }>();
+    expect(wh!.failure_count).toBe(1);
+  });
+
   it('ropa: relatório HTML que falha devolve 500 sem a exceção e com o request_id', async () => {
     // A mensagem traz HTML de propósito: antes ia interpolada crua na página.
     const db = new Proxy(env.DB, {
