@@ -6,7 +6,7 @@ import { applySchema, workerEnv, sessionFor } from './helpers/d1';
 /**
  * O PUT do ROPA gravava `body.status || 'Draft'`: status livre (aprovava sem senha nem autoridade) e,
  * sem `status` no corpo, devolvia um ROPA aprovado a rascunho com as assinaturas ainda na linha.
- * Regra (a mesma da DPIA): pelo PUT o status só transita entre 'Draft' e 'Under Review'; ausente,
+ * Regra (a mesma da DPIA): pelo PUT/POST o status nunca é 'Approved' (Active/Inactive/Draft/Under Review passam); ausente,
  * não muda; ROPA aprovado só sai de 'Approved' por "Revogar aprovação".
  */
 const json = { 'Content-Type': 'application/json' };
@@ -61,5 +61,26 @@ describe('PUT /ropa/:id não aprova nem reverte aprovação', () => {
     const r = await chamar('PUT', URL_PUT, editor, { processing_purpose: 'Folha', status: 'Under Review' });
     expect(r.status, await r.clone().text()).toBe(200);
     expect((await linha()).status).toBe('Under Review');
+  }, 30_000);
+
+  it("ROPA 'Active' editado sem status continua 'Active'", async () => {
+    await semear('Active');
+    expect((await chamar('PUT', URL_PUT, editor, { processing_purpose: 'Folha v2' })).status).toBe(200);
+    expect((await linha()).status).toBe('Active');
+  }, 30_000);
+
+  it("PUT com status 'Inactive' em ROPA 'Active': 200", async () => {
+    await semear('Active');
+    const r = await chamar('PUT', URL_PUT, editor, { processing_purpose: 'Folha', status: 'Inactive' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect((await linha()).status).toBe('Inactive');
+  }, 30_000);
+
+  it("POST: 'Approved' é 400; 'Active' é aceito", async () => {
+    const url = '/api/v1/projects/p-s/ropa';
+    const ruim = await chamar('POST', url, editor, { processing_purpose: 'X', status: 'Approved' });
+    expect(ruim.status, await ruim.clone().text()).toBe(400);
+    const bom = await chamar('POST', url, editor, { processing_purpose: 'X', status: 'Active' });
+    expect(bom.status, await bom.clone().text()).toBe(201);
   }, 30_000);
 });
