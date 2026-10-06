@@ -155,3 +155,18 @@ describe('nota do auditor externo (token): control_id do corpo', () => {
   });
 });
 
+describe('DPIA: ropa_id do corpo', () => {
+  const base = { processing_name: 'X', data_category_risk: 'Alto', necessity_proportionality: 'ok', technical_measures: 'cripto' };
+
+  it('POST e PUT recusam ROPA de outro projeto, sem gravar', async () => {
+    await recusa(`/api/v1/projects/${A}/dpia`, 'POST', base, 'ropa_id', 'ropa-b');
+    await recusa('/api/v1/dpia/dpia-a', 'PUT', base, 'ropa_id', 'ropa-b');
+    expect(await conta(`SELECT COUNT(*) n FROM dpia_assessments`)).toBe(1);
+    expect(await env.DB.prepare(`SELECT ropa_id FROM dpia_assessments WHERE id = 'dpia-a'`).first()).toEqual({ ropa_id: null });
+  });
+
+  it('legítimo: ROPA do próprio projeto', async () => {
+    expect((await req(`/api/v1/projects/${A}/dpia`, 'POST', { ...base, ropa_id: 'ropa-a' })).status).toBe(201);
+    expect((await req('/api/v1/dpia/dpia-a', 'PUT', { ...base, ropa_id: 'ropa-a' })).status).toBe(200);
+  });
+});

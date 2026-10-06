@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { MigrationService } from '../services/migration-service';
@@ -1031,6 +1031,8 @@ projectsApp.post('/:id/dpia', async (c) => {
     const valid = await validateBody(c, dpiaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['ropa_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = genId();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
