@@ -60,7 +60,12 @@ export const ropaSchema = z.object({
   data_subject_rights_details: longoOpcional,
   dpia_required: boolLike,
   owner: curtoOpcional,
-  status: curtoOpcional,
+  // 'Approved' fica de fora de propósito (como na DPIA): aprovar exige senha, autoridade na matriz de
+  // Governança e segregação, e isso só existe em POST .../approve e nos pedidos de aprovação.
+  // Active/Inactive é o ciclo de vida da atividade de tratamento, que convive com o status de aprovação.
+  status: z.enum(['Draft', 'Under Review', 'Active', 'Inactive'], {
+    error: "status aceita 'Draft', 'Under Review', 'Active' ou 'Inactive'. 'Approved' só pelo fluxo de aprovação (assinatura do Líder SGSI e da Direção), não pela edição.",
+  }).optional().nullable(),
 }).passthrough();
 
 export const ropaApprovalSchema = z.object({

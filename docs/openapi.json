@@ -12090,7 +12090,12 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 500
+                        "enum": [
+                          "Draft",
+                          "Under Review",
+                          "Active",
+                          "Inactive"
+                        ]
                       },
                       {
                         "type": "null"
@@ -15834,7 +15839,12 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 500
+                        "enum": [
+                          "Draft",
+                          "Under Review",
+                          "Active",
+                          "Inactive"
+                        ]
                       },
                       {
                         "type": "null"

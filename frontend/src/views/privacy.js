@@ -215,9 +215,9 @@ import { navigate, render } from '../router.js';
             <div class="form-group"><label class="form-label">Destinatarios / Compartilhamento</label><input class="form-input" id="ropa-e-recipients" value="${escapeHTML(r.recipients||'')}"></div>
             <div class="form-group"><label class="form-label">Salvaguardas de Transferência</label><input class="form-input" id="ropa-e-safeguards" value="${escapeHTML(r.transfer_safeguards||'')}"></div>
             <div class="form-group"><label class="form-label">Status</label>
-                <select class="form-input" id="ropa-e-status">
-                    <option ${r.status==='Active'?'selected':''}>Active</option>
-                    <option ${r.status==='Inactive'?'selected':''}>Inactive</option>
+                <select class="form-input" id="ropa-e-status" ${r.status==='Approved'?'disabled':''}>
+                    ${r.status==='Approved' ? '<option value="Approved" selected>Approved (reabrir: Revogar aprovação)</option>' : `
+                    ${['Active','Inactive','Draft','Under Review'].map(v => `<option value="${v}" ${(r.status||'Active')===v?'selected':''}>${v}</option>`).join('')}`}
                 </select></div>
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-e-intl" ${r.international_transfers?'checked':''}> Transferencia Internacional</label>
@@ -240,10 +240,12 @@ import { navigate, render } from '../router.js';
             recipients: document.getElementById('ropa-e-recipients').value, 
             owner: document.getElementById('ropa-e-owner').value, 
             transfer_safeguards: document.getElementById('ropa-e-safeguards').value,
-            status: document.getElementById('ropa-e-status').value,
             international_transfers: document.getElementById('ropa-e-intl').checked ? 1 : 0, 
             dpia_required: document.getElementById('ropa-e-dpia').checked ? 1 : 0 
         };
+        // Aprovar é pelo fluxo de assinatura; o PUT recusa 'Approved' e status em ROPA já aprovado.
+        const st = document.getElementById('ropa-e-status');
+        if (!st.disabled) body.status = st.value;
         await api('PUT', `/api/v1/ropa/${id}`, body);
         forceCloseModal(); render();
     };

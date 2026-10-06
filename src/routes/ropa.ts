@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
@@ -14,16 +14,20 @@ ropaApp.put('/:id', async (c) => {
     await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
     const valid = await validateBody(c, ropaSchema);
     if (!valid.success) return valid.response;
-    const body = valid.data as any;
-    const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      `UPDATE ropa_records SET processing_purpose=?, data_categories=?, data_subjects=?, legal_basis=?, consent_details=?, data_subject_rights_details=?, retention_period=?, recipients=?, international_transfers=?, transfer_safeguards=?, dpia_required=?, status=?, owner=?, updated_at=? WHERE id=?`
-    ).bind(
-      body.processing_purpose ?? null, body.data_categories ?? null, body.data_subjects ?? null,
-      body.legal_basis ?? null, body.consent_details ?? null, body.data_subject_rights_details ?? null,
-      body.retention_period ?? null, body.recipients ?? null, body.international_transfers ? 1 : 0,
-      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.status || 'Draft', body.owner ?? null, now, id
-    ).run();
+    // Ausente preserva o valor gravado (setParcial); o transform de boolLike deixa a chave com undefined.
+    const body = Object.fromEntries(Object.entries(valid.data as Record<string, unknown>).filter(([, v]) => v !== undefined)) as any;
+    const atual = await c.env.DB.prepare('SELECT status FROM ropa_records WHERE id = ?').bind(id).first<{ status: string | null }>();
+    // Sair de 'Approved' pelo PUT deixaria as assinaturas na linha sem motivo nem trilha: é revogação.
+    if (atual?.status === 'Approved' && Object.hasOwn(body, 'status')) {
+      return c.json({ error: 'ROPA aprovado não muda de status pela edição. Para reabrir, use "Revogar aprovação" (motivo obrigatório).' }, 400);
+    }
+    for (const k of ['international_transfers', 'dpia_required']) if (k in body && body[k] !== null) body[k] = body[k] ? 1 : 0;
+    const p = setParcial(body, {
+      processing_purpose: null, data_categories: null, data_subjects: null, legal_basis: null, consent_details: null,
+      data_subject_rights_details: null, retention_period: null, recipients: null, international_transfers: 0,
+      transfer_safeguards: null, dpia_required: 0, status: 'Draft', owner: null,
+    });
+    if (p.sql) await c.env.DB.prepare(`UPDATE ropa_records SET ${p.sql}, updated_at=? WHERE id=?`).bind(...p.binds, new Date().toISOString(), id).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
     return c.json({ ok: true });
