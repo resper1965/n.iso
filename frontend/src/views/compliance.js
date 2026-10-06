@@ -2428,3 +2428,30 @@ window.generateSoA = generateSoA;
 window.openPolicyReport = function(projectId, controlId) {
     window.open(`/api/v1/projects/${projectId}/controls/${controlId}/policy/report?token=${S.token}`, '_blank');
 };
+
+// A rota de avaliação trabalha sobre o TEXTO do documento (o arquivo vive no R2, não é lido
+// aqui), então o botão "IA" abre um modal para colar o trecho a avaliar.
+window.evaluateEvidenceAI = function(evidenceId) {
+    openModal(`
+        <div class="modal-header"><span class="modal-title">Avaliar evidência por IA</span><button class="btn-ghost" data-action="forceCloseModal">×</button></div>
+        <div class="form-group">
+            <label class="form-label">Texto do documento</label>
+            <textarea class="form-input" id="eval-text" style="min-height:160px" placeholder="Cole aqui o texto extraído da evidência."></textarea>
+        </div>
+        <button class="btn btn-primary" style="width:100%" data-action="enviarAvaliacaoEvidencia" data-args='${JSON.stringify([evidenceId])}'>Avaliar</button>
+        <div id="eval-result" style="margin-top:1rem;font-size:0.8rem;white-space:pre-wrap"></div>
+    `);
+};
+
+window.enviarAvaliacaoEvidencia = async function(evidenceId) {
+    const text = (document.getElementById('eval-text')?.value || '').trim();
+    const out = document.getElementById('eval-result');
+    if (!text) { showToast('Cole o texto do documento para avaliar.', 'error'); return; }
+    out.textContent = 'Avaliando...';
+    try {
+        const r = await api('POST', `/api/v1/evidence/${evidenceId}/evaluate`, { text });
+        out.innerHTML = `<strong>${escapeHTML(r.evaluation_status || '')}</strong>\n${escapeHTML(r.evaluation_markdown || '')}`;
+    } catch (e) {
+        out.textContent = 'Erro: ' + e.message;
+    }
+};
