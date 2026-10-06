@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500 } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro } from '../helpers';
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
@@ -105,11 +105,14 @@ evidenceApp.delete('/:id', async (c) => {
     const ev = await c.env.DB.prepare('SELECT file_name, r2_key, project_id FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
-    if (ev.r2_key) {
-      await c.env.STORAGE.delete(ev.r2_key).catch(() => {});
-    }
-
+    // Banco primeiro: se o DELETE falhar (ex.: FK do checklist), a linha e o
+    // arquivo continuam juntos. Ao contrário, a linha sobrava apontando para um
+    // objeto já apagado. Falha do R2 depois disso vira objeto órfão — vai ao log,
+    // mas não desfaz a exclusão.
     await c.env.DB.prepare('DELETE FROM evidence WHERE id = ?').bind(id).run();
+    if (ev.r2_key) {
+      await c.env.STORAGE.delete(ev.r2_key).catch((e: unknown) => registraErro(c, e));
+    }
     await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`, '', '', ev.project_id);
     return c.json({ ok: true });
   } catch (e: any) {

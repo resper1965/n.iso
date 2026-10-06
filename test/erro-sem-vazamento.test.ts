@@ -161,8 +161,32 @@ describe('500 correlaciona em vez de vazar', () => {
       env.DB.prepare(`INSERT INTO checklist_progress (project_id, phase_number, item_id, evidence_id) VALUES (?,?,?,?)`)
         .bind(PROJ, 1, 'item-vaz', 'ev-vaz'),
     ]);
+    await env.STORAGE.put('evidence/proj-vaz/ev-vaz-a.pdf', 'conteudo');
     const res = await req('/api/v1/evidence/ev-vaz', { method: 'DELETE', headers: admin });
     await exigeSemVazamento(res, 'Erro ao excluir evidência');
+    // O banco recusou: a linha continua, então o arquivo para o qual ela aponta
+    // também precisa continuar. Antes o R2 era apagado primeiro.
+    expect(await env.DB.prepare('SELECT id FROM evidence WHERE id = ?').bind('ev-vaz').first()).not.toBeNull();
+    expect(await env.STORAGE.head('evidence/proj-vaz/ev-vaz-a.pdf')).not.toBeNull();
+  });
+
+  it('evidence: falha do R2 ao excluir não derruba a exclusão nem deixa a linha', async () => {
+    await env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+      .bind('ev-r2', PROJ, 'b.pdf', 'evidence/proj-vaz/ev-r2-b.pdf', 'h', 'vaz@ness.io').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const storage = new Proxy(env.STORAGE, {
+      get(alvo, prop) {
+        if (prop === 'delete') return async () => { throw new Error('R2 indisponível'); };
+        const v = (alvo as any)[prop];
+        return typeof v === 'function' ? v.bind(alvo) : v;
+      },
+    });
+    const res = await worker.fetch(
+      new Request('http://localhost/api/v1/evidence/ev-r2', { method: 'DELETE', headers: admin }),
+      { ...testEnv(), STORAGE: storage },
+    );
+    expect(res.status).toBe(200);
+    expect(await env.DB.prepare('SELECT id FROM evidence WHERE id = ?').bind('ev-r2').first()).toBeNull();
   });
 
   it('ropa: criar ROPA em projeto inexistente vira 500 sem texto do D1', async () => {
