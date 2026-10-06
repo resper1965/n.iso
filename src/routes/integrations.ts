@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { requireResourceAccess, genToken, signWebhook } from '../helpers';
+import { requireResourceAccess, genToken, signWebhook, registraErro } from '../helpers';
 import { validateBody, createWebhookSchema, createApiKeySchema } from '../schemas';
 
 const integrations = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -271,9 +271,10 @@ integrations.post('/api/v1/webhooks/test/:id', async (c) => {
     const resp = await fetch(webhook.url, { method: 'POST', headers: cabecalhos, body: corpo });
     await c.env.DB.prepare('UPDATE webhooks SET last_triggered_at = ? WHERE id = ?').bind(new Date().toISOString(), id).run();
     return c.json({ ok: true, status: resp.status });
-  } catch (e: any) {
+  } catch (e) {
     await c.env.DB.prepare('UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = ?').bind(id).run();
-    return c.json({ ok: false, error: e.message }, 502);
+    // A exceção pode ser do destino ou do D1 (o UPDATE está no mesmo try): vai ao log.
+    return c.json({ ok: false, error: 'Falha ao disparar o webhook de teste', request_id: registraErro(c, e) }, 502);
   }
 });
 

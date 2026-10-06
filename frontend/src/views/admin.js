@@ -133,7 +133,7 @@ window.__adminCopiarApiKey = () => {
             });
 
             const totalUsers = userArr.length;
-            const admins = userArr.filter(u => u.role === 'platform_admin' || u.role === 'admin' || u.role === 'consultor').length;
+            const admins = userArr.filter(u => ['platform_admin', 'admin', 'consultor', 'consultant', 'comercial', 'consultoria_admin'].includes(u.role)).length;
             const clientUsers = totalUsers - admins;
 
             const statsHtml = window.renderStatCards([
@@ -149,6 +149,8 @@ window.__adminCopiarApiKey = () => {
                     const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
                                       u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
                                       u.role === 'comercial' ? 'Comercial' :
+                                      u.role === 'consultoria_admin' ? 'Admin da consultoria' :
+                                      u.role === 'stakeholder' ? 'Stakeholder' :
                                       u.role === 'org_admin' ? 'Gestor Cliente' : 
                                       u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
                     return [

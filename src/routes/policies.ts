@@ -58,7 +58,8 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     );
 
     if (!result.success) {
-      return c.json({ error: 'Falha ao gerar política', detail: result.content }, 500);
+      // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
+      return erro500(c, 'Falha ao gerar política', new Error(result.content));
     }
 
     // ponytail: store generated policy in RAG for future context
@@ -353,7 +354,7 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
     }
 
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
-    const policies: { control_id: string; success: boolean; content_preview: string }[] = [];
+    const policies: { control_id: string; success: boolean; content_preview: string; error?: string; request_id?: string }[] = [];
     let successful = 0;
     let failed = 0;
 
@@ -404,10 +405,13 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
             const memory = new MemoryService(c.env.AI, c.env.VECTOR_INDEX);
             await memory.storeFact(projectId, `Política ${controlId}: ${result.content.substring(0, 500)}`, 'policy', { controlId });
           } catch (_) { /* non-blocking */ }
+          policies.push({ control_id: controlId, success: true, content_preview: result.content.substring(0, 200) });
         } else {
           failed++;
+          // Em falha, result.content é o erro cru de cada provedor de IA: vai ao
+          // log, e o item leva só mensagem fixa e o request_id.
+          policies.push({ control_id: controlId, success: false, content_preview: '', error: 'Falha ao gerar política', request_id: registraErro(c, new Error(result.content)) });
         }
-        policies.push({ control_id: controlId, success: result.success, content_preview: result.content?.substring(0, 200) ?? '' });
       } catch (e: any) {
         failed++;
         // `content_preview` é prévia de política; devolver a exceção aqui punha a

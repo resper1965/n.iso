@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireProjectAccess } from '../helpers';
+import { logAudit, requireProjectAccess, erro500 } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
 import { KnowledgeService } from '../services/knowledge-service';
 import { validateBody, chatSchema, mcpExecutarSchema } from '../schemas';
@@ -41,7 +41,7 @@ Seja solícito e forneça exemplos práticos quando solicitado.`;
 
     return c.json({ ok: true, reply });
   } catch (err: any) {
-    return c.json({ error: 'Erro ao comunicar com a IA', details: err.message }, 500);
+    return erro500(c, 'Erro ao comunicar com a IA', err);
   }
 });
 
@@ -162,7 +162,7 @@ Responda em PORTUGUÊS estritamente no formato JSON abaixo, sem blocos de códig
     });
 
   } catch (err: any) {
-    return c.json({ error: 'Erro ao rodar auditoria IA', details: err.message }, 500);
+    return erro500(c, 'Erro ao rodar auditoria IA', err);
   }
 });
 
@@ -197,7 +197,8 @@ aiApp.post('/projects/:id/assessment/evaluate', async (c) => {
     const result = await agent.run(assessmentData, context);
     
     if (!result.success) {
-      return c.json({ error: 'Falha no processamento agêntico do diagnóstico', details: result.content }, 500);
+      // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
+      return erro500(c, 'Falha no processamento agêntico do diagnóstico', new Error(result.content));
     }
 
     let cmmScore = 1;
@@ -238,7 +239,7 @@ aiApp.post('/projects/:id/assessment/evaluate', async (c) => {
     });
 
   } catch (err: any) {
-    return c.json({ error: 'Erro ao rodar diagnóstico executivo', details: err.message }, 500);
+    return erro500(c, 'Erro ao rodar diagnóstico executivo', err);
   }
 });
 
