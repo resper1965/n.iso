@@ -173,6 +173,39 @@ describe('500 correlaciona em vez de vazar', () => {
     });
     await exigeSemVazamento(res, 'Falha ao criar ROPA');
   });
+
+  it('ropa: relatório HTML que falha devolve 500 sem a exceção e com o request_id', async () => {
+    // A mensagem traz HTML de propósito: antes ia interpolada crua na página.
+    const db = new Proxy(env.DB, {
+      get(alvo, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => /FROM projects/.test(sql)
+            ? { bind: () => ({ first: async () => { throw new Error('D1_ERROR: <img src=x onerror=alert(1)>'); } }) }
+            : alvo.prepare(sql);
+        }
+        const v = (alvo as any)[prop];
+        return typeof v === 'function' ? v.bind(alvo) : v;
+      },
+    });
+    const linhas: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { linhas.push(String(args[0])); });
+
+    const res = await worker.fetch(
+      new Request(`http://localhost/api/v1/projects/${PROJ}/ropa/report`, { headers: admin }),
+      { ...testEnv(), DB: db },
+    );
+    expect(res.status).toBe(500);
+    const html = await res.text();
+    expect(html).not.toMatch(/D1_ERROR|<img|onerror/);
+
+    // O detalhe foi para o log, e a página cita o MESMO request_id.
+    const erro = linhas
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .find((ev) => ev?.msg === 'erro_handler');
+    expect(erro, 'a falha precisa ir ao log estruturado').toBeDefined();
+    expect(erro.erro).toMatch(/D1_ERROR/);
+    expect(html).toContain(erro.request_id);
+  });
 });
 
 /**
@@ -182,14 +215,15 @@ describe('500 correlaciona em vez de vazar', () => {
  */
 const ROTAS = import.meta.glob('../src/routes/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
-describe('catraca: detail com e.message em src/routes', () => {
+describe('catraca: mensagem de exceção em resposta de src/routes', () => {
   it('o leitor enxerga as rotas', () => {
     expect(Object.keys(ROTAS).length).toBeGreaterThan(10);
   });
 
-  it('nenhuma rota devolve detail: <erro>.message', () => {
+  it('nenhuma rota devolve detail: <erro>.message nem interpola ${e.message}', () => {
+    const PADRAO = /detail:\s*\w+\??\.message|\$\{\s*(e|err|error)\??\.message\s*\}/;
     const achados = Object.entries(ROTAS).flatMap(([arq, txt]) =>
-      txt.split('\n').flatMap((l, i) => (/detail:\s*\w+\??\.message/.test(l) ? [`${arq}:${i + 1}`] : [])));
-    expect(achados, `Use erro500(c, mensagem, e) em vez de detail: e.message: ${achados.join(', ')}`).toEqual([]);
+      txt.split('\n').flatMap((l, i) => (PADRAO.test(l) ? [`${arq}:${i + 1}`] : [])));
+    expect(achados, `Use erro500(c, mensagem, e) ou registraErro(c, e): ${achados.join(', ')}`).toEqual([]);
   });
 });

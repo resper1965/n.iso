@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, PODE_REVOGAR_APROVACAO } from '../helpers';
+import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
@@ -243,7 +243,10 @@ projectRopaApp.get('/report', async (c) => {
       </html>
     `;
     return c.html(html);
-  } catch (e: any) {
-    return c.html(`<h3>Erro ao gerar relatório ROPA: ${e.message}</h3>`, 500);
+  } catch (e) {
+    return c.html(
+      `<h3>Erro ao gerar relatório ROPA</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`,
+      500
+    );
   }
 });
