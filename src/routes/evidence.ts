@@ -349,8 +349,9 @@ projectEvidenceApp.post('/upload', async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
       ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
     } catch (e) {
-      // Compensação: sem a linha no banco, o objeto no R2 seria órfão.
-      await c.env.STORAGE.delete(r2Key).catch(() => {});
+      // Compensação: sem a linha no banco, o objeto no R2 seria órfão. Se
+      // a própria compensação falhar, o órfão fica registrado no log.
+      await c.env.STORAGE.delete(r2Key).catch((e2: unknown) => registraErro(c, e2));
       throw e;
     }
 

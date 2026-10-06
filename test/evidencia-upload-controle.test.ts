@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, sessionFor, workerEnv } from './helpers/d1';
@@ -17,13 +17,13 @@ let admin: Record<string, string>;
 const objetosDe = async (projeto: string) =>
   (await env.STORAGE.list({ prefix: `evidence/${projeto}/` })).objects.map((o) => o.key);
 
-function upload(controlId: string | null, db?: D1Database) {
+function upload(controlId: string | null, sobre: Record<string, unknown> = {}) {
   const form = new FormData();
   form.append('file', new File(['conteudo da evidencia'], 'politica.pdf', { type: 'application/pdf' }));
   if (controlId !== null) form.append('control_id', controlId);
   return worker.fetch(
     new Request(`http://localhost/api/v1/projects/${P}/evidence/upload`, { method: 'POST', headers: admin, body: form }),
-    { ...workerEnv(), ...(db ? { DB: db } : {}) },
+    { ...workerEnv(), ...sobre },
   );
 }
 
@@ -65,26 +65,47 @@ describe('upload de evidência com control_id', () => {
     expect((await objetosDe(P)).some((k) => k.includes(id))).toBe(true);
   });
 
+  // Dublê pontual: só o INSERT em evidence falha; o resto vai ao D1 real.
+  const dbInsertFalha = () => new Proxy(env.DB, {
+    get(alvo, prop) {
+      if (prop === 'prepare') {
+        return (sql: string) => /INSERT INTO evidence/.test(sql)
+          ? { bind: () => ({ run: async () => { throw new Error('D1_ERROR: falha simulada no INSERT'); } }) }
+          : alvo.prepare(sql);
+      }
+      const v = (alvo as any)[prop];
+      return typeof v === 'function' ? v.bind(alvo) : v;
+    },
+  }) as D1Database;
+
   it('INSERT falha depois do put: o objeto é apagado do R2 e a resposta não vaza', async () => {
     const antes = await objetosDe(P);
-    // Dublê pontual: só o INSERT em evidence falha; o resto vai ao D1 real.
-    const db = new Proxy(env.DB, {
-      get(alvo, prop) {
-        if (prop === 'prepare') {
-          return (sql: string) => /INSERT INTO evidence/.test(sql)
-            ? { bind: () => ({ run: async () => { throw new Error('D1_ERROR: falha simulada no INSERT'); } }) }
-            : alvo.prepare(sql);
-        }
-        const v = (alvo as any)[prop];
-        return typeof v === 'function' ? v.bind(alvo) : v;
-      },
-    }) as D1Database;
-
-    const res = await upload('ctrl-meu', db);
+    const res = await upload('ctrl-meu', { DB: dbInsertFalha() });
     expect(res.status).toBe(500);
     const corpo = (await res.json()) as Record<string, unknown>;
     expect(corpo.detail).toBeUndefined();
     expect(JSON.stringify(corpo)).not.toMatch(/D1_ERROR|INSERT/);
     expect(await objetosDe(P)).toEqual(antes);
   });
+
+  it('compensação que falha no R2 vai ao log em vez de sumir', async () => {
+    const linhas: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { linhas.push(String(args[0])); });
+    const storage = new Proxy(env.STORAGE, {
+      get(alvo, prop) {
+        if (prop === 'delete') return async () => { throw new Error('R2 indisponível na compensação'); };
+        const v = (alvo as any)[prop];
+        return typeof v === 'function' ? v.bind(alvo) : v;
+      },
+    });
+    const res = await upload('ctrl-meu', { DB: dbInsertFalha(), STORAGE: storage });
+    expect(res.status).toBe(500);
+    const erros = linhas
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((ev) => ev?.msg === 'erro_handler')
+      .map((ev) => String(ev.erro));
+    expect(erros.some((e) => /R2 indisponível na compensação/.test(e)), erros.join(' | ')).toBe(true);
+  });
 });
+
+afterEach(() => vi.restoreAllMocks());
