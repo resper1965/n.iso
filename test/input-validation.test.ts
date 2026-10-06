@@ -98,7 +98,7 @@ describe('Guarda global de corpo', () => {
 
   it('deixa passar corpo vazio — rota de ação não recebe corpo', async () => {
     // Se a guarda recusasse isto, quebraria toda rota de "executar" sem payload.
-    const res = await post('/api/v1/projects/p1/generate-soa', '');
+    const res = await post('/api/v1/projects/p1/migrate-27701', '');
     expect(res.status).not.toBe(400);
   });
 });

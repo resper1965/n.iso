@@ -145,7 +145,7 @@ governança derruba o agente dela na chamada seguinte, sem esperar o token expir
 | `src/middleware/agente.ts` | `concessaoValida`, `resolverAgente`, `FORA_DO_AGENTE`, `acaoDestrutiva`, `NOME_CLIENTE_SQL`. |
 | `src/middleware/auth.ts` | Ramo `env.AGENTE` do `authMiddleware` e a trilha `agente.acao_destrutiva`. |
 | `src/routes/agentes.ts` | O que o cliente vê e faz: listar e revogar os agentes do projeto. |
-| `mcp-server-niso/src/ferramentas.ts` | As 24 ferramentas tipadas, o filtro por papel e o despacho. **Compartilhado** entre o servidor local (stdio) e o remoto. |
+| `mcp-server-niso/src/ferramentas.ts` | As 23 ferramentas tipadas, o filtro por papel e o despacho. **Compartilhado** entre o servidor local (stdio) e o remoto. |
 | `agent-skills/` | A fonte das skills (SKILL.md, referências, scripts). |
 | `scripts/gerar-skills.mjs` | Escreve `src/mcp/skills-gerado.ts` a partir de `agent-skills/` (`npm run skills:gerar`). |
 | `migrations/0034_agente_concessoes.sql` | A tabela das concessões. |
@@ -193,7 +193,7 @@ O agente enxerga **25**: 4 do servidor remoto e 21 tipadas.
 | Origem | Quais |
 |---|---|
 | Só do servidor remoto (`servidor.ts`) | `niso_contexto`, `niso_skill`, `niso_ler`, `niso_executar` |
-| Tipadas (`ferramentas.ts`) | Leitura: `list_projects`, `get_project`, `list_controls`, `list_risks`, `gap_analysis`, `traceability`, `list_evidence`, `audit_pack`, `coherence_check`. Escrita: `create_risk`, `update_risk`, `generate_policy`, `generate_soa`, `evaluate_evidence`, `create_evidence`, `import_training`, `create_asset`, `update_policy`, `update_control`, `migrate_27701`, `respond_auditor_note` |
+| Tipadas (`ferramentas.ts`) | Leitura: `list_projects`, `get_project`, `list_controls`, `list_risks`, `gap_analysis`, `traceability`, `list_evidence`, `audit_pack`, `coherence_check`. Escrita: `create_risk`, `update_risk`, `generate_policy`, `evaluate_evidence`, `create_evidence`, `import_training`, `create_asset`, `update_policy`, `update_control`, `migrate_27701`, `respond_auditor_note` |
 
 O servidor local define as 24 tipadas. O remoto esconde 3: as duas de escrita de
 auditor (`create_audit_finding`, `create_auditor_note`) pelo papel, e

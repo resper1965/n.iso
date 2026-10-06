@@ -667,21 +667,15 @@ import { navigate } from '../router.js';
                 }
             });
 
-            // Produzir a SoA com exclusão sem justificativa é entregar um
-            // documento que reprova na auditoria. O botão fica desabilitado e o
-            // title diz o motivo; quando libera, o title diz o recorte.
-            // `Gerar SoA (AI)` é a única ação deste repo que produz o documento
-            // — o `Exportar SoA` do protótipo ainda não tem rota.
+            // Exclusão sem justificativa é achado de auditoria: a faixa de bloqueio
+            // abaixo e o card de justificativas dizem o motivo.
             const travado = bloqueios.length > 0;
             const motivo = travado
                 ? `${bloqueios.length} ${bloqueios.length === 1 ? 'controle N/A está' : 'controles N/A estão'} sem justificativa de exclusão`
                 : `Considera o recorte atual (${controls.length} controles)`;
             a.innerHTML = `
                 <button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${proj.id}"]' style="margin-right:8px">Diagnóstico de prontidão</button>
-                <button class="btn btn-secondary" data-action="migrate27701" data-args='["${proj.id}"]' style="margin-right:8px">Migrar 27701</button>
-                <button class="btn btn-primary" id="soa-generate" title="${escapeHTML(motivo)}"
-                    ${travado ? 'disabled style="cursor:not-allowed;opacity:0.5"' : ''}
-                    data-action="generateSoA" data-args='["${proj.id}"]'>Gerar SoA (AI)</button>`;
+                <button class="btn btn-secondary" data-action="migrate27701" data-args='["${proj.id}"]'>Migrar 27701</button>`;
 
             const stdGroups = {};
             controls.forEach(ctrl => {
@@ -2393,18 +2387,6 @@ import { navigate } from '../router.js';
         } catch(e) { alert('Erro: ' + e.message); }
     }
 
-    async function generateSoA(projectId) {
-        if (!confirm('Gerar Statement of Applicability automatico? Isso criara controles no banco de dados.')) return;
-        try {
-            const res = await api('POST', `/api/v1/projects/${projectId}/generate-soa`);
-            if (res.ok) {
-                alert(`SoA Gerado!\n\nTotal: ${res.total} controles avaliados\nAplicaveis: ${res.applicable}\nNao aplicaveis: ${res.not_applicable}\nNovos controles criados: ${res.new_controls_created}`);
-                await loadControls();
-                render();
-            }
-        } catch(e) { alert('Erro ao gerar SoA: ' + e.message); }
-    }
-
 window.renderControls = renderControls;
 window.openControlDetail = openControlDetail;
 window.updateControlStatus = updateControlStatus;
@@ -2423,7 +2405,6 @@ window.doGeneratePolicy = doGeneratePolicy;
 window.renderAcknowledgments = renderAcknowledgments;
 window.bulkGeneratePolicies = bulkGeneratePolicies;
 window.migrate27701 = migrate27701;
-window.generateSoA = generateSoA;
 
 window.openPolicyReport = function(projectId, controlId) {
     window.open(`/api/v1/projects/${projectId}/controls/${controlId}/policy/report?token=${S.token}`, '_blank');

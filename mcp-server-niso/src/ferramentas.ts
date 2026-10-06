@@ -238,17 +238,6 @@ export const TOOLS: Ferramenta[] = [
     },
   },
   {
-    name: "niso_generate_soa",
-    description: `Generate the Statement of Applicability draft (93 controls) from the project's assessment answers, creating compliance controls. ${WRITE_GUARDRAIL}`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        projectId: { type: "string", description: "The project ID" },
-      },
-      required: ["projectId"],
-    },
-  },
-  {
     name: "niso_evaluate_evidence",
     description: `AI pre-qualification of an evidence record (CONFORME/PARCIAL/NAO CONFORME draft — not an audit verdict). Requires the extracted text of the evidence document. ${WRITE_GUARDRAIL}`,
     inputSchema: {
@@ -568,12 +557,6 @@ export async function executarFerramenta(
         return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-policy`, {
           control_id: controlId,
         });
-      }
-
-      case "niso_generate_soa": {
-        const { projectId } = projectIdSchema.parse(args);
-        fora(projectId);
-        return await t.enviar(`/api/v1/projects/${enc(projectId)}/generate-soa`);
       }
 
       case "niso_evaluate_evidence": {
