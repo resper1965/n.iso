@@ -83,7 +83,7 @@ describe('renderKnowledge', () => {
   });
 
   // BUG (ai.js:24): `value="${query}"` sem escapeHTML — a busca digitada vai crua para o atributo.
-  it.fails('a consulta digitada não escapa do atributo value (ai.js:24)', async () => {
+  it('a consulta digitada não escapa do atributo value (ai.js:24)', async () => {
     S.activeProject = { id: 'p1' };
     S.knowledgeQuery = '"><img id="inj" src=x>';
     apiMock.mockResolvedValue([]);

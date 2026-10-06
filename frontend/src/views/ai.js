@@ -21,7 +21,7 @@ import { navigate, render } from '../router.js';
             <div class="fade-in">
                 <div class="card" style="padding:1.5rem;margin-bottom:1.5rem">
                     <div class="form-group" style="margin-bottom:0">
-                        <input class="form-input" id="k-search" placeholder="Buscar no conhecimento do projeto..." value="${query}" data-action-keydown="searchKnowledge" data-key="Enter">
+                        <input class="form-input" id="k-search" placeholder="Buscar no conhecimento do projeto..." value="${escapeHTML(query)}" data-action-keydown="searchKnowledge" data-key="Enter">
                     </div>
                 </div>
                 <div id="k-results">
