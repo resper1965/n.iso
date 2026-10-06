@@ -318,6 +318,15 @@ projectEvidenceApp.post('/upload', async (c) => {
     const invalido = validateUpload(file);
     if (invalido) return c.json({ error: invalido }, 400);
 
+    // O controle precisa existir E ser deste projeto, conferido ANTES de tocar
+    // no R2: sem isto a FK derrubava o INSERT depois do put (objeto órfão + 500)
+    // e controle de outro projeto era aceito. Mesma resposta nos dois casos para
+    // não revelar a existência de controle alheio.
+    if (controlId) {
+      const ctrl = await c.env.DB.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
+      if (!ctrl) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
+    }
+
     const id = genId();
     const r2Key = `evidence/${projectId}/${id}-${file.name}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -331,10 +340,16 @@ projectEvidenceApp.post('/upload', async (c) => {
     });
 
     const user = c.get('user');
-    await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
-    ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, uploaded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
+      ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+    } catch (e) {
+      // Compensação: sem a linha no banco, o objeto no R2 seria órfão.
+      await c.env.STORAGE.delete(r2Key).catch(() => {});
+      throw e;
+    }
 
     await logAudit(c.env.DB, 'evidence.uploaded', user?.email || 'system', `Evidência ${file.name} (SHA-256: ${realSha256.substring(0, 8)}...) enviada para projeto ${projectId}`);
 
