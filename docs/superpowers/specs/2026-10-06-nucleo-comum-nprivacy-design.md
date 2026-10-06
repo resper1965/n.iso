@@ -227,7 +227,7 @@ Princípios:
 - **Mantém:** `organizations` (consultoria) → `projects` (cliente).
 - **Novo:** `projeto_modulos (project_id, modulo, habilitado_em, habilitado_por)`, com `modulo IN ('iso','privacy','secops')`.
 - **Teto:** a organização define quais módulos pode habilitar (`organizations.modulos_contratados`, JSON). O projeto não habilita o que a org não contratou.
-- **Ponto aberto.** O pedido diz "módulos habilitados por organização". Neste código a organização é a consultoria e o cliente é o projeto. Proponho habilitar **por projeto**, com teto na org. Confirmar (seção 10).
+- **Decidido (06/10):** habilita por projeto, com teto na org. A gestão de organização, projeto, usuário e acesso é **a mesma do n.iso**: mesmas tabelas, mesmo `projectAccessMiddleware`, mesmos papéis e as mesmas telas de administração. O n.privacy não tem cadastro de cliente nem de usuário próprio. Habilitar um módulo é uma ação a mais nessa gestão, não um sistema novo.
 
 ### 4.2 Partes
 
@@ -337,7 +337,7 @@ requisito_mapeamentos
 - **Só `validado_juridico` aparece para o cliente.** O `proposto` é trabalho interno até o advogado assinar.
 - **Ligação com o n.iso sem duplicar.** `compliance_controls` continua sendo a instância por projeto (status, maturidade, SoA) e ganha `requisito_id`. O controle ISO fica no n.iso; o requisito é a referência comum.
 - **Antes de semear:**
-  - escolher **um** catálogo 27701:2025 (`src/data/iso27701-2025.ts` ou `PIMS_RULES`) e apagar o outro;
+  - vale a **ISO 27701:2025** (decidido em 06/10). Os dois catálogos do código se dizem 2025 e numeram diferente; fica o que bater com a norma publicada (conferência na fatia 0; o provável é `src/data/iso27701-2025.ts`, que é o semeado) e o outro é apagado;
   - o seed dos 93 do Anexo A passa a sair daqui.
 - **LGPD e GDPR entram como artigo e inciso**, com título curto próprio. Texto de lei é público, mas a paráfrase e a ligação passam pelo jurídico.
 
@@ -503,10 +503,10 @@ As fatias 2 e 3 podem trocar de lugar: documentos não dependem de requisito par
 
 ## 10. Perguntas para você e para o jurídico
 
-1. **Módulos por projeto (cliente), com teto na organização (consultoria)?** No código, "organização" é a consultoria.
+1. ~~Módulos por projeto, com teto na organização?~~ **Decidido:** sim, e a gestão de organização e projeto é a mesma do n.iso (4.1).
 2. **CMP:** confirma "não construir, integrar depois"?
 3. **Portal público de pedidos do titular entra na fatia 7, ou só o registro interno?**
-4. **Qual catálogo 27701:2025 vale:** `src/data/iso27701-2025.ts` (31+18) ou `PIMS_RULES` (78)? Recomendo o primeiro, que é o semeado e o que tem as referências corrigidas aos arts. 37 e 18.
+4. ~~Qual catálogo 27701 vale?~~ **Decidido:** a versão mais nova, 2025. Falta só conferir, contra a norma publicada, qual dos dois catálogos do código a reproduz (4.5).
 5. **`stakeholders` (cláusula 4.2) vira parte?** Recomendo que sim, com vínculo `parte_interessada`.
 6. **Processo como item e tratamento como entidade separada** (4.4): concorda?
 7. **Jurídico:** prazos do titular e de incidente (ANPD e titular), lista de bases legais, títulos curtos dos artigos e todo `requisito_mapeamentos` antes de `validado_juridico`.
