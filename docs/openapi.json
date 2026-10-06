@@ -8463,17 +8463,6 @@
                             "string",
                             "null"
                           ]
-                        },
-                        "notes": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "maxLength": 50000
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
                         }
                       },
                       "required": [

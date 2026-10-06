@@ -283,7 +283,6 @@ export const interviewSchema = z.object({
       answer: longo,
       interviewee: curtoOpcional,
       gap_detected: boolLike,
-      notes: longoOpcional,
     })
   ).min(1).max(1000),
 }).passthrough();
