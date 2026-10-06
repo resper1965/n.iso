@@ -16,7 +16,7 @@ risks.get('/api/v1/projects/:projectId/risks', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT r.*, cc.standard as control_standard, cc.title as control_title 
      FROM risks r 
-     LEFT JOIN compliance_controls cc ON r.control_id = cc.id 
+     LEFT JOIN compliance_controls cc ON r.control_id = cc.id AND cc.project_id = r.project_id
      WHERE r.project_id = ? 
      ORDER BY r.impact * r.probability DESC`
   ).bind(c.req.param('projectId')).all();

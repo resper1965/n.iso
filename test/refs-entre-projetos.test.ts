@@ -227,3 +227,13 @@ describe('PUT parcial: campo ausente preserva o gravado; null ou vazio explícit
       .toEqual({ processing_name: 'Folha', technical_measures: 'cripto', residual_risk_level: 'Low', status: 'Approved', ropa_id: 'ropa-a' });
   });
 });
+
+describe('listagem de riscos: o JOIN do controle exige o mesmo projeto', () => {
+  it('vínculo legado a controle de outro projeto não traz o título alheio', async () => {
+    await env.DB.prepare(`UPDATE risks SET control_id = 'ctl-b' WHERE id = 'r-a'`).run();
+    const corpo = await (await pedir(worker, `/api/v1/projects/${A}/risks`, { headers: h })).json<any>();
+    const r = corpo.risks.find((x: any) => x.id === 'r-a');
+    expect(r.control_title).toBeNull();
+    expect(JSON.stringify(corpo)).not.toContain('Controle b');
+  });
+});
