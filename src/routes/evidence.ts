@@ -137,13 +137,12 @@ evidenceApp.put('/:id', async (c) => {
     }
     const novoControle = body.control_id ?? null;
 
-    // Aterramento de tenant: só vincula a um controle DO MESMO projeto.
+    // Aterramento de tenant: só vincula a um controle DO MESMO projeto. Mesma
+    // resposta para inexistente e de outro projeto (como no upload): um 403
+    // distinto confirmava que o id existe em outro tenant.
     if (novoControle !== null) {
-      const ctrl = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(novoControle).first<any>();
-      if (!ctrl) return c.json({ error: 'Controle não encontrado' }, 404);
-      if (ctrl.project_id !== ev.project_id) {
-        return c.json({ error: 'Forbidden: controle pertence a outro projeto' }, 403);
-      }
+      const ctrl = await c.env.DB.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(novoControle, ev.project_id).first();
+      if (!ctrl) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
     }
 
     // Mudar o controle-alvo invalida a avaliação anterior (foi feita contra outro
