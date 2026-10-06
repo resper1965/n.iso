@@ -1104,64 +1104,6 @@ window.updateContextPanel = function updateContextPanel() {
         // ponytail: no-op stub
     }
 
-window.openInviteClientModal = function openInviteClientModal(projectId) {
-        const tempPassword = 'Niso@' + Math.floor(Math.random() * 9000 + 1000);
-        openModal(`
-            <div class="modal-header"><span class="modal-title">Convidar Cliente</span><button class="btn-ghost" data-action="forceCloseModal">\u00d7</button></div>
-            <div class="form-group">
-                <label class="form-label">Nome do Cliente</label>
-                <input class="form-input" id="invite-name" placeholder="Ex: João Silva">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email de Acesso</label>
-                <input class="form-input" id="invite-email" type="email" placeholder="cliente@empresa.com.br">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Senha Inicial</label>
-                <input class="form-input" id="invite-password" type="text" value="${tempPassword}">
-            </div>
-            <p style="font-size:0.7rem;color:var(--muted);margin-bottom:1rem">O cliente terá acesso exclusivo ao portal do projeto vinculado.</p>
-            <button class="btn btn-primary" id="btn-do-invite" style="width:100%" data-action="doInviteClient" data-args='["${projectId}"]'>Criar Acesso</button>
-            <div id="invite-result" style="margin-top:1rem;font-size:0.8rem"></div>
-        `);
-    }
-
-window.doInviteClient = async function doInviteClient(projectId) {
-        const name = document.getElementById('invite-name').value;
-        const email = document.getElementById('invite-email').value;
-        const password = document.getElementById('invite-password').value;
-        const result = document.getElementById('invite-result');
-        const btn = document.getElementById('btn-do-invite');
-
-        if (!name || !email || !password) {
-            result.style.color = 'var(--danger)';
-            result.textContent = 'Preencha todos os campos.';
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Criando...';
-
-        try {
-            const res = await api('POST', '/api/v1/users', {
-                name,
-                email,
-                password,
-                role: 'client',
-                client_project_id: projectId
-            });
-            result.style.color = 'var(--accent)';
-            result.textContent = `Acesso criado com sucesso para ${email}!`;
-            btn.textContent = 'Criar outro';
-            btn.disabled = false;
-        } catch (e) {
-            result.style.color = 'var(--danger)';
-            result.textContent = 'Erro: ' + e.message;
-            btn.disabled = false;
-            btn.textContent = 'Tentar novamente';
-        }
-    }
-
 // Espelho de `ehComercial` (src/helpers.ts). Só decide o que MOSTRAR; quem
 // barra de verdade é o servidor.
 window.ehComercial = function ehComercial() { return !!(S.user && ['platform_admin', 'comercial', 'consultoria_admin'].includes(S.user.role)); }

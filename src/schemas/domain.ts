@@ -372,6 +372,14 @@ export const dpiaSchema = z.object({
   technical_measures: longoOpcional,
   residual_risk_level: curtoOpcional,
   dpo_recommendations: longoOpcional,
+  // Colunas que a tela (frontend/src/views/privacy.js) usa para criar, listar e mostrar o detalhe.
+  system_name: longoOpcional,
+  data_flow_description: longoOpcional,
+  data_subjects_types: longoOpcional,
+  personal_data_categories: longoOpcional,
+  risks_identified: longoOpcional,
+  mitigation_measures: longoOpcional,
+  dpo_opinion: longoOpcional,
   // 'Approved' fica de fora de propósito: aprovar exige senha, autoridade na matriz de Governança e
   // segregação, e isso só existe em POST .../approve e nos pedidos de aprovação. Assinaturas
   // (dpo_signature, ceo_signature, dpo_approved_*) passam pelo passthrough mas a rota não as grava.

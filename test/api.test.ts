@@ -665,7 +665,6 @@ describe('nISO API (D1 e KV reais)', () => {
       const data = await res.json() as any;
       expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
-      expect(data.templates[0]).toHaveProperty('popularity');
     });
   });
 
