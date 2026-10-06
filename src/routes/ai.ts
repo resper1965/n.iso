@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireProjectAccess, erro500 } from '../helpers';
+import { logAudit, erro500 } from '../helpers';
 import { AssessmentAgent } from '../agents/assessment';
-import { KnowledgeService } from '../services/knowledge-service';
-import { validateBody, chatSchema, mcpExecutarSchema } from '../schemas';
+import { validateBody, chatSchema } from '../schemas';
 import { chatModel } from '../config/models';
 
 export const aiApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -241,71 +240,4 @@ aiApp.post('/projects/:id/assessment/evaluate', async (c) => {
   } catch (err: any) {
     return erro500(c, 'Erro ao rodar diagnóstico executivo', err);
   }
-});
-
-// MCP Protocol Endpoints
-aiApp.get('/mcp', async (c) => {
-  return c.json({
-    mcp_version: '1.0',
-    tools: [
-      {
-        name: 'get_project_knowledge',
-        description: 'Busca semântica no cérebro do projeto (entrevistas, procedimentos, políticas).',
-        parameters: {
-          type: 'object',
-          properties: {
-            project_id: { type: 'string' },
-            query: { type: 'string' }
-          },
-          required: ['project_id', 'query']
-        }
-      },
-      {
-        name: 'check_control_compliance',
-        description: 'Verifica o status de um controle ISO específico no projeto.',
-        parameters: {
-          type: 'object',
-          properties: {
-            project_id: { type: 'string' },
-            control_id: { type: 'string' }
-          },
-          required: ['project_id', 'control_id']
-        }
-      }
-    ]
-  });
-});
-
-aiApp.post('/mcp/execute', async (c) => {
-  const v = await validateBody(c, mcpExecutarSchema);
-  if (!v.success) return v.response;
-  const { tool } = v.data;
-  const args: any = v.data.arguments;
-
-  // Esta rota é montada em /api/v1 (fora de /projects/:projectId), então o
-  // projectAccessMiddleware NÃO roda aqui. O project_id vem do CORPO — sem a
-  // checagem abaixo, uma chave/sessão do projeto A leria dados do projeto B
-  // (IDOR cross-tenant). Trava o escopo antes de qualquer query.
-  const projectId = args?.project_id;
-  if (!projectId) return c.json({ error: 'project_id é obrigatório' }, 400);
-  try {
-    await requireProjectAccess(c.env.DB, c.get('user'), projectId);
-  } catch {
-    return c.json({ error: 'Sem acesso a este projeto' }, 403);
-  }
-
-  const service = new KnowledgeService(c.env);
-
-  if (tool === 'get_project_knowledge') {
-    const results = await service.search(args.project_id, args.query);
-    return c.json({ results });
-  }
-  
-  if (tool === 'check_control_compliance') {
-    const ctrl = await c.env.DB.prepare('SELECT status, maturity FROM compliance_controls WHERE project_id = ? AND id = ?')
-      .bind(args.project_id, args.control_id).first();
-    return c.json({ control: ctrl || { status: 'Not Started' } });
-  }
-
-  return c.json({ error: 'Tool not found' }, 404);
 });

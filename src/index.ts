@@ -64,7 +64,6 @@ export type Bindings = {
   OAUTH_KV: KVNamespace;
   /** Injetado pelo OAuthProvider nas rotas /oauth/*. */
   OAUTH_PROVIDER?: import('@cloudflare/workers-oauth-provider').OAuthHelpers;
-  VECTOR_INDEX: VectorizeIndex;
   STORAGE: R2Bucket;
   AI: Ai;
   SETUP_KEY?: string;

@@ -29,7 +29,6 @@ veio deixa o resto parecer inexistente.
 | Fora | Motivo |
 | :--- | :--- |
 | Arquivos de evidência (R2) | Vão as chaves, os hashes e os tamanhos na tabela `evidence`; o conteúdo sai por download individual. Base64 multiplica o tamanho por 1,33 e um export de 500 MB estoura o limite de resposta do Worker. |
-| Vetores do Vectorize | Derivados dos documentos, reconstruíveis por reingestão. Exportar embedding é exportar artefato do modelo, não dado do cliente. |
 | `api_keys` e `auditor_tokens` | Têm `project_id` e passariam pela descoberta automática. São **credenciais**, não dado do titular: um export que as carrega vira cópia viva de credenciais, guardada onde quer que o cliente ponha o arquivo. |
 
 ## Assinatura

@@ -88,7 +88,6 @@ Renderiza tabelas Glassmorphism com cabeçalhos em caixa alta, formatação cust
 | **5. Privacidade** | ROPA | `ropa` | Registro de Operações de Tratamento (LGPD / ISO 27701) |
 | **5. Privacidade** | DPIA / RIPD | `dpia` | Relatório de Impacto à Proteção de Dados |
 | **6. Inteligência** | AI Assistant | `ai-chat` | Copilot de Compliance baseado em Workers AI |
-| **6. Inteligência** | Knowledge Base | `knowledge` | RAG na base de conhecimento Vectorize |
 | **7. Sistema** | Trilha de Logs | `audit-trail` | Log Viewer e auditoria de ações no sistema |
 | **7. Sistema** | Usuários | `users` | Gestão de usuários e permissões RBAC |
 | **7. Sistema** | Configurações | `settings` | Webhooks, API Keys e Branding da Organização |

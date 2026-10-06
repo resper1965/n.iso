@@ -338,7 +338,6 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       { methods: ['POST'], test: p => p.endsWith('/documents/upload') },
       { methods: ['POST', 'PUT'], test: p => p.endsWith('/policy-acknowledgments') },
       { methods: ['POST', 'PUT'], test: p => p.endsWith('/policies/ack') },
-      { methods: ['POST'], test: p => p.endsWith('/mcp/execute') },
       { methods: ['POST'], test: p => p.endsWith('/chat') },
       { methods: ['POST'], test: p => MFA_AUTO_SERVICO.test(p) },
       { methods: ['POST'], test: p => SENHA_AUTO_SERVICO.test(p) },

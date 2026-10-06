@@ -7,8 +7,7 @@
 // Papéis:
 // - reasoning: análise/diagnóstico dos agentes (Workers AI, 70B). Capaz, on-CF.
 // - gateway:   primário via AI Gateway (roteável), quando há AI_GATEWAY_TOKEN.
-// - chat:      assistente/knowledge, mais barato e rápido (8B).
-// (embeddings tem o seu próprio constante em services/embeddings.ts.)
+// - chat:      assistente de chat, mais barato e rápido (8B).
 
 export const DEFAULT_MODELS = {
   reasoning: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',

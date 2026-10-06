@@ -4,7 +4,7 @@
 [![Deploy](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml)
 [![CodeQL](https://github.com/resper1965/n.iso/actions/workflows/codeql.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/codeql.yml)
 ![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)
-![Stack](https://img.shields.io/badge/stack-Cloudflare%20Workers%20%2B%20D1%20%2B%20R2%20%2B%20Vectorize-f38020.svg)
+![Stack](https://img.shields.io/badge/stack-Cloudflare%20Workers%20%2B%20D1%20%2B%20R2-f38020.svg)
 
 O **nISO** conduz a adequação a ISO 27001 e 27701 de ponta a ponta: Declaração de
 Aplicabilidade, matriz de risco, cofre de evidências e trilha de auditoria. É a
@@ -122,7 +122,6 @@ curl -s https://niso.ness.com.br/health
 
 - **Runtime**: Hono no Cloudflare Workers.
 - **Banco**: D1 (SQLite). Trilha de auditoria append-only por trigger.
-- **Memória**: Vectorize (RAG) para contexto organizacional e normativo.
 - **Arquivos**: R2 para evidências e documentos; bucket separado para a trilha arquivada.
 - **IA**: Workers AI (Llama 3.1) via AI Gateway.
 - **Contrato**: `docs/openapi.json` é **gerado** dos schemas Zod. Editar à mão cria
@@ -148,7 +147,6 @@ Bindings e variáveis ficam em `wrangler.jsonc`.
 | `SESSIONS` | KV | Sessões, tokens e contadores de rate limit |
 | `STORAGE` | R2 | Evidências e documentos |
 | `TRILHA` | R2 | Trilha de auditoria arquivada, em cadeia encadeada |
-| `VECTOR_INDEX` | Vectorize | Memória de longo prazo da IA |
 | `AI` | Workers AI | Inferência |
 
 **Variáveis** (públicas, versionadas em `wrangler.jsonc`): `ENVIRONMENT`,
