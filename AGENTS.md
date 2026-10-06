@@ -184,9 +184,12 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **~510 `any` em `src/`** (medido em 2026-10-01: `: any`, `as any` e `<any>` em
-  `src/*.ts`). `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria
-  barata; nao precisa de permissao. Falta uma catraca que reprove o aumento.
+- **569 `any` em `src/`** (medido em 2026-10-06, fora `*.test.ts`:
+  `git grep -ahoE ': any|as any|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
+  `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
+  precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
+  `git grep` sem ele conta 1 linha no lugar de 8). `test/any-catraca.test.ts` reprova se o numero subir — e
+  tambem se descer sem baixar o `TETO` la.
 - **4 de 94 arquivos de teste ainda mockam o D1**: `api`, `integration`,
   `mcp-integration` e `services-rag` (medido em 2026-10-01). Os demais que tocam
   banco usam o D1 real do `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
