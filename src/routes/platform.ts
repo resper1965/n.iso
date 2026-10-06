@@ -75,7 +75,7 @@ platformApp.put('/dpia/:id', async (c) => {
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     await c.env.DB.prepare(
       `UPDATE dpia_assessments SET ropa_id=?, processing_name=?, data_category_risk=?, necessity_proportionality=?, technical_measures=?, residual_risk_level=?, dpo_recommendations=?, status=? WHERE id=?`
-    ).bind(body.ropa_id || null, body.processing_name, body.data_category_risk, body.necessity_proportionality, body.technical_measures, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
+    ).bind(body.ropa_id || null, body.processing_name ?? null, body.data_category_risk ?? null, body.necessity_proportionality ?? null, body.technical_measures ?? null, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, body.status || 'Draft', id).run();
     // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
     await conferirPedidosDoDocumento(c, 'dpia', id);
     const user = c.get('user');

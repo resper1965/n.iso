@@ -183,3 +183,22 @@ describe('achado de não conformidade abre CAPA', () => {
     });
   }
 });
+
+describe('corpo mínimo: opcional ausente vira NULL, não 500', () => {
+  // Opcional ausente chegava ao bind como `undefined`, que o D1 recusa (D1_TYPE_ERROR).
+  it('CAPA: POST só com título e PUT só com título e status', async () => {
+    const p = await req(`/api/v1/projects/${A}/capa`, 'POST', { title: 'Mínima' });
+    expect(p.status, await p.clone().text()).toBe(201);
+    const u = await req('/api/v1/capa/capa-a', 'PUT', { title: 'Mínima', status: 'Open' });
+    expect(u.status, await u.clone().text()).toBe(200);
+    expect(await env.DB.prepare(`SELECT title, description, due_date FROM corrective_actions WHERE id = 'capa-a'`).first())
+      .toEqual({ title: 'Mínima', description: null, due_date: null });
+  });
+
+  it('DPIA: POST e PUT com corpo vazio', async () => {
+    const p = await req(`/api/v1/projects/${A}/dpia`, 'POST', {});
+    expect(p.status, await p.clone().text()).toBe(201);
+    const u = await req('/api/v1/dpia/dpia-a', 'PUT', {});
+    expect(u.status, await u.clone().text()).toBe(200);
+  });
+});

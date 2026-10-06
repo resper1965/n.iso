@@ -24,7 +24,7 @@ capaApp.put('/:id', async (c) => {
     const completedAt = body.status === 'Closed' ? new Date().toISOString() : null;
     await c.env.DB.prepare(
       `UPDATE corrective_actions SET audit_id=?, risk_id=?, control_id=?, title=?, description=?, severity=?, assigned_to=?, due_date=?, status=?, resolution=?, completed_at=? WHERE id=?`
-    ).bind(body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description, body.severity, body.assigned_to, body.due_date, body.status, body.resolution || null, completedAt, id).run();
+    ).bind(body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description ?? null, body.severity ?? null, body.assigned_to ?? null, body.due_date ?? null, body.status, body.resolution || null, completedAt, id).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'capa_updated', user?.email || 'system', `CAPA ${id} updated`);
     return c.json({ ok: true });
@@ -68,7 +68,7 @@ projectCapaApp.post('/', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO corrective_actions (id, project_id, audit_id, risk_id, control_id, title, description, severity, assigned_to, due_date, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)`
-    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description, body.severity, body.assigned_to, body.due_date, now).run();
+    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description ?? null, body.severity ?? 'Medium', body.assigned_to ?? null, body.due_date ?? null, now).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'capa_created', user?.email || 'system', `CAPA ${id} created`);
     return c.json({ ok: true, id }, 201);
