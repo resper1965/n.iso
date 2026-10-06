@@ -81,12 +81,6 @@
 			"bucket_name": "niso-trilha"
 		}
 	],
-	"vectorize": [
-		{
-			"binding": "VECTOR_INDEX",
-			"index_name": "niso-knowledge"
-		}
-	],
 	"ai": {
 		"binding": "AI",
 		"gateway": {
@@ -114,11 +108,6 @@
 	 *
 	 * O que ele NÃO tem, e por quê:
 	 *
-	 *   - `vectorize`: a base de conhecimento (RAG) é o único binding que não faz
-	 *     sentido duplicar para ensaio de migration, e apontar staging para o
-	 *     índice de produção faria ingestão de teste gravar vetor no índice do
-	 *     cliente. Sem o binding, as rotas de IA que usam RAG falham em staging —
-	 *     é limitação declarada, não descuido.
 	 *   - `triggers`: DESLIGADO explicitamente com uma lista vazia. Este
 	 *     comentário afirmava antes que o cron "não é herdado pelo env" — errado,
 	 *     e o primeiro deploy de staging mostrou: ele subiu com

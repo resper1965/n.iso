@@ -22,10 +22,7 @@ import type { Bindings } from './index';
  *   - os ARQUIVOS de evidência, que vivem no R2. Vão as chaves, os hashes e os
  *     tamanhos; o conteúdo sai por download individual. Embutir binário em
  *     base64 multiplicaria o tamanho por 1,33 e faria um export de 500 MB
- *     estourar o limite de resposta do Worker;
- *   - os vetores do Vectorize, que são derivados dos documentos e reconstruíveis
- *     por reingestão. Exportar embedding é exportar um artefato do modelo, não
- *     dado do cliente.
+ *     estourar o limite de resposta do Worker.
  */
 
 /** Tabelas cujo conteúdo é da PLATAFORMA, não do cliente, mesmo tendo project_id. */
@@ -227,8 +224,8 @@ export async function exportarProjeto(env: Bindings, projectId: string): Promise
     ...(motivo ? { assinatura_ausente: motivo } : {}),
     nao_incluido: [
       'Arquivos de evidência (R2): vão as chaves, os hashes e os tamanhos na tabela `evidence`; o conteúdo sai por download individual.',
-      'Vetores do Vectorize: derivados dos documentos e reconstruíveis por reingestão.',
       'Chaves de API e tokens de auditor: são credenciais de acesso, não dado do titular.',
+      'Segredos de integração saem em branco: `webhooks.secret`, `project_sso.client_secret`, `project_scim.token_hash` e `projects.repository_token`. Não servem fora daqui, e o do webhook permitiria forjar entregas assinadas.',
     ],
   };
 

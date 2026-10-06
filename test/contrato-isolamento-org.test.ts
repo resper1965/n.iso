@@ -90,7 +90,6 @@ const CRIA_COM_REFERENCIA: Record<string, (alvo: Org) => unknown> = {
   'POST /api/v1/assessments': (a) => ({ client_name: 'X', lead_id: a.rec }),
   'POST /api/v1/proposals': (a) => ({ lead_id: a.rec, assessment_id: a.rec, total_price: 1, content_html: '<p>x</p>' }),
   'POST /api/v1/propostas': (a) => ({ leadId: a.rec }),
-  'POST /api/v1/mcp/execute': (a) => ({ tool: 'check_control_compliance', arguments: { project_id: a.proj, control_id: a.rec } }),
 };
 
 /**

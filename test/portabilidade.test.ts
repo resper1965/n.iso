@@ -123,7 +123,14 @@ describe('Export de portabilidade', () => {
     // recebe não distingue "não configurado" de "falhou".
     const { manifesto } = await exportarProjeto(env as any, A);
     expect(manifesto.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(manifesto.nao_incluido.length).toBeGreaterThanOrEqual(3);
+    // O que fica de fora, um por um: contar itens deixava passar a lista certa
+    // com o conteúdo errado (e quebrava quando a vetorização saiu, em 2026-10-06).
+    const fora = manifesto.nao_incluido.join('\n');
+    expect(fora, 'arquivos de evidência').toContain('Arquivos de evidência');
+    expect(fora, 'credenciais de acesso').toContain('Chaves de API');
+    for (const segredo of ['webhooks.secret', 'project_sso.client_secret', 'project_scim.token_hash', 'projects.repository_token']) {
+      expect(fora, `segredo zerado sem aviso: ${segredo}`).toContain(segredo);
+    }
     expect(manifesto.assinatura).toBeNull();
     expect(manifesto.assinatura_ausente, 'null sem motivo').toContain('EXPORT_SIGNING_KEY');
   });
