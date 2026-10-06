@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO, genId, genToken, hashPassword, invalidateUserSessions, revogarAgentesPorTrocaDeSenha } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, PODE_REVOGAR_APROVACAO, genId, genToken, hashPassword, invalidateUserSessions, revogarAgentesPorTrocaDeSenha, refForaDoProjeto } from '../helpers';
 import { enviarBoasVindas, nomeDaOrg } from './users';
 import { validateBody, stakeholderSchema, governanceMemberSchema, companyProfileSchema, contextSchema, auditFindingSchema, auditFindingUpdateSchema, stakeholderAtualizarSchema, revisaoCriarSchema, revisaoAtualizarSchema, metricaCriarSchema, metricaAtualizarSchema, cienciaPoliticaSchema } from '../schemas';
 
@@ -381,6 +381,8 @@ governanceApp.post('/audits/:auditId/findings', async (c) => {
     const audit = await c.env.DB.prepare('SELECT project_id FROM audit_schedule WHERE id = ?').bind(auditId).first<any>();
     if (!audit) return c.json({ error: 'Auditoria não encontrada' }, 404);
     const project_id = audit.project_id;
+    const fora = await refForaDoProjeto(c.env.DB, project_id, { control_id }, ['control_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
 
     const findingId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
     let capaId: string | null = null;

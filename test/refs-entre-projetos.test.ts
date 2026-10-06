@@ -128,3 +128,30 @@ describe('CAPA: audit_id, risk_id e control_id do corpo', () => {
   });
 });
 
+describe('achado de auditoria: control_id do corpo', () => {
+  // `observation`: NC (major/minor) cria CAPA com `updated_at`, coluna que corrective_actions não
+  // tem — 500 em qualquer caso, defeito à parte; com ele o vermelho daqui não provaria nada.
+  const base = { project_id: A, finding_type: 'observation', description: 'Sem backup testado' };
+
+  it('recusa controle de outro projeto, sem gravar achado', async () => {
+    await recusa('/api/v1/audits/au-a/findings', 'POST', base, 'control_id', 'ctl-b');
+    expect(await conta(`SELECT COUNT(*) n FROM audit_findings`)).toBe(0);
+  });
+
+  it('legítimo: controle do próprio projeto', async () => {
+    const res = await req('/api/v1/audits/au-a/findings', 'POST', { ...base, control_id: 'ctl-a' });
+    expect(res.status, await res.clone().text()).toBe(200);
+  });
+});
+
+describe('nota do auditor externo (token): control_id do corpo', () => {
+  it('recusa controle de outro projeto, sem gravar', async () => {
+    await recusa('/api/v1/auditor/tok-a/notes', 'POST', { content: 'Pergunta' }, 'control_id', 'ctl-b');
+    expect(await conta(`SELECT COUNT(*) n FROM auditor_notes`)).toBe(0);
+  });
+
+  it('legítimo: controle do próprio projeto', async () => {
+    expect((await req('/api/v1/auditor/tok-a/notes', 'POST', { content: 'Pergunta', control_id: 'ctl-a' }, {})).status).toBe(200);
+  });
+});
+
