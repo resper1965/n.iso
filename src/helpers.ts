@@ -299,6 +299,55 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   return true;
 }
 
+// Campo do corpo → tabela que ele referencia. É a allowlist do `refForaDoProjeto`: o nome da tabela
+// entra interpolado no SQL, então só sai daqui.
+const TABELA_DA_REF = {
+  control_id: 'compliance_controls',
+  asset_id: 'assets',
+  risk_id: 'risks',
+  audit_id: 'audit_schedule',
+  ropa_id: 'ropa_records',
+} as const;
+export type RefDeProjeto = keyof typeof TABELA_DA_REF;
+
+/**
+ * Aterramento de tenant para ids que chegam no CORPO. O acesso à rota prova que o chamador alcança
+ * o projeto da URL, não que o `control_id` (ou `risk_id`, …) que ele mandou seja desse projeto: sem
+ * isto, o risco de A apontava para o controle de B e a listagem de A exibia o título dele por JOIN;
+ * e uma FK com ON DELETE CASCADE deixava B apagar a CAPA de A.
+ *
+ * Devolve o primeiro campo cujo id não existe NO projeto, ou `null` se todos passam. Inexistente e
+ * de outro projeto dão o mesmo resultado de propósito: resposta diferente seria oráculo de
+ * existência. Campo ausente, `null` ou `''` passa — o vínculo continua opcional onde já era.
+ */
+export async function refForaDoProjeto(
+  db: D1Database, projectId: string | null | undefined, corpo: Record<string, unknown>, campos: RefDeProjeto[]
+): Promise<RefDeProjeto | null> {
+  for (const campo of campos) {
+    if (!Object.hasOwn(TABELA_DA_REF, campo)) throw new Error('Invalid ref');
+    const id = corpo[campo];
+    if (id === undefined || id === null || id === '') continue;
+    const achou = typeof id === 'string' && !!projectId && await db
+      .prepare(`SELECT 1 FROM ${TABELA_DA_REF[campo]} WHERE id = ? AND project_id = ?`).bind(id, projectId).first();
+    if (!achou) return campo;
+  }
+  return null;
+}
+
+/**
+ * SET de atualização PARCIAL: só as colunas presentes no corpo. Campo ausente preserva o valor
+ * gravado; `null` ou `''` explícito grava o "vazio" da coluna (NULL, ou o padrão dela). `colunas`
+ * mapeia coluna → vazio e é allowlist fixa da rota: o nome entra interpolado no SQL. O schema da
+ * rota não pode preencher campo ausente com null (transform), senão ausente vira "limpar".
+ */
+export function setParcial(corpo: Record<string, unknown>, colunas: Record<string, unknown>): { sql: string; binds: unknown[] } {
+  const presentes = Object.keys(colunas).filter((k) => Object.hasOwn(corpo, k));
+  return {
+    sql: presentes.map((k) => `${k} = ?`).join(', '),
+    binds: presentes.map((k) => (corpo[k] === null || corpo[k] === '' ? colunas[k] : corpo[k])),
+  };
+}
+
 /**
  * Garante que o usuário tem acesso ao projeto. `platform_admin` alcança todos; consultor, só os
  * projetos da própria organização em que está designado na governança (D5); `consultoria_admin`,

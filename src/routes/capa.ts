@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, erro500 } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, refForaDoProjeto, setParcial } from '../helpers';
 import { validateBody, createCapaSchema, capaUpdateSchema } from '../schemas';
 
 export const capaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -16,10 +16,16 @@ capaApp.put('/:id', async (c) => {
     const v = await validateBody(c, capaUpdateSchema);
     if (!v.success) return v.response;
     const body = v.data as any;
+    // O projeto vem da CAPA gravada, nunca do corpo. Sem isto, apontar para o risco de outro
+    // projeto deixava o dono dele apagar esta CAPA pelo ON DELETE CASCADE.
+    const atual = await c.env.DB.prepare('SELECT project_id FROM corrective_actions WHERE id = ?').bind(id).first<{ project_id: string | null }>();
+    const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['audit_id', 'risk_id', 'control_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const completedAt = body.status === 'Closed' ? new Date().toISOString() : null;
+    const p = setParcial(body, { audit_id: null, risk_id: null, control_id: null, description: null, severity: null, assigned_to: null, due_date: null, resolution: null });
     await c.env.DB.prepare(
-      `UPDATE corrective_actions SET audit_id=?, risk_id=?, control_id=?, title=?, description=?, severity=?, assigned_to=?, due_date=?, status=?, resolution=?, completed_at=? WHERE id=?`
-    ).bind(body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description, body.severity, body.assigned_to, body.due_date, body.status, body.resolution || null, completedAt, id).run();
+      `UPDATE corrective_actions SET title=?, status=?, completed_at=?${p.sql ? ', ' + p.sql : ''} WHERE id=?`
+    ).bind(body.title, body.status, completedAt, ...p.binds, id).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'capa_updated', user?.email || 'system', `CAPA ${id} updated`);
     return c.json({ ok: true });
@@ -56,12 +62,14 @@ projectCapaApp.post('/', async (c) => {
     const valid = await validateBody(c, createCapaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['audit_id', 'risk_id', 'control_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       `INSERT INTO corrective_actions (id, project_id, audit_id, risk_id, control_id, title, description, severity, assigned_to, due_date, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)`
-    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description, body.severity, body.assigned_to, body.due_date, now).run();
+    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description ?? null, body.severity ?? 'Medium', body.assigned_to ?? null, body.due_date ?? null, now).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'capa_created', user?.email || 'system', `CAPA ${id} created`);
     return c.json({ ok: true, id }, 201);

@@ -365,9 +365,15 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
     expect(JSON.stringify(corpo.details), `o 400 não diz que falta ${campo}`).toContain(campo);
   });
 
-  it('campo OPCIONAL omitido não estoura — o `undefined` vira null antes do bind', async () => {
+  it('campo OPCIONAL omitido não estoura e preserva o valor gravado', async () => {
     // A outra metade da correção. Exigir o obrigatório sozinho não bastaria: o
     // opcional omitido continuaria chegando como `undefined` no `.bind()`.
+    //
+    // E omitido não é o mesmo que limpar: até o PUT parcial (`setParcial`), o
+    // campo ausente virava NULL e uma edição só do título apagava a severidade.
+    // Hoje ausente preserva; `null` ou '' explícito é que limpa.
+    const antes = await env.DB.prepare('SELECT severity FROM corrective_actions WHERE id = ?')
+      .bind('reg-a').first<any>();
     const res = await req('/api/v1/capa/reg-a', {
       method: 'PUT', headers: staff,
       body: JSON.stringify({ title: 'Ação corretiva', status: 'Open' }),
@@ -376,7 +382,7 @@ describe('PUT dos módulos com corpo parcial — 400, não 500', () => {
     const linha = await env.DB.prepare('SELECT title, severity FROM corrective_actions WHERE id = ?')
       .bind('reg-a').first<any>();
     expect(linha.title).toBe('Ação corretiva');
-    expect(linha.severity, 'o campo omitido devia ter virado NULL').toBeNull();
+    expect(linha.severity, 'o campo omitido devia manter o valor gravado').toBe(antes.severity);
   });
 });
 
