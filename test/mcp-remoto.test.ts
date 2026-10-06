@@ -56,7 +56,7 @@ describe('/mcp remoto', () => {
     await applySchema();
     const senha = await hashPassword('senha-forte-123');
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Twyn','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Acme','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-b','Outro','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','cons@ness.lat',?,'Cons','consultor')`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
@@ -99,7 +99,7 @@ describe('/mcp remoto', () => {
   it('niso_contexto diz o cliente, o papel e os roteiros', async () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_contexto', arguments: {} });
     const texto = res.content[0].text;
-    expect(texto).toContain('Twyn');
+    expect(texto).toContain('Acme');
     expect(texto).toContain('p-a');
     expect(texto).toContain('Diagnóstico');
   });
@@ -128,7 +128,7 @@ describe('/mcp remoto', () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_create_evidence', arguments: { projectId: 'p-a', fileName: 'nota.md', content: '# Evidência' } });
     expect(res.isError, res.content?.[0]?.text).toBeFalsy();
     const ev = await env.DB.prepare(`SELECT file_type, uploaded_by FROM evidence WHERE project_id = 'p-a' AND file_name = 'nota.md'`).first<any>();
-    expect(ev).toEqual({ file_type: 'text/markdown', uploaded_by: 'agente de cons@ness.lat (Twyn / p-a)' });
+    expect(ev).toEqual({ file_type: 'text/markdown', uploaded_by: 'agente de cons@ness.lat (Acme / p-a)' });
   });
 
   it('escrita pelo agente sai com a autoria do humano', async () => {
@@ -136,7 +136,7 @@ describe('/mcp remoto', () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_create_risk', arguments: { projectId: 'p-a', asset: 'Base de clientes', threat: 'Vazamento via MCP', impact: 3, probability: 2 } });
     expect(res.isError, res.content?.[0]?.text).toBeFalsy();
     const log = await env.DB.prepare(`SELECT actor FROM audit_logs ORDER BY rowid DESC LIMIT 1`).first<{ actor: string }>();
-    expect(log!.actor).toBe('agente de cons@ness.lat (Twyn / p-a)');
+    expect(log!.actor).toBe('agente de cons@ness.lat (Acme / p-a)');
   });
 
   // Revisão final, achado 1: id interpolado no caminho não pode levar o agente
@@ -182,7 +182,7 @@ describe('/mcp remoto', () => {
     const tk = await tokenDoAgente('rev@ness.lat');
     expect((await rpcBruto(tk, 'tools/list')).status).toBe(200);
     const { id } = (await env.DB.prepare(`SELECT id FROM agente_concessoes WHERE user_id = 'u-rev'`).first<any>())!;
-    const s = await sessionFor({ id: 'u-o', email: 'dono@twyn.com', role: 'org_admin', client_project_id: 'p-a' });
+    const s = await sessionFor({ id: 'u-o', email: 'dono@acme.com', role: 'org_admin', client_project_id: 'p-a' });
     const rev = await f(`/api/v1/projects/p-a/agentes/${id}/revogar`, { method: 'POST', headers: s });
     expect(rev.status).toBe(200);
     await espera401(tk);

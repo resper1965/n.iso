@@ -52,11 +52,11 @@ describe('Autorização OAuth do agente', () => {
     await applySchema();
     const senha = await hashPassword('senha-forte-123');
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Twyn','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Acme','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-b','Outro','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','cons@ness.lat',?,'Cons','consultor')`).bind(senha),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-sem','sem@ness.lat',?,'Sem','consultor')`).bind(senha),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-cli','cli@twyn.com',?,'Cli','org_admin','p-a')`).bind(senha),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-cli','cli@acme.com',?,'Cli','org_admin','p-a')`).bind(senha),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, totp_enabled, totp_secret) VALUES ('u-mfa','mfa@ness.lat',?,'Mfa','consultor',1,'JBSWY3DPEHPK3PXP')`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Mfa','mfa@ness.lat','consultor','Consultor')`),
@@ -78,7 +78,7 @@ describe('Autorização OAuth do agente', () => {
 
     const passo2 = await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }));
     const html2 = await passo2.text();
-    expect(html2).toContain('Twyn');
+    expect(html2).toContain('Acme');
     expect(html2).not.toContain('Outro'); // só projetos onde é consultor designado
     // O consultor consente em cima deste texto: ele tem de dizer o que o agente de fato pode fazer.
     expect(html2).not.toContain('Não apaga registros');
@@ -125,9 +125,9 @@ describe('Autorização OAuth do agente', () => {
       const r = await f('/oauth/authorize/entrar', form({ pedido, email, senha, codigo: '' }, '10.0.0.3'));
       return { status: r.status, corpo: await r.text() };
     };
-    const errada = await tentar('cli@twyn.com', 'errada-errada');
+    const errada = await tentar('cli@acme.com', 'errada-errada');
     expect(errada.status).toBe(401);
-    expect(await tentar('cli@twyn.com', 'senha-forte-123')).toEqual(errada);
+    expect(await tentar('cli@acme.com', 'senha-forte-123')).toEqual(errada);
     expect(await tentar('ina@ness.lat', 'senha-forte-123')).toEqual(errada);
   });
 

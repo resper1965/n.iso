@@ -19,7 +19,7 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 |----|------|------|---------|------|------------|
 | **Onda 0 — higiene** | | | | | |
 | H1 | Apagar o script de senha da pasta temporária | agente | — | feito | — |
-| H2 | Ligar o MFA em `resper@ness.com.br` | **você** | S | **P1** | — |
+| H2 | Ligar o MFA em a conta `platform_admin` do dono | **você** | S | **P1** | — |
 | H3 | Checkout principal: sair do branch antigo e decidir três arquivos soltos | **você** | S | P2 | — |
 | H4 | Decidir os dois stashes antigos (era do PR #32) | **você** | S | P4 | — |
 | H5 | Números velhos do `AGENTS.md` | agente | S | P2 | — |
@@ -61,7 +61,7 @@ por item. A Onda 2 intercala com a 1. A Onda 3 corre em paralelo, em fatias pequ
 `definir-senha-admin.mjs` definia a senha de uma conta administrativa e ficou na pasta
 temporária da sessão. Foi apagado em 01/10/2026 (confirmado: 0 restantes).
 
-### H2 · MFA em `resper@ness.com.br` · você · P1
+### H2 · MFA em a conta `platform_admin` do dono · você · P1
 **Por quê.** É a conta `platform_admin`: designa consultor em qualquer projeto, vê todos os
 clientes e mexe em SSO. Está sem segundo fator, então uma senha vazada basta para tomar tudo.
 **Como.** Entre, abra o cartão de perfil no rodapé da barra lateral, ative o segundo fator
@@ -192,12 +192,12 @@ teste e sem enfraquecer a fronteira de projeto.
 
 ### F5 · Verificação normativa · P3
 O `coherence_check` aponta referências órfãs; a skill de prontidão compara com a norma. A
-aproximação entre os dois (regras ISO 27001/27701 no servidor) só vale **depois** de o agente da
-Twyn exercitar o roteiro 4 em escala. Registrar os achados que a skill repete e promover os mais
+aproximação entre os dois (regras ISO 27001/27701 no servidor) só vale **depois** de o agente de um
+cliente real exercitar o roteiro 4 em escala. Registrar os achados que a skill repete e promover os mais
 frequentes a regra.
 
 ### F6 · O humano revoga aprovação e apaga análise crítica · P2 · decisão D1
-A limpeza da Twyn precisou de SQL porque **nem a interface** tem: exclusão de análise crítica, e
+A limpeza de um projeto de cliente precisou de SQL porque **nem a interface** tem: exclusão de análise crítica, e
 revogação de aprovação de ROPA e DPIA (só existe para controles). É o D3 do `backlog-plan.md`.
 **Decidido (D1, 01/10/2026): sim.** Isto é **para o humano, pela interface**. O agente continua sem essas ações, como
 você decidiu.

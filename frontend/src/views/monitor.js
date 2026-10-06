@@ -746,11 +746,11 @@ import { navigate } from '../router.js';
                 <form id="add-gov-member-form" data-action-submit="saveGovernanceMember" data-arg-event data-args='["${projectId}"]' style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
                     <div class="form-group" style="grid-column: span 2">
                         <label class="form-label">Nome Completo</label>
-                        <input class="form-input" id="gov-name" required placeholder="Ex: Ricardo Esper">
+                        <input class="form-input" id="gov-name" required placeholder="Ex: Maria Silva">
                     </div>
                     <div class="form-group" style="grid-column: span 2">
                         <label class="form-label">E-mail</label>
-                        <input class="form-input" id="gov-email" type="email" placeholder="Ex: ricardo@twyn.com">
+                        <input class="form-input" id="gov-email" type="email" placeholder="Ex: maria@empresa.com.br">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Categoria de Papel</label>
@@ -969,7 +969,7 @@ import { navigate } from '../router.js';
                                     1. Perímetro de Negócio, Sistemas & Infraestrutura (Cláusula 4.3.a)
                                 </div>
                                 <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:10px">Defina os produtos, serviços, plataformas (ex: APIs, biometria), aplicações e ambientes de nuvem/escritórios abrangidos pelo SGSI.</div>
-                                <textarea id="charter-perimeter" class="form-input" style="width:100%; height:100px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Ex: Plataforma TWYN Face ID, APIs REST de biometria facial, infraestrutura AWS us-east-1 e repositórios de dados biográficos.">${escapeHTML(scopeCharter.perimeter)}</textarea>
+                                <textarea id="charter-perimeter" class="form-input" style="width:100%; height:100px; resize:vertical; font-family:inherit; font-size:0.85rem; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px" placeholder="Ex: Plataforma SaaS principal, APIs REST, infraestrutura AWS us-east-1 e repositórios de dados biográficos.">${escapeHTML(scopeCharter.perimeter)}</textarea>
                             </div>
 
                             <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:12px; padding:20px">

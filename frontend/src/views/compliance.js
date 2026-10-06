@@ -2038,7 +2038,7 @@ import { navigate } from '../router.js';
 
         if (method === 'template') {
             container.style.display = 'block';
-            hint.textContent = 'Gere a política a partir de um template standard preenchendo as variáveis do projeto TWYN automaticamente.';
+            hint.textContent = 'Gere a política a partir de um template standard preenchendo as variáveis do projeto automaticamente.';
             btn.textContent = 'Gerar a partir de Template';
         } else {
             container.style.display = 'none';

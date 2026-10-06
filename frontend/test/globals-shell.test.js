@@ -38,9 +38,9 @@ function montaShell() {
 
 beforeEach(() => {
   montaShell();
-  S.user = { name: 'Ana Prado', email: 'ana@twyn.com.br', role: 'consultor' };
+  S.user = { name: 'Ana Prado', email: 'ana@acme.com.br', role: 'consultor' };
   S.projects = [
-    { id: 'p1', project_name: 'Twyn', standard: 'ISO 27001:2022' },
+    { id: 'p1', project_name: 'Acme', standard: 'ISO 27001:2022' },
     { id: 'p2', client_name: 'Alup', standard: 'ISO 27701' },
   ];
   S.activeProject = S.projects[0];
@@ -49,13 +49,13 @@ beforeEach(() => {
 describe('seletor de tenant', () => {
   it('mostra nome, norma e iniciais numa linha só', () => {
     window.updateSidebarProjectSelector();
-    expect(document.getElementById('tenant-name').textContent).toBe('Twyn');
+    expect(document.getElementById('tenant-name').textContent).toBe('Acme');
     expect(document.getElementById('tenant-norm').textContent).toBe('ISO 27001:2022');
-    expect(document.getElementById('tenant-initials').textContent).toBe('TW');
+    expect(document.getElementById('tenant-initials').textContent).toBe('AC');
   });
 
   it('não imprime fase, prazo nem percentual — esse contexto é da Jornada', () => {
-    S.activeProject = { id: 'p1', project_name: 'Twyn', standard: 'ISO 27001:2022', phase: 14, progress: 62 };
+    S.activeProject = { id: 'p1', project_name: 'Acme', standard: 'ISO 27001:2022', phase: 14, progress: 62 };
     window.updateSidebarProjectSelector();
     const texto = document.querySelector('.tenant-face').textContent;
     expect(texto).not.toMatch(/14|62|%|Fase/);
@@ -75,15 +75,15 @@ describe('menu de conta', () => {
     const box = document.getElementById('account-menu');
     expect(box.hidden).toBe(false);
     expect(document.getElementById('sidebar-user-card').getAttribute('aria-expanded')).toBe('true');
-    expect(box.textContent).toContain('ana@twyn.com.br');
-    expect(box.textContent).toContain('Twyn');
+    expect(box.textContent).toContain('ana@acme.com.br');
+    expect(box.textContent).toContain('Acme');
     expect(box.textContent).toContain('Alup');
     expect(box.textContent).toContain('Minha conta e MFA');
     expect(box.textContent).toContain('Encerrar sessão');
     // O tenant ativo é o único com check.
     const marcados = box.querySelectorAll('.account-item[aria-checked="true"]');
     expect(marcados).toHaveLength(1);
-    expect(marcados[0].textContent).toContain('Twyn');
+    expect(marcados[0].textContent).toContain('Acme');
   });
 
   it('oferece "Trocar senha", que abre o modal de troca (F7)', () => {

@@ -37,7 +37,7 @@ beforeEach(async () => {
   montaDom();
   apiMock.mockReset();
   S.token = 'tok';
-  S.user = { id: 'u1', email: 'ana@twyn.com.br' };
+  S.user = { id: 'u1', email: 'ana@acme.com.br' };
 });
 
 afterEach(() => {

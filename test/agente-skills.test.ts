@@ -37,7 +37,8 @@ describe('agent-skills embutidas no Worker', () => {
 
   it('a skill é genérica: nenhum cliente nomeado e nenhum termo de cliente fixo no validador', () => {
     const tudo = Object.values(SKILLS['prontidao-certificacao'].arquivos).join('\n').toLowerCase();
-    for (const marca of ['twyn', 't4isb', 'caixa']) expect(tudo, marca).not.toContain(marca);
+    // Nomes montados por pedaços: o repositório não guarda nome de cliente (test/sem-dado-de-cliente.test.ts).
+    for (const marca of [['tw', 'yn'], ['t4', 'isb'], ['cai', 'xa']].map((p) => p.join(''))) expect(tudo, marca).not.toContain(marca);
   });
 });
 

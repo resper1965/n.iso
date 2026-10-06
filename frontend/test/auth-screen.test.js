@@ -14,7 +14,7 @@ function montaLogin() {
   document.body.innerHTML = `
     <div id="login-overlay">
       <div class="login-box" id="standard-login-box">
-        <input id="login-email" class="form-input" value="ana@twyn.com.br">
+        <input id="login-email" class="form-input" value="ana@acme.com.br">
         <input type="password" id="login-password" class="form-input" value="senha-errada">
         <div class="login-challenge" id="login-challenge" hidden>
           <div id="login-challenge-widget"></div>
@@ -330,7 +330,7 @@ describe('segundo fator', () => {
 
 describe('reautenticação após expirar por inatividade', () => {
   beforeEach(() => {
-    S.user = { email: 'ana@twyn.com.br' };
+    S.user = { email: 'ana@acme.com.br' };
     window.rascunhoPendente = null;
   });
 
@@ -357,7 +357,7 @@ describe('reautenticação após expirar por inatividade', () => {
     window.registrarRascunho('A.8.12', ['status', 'dono']);
     window.pedirReautenticacao();
     expect(document.getElementById('reauth-box').style.display).toBe('flex');
-    expect(document.getElementById('reauth-email').textContent).toBe('ana@twyn.com.br');
+    expect(document.getElementById('reauth-email').textContent).toBe('ana@acme.com.br');
     const linha = document.getElementById('reauth-draft');
     expect(linha.style.display).toBe('block');
     expect(linha.textContent).toContain('2 alterações não salvas');
@@ -379,10 +379,10 @@ describe('reautenticação após expirar por inatividade', () => {
   it('entra de novo com a senha e não força re-render', async () => {
     window.pedirReautenticacao();
     document.getElementById('reauth-password').value = 'senha-certa';
-    apiMock.mockResolvedValue({ token: 'novo', user: { email: 'ana@twyn.com.br' } });
+    apiMock.mockResolvedValue({ token: 'novo', user: { email: 'ana@acme.com.br' } });
     window.render = vi.fn();
     await window.doReauth();
-    expect(apiMock).toHaveBeenCalledWith('POST', '/api/v1/auth/login', { email: 'ana@twyn.com.br', password: 'senha-certa' });
+    expect(apiMock).toHaveBeenCalledWith('POST', '/api/v1/auth/login', { email: 'ana@acme.com.br', password: 'senha-certa' });
     expect(document.getElementById('reauth-box').style.display).toBe('none');
     expect(window.render).not.toHaveBeenCalled();
   });

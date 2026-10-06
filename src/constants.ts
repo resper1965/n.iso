@@ -189,16 +189,16 @@ export const PHASE_TITLES: string[] = [
 // NÃO confundir com a `PHASE_CHECKLISTS` de src/checklists.ts, que é um mapa
 // item→documento usado só por policies.ts. Itens visíveis ao usuário entram AQUI.
 // ═══════════════════════════════════════════════════════════════
-export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; category: string; twyn_ref?: string }[]> = {
+export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; category: string }[]> = {
   0: [
-    { id: 'p0_1', text: 'Mobilização: Nomear Sponsor e Equipe TWYN', category: 'task', twyn_ref: 'TWYN-MOB-01' },
-    { id: 'p0_2', text: 'Kick-off: Apresentação da Metodologia TWYN', category: 'task', twyn_ref: 'TWYN-MOB-02' },
+    { id: 'p0_1', text: 'Mobilização: Nomear Sponsor e Equipe do Projeto', category: 'task' },
+    { id: 'p0_2', text: 'Kick-off: Apresentação da Metodologia', category: 'task' },
     { id: 'p0_3', text: 'Realizar Reunião de Kick-off', category: 'evidence' },
     { id: 'p0_4', text: 'Aprovar Cronograma Macro do Projeto', category: 'document' },
     { id: 'p0_5', text: 'Definir Canais de Comunicação Interna', category: 'task' },
   ],
   1: [
-    { id: 'p1_1', text: 'Entrevista Executiva: Alinhamento de Expectativas', category: 'task', twyn_ref: 'TWYN-ENT-01' },
+    { id: 'p1_1', text: 'Entrevista Executiva: Alinhamento de Expectativas', category: 'task' },
     { id: 'p1_2', text: 'Identificar Objetivos de Negócio e Segurança', category: 'document' },
     { id: 'p1_3', text: 'Mapear Expectativas de Certificação', category: 'task' },
   ],

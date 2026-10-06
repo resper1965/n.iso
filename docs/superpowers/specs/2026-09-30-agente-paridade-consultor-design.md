@@ -11,7 +11,7 @@ fases, ROPA, DPIA, ativos, fornecedores, treinamento, auditorias, CAPA,
 governança nem certificação. E escreve menos que o consultor humano: não apaga
 nem gera em lote.
 
-Consequência observada no uso real (Twyn, 2026-09-30): o agente gravou
+Consequência observada no uso real (projeto de cliente, 2026-09-30): o agente gravou
 evidências citando outro cliente, não conseguia relê-las para conferir e não
 conseguia apagá-las; o administrador teve de apagar 27 registros à mão. Ele
 também declarou não ter lido as políticas existentes — não havia ferramenta.
@@ -143,6 +143,6 @@ Integração real no D1 (`cloudflare:test`), chamando como agente via
 
 - `mcp-server-niso/README.md` e a tela "Conectar agente": o agente tem paridade
   de consultor num projeto; apagar pede confirmação.
-- `C:\Users\resper\Clientes\Twyn\CLAUDE.md` (fora do repo): remover "você não
+- `CLAUDE.md` da pasta de trabalho do cliente (fora do repo): remover "você não
   apaga, não gera em lote"; trocar por "apagar e lote: mostre e peça confirmação".
 - `AGENTS.md`: seção do MCP remoto (hoje ausente) e última migration (0034).

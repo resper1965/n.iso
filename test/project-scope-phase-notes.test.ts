@@ -1,4 +1,4 @@
-// Solicitação de mudança (engajamento twyn) — dois itens:
+// Solicitação de mudança (engajamento de cliente) — dois itens:
 //  1. `scope` do projeto gravável via PUT /projects/:id (era ignorado).
 //  2. PUT /projects/:id/phases/:num deixa de ser no-op silencioso: a rota casa
 //     por phase_number (0..N); um num inexistente (ex.: phase_id no lugar do

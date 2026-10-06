@@ -705,4 +705,4 @@ git commit -m "docs(agente): alcance de consultor no MCP remoto; AGENTS.md na mi
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-Fora do repositório, depois do merge (controlador faz, não o implementador): em `C:\Users\resper\Clientes\Twyn\CLAUDE.md`, trocar "Você não apaga, não gera em lote e não registra achado de auditoria" por "Apagar e gerar em lote: mostre o que será feito e espere meu 'sim' antes. Achado de auditoria você não registra."
+Fora do repositório, depois do merge (controlador faz, não o implementador): em no `CLAUDE.md` da pasta de trabalho do cliente, trocar "Você não apaga, não gera em lote e não registra achado de auditoria" por "Apagar e gerar em lote: mostre o que será feito e espere meu 'sim' antes. Achado de auditoria você não registra."
