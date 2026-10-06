@@ -149,6 +149,8 @@ window.__adminCopiarApiKey = () => {
                     const roleLabel = u.role === 'platform_admin' ? 'Admin Plataforma' : 
                                       u.role === 'consultant' || u.role === 'consultor' ? 'Consultor' :
                                       u.role === 'comercial' ? 'Comercial' :
+                                      u.role === 'consultoria_admin' ? 'Admin da consultoria' :
+                                      u.role === 'stakeholder' ? 'Stakeholder' :
                                       u.role === 'org_admin' ? 'Gestor Cliente' : 
                                       u.role === 'org_user' ? 'Colaborador Cliente' : u.role;
                     return [

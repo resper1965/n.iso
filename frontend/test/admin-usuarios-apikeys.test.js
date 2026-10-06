@@ -97,7 +97,7 @@ describe('renderUsers', () => {
   });
 
   // BUG (admin.js:147-153): consultoria_admin não tem rótulo e aparece como "consultoria_admin" cru.
-  it.fails('consultoria_admin tem rótulo legível (admin.js:147)', async () => {
+  it('consultoria_admin tem rótulo legível (admin.js:147)', async () => {
     apiMock.mockResolvedValue([{ id: 'a', name: 'A', email: 'a@x.test', role: 'consultoria_admin' }]);
     const [c, h, a] = dom();
     await window.renderUsers(c, h, a);
