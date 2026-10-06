@@ -1,92 +1,7 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
-import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
-import { navigate, render } from '../router.js';
-
-    async function renderKnowledge(c, h, a) {
-        h.textContent = 'Cérebro do Projeto — Gestão de Conhecimento';
-        const proj = S.activeProject || S.projects[0];
-        if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
-        
-        a.innerHTML = `<button class="btn btn-primary" data-action="openIngestModal" data-args='["${proj.id}"]'>+ Ingerir Conhecimento</button>`;
-        
-        let query = S.knowledgeQuery || '';
-        let items = [];
-        try {
-            const url = query ? `/api/v1/projects/${proj.id}/knowledge/search?q=${encodeURIComponent(query)}` : `/api/v1/projects/${proj.id}/knowledge/search?q=*`;
-            items = await api('GET', url);
-        } catch(e) {}
-
-        c.innerHTML = `
-            <div class="fade-in">
-                <div class="card" style="padding:1.5rem;margin-bottom:1.5rem">
-                    <div class="form-group" style="margin-bottom:0">
-                        <input class="form-input" id="k-search" placeholder="Buscar no conhecimento do projeto..." value="${escapeHTML(query)}" data-action-keydown="searchKnowledge" data-key="Enter">
-                    </div>
-                </div>
-                <div id="k-results">
-                    ${items.length ? items.map(item => {
-                        const m = item.metadata || {};
-                        return `
-                        <div class="list-item">
-                            <div style="flex:1">
-                                <div class="item-name">${escapeHTML(m.title || item.id)}</div>
-                                <div class="item-meta">${escapeHTML(m.type || 'Documento')} | ${escapeHTML(m.summary || 'Sem resumo disponível')}</div>
-                                <div style="margin-top:0.5rem;display:flex;gap:0.35rem">
-                                    ${(m.controls || []).map(ctrl => `<span class="ctx-tag">${escapeHTML(ctrl)}</span>`).join('')}
-                                </div>
-                            </div>
-                            <button class="btn btn-ghost" data-action="viewKnowledge" data-args='["${item.id}","${proj.id}"]'>Ver</button>
-                        </div>`;
-                    }).join('') : '<div class="empty-state"><h3>Nenhum conhecimento mapeado</h3><p>Ingira atas de reuniões, entrevistas ou procedimentos para começar.</p></div>'}
-                </div>
-            </div>
-        `;
-    }
-
-    function searchKnowledge() {
-        const q = document.getElementById('k-search').value;
-        S.knowledgeQuery = q;
-        render();
-    }
-
-    function openIngestModal(projectId) {
-        openModal(`
-            <div class="modal-header"><span class="modal-title">Ingerir Novo Conhecimento</span><button class="btn-ghost" data-action="closeModal">\u00d7</button></div>
-            <div class="form-group">
-                <label class="form-label">Título do Documento / Nome da Entrevista</label>
-                <input class="form-input" id="ingest-title" placeholder="Ex: Entrevista CTO - 05/07/24">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Conteúdo (Texto, Transcrição ou Notas)</label>
-                <textarea class="form-input" id="ingest-content" rows="10" placeholder="Cole aqui o conteúdo do documento ou notas da reunião..."></textarea>
-            </div>
-            <div id="ingest-loading" style="display:none;margin-bottom:1rem;color:var(--accent);font-size:0.7rem">IA processando documento e mapeando controles...</div>
-            <button class="btn btn-primary" style="width:100%" id="ingest-btn" data-action="doIngest" data-args='["${projectId}"]'>Processar e Ingerir</button>
-        `);
-    }
-
-    async function doIngest(projectId) {
-        const title = document.getElementById('ingest-title').value;
-        const content = document.getElementById('ingest-content').value;
-        if (!title || !content) return;
-
-        const btn = document.getElementById('ingest-btn');
-        const loader = document.getElementById('ingest-loading');
-        btn.disabled = true;
-        loader.style.display = 'block';
-
-        try {
-            await api('POST', `/api/v1/projects/${projectId}/knowledge/ingest`, { title, content });
-            showToast('Conhecimento ingerido e processado pela IA');
-            closeModal();
-            render();
-        } catch(e) {
-            showToast('Erro ao processar conhecimento', 'error');
-            btn.disabled = false;
-            loader.style.display = 'none';
-        }
-    }
+import { escapeHTML } from '../ui.js';
+import { render } from '../router.js';
 
     async function renderAIChat(c, h, a) {
         h.textContent = 'AI Compliance Assistant';
@@ -138,11 +53,7 @@ import { navigate, render } from '../router.js';
         render();
     }
 
-export { renderKnowledge, renderAIChat };
-window.renderKnowledge = renderKnowledge;
+export { renderAIChat };
 window.renderAIChat = renderAIChat;
-window.searchKnowledge = searchKnowledge;
-window.openIngestModal = openIngestModal;
-window.doIngest = doIngest;
 window.sendChatMessage = sendChatMessage;
 window.clearChatHistory = clearChatHistory;
