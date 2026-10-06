@@ -105,6 +105,23 @@ const REFERENCIA_ALHEIA_EXTRA: [string, (p: { de: Org; alheio: Org }) => string,
   ['PUT', (p) => `/api/v1/users/${p.de.m}-cli`, (p) => ({ role: 'comercial', client_project_id: p.alheio.proj })],
 ];
 
+/**
+ * Rota do PRÓPRIO projeto (ou recurso) com id de recurso alheio no corpo: `control_id`, `risk_id`,
+ * `ropa_id`… A guarda de acesso olha a URL; quem confere o corpo é `refForaDoProjeto`. Sem ela o
+ * risco gravava o controle alheio e a lista exibia o título dele; a CAPA apontava para o risco
+ * alheio e morria no ON DELETE CASCADE quando o dono o apagava.
+ */
+type Ctx = { de: Org; alheio: Org; token?: string };
+const VINCULO_ALHEIO: [string, (p: Ctx) => string, (p: Ctx) => unknown][] = [
+  ['POST', (p) => `/api/v1/projects/${p.de.proj}/risks`, (p) => ({ asset: 'A', threat: 'T', control_id: p.alheio.rec })],
+  ['PUT', (p) => `/api/v1/risks/${p.de.rec}`, (p) => ({ asset: 'A', threat: 'T', asset_id: p.alheio.rec })],
+  ['POST', (p) => `/api/v1/projects/${p.de.proj}/capa`, (p) => ({ title: 'C', description: 'd', severity: 'Low', assigned_to: 'x', due_date: '2099-01-01', risk_id: p.alheio.rec })],
+  ['PUT', (p) => `/api/v1/capa/${p.de.rec}`, (p) => ({ title: 'C', description: 'd', severity: 'Low', assigned_to: 'x', due_date: '2099-01-01', status: 'Open', audit_id: p.alheio.rec })],
+  ['POST', (p) => `/api/v1/audits/${p.de.rec}/findings`, (p) => ({ project_id: p.de.proj, finding_type: 'observation', description: 'd', control_id: p.alheio.rec })],
+  ['POST', (p) => `/api/v1/auditor/${p.token ?? 'token-forjado-inexistente'}/notes`, (p) => ({ content: 'n', control_id: p.alheio.rec })],
+  ['POST', (p) => `/api/v1/projects/${p.de.proj}/dpia`, (p) => ({ processing_name: 'P', data_category_risk: 'r', necessity_proportionality: 'n', technical_measures: 't', ropa_id: p.alheio.rec })],
+];
+
 /** Rota sem parâmetro, não GET, que não recebe nem devolve recurso de outra organização. */
 const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/auth/setup': 'bootstrap do primeiro admin, por SETUP_KEY; sem sessão',
@@ -413,6 +430,17 @@ describe('contrato de isolamento entre organizações', () => {
       `SELECT u.id FROM users u JOIN projects p ON p.id = u.client_project_id WHERE p.org_id <> u.org_id OR u.role NOT IN ('org_admin', 'org_user', 'client')`
     ).all();
     expect(results).toEqual([]);
+  }, 120_000);
+
+  it('vínculo a recurso alheio no corpo de rota do próprio projeto é recusado', async () => {
+    const aceitou: string[] = [];
+    for (const p of PRINCIPAIS) {
+      for (const [metodo, caminho, corpo] of VINCULO_ALHEIO) {
+        const res = await chamar(p, metodo, caminho(p), corpo(p));
+        if (res.status < 400 || res.status >= 500) aceitou.push(`${res.status} ${metodo} ${caminho(p)}  [${p.nome}]`);
+      }
+    }
+    expect(aceitou, `vincularam recurso de outra organização:\n  ${aceitou.join('\n  ')}`).toEqual([]);
   }, 120_000);
 
   it('listas e respostas: nenhuma rota GET traz dado da organização alheia', async () => {
