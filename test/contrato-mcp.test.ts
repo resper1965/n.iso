@@ -79,8 +79,8 @@ describe('Contrato do mcp-server-niso', () => {
 });
 
 describe('ferramentas.ts é a fonte única das ferramentas MCP', () => {
-  it('exporta as 24 ferramentas, todas com prefixo niso_', () => {
-    expect(TOOLS).toHaveLength(24);
+  it('exporta as 23 ferramentas, todas com prefixo niso_', () => {
+    expect(TOOLS).toHaveLength(23);
     expect(TOOLS.every((t) => t.name.startsWith('niso_'))).toBe(true);
   });
   it('auditor não vê escrita de implementação; consultor não vê achado', () => {
