@@ -13,7 +13,7 @@ export async function execSql(sql: string): Promise<void> {
   const statements: string[] = [];
   let buf = '';
   let inTrigger = false;
-  for (const rawLine of sql.split('\n')) {
+  for (const rawLine of sql.replace(/\r\n?/g, '\n').split('\n')) {
     const line = rawLine.replace(/--.*$/, '');
     if (!line.trim()) continue;
     if (/CREATE\s+TRIGGER/i.test(line)) inTrigger = true;
