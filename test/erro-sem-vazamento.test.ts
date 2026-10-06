@@ -138,4 +138,226 @@ describe('500 correlaciona em vez de vazar', () => {
     const corpo = (await res.json()) as { error: string };
     expect(corpo.error).toMatch(/^Forbidden/);
   });
+
+  // evidence.ts e ropa.ts ainda devolviam `detail: e.message` — achado quando um
+  // mock de D1 virou D1 real e o 500 passou a trazer `D1_ERROR: FOREIGN KEY ...`.
+  // Os dois erros abaixo também são reais: FK violada no próprio SQLite.
+  const VAZAMENTO_FK = /FOREIGN KEY|constraint|SQLITE|D1_ERROR|INSERT INTO|DELETE FROM/i;
+
+  async function exigeSemVazamento(res: Response, mensagem: string) {
+    expect(res.status).toBe(500);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.error).toBe(mensagem);
+    expect(corpo.detail).toBeUndefined();
+    expect(JSON.stringify(corpo)).not.toMatch(VAZAMENTO_FK);
+    expect(typeof corpo.request_id).toBe('string');
+    expect((corpo.request_id as string).length).toBeGreaterThan(0);
+  }
+
+  it('evidence: excluir evidência referenciada pelo checklist vira 500 sem texto do D1', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+        .bind('ev-vaz', PROJ, 'a.pdf', 'evidence/proj-vaz/ev-vaz-a.pdf', 'h', 'vaz@ness.io'),
+      env.DB.prepare(`INSERT INTO checklist_progress (project_id, phase_number, item_id, evidence_id) VALUES (?,?,?,?)`)
+        .bind(PROJ, 1, 'item-vaz', 'ev-vaz'),
+    ]);
+    await env.STORAGE.put('evidence/proj-vaz/ev-vaz-a.pdf', 'conteudo');
+    const res = await req('/api/v1/evidence/ev-vaz', { method: 'DELETE', headers: admin });
+    await exigeSemVazamento(res, 'Erro ao excluir evidência');
+    // O banco recusou: a linha continua, então o arquivo para o qual ela aponta
+    // também precisa continuar. Antes o R2 era apagado primeiro.
+    expect(await env.DB.prepare('SELECT id FROM evidence WHERE id = ?').bind('ev-vaz').first()).not.toBeNull();
+    expect(await env.STORAGE.head('evidence/proj-vaz/ev-vaz-a.pdf')).not.toBeNull();
+  });
+
+  it('evidence: falha do R2 ao excluir não derruba a exclusão nem deixa a linha', async () => {
+    await env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+      .bind('ev-r2', PROJ, 'b.pdf', 'evidence/proj-vaz/ev-r2-b.pdf', 'h', 'vaz@ness.io').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const storage = new Proxy(env.STORAGE, {
+      get(alvo, prop) {
+        if (prop === 'delete') return async () => { throw new Error('R2 indisponível'); };
+        const v = (alvo as any)[prop];
+        return typeof v === 'function' ? v.bind(alvo) : v;
+      },
+    });
+    const res = await worker.fetch(
+      new Request('http://localhost/api/v1/evidence/ev-r2', { method: 'DELETE', headers: admin }),
+      { ...testEnv(), STORAGE: storage },
+    );
+    expect(res.status).toBe(200);
+    expect(await env.DB.prepare('SELECT id FROM evidence WHERE id = ?').bind('ev-r2').first()).toBeNull();
+  });
+
+  it('ropa: criar ROPA em projeto inexistente vira 500 sem texto do D1', async () => {
+    const res = await req('/api/v1/projects/proj-vaz-inexistente/ropa', {
+      method: 'POST',
+      headers: { ...admin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ processing_purpose: 'Folha', legal_basis: 'Contrato' }),
+    });
+    await exigeSemVazamento(res, 'Falha ao criar ROPA');
+  });
+
+  // IA indisponível: o agente devolve `success:false` com o texto cru de cada
+  // provedor (gateway, Workers AI, binding direto). Isso fica no log, não no 500.
+  const PROVEDOR = 'texto-cru-do-provedor-xyz';
+  const envSemIa = () => ({ ...testEnv(), AI: { run: async () => { throw new Error(PROVEDOR); } } });
+
+  async function exigeSemProvedor(res: Response, mensagem: string) {
+    expect(res.status).toBe(500);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.error).toBe(mensagem);
+    expect(corpo.detail).toBeUndefined();
+    expect(corpo.details).toBeUndefined();
+    expect(JSON.stringify(corpo)).not.toMatch(new RegExp(`${PROVEDOR}|ai-gateway|workers-ai`));
+    expect(typeof corpo.request_id).toBe('string');
+  }
+
+  it('evidence: avaliar com IA indisponível não devolve o texto do provedor', async () => {
+    await env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+      .bind('ev-ia', PROJ, 'c.pdf', 'evidence/proj-vaz/ev-ia-c.pdf', 'h', 'vaz@ness.io').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-ia/evaluate', {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'politica de acesso' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha ao avaliar evidência');
+  });
+
+  it('policies: gerar política com IA indisponível não devolve o texto do provedor', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/generate-policy`, {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_id: 'A.5.1' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha ao gerar política');
+  });
+
+  it('ai: diagnóstico executivo com IA indisponível não devolve o texto do provedor', async () => {
+    await env.DB.prepare(`INSERT INTO project_interviews (id, project_id, track, question, answer) VALUES (?,?,?,?,?)`)
+      .bind('int-vaz', PROJ, 'governanca', 'Há política?', 'Sim').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/assessment/evaluate`, {
+      method: 'POST', headers: admin,
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha no processamento agêntico do diagnóstico');
+  });
+
+  it('ai: chat com IA indisponível não devolve a exceção', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/chat`, {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'oi' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Erro ao comunicar com a IA');
+  });
+
+  it('policies: lote com IA indisponível não devolve o erro do provedor na prévia', async () => {
+    const linhas: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { linhas.push(String(args[0])); });
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/generate-policies-bulk`, {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_ids: ['A.5.1'] }),
+    }), envSemIa());
+    expect(res.status).toBe(200);
+    const corpo = (await res.json()) as { policies: Array<Record<string, unknown>> };
+    expect(JSON.stringify(corpo)).not.toMatch(new RegExp(`${PROVEDOR}|ai-gateway|workers-ai`));
+    const item = corpo.policies[0];
+    expect(item.success).toBe(false);
+    expect(item.content_preview).toBe('');
+    expect(typeof item.request_id).toBe('string');
+    // O texto do provedor foi para o log, sob o mesmo id devolvido no item.
+    const erro = linhas
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .find((ev) => ev?.msg === 'erro_handler' && ev.request_id === item.request_id);
+    expect(erro?.erro).toMatch(new RegExp(PROVEDOR));
+  });
+
+  it('webhooks: teste que falha devolve 502 sem a mensagem da exceção', async () => {
+    await env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events, status) VALUES (?,?,?,?,?)`)
+      .bind('wh-vaz', PROJ, 'https://93.184.216.34/hook', '["test"]', 'Active').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED texto-interno-abc'));
+    const res = await req('/api/v1/webhooks/test/wh-vaz', { method: 'POST', headers: admin });
+    expect(res.status).toBe(502);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.ok).toBe(false);
+    expect(JSON.stringify(corpo)).not.toMatch(/ECONNREFUSED|texto-interno/);
+    expect(typeof corpo.request_id).toBe('string');
+    const wh = await env.DB.prepare('SELECT failure_count FROM webhooks WHERE id = ?').bind('wh-vaz').first<{ failure_count: number }>();
+    expect(wh!.failure_count).toBe(1);
+  });
+
+  it('ropa: relatório HTML que falha devolve 500 sem a exceção e com o request_id', async () => {
+    // A mensagem traz HTML de propósito: antes ia interpolada crua na página.
+    const db = new Proxy(env.DB, {
+      get(alvo, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => /FROM projects/.test(sql)
+            ? { bind: () => ({ first: async () => { throw new Error('D1_ERROR: <img src=x onerror=alert(1)>'); } }) }
+            : alvo.prepare(sql);
+        }
+        const v = (alvo as any)[prop];
+        return typeof v === 'function' ? v.bind(alvo) : v;
+      },
+    });
+    const linhas: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { linhas.push(String(args[0])); });
+
+    const res = await worker.fetch(
+      new Request(`http://localhost/api/v1/projects/${PROJ}/ropa/report`, { headers: admin }),
+      { ...testEnv(), DB: db },
+    );
+    expect(res.status).toBe(500);
+    const html = await res.text();
+    expect(html).not.toMatch(/D1_ERROR|<img|onerror/);
+
+    // O detalhe foi para o log, e a página cita o MESMO request_id.
+    const erro = linhas
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .find((ev) => ev?.msg === 'erro_handler');
+    expect(erro, 'a falha precisa ir ao log estruturado').toBeDefined();
+    expect(erro.erro).toMatch(/D1_ERROR/);
+    expect(html).toContain(erro.request_id);
+  });
+});
+
+/**
+ * Catraca: nenhum handler em src/routes volta a devolver a mensagem crua da
+ * exceção em `detail`. O caminho certo é `erro500(c, mensagem, e)`.
+ * `?raw` inlina o fonte em tempo de build (mesmo método de any-catraca.test.ts).
+ */
+const ROTAS = import.meta.glob('../src/routes/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
+describe('catraca: mensagem de exceção em resposta de src/routes', () => {
+  it('o leitor enxerga as rotas', () => {
+    expect(Object.keys(ROTAS).length).toBeGreaterThan(10);
+  });
+
+  // Cada padrão é de uma linha só. Cobre:
+  //  - `detail(s): e.message` e `detail(s): result.content` (o content de
+  //    agente com success:false carrega o erro cru do provedor de IA);
+  //  - `${e.message}` interpolado em resposta (HTML ou JSON);
+  //  - `error: e.message` numa resposta 5xx (o 403 de ForbiddenError/Recusa
+  //    devolve a própria mensagem de propósito e fica de fora).
+  const PADROES = [
+    /details?:\s*\w+\??\.(message|content)\b/,
+    /\$\{\s*(e|err|error)\??\.message\s*\}/,
+    /error:\s*(e|err|error)\??\.message\b.*\b5\d\d\s*\)/,
+  ];
+
+  it('nenhuma rota devolve texto de exceção ou de provedor ao cliente', () => {
+    const achados = Object.entries(ROTAS).flatMap(([arq, txt]) =>
+      txt.split('\n').flatMap((l, i) => (PADROES.some((p) => p.test(l)) ? [`${arq}:${i + 1}`] : [])));
+    expect(achados, `Use erro500(c, mensagem, e) ou registraErro(c, e): ${achados.join(', ')}`).toEqual([]);
+  });
+
+  it('os padrões casam as formas que já vazaram (senão a catraca passaria vazia)', () => {
+    for (const linha of [
+      "return c.json({ error: 'x', detail: e.message }, 500);",
+      "return c.json({ error: 'x', detail: result.content }, 500);",
+      "return c.json({ error: 'x', details: result.content }, 500);",
+      "return c.json({ error: 'x', details: err.message }, 500);",
+      'return c.html(`<h3>Erro: ${e.message}</h3>`, 500);',
+      'return c.json({ ok: false, error: e.message }, 502);',
+    ]) expect(PADROES.some((p) => p.test(linha)), linha).toBe(true);
+    // E não reprova o 403 legítimo.
+    expect(PADROES.some((p) => p.test('if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);'))).toBe(false);
+  });
 });

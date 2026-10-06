@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro } from '../helpers';
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
@@ -20,8 +20,7 @@ evidenceApp.get('/:id/detail', async (c) => {
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
     return c.json(evidence);
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao buscar detalhe da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar detalhe da evidência', e);
   }
 });
 
@@ -41,8 +40,7 @@ async function downloadEvidence(c: any, id: string) {
 
     return new Response(obj.body, { headers });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao baixar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao baixar evidência', e);
   }
 }
 
@@ -62,8 +60,7 @@ evidenceApp.get('/:id/content', async (c) => {
     const content = await obj.text();
     return c.json({ ok: true, file_name: ev.file_name, content });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao buscar conteúdo da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar conteúdo da evidência', e);
   }
 });
 
@@ -97,8 +94,7 @@ evidenceApp.put('/:id/content', async (c) => {
     await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system', `Conteúdo da evidência ${id} atualizado.`);
     return c.json({ ok: true, sha256: realSha256 });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar conteúdo da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar conteúdo da evidência', e);
   }
 });
 
@@ -109,16 +105,18 @@ evidenceApp.delete('/:id', async (c) => {
     const ev = await c.env.DB.prepare('SELECT file_name, r2_key, project_id FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
-    if (ev.r2_key) {
-      await c.env.STORAGE.delete(ev.r2_key).catch(() => {});
-    }
-
+    // Banco primeiro: se o DELETE falhar (ex.: FK do checklist), a linha e o
+    // arquivo continuam juntos. Ao contrário, a linha sobrava apontando para um
+    // objeto já apagado. Falha do R2 depois disso vira objeto órfão — vai ao log,
+    // mas não desfaz a exclusão.
     await c.env.DB.prepare('DELETE FROM evidence WHERE id = ?').bind(id).run();
+    if (ev.r2_key) {
+      await c.env.STORAGE.delete(ev.r2_key).catch((e: unknown) => registraErro(c, e));
+    }
     await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`, '', '', ev.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Erro ao excluir evidência', detail: e.message }, 500);
+    return erro500(c, 'Erro ao excluir evidência', e);
   }
 });
 
@@ -139,13 +137,12 @@ evidenceApp.put('/:id', async (c) => {
     }
     const novoControle = body.control_id ?? null;
 
-    // Aterramento de tenant: só vincula a um controle DO MESMO projeto.
+    // Aterramento de tenant: só vincula a um controle DO MESMO projeto. Mesma
+    // resposta para inexistente e de outro projeto (como no upload): um 403
+    // distinto confirmava que o id existe em outro tenant.
     if (novoControle !== null) {
-      const ctrl = await c.env.DB.prepare('SELECT project_id FROM compliance_controls WHERE id = ?').bind(novoControle).first<any>();
-      if (!ctrl) return c.json({ error: 'Controle não encontrado' }, 404);
-      if (ctrl.project_id !== ev.project_id) {
-        return c.json({ error: 'Forbidden: controle pertence a outro projeto' }, 403);
-      }
+      const ctrl = await c.env.DB.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(novoControle, ev.project_id).first();
+      if (!ctrl) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
     }
 
     // Mudar o controle-alvo invalida a avaliação anterior (foi feita contra outro
@@ -159,8 +156,7 @@ evidenceApp.put('/:id', async (c) => {
     }
     return c.json({ ok: true, control_id: novoControle, relinked: mudou });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Erro ao re-associar evidência', detail: e.message }, 500);
+    return erro500(c, 'Erro ao re-associar evidência', e);
   }
 });
 
@@ -193,7 +189,8 @@ evidenceApp.post('/:id/evaluate', async (c) => {
     });
 
     if (!result.success) {
-      return c.json({ error: 'Falha ao avaliar evidência', detail: result.content }, 500);
+      // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
+      return erro500(c, 'Falha ao avaliar evidência', new Error(result.content));
     }
 
     let evalStatus = 'pending';
@@ -216,8 +213,7 @@ evidenceApp.post('/:id/evaluate', async (c) => {
       metadata: result.metadata
     });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao avaliar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao avaliar evidência', e);
   }
 });
 
@@ -291,8 +287,7 @@ async function handleApprove(c: any) {
 
     return c.json({ ok: true, role: targetRole, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao assinar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao assinar evidência', e);
   }
 }
 
@@ -326,6 +321,15 @@ projectEvidenceApp.post('/upload', async (c) => {
     const invalido = validateUpload(file);
     if (invalido) return c.json({ error: invalido }, 400);
 
+    // O controle precisa existir E ser deste projeto, conferido ANTES de tocar
+    // no R2: sem isto a FK derrubava o INSERT depois do put (objeto órfão + 500)
+    // e controle de outro projeto era aceito. Mesma resposta nos dois casos para
+    // não revelar a existência de controle alheio.
+    if (controlId) {
+      const ctrl = await c.env.DB.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
+      if (!ctrl) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
+    }
+
     const id = genId();
     const r2Key = `evidence/${projectId}/${id}-${file.name}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -339,15 +343,22 @@ projectEvidenceApp.post('/upload', async (c) => {
     });
 
     const user = c.get('user');
-    await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
-    ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, uploaded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`
+      ).bind(id, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+    } catch (e) {
+      // Compensação: sem a linha no banco, o objeto no R2 seria órfão. Se
+      // a própria compensação falhar, o órfão fica registrado no log.
+      await c.env.STORAGE.delete(r2Key).catch((e2: unknown) => registraErro(c, e2));
+      throw e;
+    }
 
     await logAudit(c.env.DB, 'evidence.uploaded', user?.email || 'system', `Evidência ${file.name} (SHA-256: ${realSha256.substring(0, 8)}...) enviada para projeto ${projectId}`);
 
     return c.json({ ok: true, id, sha256: realSha256 }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha no upload de evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha no upload de evidência', e);
   }
 });
