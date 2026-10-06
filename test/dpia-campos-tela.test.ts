@@ -22,6 +22,9 @@ const TELA = {
   risks_identified: 'Vazamento', mitigation_measures: 'TLS', dpo_opinion: 'De acordo',
 };
 
+// No topo do arquivo: com `-t`, o beforeAll de um describe filtrado não roda.
+beforeAll(applySchema);
+
 describe('DPIA: campos da tela são gravados', () => {
   let ed: Record<string, string>;
   const ler = async (id: string) => {
@@ -30,7 +33,6 @@ describe('DPIA: campos da tela são gravados', () => {
   };
 
   beforeAll(async () => {
-    await applySchema();
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,'CT','ISO 27701','controller','Active')`).bind(P),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-ct','ct@x.com','x','Ed','org_admin',?)`).bind(P),
@@ -54,12 +56,19 @@ describe('DPIA: campos da tela são gravados', () => {
 
   it('relatório mostra os campos da tela, escapados', async () => {
     const { id } = await (await chamar('POST', `/api/v1/projects/${P}/dpia`, ed, { ...TELA, risks_identified: '<script>x</script>' })).json<any>();
-    const r = await chamar('GET', `/api/v1/projects/${P}/dpia/${id}/report`, ed);
-    expect(r.status).toBe(200);
-    const html = await r.text();
-    for (const v of ['CRM', 'Entra pelo site', 'TLS', 'De acordo']) expect(html).toContain(v);
-    expect(html).not.toContain('<script>x</script>');
-    expect(html).toContain('&lt;script&gt;');
+    await env.DB.prepare(`UPDATE projects SET client_name = '<img src=x onerror=alert(1)>' WHERE id = ?`).bind(P).run();
+    try {
+      const r = await chamar('GET', `/api/v1/projects/${P}/dpia/${id}/report`, ed);
+      expect(r.status).toBe(200);
+      const html = await r.text();
+      for (const v of ['CRM', 'Entra pelo site', 'TLS', 'De acordo']) expect(html).toContain(v);
+      expect(html).not.toContain('<script>x</script>');
+      expect(html).toContain('&lt;script&gt;');
+      expect(html).not.toContain('<img src=x onerror');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    } finally {
+      await env.DB.prepare(`UPDATE projects SET client_name = 'CT' WHERE id = ?`).bind(P).run();
+    }
   }, 30_000);
 
   it('PUT de texto da tela com pedido de aprovação aberto: pedido vira substituido', async () => {
@@ -72,5 +81,20 @@ describe('DPIA: campos da tela são gravados', () => {
     expect(r.status, await r.clone().text()).toBe(200);
     const linha = await env.DB.prepare('SELECT status FROM pedidos WHERE id = ?').bind(pedido!.id).first<any>();
     expect(linha.status).toBe('substituido');
+  }, 30_000);
+});
+
+describe('relatório ROPA escapa o nome do cliente', () => {
+  it('client_name com <img onerror> sai escapado', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-rr','<img src=x onerror=alert(1)>','ISO 27701','controller','Active')`),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-rr','rr@x.com','x','Rr','org_admin','p-rr')`),
+    ]);
+    const h = await sessionFor({ id: 'u-rr', email: 'rr@x.com', role: 'org_admin', client_project_id: 'p-rr' });
+    const r = await chamar('GET', '/api/v1/projects/p-rr/ropa/report', h);
+    expect(r.status, await r.clone().text()).toBe(200);
+    const html = await r.text();
+    expect(html).not.toContain('<img src=x onerror');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
   }, 30_000);
 });

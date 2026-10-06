@@ -192,7 +192,7 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Relatório RIPD / DPIA - ${project.client_name}</title>
+        <title>Relatório RIPD / DPIA - ${escapeHtml(project.client_name)}</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
         <style>
           body { background-color: #f1f5f9; color: #070b14; font-family: 'Inter', sans-serif; margin: 0; padding: 2rem; line-height: 1.6; }
@@ -205,7 +205,7 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
       <body>
         <div class="container">
           <h1>Relatório de Impacto à Proteção de Dados (RIPD / DPIA)</h1>
-          <p style="color: #64748b;"><strong>Organização:</strong> ${project.client_name}</p>
+          <p style="color: #64748b;"><strong>Organização:</strong> ${escapeHtml(project.client_name)}</p>
           
           ${campos}
 
