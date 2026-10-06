@@ -221,7 +221,7 @@ projectRopaApp.get('/report', async (c) => {
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Relatório ROPA - ${project.client_name || 'Projeto GRC'}</title>
+        <title>Relatório ROPA - ${escapeHtml(project.client_name || 'Projeto GRC')}</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
         <style>
           body { background-color: #f1f5f9; color: #070b14; font-family: 'Inter', sans-serif; margin: 0; padding: 2rem; line-height: 1.6; }
@@ -240,7 +240,7 @@ projectRopaApp.get('/report', async (c) => {
         </style>
       </head>
       <body>
-        <h1 style="font-family: 'Montserrat', sans-serif; color: #0f172a;">Relatório ROPA — ${project.client_name}</h1>
+        <h1 style="font-family: 'Montserrat', sans-serif; color: #0f172a;">Relatório ROPA — ${escapeHtml(project.client_name)}</h1>
         <p style="color: #64748b;">Registro das Atividades de Tratamento de Dados Pessoais (Art. 37 LGPD / ISO 27701)</p>
         ${rowsHtml || '<p>Nenhum registro ROPA cadastrado neste projeto.</p>'}
       </body>

@@ -1044,9 +1044,11 @@ projectsApp.post('/:id/dpia', async (c) => {
     const id = genId();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
-      `INSERT INTO dpia_assessments (id, project_id, ropa_id, processing_name, data_category_risk, necessity_proportionality, technical_measures, residual_risk_level, dpo_recommendations, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?)`
-    ).bind(id, projectId, body.ropa_id || null, body.processing_name ?? null, body.data_category_risk ?? null, body.necessity_proportionality ?? null, body.technical_measures ?? null, body.residual_risk_level || 'Medium', body.dpo_recommendations || null, now).run();
+      `INSERT INTO dpia_assessments (id, project_id, ropa_id, processing_name, data_category_risk, necessity_proportionality, technical_measures, residual_risk_level, dpo_recommendations,
+         system_name, data_flow_description, data_subjects_types, personal_data_categories, risks_identified, mitigation_measures, dpo_opinion, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?)`
+    ).bind(id, projectId, body.ropa_id || null, body.processing_name ?? null, body.data_category_risk ?? null, body.necessity_proportionality ?? null, body.technical_measures ?? null, body.residual_risk_level || 'Medium', body.dpo_recommendations || null,
+      body.system_name || null, body.data_flow_description || null, body.data_subjects_types || null, body.personal_data_categories || null, body.risks_identified || null, body.mitigation_measures || null, body.dpo_opinion || null, now).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_created', user?.email || 'system', `DPIA ${id} created`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
