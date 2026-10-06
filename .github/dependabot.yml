@@ -7,6 +7,11 @@ version: 2
 # Cada diretório agrupa as atualizações de patch e minor num PR só. Sem isso, cada
 # merge desatualiza os demais PRs e o ciclo atualizar-esperar o CI-mergear custa
 # ~12 min por dependência. Versão MAIOR continua em PR separado: exige decisão.
+#
+# IGNORADOS de propósito (conflito de peer dependency que derruba o `npm ci`, ou seja,
+# o PR inteiro, inclusive os pacotes bons do mesmo grupo). Revisitar quando sair versão compatível:
+#  - vitest / @vitest/* major 5: @cloudflare/vitest-pool-workers@0.22 ainda não suporta (ERESOLVE).
+#  - @modelcontextprotocol/server: o pacote `agents` não aceita a 2.3 (ERESOLVE).
 updates:
   - package-ecosystem: npm
     directory: /
@@ -17,8 +22,15 @@ updates:
       # Agrupa o que quase sempre sobe junto, para não gerar 5 PRs por semana.
       dev-tooling:
         patterns: ["vitest", "@vitest/*", "@cloudflare/vitest-pool-workers", "typescript", "wrangler"]
+        update-types: ["minor", "patch"]
       menores-e-patches:
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@modelcontextprotocol/server"
     labels: ["dependencies"]
 
   - package-ecosystem: npm
@@ -29,6 +41,11 @@ updates:
     groups:
       menores-e-patches:
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
     labels: ["dependencies", "frontend"]
 
   - package-ecosystem: npm
