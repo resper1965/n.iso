@@ -202,3 +202,28 @@ describe('corpo mínimo: opcional ausente vira NULL, não 500', () => {
     expect(u.status, await u.clone().text()).toBe(200);
   });
 });
+
+describe('PUT parcial: campo ausente preserva o gravado; null ou vazio explícito limpa', () => {
+  it('CAPA: PUT sem severity, prazo e vínculo mantém os três', async () => {
+    await env.DB.prepare(`UPDATE corrective_actions SET severity = 'High', due_date = '2026-12-31', risk_id = 'r-a' WHERE id = 'capa-a'`).run();
+    const r = await req('/api/v1/capa/capa-a', 'PUT', { title: 'Novo título', status: 'Open' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect(await env.DB.prepare(`SELECT title, severity, due_date, risk_id FROM corrective_actions WHERE id = 'capa-a'`).first())
+      .toEqual({ title: 'Novo título', severity: 'High', due_date: '2026-12-31', risk_id: 'r-a' });
+  });
+
+  it('CAPA: null e vazio explícitos limpam', async () => {
+    await env.DB.prepare(`UPDATE corrective_actions SET due_date = '2026-12-31', risk_id = 'r-a' WHERE id = 'capa-a'`).run();
+    await req('/api/v1/capa/capa-a', 'PUT', { title: 'T', status: 'Open', due_date: null, risk_id: '' });
+    expect(await env.DB.prepare(`SELECT due_date, risk_id FROM corrective_actions WHERE id = 'capa-a'`).first())
+      .toEqual({ due_date: null, risk_id: null });
+  });
+
+  it('DPIA: PUT só com um campo mantém os demais, inclusive o status', async () => {
+    await env.DB.prepare(`UPDATE dpia_assessments SET technical_measures = 'cripto', residual_risk_level = 'Low', status = 'Approved', ropa_id = 'ropa-a' WHERE id = 'dpia-a'`).run();
+    const r = await req('/api/v1/dpia/dpia-a', 'PUT', { processing_name: 'Folha' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect(await env.DB.prepare(`SELECT processing_name, technical_measures, residual_risk_level, status, ropa_id FROM dpia_assessments WHERE id = 'dpia-a'`).first())
+      .toEqual({ processing_name: 'Folha', technical_measures: 'cripto', residual_risk_level: 'Low', status: 'Approved', ropa_id: 'ropa-a' });
+  });
+});

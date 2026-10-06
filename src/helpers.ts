@@ -335,6 +335,20 @@ export async function refForaDoProjeto(
 }
 
 /**
+ * SET de atualização PARCIAL: só as colunas presentes no corpo. Campo ausente preserva o valor
+ * gravado; `null` ou `''` explícito grava o "vazio" da coluna (NULL, ou o padrão dela). `colunas`
+ * mapeia coluna → vazio e é allowlist fixa da rota: o nome entra interpolado no SQL. O schema da
+ * rota não pode preencher campo ausente com null (transform), senão ausente vira "limpar".
+ */
+export function setParcial(corpo: Record<string, unknown>, colunas: Record<string, unknown>): { sql: string; binds: unknown[] } {
+  const presentes = Object.keys(colunas).filter((k) => Object.hasOwn(corpo, k));
+  return {
+    sql: presentes.map((k) => `${k} = ?`).join(', '),
+    binds: presentes.map((k) => (corpo[k] === null || corpo[k] === '' ? colunas[k] : corpo[k])),
+  };
+}
+
+/**
  * Garante que o usuário tem acesso ao projeto. `platform_admin` alcança todos; consultor, só os
  * projetos da própria organização em que está designado na governança (D5); `consultoria_admin`,
  * todos os da própria organização; papéis de CLIENTE, o seu client_project_id (chave de API e agente
