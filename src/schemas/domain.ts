@@ -283,7 +283,6 @@ export const interviewSchema = z.object({
       answer: longo,
       interviewee: curtoOpcional,
       gap_detected: boolLike,
-      notes: longoOpcional,
     })
   ).min(1).max(1000),
 }).passthrough();
@@ -374,7 +373,12 @@ export const dpiaSchema = z.object({
   technical_measures: longoOpcional,
   residual_risk_level: curtoOpcional,
   dpo_recommendations: longoOpcional,
-  status: curtoOpcional,
+  // 'Approved' fica de fora de propósito: aprovar exige senha, autoridade na matriz de Governança e
+  // segregação, e isso só existe em POST .../approve e nos pedidos de aprovação. Assinaturas
+  // (dpo_signature, ceo_signature, dpo_approved_*) passam pelo passthrough mas a rota não as grava.
+  status: z.enum(['Draft', 'Under Review'], {
+    error: "status aceita 'Draft' ou 'Under Review'. Aprovar a DPIA é pelo fluxo de aprovação (assinatura do DPO e da Direção), não pela edição.",
+  }).optional().nullable(),
 }).passthrough();
 
 // ——— Documentos legais ————————————————————————————————————————————————

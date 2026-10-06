@@ -436,10 +436,10 @@ import { navigate, render } from '../router.js';
             <div class="form-group"><label class="form-label">Medidas de Mitigação</label><textarea class="form-input" id="dpia-e-mitigations">${escapeHTML(dp.mitigation_measures||'')}</textarea></div>
             <div class="form-group"><label class="form-label">Parecer do DPO (Encarregado)</label><textarea class="form-input" id="dpia-e-opinion">${escapeHTML(dp.dpo_opinion||'')}</textarea></div>
             <div class="form-group"><label class="form-label">Status</label>
-                <select class="form-input" id="dpia-e-status">
+                <select class="form-input" id="dpia-e-status" ${dp.status==='Approved'?'disabled':''}>
+                    ${dp.status==='Approved' ? '<option value="Approved" selected>Approved (reabrir: Revogar aprovação)</option>' : `
                     <option value="Draft" ${dp.status==='Draft'?'selected':''}>Draft</option>
-                    <option value="Under Review" ${dp.status==='Under Review'?'selected':''}>Under Review</option>
-                    <option value="Approved" ${dp.status==='Approved'?'selected':''}>Approved</option>
+                    <option value="Under Review" ${dp.status==='Under Review'?'selected':''}>Under Review</option>`}
                 </select></div>
 
             <div style="display:flex; gap:0.5rem; justify-content:space-between; margin-top:1.5rem">
@@ -458,9 +458,12 @@ import { navigate, render } from '../router.js';
             necessity_proportionality: document.getElementById('dpia-e-necessity').value,
             risks_identified: document.getElementById('dpia-e-risks').value,
             mitigation_measures: document.getElementById('dpia-e-mitigations').value,
-            dpo_opinion: document.getElementById('dpia-e-opinion').value,
-            status: document.getElementById('dpia-e-status').value
+            dpo_opinion: document.getElementById('dpia-e-opinion').value
         };
+        // Aprovar é pelo fluxo de assinatura; o PUT só move entre Draft e Under Review e recusa
+        // status em DPIA já aprovada.
+        const st = document.getElementById('dpia-e-status');
+        if (!st.disabled) body.status = st.value;
         await api('PUT', `/api/v1/dpia/${id}`, body);
         forceCloseModal(); render();
     };

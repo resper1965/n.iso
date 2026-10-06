@@ -70,7 +70,12 @@ platformApp.put('/dpia/:id', async (c) => {
     const valid = await validateBody(c, dpiaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
-    const atual = await c.env.DB.prepare('SELECT project_id FROM dpia_assessments WHERE id = ?').bind(id).first<{ project_id: string | null }>();
+    const atual = await c.env.DB.prepare('SELECT project_id, status FROM dpia_assessments WHERE id = ?').bind(id).first<{ project_id: string | null; status: string | null }>();
+    // Sair de 'Approved' pelo PUT deixaria as assinaturas na linha sem motivo nem trilha: é revogação.
+    // Editar só o conteúdo de DPIA aprovada continua permitido (o pedido aberto é substituído abaixo).
+    if (atual?.status === 'Approved' && Object.hasOwn(body, 'status')) {
+      return c.json({ error: 'DPIA aprovada não muda de status pela edição. Para reabrir, use "Revogar aprovação" (motivo obrigatório).' }, 400);
+    }
     const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['ropa_id']);
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const p = setParcial(body, {
