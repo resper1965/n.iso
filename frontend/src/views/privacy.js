@@ -164,11 +164,6 @@ import { navigate, render } from '../router.js';
             </div>
             <div class="form-group"><label class="form-label">Destinatarios / Compartilhamento</label><input class="form-input" id="ropa-recipients" placeholder="Ex: Contabilidade, INSS, Cloud Providers"></div>
             <div class="form-group"><label class="form-label">Salvaguardas de Transferência (Se aplicável)</label><input class="form-input" id="ropa-safeguards" placeholder="Ex: Standard Contractual Clauses (SCCs)"></div>
-            <div class="form-group"><label class="form-label">Status</label>
-                <select class="form-input" id="ropa-status">
-                    <option>Active</option>
-                    <option>Inactive</option>
-                </select></div>
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-intl"> Transferencia Internacional</label>
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-dpia"> DPIA Requerido</label>
@@ -187,7 +182,6 @@ import { navigate, render } from '../router.js';
             recipients: document.getElementById('ropa-recipients').value, 
             owner: document.getElementById('ropa-owner').value, 
             transfer_safeguards: document.getElementById('ropa-safeguards').value,
-            status: document.getElementById('ropa-status').value,
             international_transfers: document.getElementById('ropa-intl').checked ? 1 : 0, 
             dpia_required: document.getElementById('ropa-dpia').checked ? 1 : 0 
         };
@@ -215,9 +209,10 @@ import { navigate, render } from '../router.js';
             <div class="form-group"><label class="form-label">Destinatarios / Compartilhamento</label><input class="form-input" id="ropa-e-recipients" value="${escapeHTML(r.recipients||'')}"></div>
             <div class="form-group"><label class="form-label">Salvaguardas de Transferência</label><input class="form-input" id="ropa-e-safeguards" value="${escapeHTML(r.transfer_safeguards||'')}"></div>
             <div class="form-group"><label class="form-label">Status</label>
-                <select class="form-input" id="ropa-e-status">
-                    <option ${r.status==='Active'?'selected':''}>Active</option>
-                    <option ${r.status==='Inactive'?'selected':''}>Inactive</option>
+                <select class="form-input" id="ropa-e-status" ${r.status==='Approved'?'disabled':''}>
+                    ${r.status==='Approved' ? '<option value="Approved" selected>Approved (reabrir: Revogar aprovação)</option>' : `
+                    <option value="Draft" ${r.status!=='Under Review'?'selected':''}>Draft</option>
+                    <option value="Under Review" ${r.status==='Under Review'?'selected':''}>Under Review</option>`}
                 </select></div>
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <label style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:0.25rem"><input type="checkbox" id="ropa-e-intl" ${r.international_transfers?'checked':''}> Transferencia Internacional</label>
@@ -240,10 +235,12 @@ import { navigate, render } from '../router.js';
             recipients: document.getElementById('ropa-e-recipients').value, 
             owner: document.getElementById('ropa-e-owner').value, 
             transfer_safeguards: document.getElementById('ropa-e-safeguards').value,
-            status: document.getElementById('ropa-e-status').value,
             international_transfers: document.getElementById('ropa-e-intl').checked ? 1 : 0, 
             dpia_required: document.getElementById('ropa-e-dpia').checked ? 1 : 0 
         };
+        // Aprovar é pelo fluxo de assinatura; o PUT só move entre Draft e Under Review.
+        const st = document.getElementById('ropa-e-status');
+        if (!st.disabled) body.status = st.value;
         await api('PUT', `/api/v1/ropa/${id}`, body);
         forceCloseModal(); render();
     };
