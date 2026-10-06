@@ -84,7 +84,7 @@ describe('renderUsers', () => {
 
   // BUG (admin.js:136): "Administradores & Consultores" só conta platform_admin/admin/consultor;
   // consultoria_admin, comercial e o legado `consultant` caem em "Usuários de Clientes".
-  it.fails('equipe da consultoria não é contada como usuário de cliente (admin.js:136)', async () => {
+  it('equipe da consultoria não é contada como usuário de cliente (admin.js:136)', async () => {
     apiMock.mockResolvedValue([
       { id: 'a', name: 'A', email: 'a@x.test', role: 'consultoria_admin' },
       { id: 'b', name: 'B', email: 'b@x.test', role: 'comercial' },

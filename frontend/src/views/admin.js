@@ -133,7 +133,7 @@ window.__adminCopiarApiKey = () => {
             });
 
             const totalUsers = userArr.length;
-            const admins = userArr.filter(u => u.role === 'platform_admin' || u.role === 'admin' || u.role === 'consultor').length;
+            const admins = userArr.filter(u => ['platform_admin', 'admin', 'consultor', 'consultant', 'comercial', 'consultoria_admin'].includes(u.role)).length;
             const clientUsers = totalUsers - admins;
 
             const statsHtml = window.renderStatCards([
