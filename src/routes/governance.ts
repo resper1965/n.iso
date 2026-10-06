@@ -390,8 +390,8 @@ governanceApp.post('/audits/:auditId/findings', async (c) => {
     if (finding_type === 'minor_nc' || finding_type === 'major_nc') {
       capaId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       await c.env.DB.prepare(`
-        INSERT INTO corrective_actions (id, project_id, audit_id, control_id, title, description, severity, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO corrective_actions (id, project_id, audit_id, control_id, title, description, severity, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Open', CURRENT_TIMESTAMP)
       `).bind(
         capaId, project_id, auditId, control_id || null, 
         `NC (${finding_type === 'major_nc' ? 'Maior' : 'Menor'}): ${description.substring(0, 50)}`, 

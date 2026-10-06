@@ -170,3 +170,16 @@ describe('DPIA: ropa_id do corpo', () => {
     expect((await req('/api/v1/dpia/dpia-a', 'PUT', { ...base, ropa_id: 'ropa-a' })).status).toBe(200);
   });
 });
+
+describe('achado de não conformidade abre CAPA', () => {
+  // A CAPA da NC era gravada com `updated_at`, coluna que corrective_actions não tem: 500 sempre.
+  for (const tipo of ['major_nc', 'minor_nc']) {
+    it(`${tipo}: grava o achado e a CAPA no projeto, auditoria e controle certos`, async () => {
+      const res = await req('/api/v1/audits/au-a/findings', 'POST', { project_id: A, finding_type: tipo, description: 'Sem backup testado', control_id: 'ctl-a' });
+      const corpo = await res.json<any>();
+      expect(res.status, JSON.stringify(corpo)).toBe(200);
+      const capa = await env.DB.prepare('SELECT project_id, audit_id, control_id FROM corrective_actions WHERE id = ?').bind(corpo.capa_id).first();
+      expect(capa).toEqual({ project_id: A, audit_id: 'au-a', control_id: 'ctl-a' });
+    });
+  }
+});
