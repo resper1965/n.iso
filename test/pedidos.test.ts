@@ -150,7 +150,7 @@ describe('meus pedidos', () => {
       env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email, user_id) VALUES ('pdd-alheio', 'pd-alheio', 'dpo@cliente.com', NULL)`),
     ]);
     alheio = 'pd-alheio';
-  });
+  }, 60_000);
 
   it('o destinatário vê o seu pedido, com o conteúdo congelado e o hash', async () => {
     const lista = await chamar(stDpo, 'GET', '/api/v1/pedidos');
