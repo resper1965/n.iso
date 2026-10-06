@@ -190,9 +190,14 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta 1 linha no lugar de 8). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **4 de 94 arquivos de teste ainda mockam o D1**: `api`, `integration`,
-  `mcp-integration` e `services-rag` (medido em 2026-10-01). Os demais que tocam
-  banco usam o D1 real do `cloudflare:test`. Teste mockado nao pega deriva de schema — foi exatamente
+- **0 de 144 arquivos de teste mockam o D1 inteiro** (medido em 2026-10-06; os
+  ultimos, `integration`, `mcp-integration` e `services-rag`, migraram no T2).
+  Todos os que tocam banco usam o D1 real do `cloudflare:test`. Sobram dubles
+  PONTUAIS de proposito: falha injetada (`helpers.test.ts`), linha legada que o
+  schema atual nao aceita (`api.test.ts`) e Proxy sobre o D1 real para simular
+  corrida (`pedidos-corrida`, `revisao-final-decididos`). Medicao:
+  `git grep -nE "prepare\s*[:(]\s*(vi\.fn|\(|async)|\bDB\s*:" -- test` e conferir
+  cada ocorrencia. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
 - **Frontend com pouco teste.** `frontend/test/` tem 19 arquivos (jsdom) e
