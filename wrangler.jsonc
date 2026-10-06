@@ -132,7 +132,9 @@
 	"env": {
 		"staging": {
 			"vars": {
-				"ENVIRONMENT": "staging"
+				"ENVIRONMENT": "staging",
+				// Links, callback de SSO e base do SCIM de staging apontam para staging.
+				"APP_URL": "https://niso-staging.ness.workers.dev"
 			},
 			"triggers": {
 				"crons": []
@@ -197,6 +199,9 @@
 	// `POST /api/v1/projects/admin/encrypt-tokens` (platform_admin) para migrar o legado.
 	"vars": {
 		"ENVIRONMENT": "production",
+		// Endereço canônico (src/config/url.ts): e-mails, callback de SSO, base do
+		// SCIM, CORS e hosts do MCP saem daqui, nunca do host da requisição.
+		"APP_URL": "https://niso.ness.com.br",
 		// Chave PÚBLICA de verificação dos exports de portabilidade (item 4.6).
 		// É `var` e não `secret` DE PROPÓSITO: ela existe para ser publicada — o
 		// Worker a serve em `GET /api/v1/public/export-public-key`, e quem recebe

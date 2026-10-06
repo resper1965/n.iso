@@ -6,6 +6,7 @@ import {
   sendEmail, escapeHtml, genToken, sha256Hex, registraErro,
 } from '../helpers';
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
+import { appUrl } from '../config/url';
 import {
   criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
   substituirPedidosDoDocumento, type TipoPedido, type Vigencia,
@@ -247,7 +248,6 @@ pedidosApp.post('/:id/recusar', async (c) => {
 // Cada pessoa recebe um link pessoal: token CSPRNG só no FRAGMENTO da URL (o servidor nunca o recebe
 // no caminho nem na query), só o SHA-256 no banco. O lado público está em `routes/public-pedidos.ts`.
 
-const URL_BASE = 'https://niso.ness.com.br';
 const SEM_EMAIL = { error: 'Envio de e-mail não configurado' };
 type Link = { email: string; nome: string | null; token: string };
 
@@ -284,7 +284,7 @@ const PAUSA_RETENTATIVA_MS = 300;
 const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function enviarLinks(c: any, titulo: string, links: Link[]): Promise<string[]> {
-  const enviar = (l: Link) => sendEmail(c, l.email, `Ciência de documento: ${titulo}`, emailCiencia(titulo, l.nome, `${URL_BASE}/politicas#${l.token}`));
+  const enviar = (l: Link) => sendEmail(c, l.email, `Ciência de documento: ${titulo}`, emailCiencia(titulo, l.nome, `${appUrl(c.env)}/politicas#${l.token}`));
   const falhas: string[] = [];
   for (let i = 0; i < links.length; i += ENVIOS_SIMULTANEOS) {
     const grupo = links.slice(i, i + ENVIOS_SIMULTANEOS);

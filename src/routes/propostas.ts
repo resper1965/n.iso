@@ -15,6 +15,7 @@ import { logoComoDataUri } from '../services/logo-org';
 import { renderizarDocx } from '../services/documento-docx';
 import { deLinha } from './servicos';
 import { fecharVenda, consultorValido } from '../services/fechar-venda';
+import { appUrl } from '../config/url';
 
 export const propostasApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -427,7 +428,6 @@ propostasApp.get('/:id/documento', async (c) => {
 
 // Envio e link (fatia 4). O token é a credencial do cliente: 32 bytes CSPRNG, no banco só o SHA-256,
 // na URL só no fragmento (o servidor nunca o recebe) e nunca em trilha, log ou resposta de enviar.
-const URL_BASE = 'https://niso.ness.com.br';
 const ENVIAVEL = ['gerada', 'enviada', 'visualizada', 'expirada'];
 const NAO_ENVIAVEL = (status: string) => ({ error: `Proposta em "${status}" não pode ser enviada: só gerada, enviada, visualizada ou expirada` });
 /** Link novo não nasce vencido: validade passada (expirada ou não) pede revisão. */
@@ -473,7 +473,7 @@ propostasApp.post('/:id/enviar', async (c) => {
     const nome = nomeSeguro((await lerConfigOrg(db, p.org_id)).nome);
     // e-mail primeiro: se falhar, nada foi gravado e o link anterior continua valendo
     const ok = await sendEmail(c, v.data.email, `Proposta ${p.numero} - ${nome}`,
-      emailProposta(nome, p, `${URL_BASE}/proposta#${token}`, v.data.mensagem),
+      emailProposta(nome, p, `${appUrl(c.env)}/proposta#${token}`, v.data.mensagem),
       { from: `${nome} via n.iso <noreply@ness.com.br>`, replyTo: user.email });
     if (!ok) return c.json({ error: 'Não foi possível enviar o e-mail: nada foi alterado, tente de novo' }, 502);
     if (!(await gravarToken(db, p, await sha256Hex(token), v.data.email))) return c.json({ error: 'A proposta mudou de estado durante o envio: confira e envie de novo' }, 409);
@@ -495,7 +495,7 @@ propostasApp.post('/:id/link', async (c) => {
     if (!(await gravarToken(db, p, await sha256Hex(token)))) return c.json({ error: 'A proposta mudou de estado: confira e tente de novo' }, 409);
     await logAudit(db, 'proposta.link_gerado', user.email ?? 'system', `Link da proposta ${p.id} (${p.numero} rev. ${p.revisao}) gerado; o anterior deixou de valer`);
     // a única vez que o token existe fora do e-mail: só o hash fica no banco
-    return c.json({ url: `${URL_BASE}/proposta#${token}` });
+    return c.json({ url: `${appUrl(c.env)}/proposta#${token}` });
   } catch (e) { return erro500(c, 'Erro ao gerar o link', e); }
 });
 

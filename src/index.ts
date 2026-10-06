@@ -55,6 +55,7 @@ import { manutencaoDiaria } from './manutencao';
 import { oauthAutorizacao } from './routes/oauth-autorizacao';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { handlerMcp } from './mcp/servidor';
+import { appUrl, APP_URL_PADRAO } from './config/url';
 
 export type Bindings = {
   DB: D1Database;
@@ -91,6 +92,8 @@ export type Bindings = {
    *  quanto a que esconde um que existe: manda procurar no lugar errado. */
   TOKEN_ENC_KEY?: string;
   ENVIRONMENT?: string;
+  /** Endereço canônico deste ambiente (`src/config/url.ts`). Sem ele, o de produção. */
+  APP_URL?: string;
   ASSETS?: Fetcher;
   /** Conta/gateway do AI Gateway (opcionais: há default em agents/types.ts).
    *  Os agentes roteiam pelo binding (env.AI.run + gateway n-iso) — sem secret;
@@ -212,11 +215,11 @@ app.get('/.well-known/security.txt', (c) => {
   return c.text(
     [
       'Contact: mailto:security@ness.lat',
-      'Contact: https://github.com/resper1965/nISO/security/advisories/new',
+      'Contact: https://github.com/resper1965/n.iso/security/advisories/new',
       `Expires: ${expira}`,
       'Preferred-Languages: pt-BR, en',
-      'Canonical: https://niso.ness.com.br/.well-known/security.txt',
-      'Policy: https://github.com/resper1965/nISO/blob/main/SECURITY.md',
+      `Canonical: ${appUrl(c.env)}/.well-known/security.txt`,
+      'Policy: https://github.com/resper1965/n.iso/blob/main/SECURITY.md',
       '',
     ].join('\n'),
     200,
@@ -226,8 +229,8 @@ app.get('/.well-known/security.txt', (c) => {
 
 // 1. CORS (S3 / OWASP A05). Era `origin: '*'` — o frontend é servido pelo próprio
 // Worker (mesma origem), então CORS só afeta chamadas de NAVEGADOR cross-origin;
-// clientes não-browser (MCP server, curl) ignoram CORS. Restringir aos domínios
-// conhecidos reduz superfície sem quebrar integração. A função ECOA a origem
+// clientes não-browser (MCP server, curl) ignoram CORS. Só a origem do `APP_URL`
+// (src/config/url.ts) é aceita: os hosts legados redirecionam antes de chegar aqui. A função ECOA a origem
 // quando permitida (o Hono responde com essa origem exata, não com `*`), e devolve
 // '' (sem header) quando não.
 //
@@ -237,16 +240,11 @@ app.get('/.well-known/security.txt', (c) => {
 // frontend suporta tanto localhost quanto 127.0.0.1 (frontend/src/api.js). Liberar
 // loopback não é risco: uma página em loopback não tem o token da origem de prod
 // (fica no localStorage dela), então não há o que exfiltrar.
-const CORS_ORIGENS = new Set([
-  'https://niso.ness.com.br',
-  'https://n-iso.ness.com.br',
-  'https://niso.ness.workers.dev',
-]);
 const CORS_LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.use('*', cors({
-  origin: (origin) => {
+  origin: (origin, c) => {
     if (!origin) return origin; // requisições same-origin/sem Origin (curl, server-to-server)
-    if (CORS_ORIGENS.has(origin) || CORS_LOOPBACK.test(origin)) return origin;
+    if (origin === appUrl(c.env) || CORS_LOOPBACK.test(origin)) return origin;
     return ''; // origem não permitida: sem Access-Control-Allow-Origin
   },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -507,7 +505,8 @@ const fetchHono = app.fetch.bind(app);
  * provider serve /oauth/token, /oauth/register e os metadados em
  * /.well-known/oauth-*; /oauth/authorize é nosso (routes/oauth-autorizacao.ts).
  * `resourceMetadata` é obrigatório na versão 1.x da biblioteca: o endereço
- * canônico do recurso é o domínio oficial.
+ * canônico do recurso é o domínio oficial. Fica no padrão de produção porque o
+ * provider nasce antes de existir `env` (staging anuncia o recurso de produção).
  */
 export const provider = new OAuthProvider({
   apiRoute: '/mcp',
@@ -519,7 +518,7 @@ export const provider = new OAuthProvider({
   scopesSupported: ['niso:consultor'],
   accessTokenTTL: 3600,
   refreshTokenTTL: 30 * 86400,
-  resourceMetadata: { resource: 'https://niso.ness.com.br/mcp', resource_name: 'n.iso' },
+  resourceMetadata: { resource: `${APP_URL_PADRAO}/mcp`, resource_name: 'n.iso' },
 });
 
 /**

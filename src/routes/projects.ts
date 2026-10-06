@@ -16,6 +16,7 @@ import { COLUNAS_REVOGACAO } from './controls';
 import { exportarProjeto } from '../portabilidade';
 import { ipPermitido } from '../politica-tenant';
 import { papelValidoParaSso } from '../sso';
+import { appUrl } from '../config/url';
 
 export const projectsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -55,7 +56,7 @@ projectsApp.post('/:projectId/scim-token', somenteNess, async (c) => {
     return c.json({
       ok: true,
       token,
-      base_url: `${new URL(c.req.url).origin}/scim/v2`,
+      base_url: `${appUrl(c.env)}/scim/v2`,
       aviso: 'Guarde agora: o token não é mostrado de novo. Emitir outro invalida este.',
     }, 201);
   } catch (e: any) {

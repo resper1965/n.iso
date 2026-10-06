@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { sha256Hex, logAudit, invalidateUserSessions, erro500, genId } from '../helpers';
 import { log } from '../observability';
+import { appUrl } from '../config/url';
 
 /**
  * SCIM 2.0 — provisionamento e DESPROVISIONAMENTO (item 4.2 do
@@ -124,7 +125,7 @@ scimApp.use('*', async (c, next) => {
 });
 
 const projetoDe = (c: any): string => c.get('scimProjectId');
-const origemDe = (c: any): string => new URL(c.req.url).origin;
+const origemDe = (c: any): string => appUrl(c.env);
 
 /** O que o IdP consulta para saber o que suportamos — inclusive o que NÃO. */
 scimApp.get('/ServiceProviderConfig', (c) =>

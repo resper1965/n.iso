@@ -9,6 +9,7 @@ import {
 import { resolveHostIsPublic } from './integrations';
 import { chavePublicaJwk, ALG_ASSINATURA } from '../portabilidade';
 import { genToken, SESSION_TTL_SEC } from '../helpers';
+import { appUrl } from '../config/url';
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -245,9 +246,9 @@ publicApp.get('/export-public-key', async (c) => {
 //  SSO por OIDC (item 4.1). Rotas PÚBLICAS — são o caminho de entrar.
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** `https://host/api/v1/public/sso/callback`, derivado da própria requisição. */
+/** Callback de SSO: sempre o do `APP_URL`, nunca o host da requisição (o IdP cadastra UM só). */
 function redirectUriDe(c: any): string {
-  return `${new URL(c.req.url).origin}/api/v1/public/sso/callback`;
+  return `${appUrl(c.env)}/api/v1/public/sso/callback`;
 }
 
 /**
