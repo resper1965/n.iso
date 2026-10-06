@@ -11,10 +11,11 @@
 		"nodejs_compat",
 		"global_fetch_strictly_public"
 	],
-	// Domínios. `niso.ness.com.br` é o oficial (links, e-mails, MCP, monitor).
-	// `n-iso.ness.com.br` nasceu pelo painel e segue respondendo: declarado aqui
-	// para o deploy não o tratar como sobra. `workers_dev` explícito porque
-	// integrações e e-mails antigos apontam para `niso.ness.workers.dev`.
+	// Domínios. `niso.ness.com.br` é o oficial (APP_URL: links, e-mails, MCP, monitor).
+	// `n-iso.ness.com.br` e `niso.ness.workers.dev` são legados: continuam
+	// declarados porque o Worker precisa recebê-los para devolver 308 ao canônico
+	// (HOSTS_LEGADOS em src/config/url.ts) — integrações e e-mails antigos ainda
+	// apontam para eles. Tirá-los daqui derruba o redirecionamento.
 	// `routes` não é herdado por `env.staging` — staging fica só no workers.dev.
 	"workers_dev": true,
 	"routes": [

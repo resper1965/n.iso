@@ -8,3 +8,6 @@ export const APP_URL_PADRAO = 'https://niso.ness.com.br';
 export function appUrl(env?: { APP_URL?: string }): string {
   return (env?.APP_URL || APP_URL_PADRAO).replace(/\/+$/, '');
 }
+
+/** Hosts antigos que o Worker ainda recebe só para redirecionar (308) ao `appUrl` (src/index.ts). */
+export const HOSTS_LEGADOS = ['n-iso.ness.com.br', 'niso.ness.workers.dev'];

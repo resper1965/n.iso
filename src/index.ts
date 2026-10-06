@@ -55,7 +55,7 @@ import { manutencaoDiaria } from './manutencao';
 import { oauthAutorizacao } from './routes/oauth-autorizacao';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { handlerMcp } from './mcp/servidor';
-import { appUrl, APP_URL_PADRAO } from './config/url';
+import { appUrl, APP_URL_PADRAO, HOSTS_LEGADOS } from './config/url';
 
 export type Bindings = {
   DB: D1Database;
@@ -548,8 +548,14 @@ export const ROTAS_OAUTH = (cru: string) => {
 };
 
 export default Object.assign(app, {
-  fetch: (req: Request, env: Bindings, ctx: ExecutionContext) =>
-    ROTAS_OAUTH(new URL(req.url).pathname) ? provider.fetch(req, env as any, ctx) : fetchHono(req, env, ctx),
+  fetch: (req: Request, env: Bindings, ctx: ExecutionContext) => {
+    const url = new URL(req.url);
+    if (HOSTS_LEGADOS.includes(url.hostname)) {
+      // 308 preserva método e corpo: POST de webhook, SCIM e token OAuth chegam inteiros.
+      return Response.redirect(`${appUrl(env)}${url.pathname}${url.search}`, 308);
+    }
+    return ROTAS_OAUTH(url.pathname) ? provider.fetch(req, env as any, ctx) : fetchHono(req, env, ctx);
+  },
   scheduled: (_evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(manutencaoDiaria(env));
   },
