@@ -190,7 +190,8 @@ evidenceApp.post('/:id/evaluate', async (c) => {
     });
 
     if (!result.success) {
-      return c.json({ error: 'Falha ao avaliar evidência', detail: result.content }, 500);
+      // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
+      return erro500(c, 'Falha ao avaliar evidência', new Error(result.content));
     }
 
     let evalStatus = 'pending';

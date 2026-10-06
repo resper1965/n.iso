@@ -58,7 +58,8 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     );
 
     if (!result.success) {
-      return c.json({ error: 'Falha ao gerar política', detail: result.content }, 500);
+      // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
+      return erro500(c, 'Falha ao gerar política', new Error(result.content));
     }
 
     // ponytail: store generated policy in RAG for future context

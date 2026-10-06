@@ -198,6 +198,38 @@ describe('500 correlaciona em vez de vazar', () => {
     await exigeSemVazamento(res, 'Falha ao criar ROPA');
   });
 
+  // IA indisponível: o agente devolve `success:false` com o texto cru de cada
+  // provedor (gateway, Workers AI, binding direto). Isso fica no log, não no 500.
+  const PROVEDOR = 'texto-cru-do-provedor-xyz';
+  const envSemIa = () => ({ ...testEnv(), AI: { run: async () => { throw new Error(PROVEDOR); } } });
+
+  async function exigeSemProvedor(res: Response, mensagem: string) {
+    expect(res.status).toBe(500);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.error).toBe(mensagem);
+    expect(corpo.detail).toBeUndefined();
+    expect(JSON.stringify(corpo)).not.toMatch(new RegExp(`${PROVEDOR}|ai-gateway|workers-ai`));
+    expect(typeof corpo.request_id).toBe('string');
+  }
+
+  it('evidence: avaliar com IA indisponível não devolve o texto do provedor', async () => {
+    await env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+      .bind('ev-ia', PROJ, 'c.pdf', 'evidence/proj-vaz/ev-ia-c.pdf', 'h', 'vaz@ness.io').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-ia/evaluate', {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'politica de acesso' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha ao avaliar evidência');
+  });
+
+  it('policies: gerar política com IA indisponível não devolve o texto do provedor', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/generate-policy`, {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_id: 'A.5.1' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha ao gerar política');
+  });
+
   it('ropa: relatório HTML que falha devolve 500 sem a exceção e com o request_id', async () => {
     // A mensagem traz HTML de propósito: antes ia interpolada crua na página.
     const db = new Proxy(env.DB, {
