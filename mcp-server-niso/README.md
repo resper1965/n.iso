@@ -135,7 +135,7 @@ Os dois recebem também o limite de projeto: a chave de API é vinculada a **um*
 projeto, e nenhum agente alcança outro. Com `NISO_PROJECT_ID`, o contexto nomeia
 qual.
 
-Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 24 ferramentas
+Rodar sem `NISO_ROLE` recebe um contexto próprio, avisando que as 23 ferramentas
 estão na mesma sessão e que isso mistura os dois lados que a norma separa.
 
 ## Chave de API: `read` não escreve
@@ -171,9 +171,9 @@ numa máquina de desenvolvedor — trate como tal.
 `niso_list_risks`, `niso_gap_analysis`, `niso_traceability`, `niso_list_evidence`,
 `niso_audit_pack`, `niso_coherence_check`
 
-**Escrita do consultor (12)** — `niso_create_risk`, `niso_create_asset`,
+**Escrita do consultor (12)** — `niso_create_risk`, `niso_update_risk`, `niso_create_asset`,
 `niso_create_evidence`, `niso_generate_policy`, `niso_generate_policies_bulk`,
-`niso_generate_soa`, `niso_evaluate_evidence`, `niso_update_policy`,
+`niso_evaluate_evidence`, `niso_update_policy`,
 `niso_update_control`, `niso_migrate_27701`, `niso_import_training`,
 `niso_respond_auditor_note`
 
