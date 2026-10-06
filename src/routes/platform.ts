@@ -81,6 +81,9 @@ platformApp.put('/dpia/:id', async (c) => {
     const p = setParcial(body, {
       ropa_id: null, processing_name: null, data_category_risk: null, necessity_proportionality: null,
       technical_measures: null, residual_risk_level: 'Medium', dpo_recommendations: null, status: 'Draft',
+      // Colunas da tela de DPIA: sem elas aqui, o texto editado pela tela era descartado em silêncio.
+      system_name: null, data_flow_description: null, data_subjects_types: null, personal_data_categories: null,
+      risks_identified: null, mitigation_measures: null, dpo_opinion: null,
     });
     if (p.sql) await c.env.DB.prepare(`UPDATE dpia_assessments SET ${p.sql} WHERE id=?`).bind(...p.binds, id).run();
     // Pedido aberto sobre o texto anterior vira `substituido` e nasce outro com o texto novo.
@@ -166,6 +169,24 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
     const dpia = await c.env.DB.prepare('SELECT * FROM dpia_assessments WHERE id = ? AND project_id = ?').bind(assessmentId, projectId).first<any>();
     if (!dpia) return c.html('<h3>DPIA não encontrado</h3>', 404);
 
+    // A tela grava system_name, data_flow_description...; a API/MCP, processing_name... As duas
+    // famílias convivem em dpia_assessments: o relatório mostra o que estiver preenchido, escapado.
+    const campos = ([
+      ['Atividade de Tratamento', dpia.processing_name || dpia.system_name],
+      ['Descrição do Fluxo de Dados', dpia.data_flow_description],
+      ['Tipos de Titulares', dpia.data_subjects_types],
+      ['Categorias de Dados Pessoais', dpia.personal_data_categories],
+      ['Riscos às Categorias de Dados', dpia.data_category_risk],
+      ['Riscos Identificados à Privacidade', dpia.risks_identified],
+      ['Necessidade e Proporcionalidade', dpia.necessity_proportionality],
+      ['Medidas Técnicas e de Segurança', dpia.technical_measures],
+      ['Medidas de Mitigação e Salvaguardas', dpia.mitigation_measures],
+      ['Nível de Risco Residual', dpia.residual_risk_level],
+      ['Parecer do Encarregado (DPO)', dpia.dpo_recommendations || dpia.dpo_opinion || 'Pendente de avaliação.'],
+    ] as [string, unknown][]).filter(([, v]) => v != null && v !== '')
+      .map(([rotulo, v]) => `<div class="field-label">${rotulo}</div><div class="field-value">${escapeHtml(String(v))}</div>`)
+      .join('\n');
+
     const html = `
       <!DOCTYPE html>
       <html lang="pt-BR">
@@ -186,26 +207,10 @@ platformApp.get('/projects/:id/dpia/:assessmentId/report', async (c) => {
           <h1>Relatório de Impacto à Proteção de Dados (RIPD / DPIA)</h1>
           <p style="color: #64748b;"><strong>Organização:</strong> ${project.client_name}</p>
           
-          <div class="field-label">Atividade de Tratamento</div>
-          <div class="field-value">${dpia.processing_name}</div>
-          
-          <div class="field-label">Riscos às Categorias de Dados</div>
-          <div class="field-value">${dpia.data_category_risk}</div>
-          
-          <div class="field-label">Necessidade e Proporcionalidade</div>
-          <div class="field-value">${dpia.necessity_proportionality}</div>
-          
-          <div class="field-label">Medidas Técnicas e de Segurança</div>
-          <div class="field-value">${dpia.technical_measures}</div>
-          
-          <div class="field-label">Nível de Risco Residual</div>
-          <div class="field-value"><strong>${dpia.residual_risk_level}</strong></div>
-          
-          <div class="field-label">Parecer do Encarregado (DPO)</div>
-          <div class="field-value">${dpia.dpo_recommendations || 'Pendente de avaliação.'}</div>
-          
+          ${campos}
+
           <div class="field-label">Status da Aprovação</div>
-          <div class="field-value">${dpia.status === 'Approved' ? `✓ Aprovado por ${dpia.dpo_approved_by} em ${new Date(dpia.dpo_approved_at).toLocaleDateString()}` : 'Aguardando Aprovação do DPO'}</div>
+          <div class="field-value">${dpia.status === 'Approved' ? `✓ Aprovado por ${escapeHtml(String(dpia.dpo_approved_by ?? ''))} em ${new Date(dpia.dpo_approved_at).toLocaleDateString()}` : 'Aguardando Aprovação do DPO'}</div>
         </div>
       </body>
       </html>
