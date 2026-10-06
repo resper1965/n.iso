@@ -1,4 +1,4 @@
-repo: resper1965/nISO
+repo: resper1965/n.iso
 branch: main
 
 ## Last sync

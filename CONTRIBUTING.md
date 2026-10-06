@@ -1,6 +1,6 @@
 # Como contribuir
 
-Este repositório é o produto nISO em produção, processando dados de conformidade
+Este repositório é o produto n.iso em produção, processando dados de conformidade
 e dados pessoais de clientes reais. As regras abaixo existem por causa de
 defeitos que já aconteceram aqui — não por formalidade.
 
@@ -22,17 +22,24 @@ npx wrangler d1 migrations apply niso-db --local
 ## Antes de abrir o PR
 
 ```bash
-npx tsc --noEmit                     # sem erro
-npm test -- --run                    # tudo verde
-cd frontend && npm run build         # se tocou a UI
-cd mcp-server-niso && npm run build  # se tocou o servidor MCP
+npx tsc --noEmit                                  # sem erro
+npx vitest run <arquivos de teste que você tocou> # a suíte completa é do CI
+cd frontend && npx vitest run <arquivos> && npm run build   # se tocou a UI
+cd mcp-server-niso && npm run build               # se tocou o servidor MCP
 ```
 
-O CI roda exatamente isso. Rodar antes economiza um ciclo.
+O CI (`.github/workflows/ci.yml`) roda mais do que isso: a suíte completa do worker e do
+frontend **com cobertura** (a catraca de cobertura reprova se cair), o E2E em Chromium
+(`frontend/e2e/`) e `npm audit --audit-level=high` nos três pacotes (informativo). O ruleset da
+`main` exige os checks `test` e `e2e` verdes, com a branch em dia com a base.
 
 ## Branch e commit
 
-- Branch a partir de `main`, nome descritivo (`fix/…`, `feat/…`).
+- Branch sempre a partir de **`origin/main`** (`git fetch && git switch -c <nome> origin/main`),
+  nunca da `main` local: uma `main` local com commits não publicados já vazou trabalho alheio
+  para um PR (#204, revertido no #206).
+- Nome pelo assunto: `fix/…`, `feat/…`, `docs/…`, `chore/…`, `test/…`.
+- Commit em português, no padrão conventional (`fix:`, `feat:`, `docs:`, `chore:`, `test:`).
 - Mensagem de commit no imperativo, explicando **por quê**, não o quê — o diff já
   diz o quê.
 - Um PR resolve um problema. PR que faz três coisas é revisado como zero.
@@ -58,9 +65,10 @@ consultar tabela que não existia em produção.
 
 ## Testes
 
-Teste que passa sem exercitar o código não é teste — é decoração. O suíte antigo
+Teste que passa sem exercitar o código não é teste — é decoração. A suíte antiga
 mockava o D1 devolvendo `{ok: true}` para qualquer query, e por isso não pegou
-nenhum dos defeitos reais.
+nenhum dos defeitos reais. Hoje nenhum arquivo de teste mocka o D1 inteiro (ver o
+`AGENTS.md`, com o comando que mede).
 
 - Caminho novo de banco → teste de integração com D1 real (miniflare), no estilo
   de `test/schema-contract.test.ts`.
@@ -74,7 +82,8 @@ nenhum dos defeitos reais.
 Leia `SECURITY.md` — a tabela de invariantes lista o que não pode regredir e onde
 cada um é garantido. PR que toca um deles precisa dizer no corpo qual e por quê.
 
-Nunca no repositório: chave, token, ID de conta, hostname interno. Segredo vai em
+Nunca no repositório: chave, token, ID de conta, hostname interno, dado de cliente ou nome
+de pessoa real (`test/sem-dado-de-cliente.test.ts` reprova). O repositório é público. Segredo vai em
 `wrangler secret put`. Vulnerabilidade não vira issue pública — veja `SECURITY.md`.
 
 ## Estilo

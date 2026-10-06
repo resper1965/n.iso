@@ -32,7 +32,7 @@ a:hover{color:#7fd6f6}
 <span style="font:500 22px/1 var(--h);letter-spacing:-.015em;white-space:nowrap">n<span style="color:var(--bd)">.</span><span style="{{ labelStyle }}">iso</span></span>
 <button onClick="{{ toggleRail }}" aria-label="Recolher menu" style="{{ railBtn }}">{{ railIcon }}</button>
 </div>
-<button style="{{ tenantBox }}"><span style="font:500 12.5px/1 var(--b);color:var(--ink)">cliente</span><span style="font:400 10px/1 var(--m);color:var(--ink3)">27001</span><span style="margin-left:auto;color:var(--ink4);font-size:10px">▾</span></button>
+<button style="{{ tenantBox }}"><span style="font:500 12.5px/1 var(--b);color:var(--ink)">Acme</span><span style="font:400 10px/1 var(--m);color:var(--ink3)">27001</span><span style="margin-left:auto;color:var(--ink4);font-size:10px">▾</span></button>
 <div style="{{ tenantRail }}">TW</div>
 <nav style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:4px 0">
 <div style="{{ grpStyle }}">Implementação</div>
@@ -404,7 +404,7 @@ class Component extends DCLogic {
   state = {
     ctrls: DATA.map(d => ({code:d[0], name:d[1], domain:d[2], applic:d[3], cmmi:d[4], status:d[5], owner:d[6], ev:d[7], naWhy: NA_WHY[d[0]] || ""})),
     naPending: null, naText: "",
-    acct: false, tenant: "cliente", role: "admin", phase: "ready", page: 25,
+    acct: false, tenant: "Acme", role: "admin", phase: "ready", page: 25,
     query: "", domains: [], statuses: [], sort: "code", dir: 1,
     sel: [], detail: null, dense: false, toast: null, undo: null, rail: false,
     mode: "instant", draft: {}, confirmClose: false, cursor: -1,
@@ -632,9 +632,9 @@ class Component extends DCLogic {
       toggleAcct: () => this.setState(s => ({ acct: !s.acct })),
       closeAcct: () => this.setState({ acct: false }),
       tenant: S.tenant,
-      roleLabel: S.role === "admin" ? "admin · ness." : "cliente · cliente",
+      roleLabel: S.role === "admin" ? "admin · ness." : "cliente · acme",
       footStyle: `margin-top:auto;margin-left:${rail ? 18 : 20}px;margin-right:${rail ? 18 : 20}px;padding:14px 0 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;cursor:pointer;background:${S.acct ? "rgba(255,255,255,.03)" : "transparent"}`,
-      tenants: ["cliente", "Forense", "ness. labs"].map(t => ({
+      tenants: ["Acme", "Forense", "ness. labs"].map(t => ({
         label: t, norm: t === "ness. labs" ? "27701" : "27001",
         active: S.tenant === t,
         checkStyle: `flex:none;opacity:${S.tenant === t ? 1 : 0};color:var(--bd)`,

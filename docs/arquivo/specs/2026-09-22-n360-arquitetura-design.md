@@ -1,5 +1,7 @@
 # n.360 — Arquitetura do Ecossistema GRC
 
+> **Arquivado em 2026-10-06:** superada. O desenho do ecossistema não foi implementado como descrito; vale só como registro da discussão.
+
 **Data:** 2026-09-22
 **Estado:** rascunho de design; aguarda revisão do autor
 **Repositório:** [`resper1965/n.360`](https://github.com/resper1965/n.360)

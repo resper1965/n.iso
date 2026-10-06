@@ -5,7 +5,7 @@ import { applySchema, workerEnv, sessionFor } from './helpers/d1';
 
 /**
  * F6 do plano de fechamento (2026-10), decisão D1: o HUMANO ganha, pela interface, a revogação de
- * aprovação de ROPA e de DPIA e a exclusão de análise crítica. Antes, a limpeza da cliente precisou de
+ * aprovação de ROPA e de DPIA e a exclusão de análise crítica. Antes, a limpeza de um projeto de cliente precisou de
  * SQL no banco. Quem faz: platform_admin e o administrador do cliente. O AGENTE fica de fora, mesmo
  * com confirmação: aprovar e desaprovar é ato da direção, e apagar análise crítica destrói registro
  * assinado.

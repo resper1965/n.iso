@@ -1,5 +1,7 @@
 # Receita dos agentes: MCP remoto com login — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #213 (spec no #212).
+
 > **Estado (2026-10-01): implementada e, em parte, superada.** O OAuth, a concessão, a
 > revalidação a cada chamada e a revogação seguem como descritos aqui. A regra "o agente
 > não apaga e não gera em lote" foi **substituída** em 30/09/2026: o agente passou a ter o
@@ -482,11 +484,11 @@ describe('Autorização OAuth do agente', () => {
     await applySchema();
     const senha = await hashPassword('senha-forte-123');
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','cliente','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Acme','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-b','Outro','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','cons@ness.lat',?,'Cons','consultor')`).bind(senha),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-sem','sem@ness.lat',?,'Sem','consultor')`).bind(senha),
-      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-cli','pessoa@exemplo.com.br',?,'Cli','org_admin','p-a')`).bind(senha),
+      env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-cli','cli@acme.com',?,'Cli','org_admin','p-a')`).bind(senha),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, totp_enabled, totp_secret) VALUES ('u-mfa','mfa@ness.lat',?,'Mfa','consultor',1,'JBSWY3DPEHPK3PXP')`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Mfa','mfa@ness.lat','consultor','Consultor')`),
@@ -500,7 +502,7 @@ describe('Autorização OAuth do agente', () => {
 
     const passo2 = await f('/oauth/authorize/entrar', form({ pedido, email: 'cons@ness.lat', senha: 'senha-forte-123', codigo: '' }));
     const html2 = await passo2.text();
-    expect(html2).toContain('cliente');
+    expect(html2).toContain('Acme');
     expect(html2).not.toContain('Outro'); // só projetos onde é consultor designado
 
     const fim = await f('/oauth/authorize/confirmar', form({ pedido, projeto: 'p-a' }));
@@ -537,7 +539,7 @@ describe('Autorização OAuth do agente', () => {
 
   it('só consultor conecta agente nesta versão', async () => {
     const pedido = await iniciar(await registrarCliente(), (await pkce()).challenge);
-    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'pessoa@exemplo.com.br', senha: 'senha-forte-123', codigo: '' }));
+    const r = await f('/oauth/authorize/entrar', form({ pedido, email: 'cli@acme.com', senha: 'senha-forte-123', codigo: '' }));
     expect(r.status).toBe(403);
   });
 
@@ -852,7 +854,7 @@ describe('/mcp remoto', () => {
     await applySchema();
     const senha = await hashPassword('senha-forte-123');
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','cliente','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Acme','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-b','Outro','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','cons@ness.lat',?,'Cons','consultor')`).bind(senha),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
@@ -883,7 +885,7 @@ describe('/mcp remoto', () => {
   it('niso_contexto diz o cliente, o papel e os roteiros', async () => {
     const res = await rpc(token, 'tools/call', { name: 'niso_contexto', arguments: {} });
     const texto = res.content[0].text;
-    expect(texto).toContain('cliente');
+    expect(texto).toContain('Acme');
     expect(texto).toContain('p-a');
     expect(texto).toContain('Diagnóstico');
   });
@@ -907,7 +909,7 @@ describe('/mcp remoto', () => {
   it('escrita pelo agente sai com a autoria do humano', async () => {
     await rpc(token, 'tools/call', { name: 'niso_create_risk', arguments: { projectId: 'p-a', title: 'Risco via MCP', impact: 3, probability: 2 } });
     const log = await env.DB.prepare(`SELECT actor FROM audit_logs ORDER BY rowid DESC LIMIT 1`).first<{ actor: string }>();
-    expect(log!.actor).toBe('agente de cons@ness.lat (cliente)');
+    expect(log!.actor).toBe('agente de cons@ness.lat (Acme)');
   });
 });
 ```
@@ -1090,7 +1092,7 @@ describe('Agentes com acesso ao projeto', () => {
   beforeAll(async () => {
     await applySchema();
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','cliente','ISO 27001','controller','Active')`),
+      env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-a','Acme','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p-b','Outro','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-c','cons@ness.lat','x','Cons','consultor')`),
       env.DB.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p-a','Cons','cons@ness.lat','consultor','Consultor')`),
@@ -1099,7 +1101,7 @@ describe('Agentes com acesso ao projeto', () => {
   });
 
   it('org_admin do cliente vê o agente', async () => {
-    const s = await sessionFor({ id: 'u-o', email: 'pessoa@exemplo.com.br', role: 'org_admin', client_project_id: 'p-a' });
+    const s = await sessionFor({ id: 'u-o', email: 'dono@acme.com', role: 'org_admin', client_project_id: 'p-a' });
     const lista = await (await req('/api/v1/projects/p-a/agentes', { headers: s })).json<any[]>();
     expect(lista).toHaveLength(1);
     expect(lista[0].consultor).toBe('cons@ness.lat');
@@ -1112,12 +1114,12 @@ describe('Agentes com acesso ao projeto', () => {
   });
 
   it('org_user (read-only) não revoga', async () => {
-    const s = await sessionFor({ id: 'u-u', email: 'pessoa@exemplo.com.br', role: 'org_user', client_project_id: 'p-a' });
+    const s = await sessionFor({ id: 'u-u', email: 'u@acme.com', role: 'org_user', client_project_id: 'p-a' });
     expect((await req('/api/v1/projects/p-a/agentes/c-1/revogar', { method: 'POST', headers: s })).status).toBe(403);
   });
 
   it('org_admin revoga, fica na trilha, e o agente cai na chamada seguinte', async () => {
-    const s = await sessionFor({ id: 'u-o', email: 'pessoa@exemplo.com.br', role: 'org_admin', client_project_id: 'p-a' });
+    const s = await sessionFor({ id: 'u-o', email: 'dono@acme.com', role: 'org_admin', client_project_id: 'p-a' });
     expect((await req('/api/v1/projects/p-a/agentes/c-1/revogar', { method: 'POST', headers: s })).status).toBe(200);
     const log = await env.DB.prepare(`SELECT action FROM audit_logs ORDER BY rowid DESC LIMIT 1`).first<{ action: string }>();
     expect(log!.action).toBe('agente.revogado');
@@ -1127,7 +1129,7 @@ describe('Agentes com acesso ao projeto', () => {
 
   it('revogar concessão de outro projeto pelo caminho deste é 404', async () => {
     await env.DB.prepare(`INSERT INTO agente_concessoes (id, user_id, project_id, expira_em) VALUES ('c-b','u-c','p-b', datetime('now','+30 days'))`).run();
-    const s = await sessionFor({ id: 'u-o', email: 'pessoa@exemplo.com.br', role: 'org_admin', client_project_id: 'p-a' });
+    const s = await sessionFor({ id: 'u-o', email: 'dono@acme.com', role: 'org_admin', client_project_id: 'p-a' });
     expect((await req('/api/v1/projects/p-a/agentes/c-b/revogar', { method: 'POST', headers: s })).status).toBe(404);
   });
 });

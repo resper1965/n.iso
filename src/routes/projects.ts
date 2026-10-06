@@ -949,7 +949,7 @@ projectsApp.get('/:id/traceability', async (c) => {
   if (controlIds.length === 0) return c.json({ ok: true, controls: [] });
 
   // Subconsulta, não `IN (?, ?, …)`: um parâmetro por controle estoura o teto
-  // de 100 do D1 em projeto com mais de 100 controles (cliente tem 124).
+  // de 100 do D1 em projeto com mais de 100 controles (já houve projeto real com 124).
   const risksResult = await db.prepare(
     `SELECT id, asset, threat, risk_level, control_id FROM risks
       WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`

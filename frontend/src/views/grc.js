@@ -312,7 +312,7 @@ window.__grcCloseExecAudit = function (id) {
                 </select>
             </div>
             <div id="risk-accept-group" style="display:none">
-                <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Executivo do Cliente (CEO)"></div>
+                <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Maria Silva (CEO)"></div>
                 <div class="form-group"><label class="form-label">Data do Aceite</label><input class="form-input" id="risk-accepted-at" type="date"></div>
             </div>
             <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
@@ -1059,7 +1059,7 @@ window.__grcCloseExecAudit = function (id) {
                 <textarea class="form-input" id="training-json-payload" style="height:150px;font-family:monospace;font-size:0.7rem;background:rgba(0,0,0,0.2)" placeholder='{
   "records": [
     {
-      "employee_name": "Pessoa F",
+      "employee_name": "Maria Silva",
       "training_name": "ISO 27001 Security Awareness",
       "completion_date": "2026-07-15",
       "score": 95,

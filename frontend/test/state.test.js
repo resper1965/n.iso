@@ -71,14 +71,14 @@ describe('state.js — hidratacao a partir do localStorage', () => {
     });
 
     it('projeto ativo sem id e descartado', async () => {
-        localStorage.setItem('niso_activeProject', JSON.stringify({ project_name: 'cliente' }));
+        localStorage.setItem('niso_activeProject', JSON.stringify({ project_name: 'Acme' }));
         const S = await carregaEstado();
         expect(S.activeProject).toBeNull();
         expect(S.currentProject).toBeNull();
     });
 
     it('projeto ativo com id alimenta activeProject e currentProject', async () => {
-        localStorage.setItem('niso_activeProject', JSON.stringify({ id: 'p1', project_name: 'cliente' }));
+        localStorage.setItem('niso_activeProject', JSON.stringify({ id: 'p1', project_name: 'Acme' }));
         const S = await carregaEstado();
         expect(S.activeProject.id).toBe('p1');
         expect(S.currentProject.id).toBe('p1');

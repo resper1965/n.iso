@@ -5,7 +5,7 @@ import { applySchema, workerEnv } from './helpers/d1';
 import { executarFerramenta, type Transporte } from '../mcp-server-niso/src/ferramentas';
 
 /**
- * Relato do primeiro uso real do agente (cliente, 124 controles):
+ * Relato do primeiro uso real do agente (projeto de cliente, 124 controles):
  * - niso_gap_analysis sempre 404: a rota sumiu na decomposição do index.ts
  *   (72f1b59) e nunca voltou.
  * - niso_traceability quebrava: `IN (?, ?, …)` com um parâmetro por controle

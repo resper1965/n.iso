@@ -1,15 +1,15 @@
 # mcp-server-niso
 
-Servidor MCP (Model Context Protocol) que expõe o nISO a agentes de IA — Claude
+Servidor MCP (Model Context Protocol) que expõe o n.iso a agentes de IA — Claude
 Desktop, Claude Code, ou qualquer cliente MCP.
 
 O servidor **não tem lógica de negócio nem acesso ao banco**. Ele é um adaptador
-fino: traduz chamada de ferramenta MCP em `fetch` para a API HTTP do worker nISO.
+fino: traduz chamada de ferramenta MCP em `fetch` para a API HTTP do worker n.iso.
 Toda autorização real acontece no worker. Isso é deliberado — um agente de IA não
 deve ser um caminho privilegiado para dentro do sistema.
 
 ```
-Claude ──stdio──▶ mcp-server-niso ──HTTPS + X-API-Key──▶ worker nISO ──▶ D1
+Claude ──stdio──▶ mcp-server-niso ──HTTPS + X-API-Key──▶ worker n.iso ──▶ D1
                   │                                      │
                   filtro por papel                       authMiddleware
                   (o que o agente VÊ)                    projectAccessMiddleware
@@ -26,7 +26,7 @@ As duas camadas respondem a perguntas diferentes e nenhuma substitui a outra:
 
 ## Servidor remoto (recomendado para consultor)
 
-O consultor nao precisa instalar nada nem guardar chave de API: o nISO expoe o
+O consultor nao precisa instalar nada nem guardar chave de API: o n.iso expoe o
 MCP em `https://niso.ness.com.br/mcp` com login OAuth. Na primeira chamada o
 cliente abre o navegador, o consultor entra no n.iso e escolhe o cliente
 (um cliente por conexao). O administrador do cliente enxerga o acesso e pode
@@ -42,7 +42,7 @@ O agente remoto tem o alcance do consultor humano no projeto escolhido no login:
 | Cliente | Onde | Trecho | Estado |
 |---|---|---|---|
 | Claude Code | terminal | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` | exercitado em producao (30/09/2026) |
-| Cursor | `.cursor/mcp.json` | `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` | documenta MCP remoto com OAuth |
+| Cursor | `.cursor/mcp.json` | `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` | a confirmar |
 | Codex | `~/.codex/config.toml` | `[mcp_servers.niso]` + `url = "https://niso.ness.com.br/mcp"` | a confirmar |
 | Antigravity | `~/.gemini/config/mcp_config.json` | `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }` | a confirmar |
 
@@ -140,7 +140,7 @@ estão na mesma sessão e que isso mistura os dois lados que a norma separa.
 
 ## Chave de API: `read` não escreve
 
-O nISO cria chaves com `permissions: 'read'` por padrão. Uma chave `read` recebe
+O n.iso cria chaves com `permissions: 'read'` por padrão. Uma chave `read` recebe
 **403 em qualquer POST/PUT/PATCH/DELETE** — não importa o papel MCP configurado.
 
 Para um agente consultor que precisa criar risco, ativo, registrar evidência ou

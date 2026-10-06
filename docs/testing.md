@@ -5,12 +5,20 @@ caiu, em que linha, e quanto do código está coberto.
 
 ## Suites
 
-| Suite | Runtime | Config | Nº de arquivos |
+Contagens de 2026-10-06, com o comando ao lado:
+
+| Suite | Runtime | Config | Arquivos |
 |---|---|---|---|
-| Worker (backend) | runtime real do Cloudflare Workers (`@cloudflare/vitest-pool-workers`) | `vitest.config.mts` | ~34 |
-| Frontend (unit) | jsdom (DOM simulado) | `frontend/vitest.config.js` | 7 |
-| Frontend (E2E) | Chromium REAL (Playwright), API mockada | `frontend/playwright.config.js` | `frontend/e2e/` |
+| Worker (backend) | runtime real do Cloudflare Workers (`@cloudflare/vitest-pool-workers`) | `vitest.config.mts` | 153 (`ls test/*.test.ts \| wc -l`) |
+| Frontend (unit) | jsdom (DOM simulado) | `frontend/vitest.config.js` | 46 (`ls frontend/test/*.test.js \| wc -l`) |
+| Frontend (E2E) | Chromium real (Playwright), API mockada | `frontend/playwright.config.js` | 5 (`ls frontend/e2e/*.spec.js \| wc -l`) |
+| E2E legado de MFA | Python + navegador, fora do CI | `test/e2e/` | 1 (`mfa.py`) |
 | MCP server | build (tsc) | `mcp-server-niso/` | — |
+
+O CI (`.github/workflows/ci.yml`) roda: `tsc --noEmit`, build do frontend, testes do frontend
+com cobertura, build do servidor MCP, testes do worker com cobertura (job `test`), o E2E em
+Chromium (job `e2e`) e `npm audit --audit-level=high` nos três pacotes (job `audit`,
+informativo: `continue-on-error`). O ruleset da `main` exige `test` e `e2e`.
 
 ## Rodar local
 
@@ -29,13 +37,8 @@ cd frontend
 npm run test:e2e                # serve o build + roda o Chromium
 ```
 
-**E2E neste contêiner:** o Chromium já vem em `/opt/pw-browsers`, mas numa
-revisão diferente da que o Playwright espera — aponte com a env:
-
-```bash
-cd frontend
-PW_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e
-```
+**Chromium fora do padrão:** se o navegador instalado não for a revisão que o Playwright
+espera, aponte o executável com `PW_EXECUTABLE_PATH` (lido em `frontend/playwright.config.js`).
 
 No CI, `npx playwright install chromium` baixa a revisão certa e a env não é
 usada. O E2E serve o build na porta 8787 (a mesma origem que `api()` usa em
@@ -77,12 +80,9 @@ atual. Ele **barra regressão**: se um PR derruba a cobertura abaixo do piso, o 
 falha. Não é meta de qualidade — é um trinco. Ao subir a cobertura de verdade,
 suba o piso junto.
 
-Base 2026-08 (com `all: true`, contando todo o `src/`):
-
-| Suite | Statements | Observação |
-|---|---|---|
-| Worker (backend) | ~49% | suíte de integração ampla (341 testes) |
-| Frontend | ~6,9% | baixo: as views grandes (dashboard, admin, project) não têm teste **unitário** — são exercitadas pela integração do worker; cobertura real delas viria de **E2E de navegador (Playwright)**, ainda não montado |
+Os pisos atuais estão em `vitest.config.mts` (worker) e `frontend/vitest.config.js`
+(frontend), no bloco `coverage.thresholds`, com o histórico de cada subida no comentário. Não
+copie os números para cá: eles mudam e a cópia envelhece.
 
 ## Isolamento de storage entre testes (importante ao escrever teste novo)
 

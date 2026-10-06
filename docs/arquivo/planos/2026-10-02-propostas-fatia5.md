@@ -1,5 +1,7 @@
 # Sistema de propostas, fatia 5 (outras consultorias) — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #253.
+
 > **Para agentes:** SUB-SKILL OBRIGATÓRIA: `superpowers:subagent-driven-development`. Passos com `- [ ]`.
 
 **Objetivo:** uma consultoria (ou um consultor avulso, que é "uma consultoria de um membro") contrata o n.iso, entra com o próprio administrador e trabalha nos próprios projetos, leads, propostas e catálogo, **sem enxergar nada de outra consultoria**. A ness. é a organização `org_ness` e fica como está. O `platform_admin` continua com acesso total (decisão do dono, 02/10/2026).

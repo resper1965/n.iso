@@ -29,7 +29,7 @@ let state = {
 
 window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
-  state.projectId = params.get('project') || params.get('projectId') || 'cliente-faceid';
+  state.projectId = params.get('project') || params.get('projectId') || '';
   // S2/CSP: handlers antes inline (onsubmit/onclick), agora via addEventListener.
   document.getElementById('form-request-otp').addEventListener('submit', handleRequestOtp);
   document.getElementById('form-verify-otp').addEventListener('submit', handleVerifyOtp);

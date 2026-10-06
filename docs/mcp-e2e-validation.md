@@ -48,7 +48,7 @@ buildado (`cd mcp-server-niso && npm run build`):
 
 | # | Servidor | Ação | Esperado |
 |---|---|---|---|
-| 1 | consultant | "liste os projetos do nISO" | ✅ retorna o portfólio (ou só o projeto, se a chave for escopada) |
+| 1 | consultant | "liste os projetos do n.iso" | ✅ retorna o portfólio (ou só o projeto, se a chave for escopada) |
 | 2 | consultant | "gere o SoA do projeto \<id\>" | ✅ executa (escrita de implementação permitida) |
 | 3 | consultant | "registre um achado de auditoria no projeto \<id\>" | ❌ **recusado** — a ferramenta nem aparece (NISO_ROLE) **e** o backend responde 403 (papel consultor) |
 | 4 | consultant (pin) | pedir ação em **outro** projeto | ❌ **recusado** — `NISO_PROJECT_ID` barra antes de sair a request; e o backend 403 pelo escopo da chave |

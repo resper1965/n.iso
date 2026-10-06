@@ -1,5 +1,7 @@
 # Plano Enterprise Grade — nISO
 
+> **Arquivado em 2026-10-06:** plano encerrado (ondas 0 a 4 no CHANGELOG, 8.2 a 10.0). Restam abertos os itens 2.2, 2.3 e 3.6.
+
 > Estado medido em 2026-09-02, sobre `main` em `0159a61`. Todo número aqui saiu
 > de comando executado, não de leitura. Ao atualizar este documento, refaça a
 > medição — número herdado envelhece e passa a mentir (ver `AGENTS.md`, regra

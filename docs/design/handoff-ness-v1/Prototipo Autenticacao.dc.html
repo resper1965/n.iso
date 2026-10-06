@@ -200,7 +200,7 @@ const PWD = "ness2026";
 const CODE = "123456";
 const DOMAINS = {
   "ness.com.br": { kind: "local", label: "ness." },
-  "cliente.com":    { kind: "sso", label: "cliente", idp: "provedor de identidade da cliente" },
+  "acme.com":    { kind: "sso", label: "Acme", idp: "provedor de identidade da Acme" },
   "forense.io":  { kind: "sso", label: "Forense", idp: "provedor de identidade da Forense" }
 };
 
@@ -329,7 +329,7 @@ class Component extends DCLogic {
       ssoCta: `Continuar no ${S.tenant ? S.tenant.label : "provedor"}`,
       goSso: () => {
         this.log("redirecionado ao provedor de identidade e retornado autenticado", "federação");
-        this.log("MFA verificado no provedor · papel recebido do grupo cliente-compliance", "federação");
+        this.log("MFA verificado no provedor · papel recebido do grupo acme-compliance", "federação");
         this.setState({ step: S.accepted.length === 2 ? "app" : "terms" });
       },
       useLocal: () => this.setState({ step: "password", via: "local", tenant: { kind: "local", label: "conta local" } }),

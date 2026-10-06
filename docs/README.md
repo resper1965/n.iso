@@ -1,4 +1,4 @@
-# Documentação do nISO
+# Documentação do n.iso
 
 Índice do que existe em `docs/`, agrupado por **quando você vai precisar**. Cada
 linha diz o que o documento responde — não o que ele contém.
@@ -27,7 +27,6 @@ entrada é o [`README.md`](../README.md) da raiz.
 | Documento | Responde |
 |---|---|
 | [`sso-scim.md`](sso-scim.md) | Como funciona o login federado (OIDC) e o provisionamento SCIM 2.0 — inclusive a pergunta que toda revisão de fornecedor faz: quando alguém é desligado no IdP do cliente, o acesso aqui cai sozinho? |
-| [`security-owasp-2026-08.md`](security-owasp-2026-08.md) | A aplicação avaliada contra o OWASP Top 10:2021, item a item, com o que foi corrigido e o que ficou. |
 | [`portabilidade.md`](portabilidade.md) | O caminho de saída dos dados de um tenant (LGPD art. 18, V), e por que a assinatura do export é assimétrica. |
 
 ## Vou mexer no agente consultor (MCP remoto)
@@ -45,29 +44,22 @@ entrada é o [`README.md`](../README.md) da raiz.
 | [`testing.md`](testing.md) | Como ler o resultado detalhado — qual teste caiu, em que linha, e quanto do código está coberto. |
 | [`mcp-e2e-validation.md`](mcp-e2e-validation.md) | Roteiro manual de validação da integração MCP, com os papéis de consultor e auditor separados. |
 
-## Quero entender uma decisão
+## Quero entender uma decisão ou o estado do trabalho
 
 | Documento | Responde |
 |---|---|
-| [`enterprise-grade-plan.md`](enterprise-grade-plan.md) | O plano que guiou o endurecimento do projeto: isolamento provado em vez de presumido, catraca de cobertura, contrato de API, staging, trilha, portabilidade. |
-| [`plano-2026-10-fechamento.md`](plano-2026-10-fechamento.md) | O que ficou aberto depois do ciclo do agente consultor (outubro/2026): o que é seu e o que é de um agente, a ordem, o critério de pronto de cada item e as quatro decisões que dependem de você. |
-| [`backlog-plan.md`](backlog-plan.md) | Gaps e débitos técnicos com causa, correção, arquivos, esforço e risco — em ordem de execução. |
-| [`api-triage-2026-08.md`](api-triage-2026-08.md) | Defeitos reportados no uso real da API v1, triados contra o código: corrigido, backlog, ou por design. |
-| [`READINESS.md`](READINESS.md) | O estado de prontidão para produção, controle a controle. |
-
-## Especificações de produto
-
-| Documento | Responde |
-|---|---|
-| [`readiness-check-spec.md`](readiness-check-spec.md) | O Diagnóstico de Prontidão: a plataforma olhando o próprio estado e apontando lacunas. O que é, e o que deliberadamente **não** é. |
-| [`journey-questionnaire-spec.md`](journey-questionnaire-spec.md) | O questionário da jornada e a interpretação coesa que o substitui. |
+| [`plano-2026-10-fechamento.md`](plano-2026-10-fechamento.md) | O plano de fechamento de outubro/2026 com o estado real de cada item (entregue, com o PR, ou o que falta e de quem é). |
+| [`superpowers/plans/2026-10-05-plano-mestre-execucao.md`](superpowers/plans/2026-10-05-plano-mestre-execucao.md) | O plano mestre de execução e a seção "Estado em 2026-10-06". |
+| [`superpowers/plans/2026-10-06-arrumacao-final.md`](superpowers/plans/2026-10-06-arrumacao-final.md) | A arrumação final (URL canônica, dados de cliente, documentação, versão), com os inventários em [`superpowers/arrumacao/`](superpowers/arrumacao/). |
+| [`superpowers/specs/`](superpowers/specs/) | O desenho de cada funcionalidade grande (landing, MCP remoto, paridade do agente, propostas, stakeholders). |
+| [`arquivo/`](arquivo/README.md) | O que já foi executado ou ficou superado: planos entregues, o plano enterprise-grade, a avaliação OWASP de 2026-08, triagens e specs antigas. Registro, não instrução. |
 
 ## Design
 
 | Documento | Responde |
 |---|---|
-| [`design/handoff-ness-v1/`](design/handoff-ness-v1/) | O pacote de handoff visual da ness.: protótipos `.dc.html` navegáveis, tokens do design system e o patch de implementação. Metade das decisões só aparece em interação — abra os protótipos no navegador antes de mexer na UI. |
-| [`../design.md`](../design.md) | Os princípios do design system aplicados no produto. |
+| [`design/handoff-ness-v1/`](design/handoff-ness-v1/) | O pacote de handoff visual da ness.: protótipos `.dc.html` navegáveis e tokens do design system (o patch de implementação, já aplicado, foi para `arquivo/design/`). Metade das decisões só aparece em interação — abra os protótipos no navegador antes de mexer na UI. |
+| [`../design.md`](../design.md) | Os princípios do design system aplicados no produto; os valores vivem em `frontend/src/style.css` (`:root`). |
 
 ## Gerado por script — não editar à mão
 
@@ -87,4 +79,5 @@ entrada é o [`README.md`](../README.md) da raiz.
 | Ambiente, verificação antes do PR, regras de schema e teste | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Como reportar vulnerabilidade e quais invariantes não podem regredir | [`../SECURITY.md`](../SECURITY.md) |
 | O que mudou, versão a versão | [`../CHANGELOG.md`](../CHANGELOG.md) |
-| Instalação e diagnóstico do servidor MCP | [`../mcp-server-niso/README.md`](../mcp-server-niso/README.md) |
+| Instalação e diagnóstico do servidor MCP local | [`../mcp-server-niso/README.md`](../mcp-server-niso/README.md) |
+| Estado e procedimento das migrations | [`../migrations/README.md`](../migrations/README.md) |

@@ -107,7 +107,7 @@ Fora: moeda estrangeira; tributo destacado por item (tudo em reais, tributos inc
 | Termos (obrigações, propriedade, confidencialidade, LGPD, vigência, rescisão, foro) | sempre | organização |
 | Aceite | sempre | proposta |
 
-Resultado esperado: avulso com 5–6 páginas, implementação completa com ~15, recorrente com ~6. A prévia aprovada está em https://claude.ai/artifact/U9YgpUxWAvnVpn2o6qNZyN.
+Resultado esperado: avulso com 5–6 páginas, implementação completa com ~15, recorrente com ~6. A prévia foi aprovada pelo dono em chat (não versionada).
 
 ### 5.2 Onde o comercial escreve
 

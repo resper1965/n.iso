@@ -1,4 +1,4 @@
-# nISO — Agentic GRC System
+# n.iso — Agentic GRC System
 
 [![CI](https://github.com/resper1965/n.iso/actions/workflows/ci.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/ci.yml)
 [![Deploy](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml/badge.svg)](https://github.com/resper1965/n.iso/actions/workflows/deploy.yml)
@@ -6,7 +6,7 @@
 ![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)
 ![Stack](https://img.shields.io/badge/stack-Cloudflare%20Workers%20%2B%20D1%20%2B%20R2-f38020.svg)
 
-O **nISO** conduz a adequação a ISO 27001 e 27701 de ponta a ponta: Declaração de
+O **n.iso** conduz a adequação a ISO 27001 e 27701 de ponta a ponta: Declaração de
 Aplicabilidade, matriz de risco, cofre de evidências e trilha de auditoria. É a
 evolução do sistema de adequação da **ness.**, reescrito numa arquitetura
 agêntica e serverless sobre a stack da Cloudflare.
@@ -41,26 +41,30 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 | Caminho | O que vive aqui |
 |---|---|
 | `src/` | O Worker. `index.ts` monta tudo: cabeçalhos de segurança, CORS, autenticação, rate limit, e os sub-routers. |
-| `src/routes/` | 31 sub-routers, um por domínio (controles, riscos, evidências, auditoria, privacidade, SSO, SCIM…). |
+| `src/routes/` | 41 arquivos de rota, um por domínio (controles, riscos, evidências, auditoria, privacidade, SSO, SCIM, propostas, pedidos, agentes…). |
 | `src/schemas/` | Schemas Zod. Todo corpo de write passa por aqui — é a fonte de verdade do contrato da API. |
 | `src/middleware/` | Autenticação, acesso por projeto (isolamento de tenant), rate limit. |
 | `src/services/`, `src/agents/` | Regra de negócio (motor da SoA, precificação) e os agentes de IA. |
 | `frontend/` | Vite + JavaScript sem framework. `login.html` é a casca; `src/views/` tem uma tela por arquivo. |
 | `frontend/public/_headers` | Cabeçalhos de segurança dos **arquivos estáticos** — ver "Duas fontes de cabeçalho", abaixo. |
-| `mcp-server-niso/` | Servidor MCP que expõe o nISO a clientes como Claude Desktop, com filtro de ferramenta por papel. |
-| `migrations/` | 31 migrations do D1, aplicadas em ordem. Nunca editar uma já aplicada. |
-| `test/` | 77 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
-| `frontend/test/` | 18 arquivos de teste da UI, em jsdom. |
+| `mcp-server-niso/` | Servidor MCP **local** (stdio, chave de API) que expõe o n.iso a clientes como Claude Desktop, com filtro de ferramenta por papel. O MCP **remoto**, com login, vive no próprio Worker (`src/mcp/`). |
+| `migrations/` | 41 arquivos de migration do D1 (última: 0043), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
+| `test/` | 153 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
+| `frontend/test/` | 46 arquivos de teste da UI, em jsdom. |
 | `frontend/e2e/` | 5 specs em Chromium real, sobre o build servido. Pega o que o jsdom não pega. |
 | `docs/` | Runbook, specs, planos e decisões — com [índice próprio](docs/README.md). |
 | `scripts/` | Geradores. `gerar-openapi.mjs` e `gerar-contrato-mcp.mjs` produzem o contrato a partir dos schemas. |
 
 ## Testes
 
+Contagens de 2026-10-06: `ls test/*.test.ts | wc -l` (153), `ls frontend/test/*.test.js | wc -l`
+(46), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (41),
+`ls migrations/*.sql | wc -l` (41).
+
 Três suítes, e cada uma existe porque a anterior não alcança o caso:
 
 ```bash
-npm test                              # backend: 77 arquivos, D1 e KV reais
+npm test                              # backend: 153 arquivos, D1 e KV reais
 npm run test:coverage                 # idem, com a catraca de cobertura que gateia o deploy
 npm test --prefix frontend            # UI em jsdom
 npm run test:e2e --prefix frontend    # Chromium real sobre o build
@@ -123,7 +127,8 @@ curl -s https://niso.ness.com.br/health
 - **Runtime**: Hono no Cloudflare Workers.
 - **Banco**: D1 (SQLite). Trilha de auditoria append-only por trigger.
 - **Arquivos**: R2 para evidências e documentos; bucket separado para a trilha arquivada.
-- **IA**: Workers AI (Llama 3.1) via AI Gateway.
+- **IA**: Workers AI via AI Gateway (`n-iso`): `llama-3.1-8b-instruct` e `llama-3.3-70b-instruct-fp8-fast`
+  (`git grep -hoE "@cf/[a-z0-9/._-]+" -- src`). Sem embedding: a vetorização saiu no #289.
 - **Contrato**: `docs/openapi.json` é **gerado** dos schemas Zod. Editar à mão cria
   uma segunda fonte de verdade, e o teste de contrato reprova a divergência.
 
@@ -147,11 +152,17 @@ Bindings e variáveis ficam em `wrangler.jsonc`.
 | `SESSIONS` | KV | Sessões, tokens e contadores de rate limit |
 | `STORAGE` | R2 | Evidências e documentos |
 | `TRILHA` | R2 | Trilha de auditoria arquivada, em cadeia encadeada |
+| `OAUTH_KV` | KV | Estado do OAuth do MCP remoto (clientes, códigos, tokens) |
 | `AI` | Workers AI | Inferência |
+| `ANALYTICS` | Analytics Engine | Métricas de requisição (SLO) |
+| `CF_VERSION_METADATA` | Version metadata | Identifica a versão publicada em `/health` |
+| `ASSETS` | Workers Assets | O frontend (`frontend/dist`) |
 
 **Variáveis** (públicas, versionadas em `wrangler.jsonc`): `ENVIRONMENT`,
 `EXPORT_PUBLIC_KEY` (verifica a assinatura dos exports), `TURNSTILE_SITE_KEY`
-(vai no HTML do widget).
+(vai no HTML do widget), `APP_URL` (endereço canônico usado em links de e-mail, callback de
+SSO, base do SCIM e recurso do MCP; padrão em `src/config/url.ts`). Opcionais, com padrão em `src/agents/types.ts`: `CF_ACCOUNT_ID` e
+`AI_GATEWAY_ID`.
 
 **Segredos** (`npx wrangler secret put <NOME>`, nunca no git):
 
@@ -165,10 +176,15 @@ Bindings e variáveis ficam em `wrangler.jsonc`.
 
 ## Integração com agentes (MCP)
 
-O `mcp-server-niso/` expõe o nISO a clientes MCP com filtro de ferramentas por
-papel — o auditor não escreve implementação, o consultor não registra achado de
-auditoria. Instalação, variáveis e diagnóstico em
-[`mcp-server-niso/README.md`](mcp-server-niso/README.md).
+Dois caminhos:
+
+- **MCP remoto** (`/mcp`, com login OAuth em `/oauth/*`): o agente do consultor entra com a
+  conta do consultor, fica preso a um projeto escolhido no login e tem o alcance do consultor
+  nesse projeto. Ação destrutiva exige confirmação no servidor. Uso, arquitetura e segurança em
+  [`docs/agente/`](docs/agente/README.md).
+- **MCP local** (`mcp-server-niso/`, stdio com chave de API): filtro de ferramentas por papel —
+  o auditor não escreve implementação, o consultor não registra achado de auditoria.
+  Instalação, variáveis e diagnóstico em [`mcp-server-niso/README.md`](mcp-server-niso/README.md).
 
 ## Documentação
 

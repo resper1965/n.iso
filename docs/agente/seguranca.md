@@ -61,25 +61,30 @@ quê (mesma regra do [`SECURITY.md`](../../SECURITY.md)).
 | **I4** | Há uma lista fechada de rotas **fora do alcance** do agente (tabela abaixo), recusada mesmo com confirmação. | `FORA_DO_AGENTE` em `src/middleware/agente.ts` | `agente-paridade` — "rotas fora do alcance mesmo com confirmação" |
 | **I5** | Ação destrutiva exige confirmação **imposta no servidor**: apagar (`DELETE`), `generate-policies-bulk`, `data-subject/erase`, `revoke-approval(s)`. Só o booleano `true` em `confirmado_pelo_usuario` vira o cabeçalho; o texto `"true"` não vale. Cada uma que passa grava `agente.acao_destrutiva` com o projeto. | `acaoDestrutiva`, `resolverAgente`, `genericas` (`servidor.ts`), hook em `auth.ts` | `agente-paridade`, `agente-ferramentas-genericas` |
 | **I6** | O agente **não registra achado de auditoria** (ISO 27001, 9.2: quem implementa não audita). | `apiKeyRoleViolation('consultant', …)` em `src/auth-policy.ts` | `agente-paridade` — "escrita de auditor continua recusada" |
-| **I7** | A concessão é revalidada **a cada chamada**: não revogada, não expirada (30 dias), conta ativa, papel consultor e **ainda designado** na governança do projeto. | `concessaoValida` (`agente.ts`), chamada pelo `/mcp` (401) e por `resolverAgente` | `mcp-remoto` — revogada, designação removida, expirada (401); `agentes-acesso` — o agente cai na chamada seguinte à revogação |
+| **I7** | A concessão é revalidada **a cada chamada**: não revogada, não expirada (30 dias), conta ativa, papel `consultor` (o `consultoria_admin` e os demais papéis não conectam agente), projeto da organização do consultor (multiconsultoria, #253) e pessoa **ainda designada** na governança do projeto. | `concessaoValida` (`agente.ts`), chamada pelo `/mcp` (401) e por `resolverAgente` | `mcp-remoto` — revogada, designação removida, expirada (401); `agentes-acesso` — o agente cai na chamada seguinte à revogação |
 | **I8** | Trocar ou redefinir a senha revoga as concessões do usuário. | `revogarAgentesPorTrocaDeSenha` (`src/helpers.ts`) | `agente-principal` — "troca de senha derruba o agente" |
 | **I9** | O fluxo OAuth usa a mesma contagem e o mesmo bloqueio do login do app; senha errada, conta inativa e papel sem acesso dão a **mesma** resposta; senha provisória barra a conexão; o escopo é fixo em `niso:consultor`; o pedido é de uso único. | `src/routes/oauth-autorizacao.ts`, `registrarFalhaLogin` (`routes/auth.ts`) | `oauth-autorizacao` |
 | **I10** | `niso_skill` só lê de um mapa embutido. `nome` e `arquivo` **nunca** viram caminho de disco. | `skill()` em `servidor.ts` (`Object.hasOwn`) | `agente-skills` — nome inexistente, `../`, `..\` |
 | **I11** | Segredo de integração não sai: a listagem de webhooks não devolve `secret`, e o export de portabilidade omite webhook, SSO, SCIM e `repository_token`. | `routes/integrations.ts`, `src/portabilidade.ts` | `webhooks-segredo`, `portabilidade` |
-| **I12** | **O consultor humano só alcança os projetos em que consta como `consultor` na governança** (`project_governance.role_category = 'consultor'`, e-mail sem caixa, conta ativa). Vale para rota de projeto, recurso por id e listagem entre projetos (`/projects`, `/portfolio`, `/controls`, `/dashboard`, `/dashboard/stats`, `/users`). É a **mesma** regra da concessão do agente (I7): uma função, `consultorDesignado`, e um SQL, `PROJETOS_DO_CONSULTOR_SQL`. Tirar a linha da governança derruba o acesso na requisição seguinte. Erro na consulta nega. Só o `platform_admin` vê todos. | `src/helpers.ts` (`requireProjectAccess`, `requireResourceAccess`, `projetosVisiveis`), `src/middleware/project-access.ts`, `src/routes/users.ts` | `consultor-escopo` |
+| **I12** | **O consultor humano só alcança os projetos em que consta como `consultor` na governança** (`project_governance.role_category = 'consultor'`, e-mail sem caixa, conta ativa). Vale para rota de projeto, recurso por id e listagem entre projetos (`/projects`, `/portfolio`, `/controls`, `/dashboard`, `/dashboard/stats`, `/users`). É a **mesma** regra da concessão do agente (I7): uma função, `consultorDesignado`, e um SQL, `PROJETOS_DO_CONSULTOR_SQL`. Tirar a linha da governança derruba o acesso na requisição seguinte. Erro na consulta nega. O `consultoria_admin` alcança os projetos da própria organização (multiconsultoria, #253); só o `platform_admin` vê todos. | `src/helpers.ts` (`requireProjectAccess`, `requireResourceAccess`, `projetosVisiveis`), `src/middleware/project-access.ts`, `src/routes/users.ts` | `consultor-escopo` |
 
 ### O que está fora do alcance (I4) e por quê
 
 | Rota | Motivo |
 |---|---|
 | `/users`, `/admin/users` | Gestão de usuários: controle de acesso, não conteúdo do SGSI. |
+| `/platform` | Administração da plataforma (organizações). |
 | `/dashboard` | Agrega todos os clientes. |
-| `/assessments`, `/leads`, `/proposals` | Área comercial. |
+| `/assessments`, `/leads`, `/proposals`, `/funil`, `/org`, `/servicos`, `/propostas` | Área comercial. |
 | `/projects/:id/{sso,security-policy,scim-token,api-keys,webhooks}` e `/webhooks` | Configuração de segurança do cliente. O agente não amplia acesso. |
 | `/auth/*`, `/legal/*`, `/notifications` | **Conta pessoal do consultor** (veja a terceira linha do primeiro quadro). |
 | `/projects/:id/auditor-token` | Emitiria uma credencial externa de até 365 dias e permitiria forjar nota de auditor. |
 | `POST /projects` | O agente é preso a um projeto; criar outro contradiz isso. `GET /projects` continua valendo, escopado. |
 | `/agentes` | O agente não gere o próprio acesso. |
+| `/projects/:id/{ropa,dpia}/:id/revoke-approval` | Desaprovar ROPA e DPIA é ato da direção, pela interface (F6, decisão D1). Revogar aprovação de **controle** segue possível, com confirmação. |
+| `DELETE /management-reviews/:id` | Excluir análise crítica destrói registro assinado: só pela interface. |
+
+Fonte da lista: `FORA_DO_AGENTE` em `src/middleware/agente.ts`. Mudou lá, muda aqui.
 
 ---
 

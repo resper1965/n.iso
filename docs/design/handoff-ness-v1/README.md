@@ -2,7 +2,7 @@
 
 ## Overview
 
-Pacote de implementação para o **n.iso** (SGSI ISO/IEC 27001:2022 e 27701, repo `resper1965/nISO`). Cobre três frentes, nesta ordem de dependência:
+Pacote de implementação para o **n.iso** (SGSI ISO/IEC 27001:2022 e 27701, repo `resper1965/n.iso`). Cobre três frentes, nesta ordem de dependência:
 
 1. **Shell da aplicação** — sidebar fixa/recolhível, banda de título fixa, menu de conta. É a casca reutilizável por toda a família de produtos ness. (`n.iso`, `n.priv`, `n.risk`).
 2. **Tela de trabalho (SoA)** — lista com busca/facetas/filtros salvos, seleção em lote com desfazer, drawer de detalhe com edição, gate de aplicabilidade N/A e trilha de auditoria.
@@ -12,7 +12,7 @@ Tudo em português (PT-BR primário), tema escuro, identidade ness.
 
 ## About the Design Files
 
-Os arquivos deste pacote são **referências de design feitas em HTML** — protótipos que mostram aparência e comportamento pretendidos, **não código de produção para copiar**. A tarefa é **recriar estes designs no ambiente já existente do nISO**, seguindo seus padrões:
+Os arquivos deste pacote são **referências de design feitas em HTML** — protótipos que mostram aparência e comportamento pretendidos, **não código de produção para copiar**. A tarefa é **recriar estes designs no ambiente já existente do n.iso**, seguindo seus padrões:
 
 - **Backend**: Cloudflare Workers + Hono, D1, Zod — `src/routes/*.ts` por domínio.
 - **Frontend**: Vite + **JavaScript sem framework** — `frontend/src/style.css`, `frontend/src/globals.js`, `frontend/src/ui.js`, `frontend/src/router.js`, `frontend/src/views/`.
@@ -103,7 +103,7 @@ Cartão centralizado `width:min(420px,100%)`, fundo `#162244`, borda `var(--line
 2. **Senha** — erro **genérico** (`E-mail ou senha incorretos. Restam N tentativas antes do bloqueio temporário.`): nunca dizer qual campo errou (enumeração de usuário). Campo com borda `#ef4444` no erro, animação `shake 260ms`.
 3. **Verificação anti-abuso** — invisível no caminho normal; **desafio visível só a partir da 2ª falha**, com `Entrar` desabilitado até resolver. **Sem marca do fornecedor na interface** (implementação: Cloudflare Turnstile).
 4. **Bloqueio** — na 5ª falha, 15 minutos, com o evento `auth.lockout` (conta + IP) registrado na trilha do tenant.
-5. **SSO federado** — o campo de senha **não aparece**; a tela declara que senha e MFA ficam no provedor de identidade do cliente e que o n.iso recebe apenas os grupos que definem o papel. Texto neutro (`provedor de identidade da cliente`), sem nome de produto.
+5. **SSO federado** — o campo de senha **não aparece**; a tela declara que senha e MFA ficam no provedor de identidade do cliente e que o n.iso recebe apenas os grupos que definem o papel. Texto neutro (`provedor de identidade da Acme`), sem nome de produto.
 6. **MFA** — TOTP, campo único de 6 dígitos (mono 24px, `letter-spacing:.5em`, centralizado) que valida ao completar; contador `expira em Ns` (âmbar ≤10s); `Código de recuperação` como alternativa. **Sem SMS.** Em tenant federado, o segundo fator é do provedor.
 7. **Aceite** — duas caixas (Termos v2.4, Privacidade v3.1); `Aceitar e entrar` só habilita com ambas; `Recusar e sair` existe; registro com data e IP.
 8. **Expiração** — reautentica **na mesma tela** preservando o rascunho (`A.8.12 · 2 alterações não salvas — status, dono`). Conta local: campo de senha. **Sessão federada: não pede senha** (não existe senha para pedir) — botão `Reautenticar no <tenant>`.

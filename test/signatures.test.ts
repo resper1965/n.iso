@@ -36,14 +36,14 @@ describe('Assinatura eletrônica (D1 real)', () => {
         `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('proj-1','Cliente Um','ISO 27001','controller','Active')`
       ),
       env.DB.prepare(
-        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','44273656+resper1965@users.noreply.github.com',?,'Ricardo Esper','consultor','proj-1')`
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-1','ana@exemplo.com.br',?,'Ana Souza','consultor','proj-1')`
       ).bind(hash),
       env.DB.prepare(
         `INSERT INTO compliance_controls (id, project_id, standard, title, description, status) VALUES ('ctrl-a51','proj-1','ISO 27001:2022','Política','Requisito universal','Missing')`
       ),
       env.DB.prepare(
         `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
-         VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'44273656+resper1965@users.noreply.github.com','pending')`
+         VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'ana@exemplo.com.br','pending')`
       ),
 
       // Direção Executiva do projeto: pessoa DIFERENTE do Líder SGSI. É o que
@@ -59,7 +59,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       // porque o papel de alguém MUDA de projeto para projeto.
       env.DB.prepare(
         `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
-         VALUES ('gov-sgsi','proj-1','Ricardo Esper','44273656+resper1965@users.noreply.github.com','consultor','DPO / Líder do SGSI')`
+         VALUES ('gov-sgsi','proj-1','Ana Souza','ana@exemplo.com.br','consultor','DPO / Líder do SGSI')`
       ),
       env.DB.prepare(
         `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
@@ -70,7 +70,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       // Consultor: entrega serviço ao cliente e assina o papel que a matriz do
       // projeto lhe der. NÃO é `platform_admin` — esse opera a plataforma e,
       // por isso mesmo, não assina conformidade nela.
-      ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'consultor' })),
+      ...(await sessionFor({ id: 'usr-1', email: 'ana@exemplo.com.br', name: 'Ana Souza', role: 'consultor' })),
       'Content-Type': 'application/json',
     };
     headersDirecao = {
@@ -117,7 +117,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       const data = await res.json() as any;
       expect(res.status, JSON.stringify(data)).toBe(200);
       expect(data.ok).toBe(true);
-      expect(data.approved_by).toBe('Ricardo Esper');
+      expect(data.approved_by).toBe('Ana Souza');
 
       const ctrl = await env.DB.prepare("SELECT status FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
       expect(ctrl.status).toBe('Approved');
@@ -129,7 +129,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
         "SELECT actor, details FROM audit_logs WHERE action = 'control.approved' ORDER BY rowid DESC LIMIT 1"
       ).first<any>();
       expect(log).not.toBeNull();
-      expect(log.actor).toBe('44273656+resper1965@users.noreply.github.com');
+      expect(log.actor).toBe('ana@exemplo.com.br');
       expect(log.details).toContain('ctrl-a51');
     });
   });
@@ -169,7 +169,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       const ev = await env.DB.prepare(
         "SELECT ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua FROM evidence WHERE id='ev-1'"
       ).first<any>();
-      expect(ev.ciso_approved_by).toBe('Ricardo Esper');
+      expect(ev.ciso_approved_by).toBe('Ana Souza');
       expect(ev.ciso_approved_at).toBeTruthy();
       expect(ev.ciso_approved_ip).toBeTruthy();
       expect(ev.ciso_approved_ua).toBeTruthy();
@@ -185,7 +185,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       const ev = await env.DB.prepare(
         "SELECT ciso_approved_by, ceo_approved_by FROM evidence WHERE id='ev-1'"
       ).first<any>();
-      expect(ev.ciso_approved_by).toBe('Ricardo Esper');
+      expect(ev.ciso_approved_by).toBe('Ana Souza');
       expect(ev.ceo_approved_by).toBe('Direcao Executiva');
       expect(ev.ciso_approved_by).not.toBe(ev.ceo_approved_by);
     });
@@ -204,7 +204,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       // designação de DPO, mas entrando pela conta que administra o sistema.
       // Quem opera a plataforma não carimba conformidade nela.
       const admin = {
-        ...(await sessionFor({ id: 'usr-1', email: '44273656+resper1965@users.noreply.github.com', name: 'Ricardo Esper', role: 'platform_admin' })),
+        ...(await sessionFor({ id: 'usr-1', email: 'ana@exemplo.com.br', name: 'Ana Souza', role: 'platform_admin' })),
         'Content-Type': 'application/json',
       };
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' }, admin);
@@ -216,7 +216,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
     });
 
     it('quem não está na matriz deste projeto não assina, qualquer que seja o papel de plataforma', async () => {
-      await env.DB.prepare("DELETE FROM project_governance WHERE email = '44273656+resper1965@users.noreply.github.com'").run();
+      await env.DB.prepare("DELETE FROM project_governance WHERE email = 'ana@exemplo.com.br'").run();
 
       // D5: o consultor fora da matriz já não alcança o projeto.
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });

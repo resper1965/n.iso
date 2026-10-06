@@ -1,5 +1,7 @@
 # Sistema de propostas, fatia 3 (a proposta) — Plano de implementação
 
+> **Arquivado em 2026-10-06:** executado em PR #250.
+
 > **Para agentes:** SUB-SKILL OBRIGATÓRIA: `superpowers:subagent-driven-development`. Passos com `- [ ]`.
 
 **Objetivo:** o comercial monta uma proposta a partir de um lead (com ou sem diagnóstico), escolhendo serviços do catálogo; o sistema calcula o preço com memória, deixa a consultoria reescrever as seções de texto do documento, gera o documento completo congelado (HTML + hash), oferece o download em Word (.docx) como cópia de trabalho e controla revisões e a aprovação de desconto acima do teto.
@@ -118,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_proposta_itens ON proposta_itens(proposta_id, ord
 - [ ] `VALOR_FIXO` ganha `propostas: { status: 'rascunho' }`; rodar `test/contrato-isolamento-topo.test.ts`.
 - [ ] **Termos iniciais da ness.** A mesma migration faz `UPDATE organizations SET textos = ? WHERE id = 'org_ness' AND (textos IS NULL OR textos = '' OR json_extract(textos, '$.termos') IS NULL OR json_extract(textos, '$.termos') = '')` com o JSON dos textos abaixo, e o `INSERT OR IGNORE` da `org_ness` em `schema.sql` passa a trazer a mesma coluna `textos`. Teste: banco novo tem `termos` não vazio na ness.; uma organização com termos já preenchidos não é sobrescrita.
   Conteúdo (copiar literalmente; `{org}` é trocado pelo nome da organização na montagem do documento):
-  - `termos`: as seções "Obrigações de {org}", "Obrigações da contratante", "Propriedade das entregas", "Confidencialidade", "Proteção de dados pessoais", "Vigência", "Rescisão", "Foro" da prévia aprovada, com o texto exato dela (está no arquivo `C:/Users/resper/AppData/Local/Temp/claude/c--Users-resper-OneDrive--rea-de-Trabalho-DESENVOLVIMENTO-niso/9b1971a3-2650-4aaf-8d42-9b90f1da4e2e/scratchpad/proposta-niso.html`, folhas 12 a 14), no formato de texto simples da edição por seção (título de subseção em linha própria iniciada por `## `, parágrafos separados por linha em branco, itens com `- `).
+  - `termos`: as seções "Obrigações de {org}", "Obrigações da contratante", "Propriedade das entregas", "Confidencialidade", "Proteção de dados pessoais", "Vigência", "Rescisão", "Foro" da prévia aprovada, com o texto exato dela (está no arquivo (prévia local, não versionada), folhas 12 a 14), no formato de texto simples da edição por seção (título de subseção em linha própria iniciada por `## `, parágrafos separados por linha em branco, itens com `- `).
   - `sobre`: o texto "Sobre a ness." da prévia.
   - `comoTrabalhamos`: princípios e ritmo da folha 5 da prévia.
   - `premissas`: as cinco premissas da folha 11.

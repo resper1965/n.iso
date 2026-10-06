@@ -25,12 +25,12 @@ describe('revogar aprovação de controle (D3)', () => {
     for (const id of ['c1', 'c2']) {
       await env.DB.prepare(
         `INSERT INTO compliance_controls (id, project_id, standard, title, status, ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua, ceo_approved_by)
-         VALUES (?, 'pr1','ISO 27001:2022','A.5.1 X','Approved','Ricardo Esper','2026-08-01','127.0.0.1','System Agent Automator','CEO Fulano')`
+         VALUES (?, 'pr1','ISO 27001:2022','A.5.1 X','Approved','Ana Souza','2026-08-01','127.0.0.1','System Agent Automator','CEO Fulano')`
       ).bind(id).run();
     }
     // Controle de OUTRO projeto (para o aterramento do lote).
     await env.DB.prepare(
-      `INSERT INTO compliance_controls (id, project_id, standard, title, status, ciso_approved_by) VALUES ('c-outro','pr2','ISO 27001:2022','A.5.1 Z','Approved','Ricardo Esper')`
+      `INSERT INTO compliance_controls (id, project_id, standard, title, status, ciso_approved_by) VALUES ('c-outro','pr2','ISO 27001:2022','A.5.1 Z','Approved','Ana Souza')`
     ).run();
     // Chave de ESCRITA do consultor (sem senha de aprovador).
     await designarConsultor('consultor@ness.io', 'pr1');
@@ -55,7 +55,7 @@ describe('revogar aprovação de controle (D3)', () => {
     const res = await req('POST', '/api/v1/controls/c1/revoke-approval', { role: 'ciso' });
     expect(res.status).toBe(400);
     const ctrl = await env.DB.prepare("SELECT ciso_approved_by FROM compliance_controls WHERE id='c1'").first<any>();
-    expect(ctrl.ciso_approved_by).toBe('Ricardo Esper');
+    expect(ctrl.ciso_approved_by).toBe('Ana Souza');
   });
 
   it('role inválido → 400', async () => {
@@ -71,6 +71,6 @@ describe('revogar aprovação de controle (D3)', () => {
     const c1 = await env.DB.prepare("SELECT ciso_approved_by FROM compliance_controls WHERE id='c1'").first<any>();
     const outro = await env.DB.prepare("SELECT ciso_approved_by FROM compliance_controls WHERE id='c-outro'").first<any>();
     expect(c1.ciso_approved_by).toBeNull();
-    expect(outro.ciso_approved_by).toBe('Ricardo Esper'); // intacto (outro projeto)
+    expect(outro.ciso_approved_by).toBe('Ana Souza'); // intacto (outro projeto)
   });
 });

@@ -377,12 +377,12 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-top"><span class="wf-dot"></span><span class="wf-url">niso.ness.io/entrar · domínio com IdP</span></div>
 <div class="wf-body"><div class="wf-main" style="padding:28px 36px 32px;gap:16px;align-items:stretch">
 <div style="font:500 20px/1 var(--font-heading);letter-spacing:-.015em;color:var(--color-neutral-900)">n<span style="color:#00ade8">.</span>iso</div>
-<div class="fld"><label>E-mail corporativo</label><span class="in" style="display:flex;align-items:center;padding:0 8px;font:400 9.5px/1 var(--font-body);color:var(--color-neutral-700)">pessoa@exemplo.com.br</span></div>
+<div class="fld"><label>E-mail corporativo</label><span class="in" style="display:flex;align-items:center;padding:0 8px;font:400 9.5px/1 var(--font-body);color:var(--color-neutral-700)">m.barros@acme.com</span></div>
 <div class="blueprint" style="padding:12px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-<div style="font:500 10px/1.4 var(--font-body);color:var(--color-neutral-900)">cliente.com autentica pelo provedor da organização</div>
+<div style="font:500 10px/1.4 var(--font-body);color:var(--color-neutral-900)">acme.com autentica pelo provedor da organização</div>
 <div class="wf-sub" style="margin:4px 0 0">Senha e MFA ficam no provedor de identidade. O n.iso não guarda credencial deste tenant.</div>
 </div>
-<div class="wf-btn pri" style="justify-content:center;height:32px">Continuar no provedor da cliente</div>
+<div class="wf-btn pri" style="justify-content:center;height:32px">Continuar no provedor da Acme</div>
 <div class="hint">não é meu e-mail · entrar com conta local (convidado)</div>
 <div class="authsig"><b>ness<i>.</i></b><s>privacidade · termos · n.iso 4.2</s></div>
 <div class="note">com IdP configurado o campo de senha não aparece — pedir senha que não existe é erro clássico</div>
@@ -393,16 +393,16 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Sistema</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>Usuários</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>SSO / SCIM</div>
 <div class="wf-foot"><b>RE</b><span>R. Esper<em>admin · ness.</em></span><i>▴</i></div></div>
 <div class="wf-main">
 <div class="wf-hdr"><div><h3 class="wf-h">SSO e provisionamento</h3></div><div class="wf-acts"><span class="wf-btn">Testar conexão</span><span class="wf-btn pri">Salvar</span></div></div>
-<div class="wf-meta">Tenant cliente<b>OIDC</b><s>provedor self-hosted do cliente</s></div>
+<div class="wf-meta">Tenant Acme<b>OIDC</b><s>provedor self-hosted do cliente</s></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-<div class="fld"><label>Issuer / discovery URL</label><span class="in" style="display:flex;align-items:center;padding:0 8px;font:400 8.5px/1 ui-monospace,monospace;color:var(--color-neutral-700)">https://id.cliente.com/application/o/niso/</span></div>
+<div class="fld"><label>Issuer / discovery URL</label><span class="in" style="display:flex;align-items:center;padding:0 8px;font:400 8.5px/1 ui-monospace,monospace;color:var(--color-neutral-700)">https://id.acme.com/application/o/niso/</span></div>
 <div class="fld"><label>Client ID</label><span class="in"></span></div>
 <div class="fld"><label>Client secret</label><span class="in"></span></div>
 <div class="fld"><label>Protocolo</label><div class="chips"><span class="chip on">OIDC</span><span class="chip">SAML 2.0</span></div></div>
@@ -414,7 +414,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <tbody>
 <tr><td>niso-admins</td><td>Admin</td><td>2</td></tr>
 <tr><td>niso-editors</td><td>Editor</td><td>6</td></tr>
-<tr><td>cliente-compliance</td><td>Cliente</td><td>9</td></tr>
+<tr><td>acme-compliance</td><td>Cliente</td><td>9</td></tr>
 <tr><td><span class="hint">+ adicionar mapeamento</span></td><td>—</td><td>—</td></tr>
 </tbody></table>
 </div>
@@ -557,7 +557,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Implementação</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>Jornada</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l2 2 4-4"></path><path d="M3 7l2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>SoA</div>
@@ -567,7 +567,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="who"><b>RE</b><span>R. Esper<em>admin@exemplo.com.br</em></span></div>
 <hr>
 <div><div class="lbl" style="margin-bottom:6px">Tenant</div>
-<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>cliente<s>27001</s></div>
+<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Acme<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>Forense<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>ness. labs<s>27701</s></div></div>
 <hr>
@@ -612,15 +612,15 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="dv-opt" id="6e"><div class="dv-olabel"><a class="dv-oid" href="#6e">6e</a>Sem permissão e erro — papel Cliente</div>
 <div style="display:flex;flex-direction:column;gap:12px">
 <div class="dv-card" style="width:420px">
-<div class="wf-top"><span class="wf-dot"></span><span class="wf-url">niso.ness.io/soa · sessão: pessoa@exemplo.com.br</span></div>
+<div class="wf-top"><span class="wf-dot"></span><span class="wf-url">niso.ness.io/soa · sessão: cliente@acme.com</span></div>
 <div class="wf-body">
 <div class="wf-side" style="width:118px">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i></i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i></i></span><em>27001</em></div>
 <div class="wf-grp">Meu projeto</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>Andamento</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 5-2 6-2 6h18s-2-1-2-6a7 7 0 0 0-7-7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>Pendências</div>
-<div class="wf-foot"><b>MB</b><span>M. Barros<em>cliente · cliente</em></span><i>▴</i></div>
+<div class="wf-foot"><b>MB</b><span>M. Barros<em>cliente · acme</em></span><i>▴</i></div>
 </div>
 <div class="wf-main">
 <div class="wf-hdr"><div><h3 class="wf-h">SoA</h3></div></div>
@@ -658,7 +658,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -673,7 +673,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="who"><b>RE</b><span>R. Esper<em>admin@exemplo.com.br</em></span></div>
 <hr>
 <div><div class="lbl" style="margin-bottom:6px">Tenant</div>
-<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>cliente<s>27001</s></div>
+<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Acme<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>Forense<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>ness. labs<s>27701</s></div></div>
 <hr>
@@ -720,7 +720,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -737,7 +737,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="who"><b>RE</b><span>R. Esper<em>admin@exemplo.com.br</em></span></div>
 <hr>
 <div><div class="lbl" style="margin-bottom:6px">Tenant</div>
-<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>cliente<s>27001</s></div>
+<div class="it on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Acme<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>Forense<s>27001</s></div>
 <div class="it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path></svg>ness. labs<s>27701</s></div></div>
 <hr>
@@ -783,7 +783,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side" style="width:152px">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Bloco 3 · Riscos</div>
 <div class="wf-nav"><span class="wf-ic" style="background:var(--color-accent-500)"></span>12 Inventário de ativos</div>
 <div class="wf-nav"><span class="wf-ic" style="background:var(--color-accent-500)"></span>13 Valoração C-I-D</div>
@@ -819,7 +819,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Operacional</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg>Políticas</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path></svg>Ciência de políticas</div>
@@ -852,7 +852,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27701</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27701</em></div>
 <div class="wf-grp">Privacidade</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14a9 3 0 0 0 18 0V5"></path><path d="M3 12a9 3 0 0 0 18 0"></path></svg>ROPA</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>DPIA / RIPD</div>
@@ -885,7 +885,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27701</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27701</em></div>
 <div class="wf-grp">Privacidade</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14a9 3 0 0 0 18 0V5"></path><path d="M3 12a9 3 0 0 0 18 0"></path></svg>ROPA</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>DPIA / RIPD</div>
@@ -925,19 +925,19 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 
 <div class="dv-opt" id="4e"><div class="dv-olabel"><a class="dv-oid" href="#4e">4e</a>Visão do cliente — papel Cliente, mesmo app</div>
 <div class="dv-card" style="width:560px">
-<div class="wf-top"><span class="wf-dot"></span><span class="wf-dot"></span><span class="wf-url">niso.ness.io/  ·  sessão: pessoa@exemplo.com.br</span></div>
+<div class="wf-top"><span class="wf-dot"></span><span class="wf-dot"></span><span class="wf-url">niso.ness.io/  ·  sessão: cliente@acme.com</span></div>
 <div class="wf-body">
 <div class="wf-side" style="width:124px">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i></i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i></i></span><em>27001</em></div>
 <div class="wf-grp">Meu projeto</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>Andamento</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"></rect><path d="m3 17 2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>Minhas pendências</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5"></path><path d="M12 3v12"></path></svg>Enviar evidência</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path></svg>Documentos</div>
-<div class="wf-foot"><b>MB</b><span>M. Barros<em>cliente · cliente</em></span><i>▴</i></div></div>
+<div class="wf-foot"><b>MB</b><span>M. Barros<em>cliente · acme</em></span><i>▴</i></div></div>
 <div class="wf-main">
-<div class="wf-hdr"><div><h3 class="wf-h">Andamento</h3><p class="wf-sub">Fase 14 de 41 · auditoria externa prevista para 27/10</p></div><div class="wf-user"><b>MB</b><span>M. Barros<em>cliente · cliente</em></span></div></div>
+<div class="wf-hdr"><div><h3 class="wf-h">Andamento</h3><p class="wf-sub">Fase 14 de 41 · auditoria externa prevista para 27/10</p></div><div class="wf-user"><b>MB</b><span>M. Barros<em>cliente · acme</em></span></div></div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
 <div class="wf-kpi"><b>34%</b><span>da jornada concluída</span></div>
 <div class="wf-kpi"><b>4</b><span class="tag t-warn">pendências suas</span></div>
@@ -961,7 +961,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 
 <section class="dv-turn" id="t3">
 <div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">Industry retunado para a marca ness.</span><span class="dv-flag on">decidido · 3b</span></div>
-<p class="dv-tdesc">Mesma estrutura de <a class="dv-oid" href="#2b">2b</a> e <a class="dv-oid" href="#2c">2c</a>, só com os tokens trocados: accent único <b>#00ADE8</b>, Montserrat nos títulos sobre Inter na interface, tinta #0E1116, wordmark em caixa baixa com o ponto ciano. Sem gradiente e sem sombra, como manda o guia. <a class="dv-oid" href="#3a">3a</a> mantém o fundo claro técnico; <a class="dv-oid" href="#3b">3b</a> usa o canvas OLED #070b14 do nISO. O esqueleto blueprint (moldura de canto, grade, tabela densa) continua sendo o do Industry.</p>
+<p class="dv-tdesc">Mesma estrutura de <a class="dv-oid" href="#2b">2b</a> e <a class="dv-oid" href="#2c">2c</a>, só com os tokens trocados: accent único <b>#00ADE8</b>, Montserrat nos títulos sobre Inter na interface, tinta #0E1116, wordmark em caixa baixa com o ponto ciano. Sem gradiente e sem sombra, como manda o guia. <a class="dv-oid" href="#3a">3a</a> mantém o fundo claro técnico; <a class="dv-oid" href="#3b">3b</a> usa o canvas OLED #070b14 do n.iso. O esqueleto blueprint (moldura de canto, grade, tabela densa) continua sendo o do Industry.</p>
 <div class="dv-opts">
 
 <div class="dv-opt ness" id="3a"><div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>ness. claro — fundo técnico, accent ciano</div>
@@ -971,7 +971,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -1012,7 +1012,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Implementação</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>Jornada</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l2 2 4-4"></path><path d="M3 7l2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>SoA</div>
@@ -1035,14 +1035,14 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="note">um accent só: ciano marca o que é interativo, o resto é tinta e hairline</div>
 </div></div>
 
-<div class="dv-opt ness ness-dark" id="3b"><div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>ness. OLED — canvas #070b14 do nISO</div>
+<div class="dv-opt ness ness-dark" id="3b"><div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>ness. OLED — canvas #070b14 do n.iso</div>
 <div style="display:flex;flex-direction:column;gap:12px">
 <div class="dv-card" style="width:620px">
 <div class="wf-top"><span class="wf-dot"></span><span class="wf-dot"></span><span class="wf-url">niso.ness.io/dashboard</span></div>
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -1083,7 +1083,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Implementação</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>Jornada</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l2 2 4-4"></path><path d="M3 7l2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>SoA</div>
@@ -1103,7 +1103,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 </tbody></table>
 </div></div>
 </div>
-<div class="note">as cores de status do nISO (verde/amarelo/vermelho) só rendem contraste no escuro</div>
+<div class="note">as cores de status do n.iso (verde/amarelo/vermelho) só rendem contraste no escuro</div>
 </div></div>
 
 </div>
@@ -1112,7 +1112,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 
 <section class="dv-turn" id="t2">
 <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Telas do fluxo — sobre o shell <a class="dv-oid" href="#1a">1a</a></span><span class="dv-flag">telas · regras no turno 6</span></div>
-<p class="dv-tdesc">As telas pedidas, desenhadas no shell denso (<a class="dv-oid" href="#1a">1a</a>): onboarding, dashboard, lista, detalhe, criação, busca, notificações, equipe, configurações e estados vazios. Nav e nomenclatura vêm das 28 rotinas do nISO. Trocar de shell redesenha só a moldura — o miolo das telas continua valendo. Tema aplicado: <a class="dv-oid" href="#3b">3b</a> (ness. OLED).</p>
+<p class="dv-tdesc">As telas pedidas, desenhadas no shell denso (<a class="dv-oid" href="#1a">1a</a>): onboarding, dashboard, lista, detalhe, criação, busca, notificações, equipe, configurações e estados vazios. Nav e nomenclatura vêm das 28 rotinas do n.iso. Trocar de shell redesenha só a moldura — o miolo das telas continua valendo. Tema aplicado: <a class="dv-oid" href="#3b">3b</a> (ness. OLED).</p>
 <div class="dv-opts ness ness-dark">
 
 <div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Onboarding — escopo do tenant em 4 passos</div>
@@ -1142,7 +1142,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -1190,7 +1190,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Implementação</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>Jornada</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l2 2 4-4"></path><path d="M3 7l2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>SoA</div>
@@ -1228,7 +1228,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Implementação</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l2 2 4-4"></path><path d="M3 7l2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>SoA</div>
 <div class="wf-grp">Controles A.8</div>
@@ -1274,7 +1274,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Operacional</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"></rect><rect x="2" y="14" width="20" height="8" rx="2"></rect><path d="M6 6h.01"></path><path d="M6 18h.01"></path></svg>Ativos</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Riscos</div>
@@ -1370,8 +1370,8 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <tbody>
 <tr><td>R. Esper · consultor</td><td>Admin</td><td><span class="tag t-n">local</span></td><td><span class="tag t-ok">ativo</span></td></tr>
 <tr><td>M. Santos · consultor</td><td>Editor</td><td><span class="tag t-n">local</span></td><td><span class="tag t-ok">ativo</span></td></tr>
-<tr><td>pessoa@exemplo.com.br</td><td>Cliente 🔒</td><td><span class="tag t-info">idp</span></td><td><span class="tag t-info">no idp</span></td></tr>
-<tr><td>pessoa@exemplo.com.br</td><td>Cliente 🔒</td><td><span class="tag t-info">idp</span></td><td><span class="tag t-info">no idp</span></td></tr>
+<tr><td>m.barros@acme.com</td><td>Cliente 🔒</td><td><span class="tag t-info">idp</span></td><td><span class="tag t-info">no idp</span></td></tr>
+<tr><td>j.lima@acme.com</td><td>Cliente 🔒</td><td><span class="tag t-info">idp</span></td><td><span class="tag t-info">no idp</span></td></tr>
 <tr><td>auditor@externo.com</td><td>Leitor</td><td><span class="tag t-n">local</span></td><td><span class="tag t-ok">ativo</span></td></tr>
 </tbody></table>
 <div class="blocker" style="border-left-color:#00ade8;background:rgba(0,173,232,.10)"><span>Papéis marcados 🔒 vêm de grupos do IdP e não podem ser editados aqui — o próximo sync sobrescreveria. Ajuste em <a href="#7d">7d</a>.</span><span class="wf-btn">Abrir SSO / SCIM</span></div>
@@ -1396,7 +1396,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <table class="wf-tbl"><tbody>
 <tr><td style="width:56px"><span class="tag t-bad">prazo</span></td><td>A.8.12 vence em 3 dias e está sem dono<div class="sk" style="width:40%;margin-top:3px"></div></td><td style="width:52px"><span class="wf-btn">Abrir</span></td></tr>
 <tr><td><span class="tag t-info">aprovar</span></td><td>3 evidências aguardam sua validação</td><td><span class="wf-btn">Abrir</span></td></tr>
-<tr><td><span class="tag t-warn">cliente</span></td><td>cliente respondeu o bloco 4 do questionário</td><td><span class="wf-btn">Abrir</span></td></tr>
+<tr><td><span class="tag t-warn">cliente</span></td><td>Acme respondeu o bloco 4 do questionário</td><td><span class="wf-btn">Abrir</span></td></tr>
 <tr><td><span class="tag t-n">sistema</span></td><td>Exportação da SoA concluída</td><td><span class="wf-btn">Baixar</span></td></tr>
 </tbody></table>
 <div class="note">agrupar por “o que preciso fazer”, não por hora do evento</div>
@@ -1441,7 +1441,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 
 <section class="dv-turn" id="t1">
 <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Quatro shells para o mesmo produto</span><span class="dv-flag">histórico · decidido 1a</span></div>
-<p class="dv-tdesc">A mesma informação — projeto cliente em certificação ISO 27001 — em quatro estruturas de navegação e densidade diferentes. Escolha o shell e as telas do turno <a class="dv-tid" href="#t2">2</a> passam a viver dentro dele. Tema aplicado: <a class="dv-oid" href="#3b">3b</a> (ness. OLED).</p>
+<p class="dv-tdesc">A mesma informação — projeto Acme em certificação ISO 27001 — em quatro estruturas de navegação e densidade diferentes. Escolha o shell e as telas do turno <a class="dv-tid" href="#t2">2</a> passam a viver dentro dele. Tema aplicado: <a class="dv-oid" href="#3b">3b</a> (ness. OLED).</p>
 <div class="dv-opts ness ness-dark">
 
 <div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Denso · sidebar por grupos, tabela primeiro</div>
@@ -1450,7 +1450,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Visão geral</div>
 <div class="wf-nav on"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</div>
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>Projetos</div>
@@ -1464,7 +1464,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-nav"><svg class="wf-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14a9 3 0 0 0 18 0V5"></path><path d="M3 12a9 3 0 0 0 18 0"></path></svg>ROPA</div>
 <div class="wf-foot"><b>RE</b><span>R. Esper<em>admin · ness.</em></span><i>▴</i></div></div>
 <div class="wf-main">
-<div class="wf-hdr"><div><h3 class="wf-h">Dashboard</h3><p class="wf-sub">cliente · fase 2 · auditoria em 47 dias</p></div><div class="wf-user"><b>RE</b><span>R. Esper<em>admin · ness.</em></span><i class="cv">▾</i></div><div class="wf-acts"><span class="wf-btn pri">+ Evidência</span></div></div>
+<div class="wf-hdr"><div><h3 class="wf-h">Dashboard</h3><p class="wf-sub">Acme · fase 2 · auditoria em 47 dias</p></div><div class="wf-user"><b>RE</b><span>R. Esper<em>admin · ness.</em></span><i class="cv">▾</i></div><div class="wf-acts"><span class="wf-btn pri">+ Evidência</span></div></div>
 <div class="wf-kpis"><div class="wf-kpi"><b>78/93</b><span>controles</span></div><div class="wf-kpi"><b>12</b><span>gaps</span></div><div class="wf-kpi"><b>2</b><span>críticos</span></div><div class="wf-kpi"><b>31</b><span>a validar</span></div></div>
 <table class="wf-tbl"><thead><tr><th style="width:42px">Ctrl</th><th>Pendência</th><th style="width:54px">Status</th><th style="width:52px">Dono</th></tr></thead><tbody>
 <tr><td>A.8.12</td><td>Prevenção de vazamento de dados</td><td><span class="tag t-bad">gap</span></td><td>—</td></tr>
@@ -1482,12 +1482,12 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-top"><span class="wf-dot"></span><span class="wf-dot"></span><span class="wf-url">niso.ness.io/</span></div>
 <div style="display:flex;align-items:center;gap:16px;height:48px;box-sizing:border-box;padding:0 16px;border-bottom:1px solid var(--color-divider)">
 <span style="font:500 15px var(--font-heading);letter-spacing:-.01em">n<span style="color:#00ade8">.</span>iso</span>
-<span class="chip on">cliente ▾</span>
+<span class="chip on">Acme ▾</span>
 <span style="flex:1;display:flex;align-items:center;gap:6px;height:22px;border:1px solid var(--color-neutral-400);padding:0 8px;font:400 9.5px/22px var(--font-body);color:var(--color-neutral-500)">Ir para, buscar ou executar… <b style="margin-left:auto;font:400 8px ui-monospace,monospace">⌘K</b></span>
 <span class="wf-ic" style="width:13px;height:13px"></span><span class="wf-user" style="border:0;padding:0"><b>RE</b><span>R. Esper<em>admin · ness.</em></span></span>
 </div>
 <div class="wf-body"><div class="wf-main" style="padding:16px 18px;gap:12px">
-<div><h3 class="wf-h" style="font-size:19px">Bom dia, Ricardo</h3><p class="wf-sub">3 coisas travam a certificação da cliente hoje</p></div>
+<div><h3 class="wf-h" style="font-size:19px">Bom dia, Ricardo</h3><p class="wf-sub">3 coisas travam a certificação da Acme hoje</p></div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
 <div class="blueprint" style="padding:9px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><span class="tag t-bad">sem dono</span><div style="font:600 10.5px var(--font-heading);margin-top:5px">A.8.12 DLP</div><div class="wf-sub">atribuir responsável</div></div>
 <div class="blueprint" style="padding:9px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><span class="tag t-info">31 itens</span><div style="font:600 10.5px var(--font-heading);margin-top:5px">Validar evidências</div><div class="wf-sub">fila de aprovação</div></div>
@@ -1510,7 +1510,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-body">
 <div class="wf-side" style="width:158px">
 <div class="wf-brand"><b>n<i>.</i>iso</b><u>«</u></div>
-<div class="wf-proj"><span>cliente<i>▾</i></span><em>27001</em></div>
+<div class="wf-proj"><span>Acme<i>▾</i></span><em>27001</em></div>
 <div class="wf-grp">Bloco 3 · Riscos</div>
 <div class="wf-nav"><span class="wf-ic" style="background:var(--color-accent-500)"></span>12 Inventário de ativos</div>
 <div class="wf-nav"><span class="wf-ic" style="background:var(--color-accent-500)"></span>13 Valoração C-I-D</div>
@@ -1560,7 +1560,7 @@ body{margin:0;background:#f2f2f3;--paper:#fff}
 <div class="wf-kpi"><b>3</b><span>auditorias no mês</span></div>
 </div>
 <table class="wf-tbl"><thead><tr><th>Cliente</th><th style="width:74px">Norma</th><th style="width:74px">Conform.</th><th style="width:52px">Aud.</th></tr></thead><tbody>
-<tr><td>cliente</td><td>27001</td><td>84%</td><td>47d</td></tr>
+<tr><td>Acme</td><td>27001</td><td>84%</td><td>47d</td></tr>
 <tr><td>ness. labs</td><td>27701</td><td>92%</td><td>—</td></tr>
 <tr><td>Forense.io</td><td>27001</td><td>63%</td><td>112d</td></tr>
 </tbody></table>

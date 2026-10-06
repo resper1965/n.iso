@@ -1,7 +1,7 @@
-# nISO — Manifesto do Agente
+# n.iso — Manifesto do Agente
 
 Se voce esta lendo isto, voce e o agente responsavel por continuar o
-desenvolvimento do **nISO** (Agentic GRC System da ness.).
+desenvolvimento do **n.iso** (Agentic GRC System da ness.).
 
 Este arquivo descreve o que **existe hoje**. Historico de sprint vive no
 `CHANGELOG.md` — nao acrescente narrativa de entrega aqui, ela envelhece e
@@ -20,7 +20,7 @@ Entao:
 - **Mergeado** so depois de `git cat-file -e origin/main:<arquivo>` responder.
 - **Aplicado** so depois de `PRAGMA table_info(...)` mostrar a coluna.
 - **Em producao** so depois de uma sonda contra a API viva. Desde o item 0.2 do
-  `enterprise-grade-plan.md`, `/health` distingue versao — ele devolve o SHA do
+  `enterprise-grade-plan.md` (hoje em `docs/arquivo/`), `/health` distingue versao — ele devolve o SHA do
   commit publicado, injetado no deploy:
 
   ```
@@ -58,7 +58,8 @@ E vale para contagem tambem: o PR que introduziu esta regra afirmou "46 tabelas"
 porque `grep -c 'CREATE TABLE'` contou duas linhas de COMENTARIO, e "7 de 23
 testes mockam o D1" porque `grep vi.fn()` casa mock de qualquer coisa. Os
 numeros certos eram 44 e 2 de 22. `grep` conveniente nao e evidencia — confira o
-que o padrao realmente casou antes de escrever o numero.
+que o padrao realmente casou antes de escrever o numero. **Todo numero neste arquivo
+traz ao lado o comando que o mede**; numero sem comando nao entra.
 
 ## Stack
 
@@ -66,10 +67,8 @@ Cloudflare Workers (Hono) + D1 + KV + R2 + Workers AI. Frontend SPA
 Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
-  dominio em `src/routes/*.ts` (auth, users, leads, proposals, assessments,
-  projects, evidence, vendors, training, ropa, audits, capa, certifications,
-  public, ai, governance, auditor, platform, risks, policies, integrations,
-  pedidos, public-pedidos).
+  dominio: **41 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
+  2026-10-06). A lista nominal envelhecia a cada PR; leia o diretorio.
 - **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
   (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
   Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
@@ -88,13 +87,18 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   proprio statement (a unica excecao e `UPDATE pedidos SET org_id = ?`), sem
   DELETE nem REPLACE; `test/pedidos-prova.test.ts` le o fonte e reprova o que
   fugir disso. Correcao e pedido novo.
+- **URL canonica**: `src/config/url.ts` (`appUrl(env)`, var `APP_URL`). Link de e-mail, callback
+  de SSO, base do SCIM, CORS e recurso do MCP saem dali, nunca do host da requisicao. Os hosts
+  legados (`n-iso.ness.com.br`, `niso.ness.workers.dev`) respondem 308 para ele (#290).
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services**: `pricing.ts`, `soa-logic.ts`
-  (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
-  `policy-generator.ts`, `project-setup.ts`.
-- **Agents**: `src/agents/` — PolicyAgent, EvidenceAgent, AssessmentAgent.
+- **Services** (`src/services/`, 18 arquivos: `ls src/services/*.ts | wc -l`): entre eles
+  `soa-logic.ts` (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
+  `policy-generator.ts`, `pedidos.ts`, `organizacao.ts`, `fechar-venda.ts`,
+  `preco-proposta.ts`, `transferencia-projeto.ts`, `totp.ts`, `data-subject.ts`.
+- **Agents** (`src/agents/`): policy, evidence, assessment, control-adequacao,
+  phase-interpretation, readiness (`ls src/agents`).
 - **Frontend**: `frontend/src/` → `frontend/dist`, servido pelo binding ASSETS.
   - `frontend/login.html` — o app de verdade (login + SPA), entrada do Vite
     (`vite.config.js: rollupOptions.input`), com `src/main.js`, `router.js`,
@@ -119,13 +123,13 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     Ciência de Políticas", não o do app.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **58 tabelas** (medido em 2026-10-05: o `schema.sql` aplicado num
-  SQLite em memoria, `SELECT count(*) FROM sqlite_master WHERE type='table'`; as linhas que comecam
-  por `CREATE TABLE` sao 58 nomes distintos). Migrations numeradas em
-  `migrations/`, ultima a **0043**. O estado real de producao e o historico da
-  reconciliacao de 2026-08 estao em `migrations/README.md` — leia antes de
-  tocar em migration.
-- **Bindings**: DB (D1), SESSIONS (KV), STORAGE (R2), AI, ASSETS.
+- **Schema**: `schema.sql` — **58 tabelas** (2026-10-06: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
+  em 2026-10-05 o mesmo 58 saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
+  numeradas em `migrations/`, ultima a **0043** (`ls migrations/*.sql | tail -1`). Procedimento
+  de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
+  `migrations/README.md` — leia antes de tocar em migration.
+- **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
+  STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
 - **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
@@ -143,8 +147,8 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. KV
   `OAUTH_KV` (id `fc8dfff4…`) e `staging-OAUTH_KV` (id `9d9d24c0…`) criados em
   2026-09-29 e declarados no `wrangler.jsonc`. Recurso fixo em
-  `niso.ness.com.br`; verificacao nos quatro clientes (Claude Code, Cursor,
-  Codex, Antigravity) ainda pendente ate o deploy.
+  `niso.ness.com.br`. Clientes: Claude Code verificado em producao (30/09/2026); Cursor,
+  Codex e Antigravity seguem "A confirmar" na tela Conectar agente (ver CHANGELOG).
 
 ## Decisoes de produto ja tomadas — nao reabrir
 
@@ -184,29 +188,32 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **569 `any` em `src/`** (medido em 2026-10-06, fora `*.test.ts`:
-  `git grep -ahoE ': any|as any|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
+- **558 `any` em `src/`** (medido em 2026-10-06, fora `*.test.ts`:
+  `git grep -ahoE ': any\b|as any\b|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
   `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
-  `git grep` sem ele conta 1 linha no lugar de 8). `test/any-catraca.test.ts` reprova se o numero subir — e
+  `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **0 de 144 arquivos de teste mockam o D1 inteiro** (medido em 2026-10-06; os
-  ultimos, `integration`, `mcp-integration` e `services-rag`, migraram no T2).
-  Todos os que tocam banco usam o D1 real do `cloudflare:test`. Sobram dubles
-  PONTUAIS de proposito: falha injetada (`helpers.test.ts`), linha legada que o
-  schema atual nao aceita (`api.test.ts`) e Proxy sobre o D1 real para simular
-  corrida (`pedidos-corrida`, `revisao-final-decididos`). Medicao:
+- **Nenhum dos 153 arquivos de teste do backend mocka o D1 inteiro** (2026-10-06;
+  `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
+  `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
+  (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
+  nao aceita (`api.test.ts`) e Proxy sobre o D1 real para simular erro ou corrida
+  (`erro-sem-vazamento`, `pedidos-corrida`, `revisao-final-decididos`). Medicao:
   `git grep -nE "prepare\s*[:(]\s*(vi\.fn|\(|async)|\bDB\s*:" -- test` e conferir
   cada ocorrencia. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com pouco teste.** `frontend/test/` tem 19 arquivos (jsdom) e
-  `test/e2e/` cobre so o fluxo de MFA, fora do `npm test`, com servidor e
-  navegador. A maior parte das telas nao tem cobertura.
-- **36 leituras de corpo (`c.req.json`) sem schema semantico em 12 arquivos**
-  (medido em 2026-10-01; mais em `policies` 7, `assessments` 6, `governance` 6,
-  `projects` 4). O `bodyGuard` global cobre teto de
-  tamanho e poluicao de prototipo, mas nao valida o formato de cada rota.
+- **Frontend com pouco teste por linha.** ~14,8 mil linhas de JS
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 46 arquivos de teste em jsdom
+  (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
+  que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
+  tem teste proprio.
+- **6 leituras de corpo cruas em 4 arquivos** (2026-10-06: `git grep -n "c\.req\.json" -- 'src/routes/*.ts'`
+  da 7 linhas; `policies.ts` passa o corpo por `safeParse` e nao conta): `control-adequacao`,
+  `controls` (le so para recusar `maturity`, depois `validateBody`), `phase-questionnaire` e
+  `scim` (3, formato SCIM). Elas validam campo a campo no handler; o `bodyGuard` global cobre
+  teto de tamanho e poluicao de prototipo. O T3 (#259) fechou as demais.
 - ~~**324 handlers `onclick=` inline**~~ **RESOLVIDO.** A migracao para delegacao
   de eventos terminou (PRs #121–#134) e `'unsafe-inline'` saiu de `script-src`
   em `src/index.ts`. Sobra 1 ocorrencia de `onclick=` no frontend. NAO
@@ -214,10 +221,12 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   reabrem o buraco.
 - **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
   em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
-- **`npm audit` nao esta em zero** (2026-09-29): 4 advisories moderados do
-  `undici`, anteriores ao MCP remoto. Em 2026-09 o audit chegou a zero (vitest 4,
-  `hono` 4.13.5), mas deixou de ser verdade sem ninguem reavaliar. Rode
-  `npm audit` antes de repetir qualquer afirmacao sobre ele.
+- **`npm audit` nao esta em zero na raiz** (2026-10-06, `npm audit` em cada pacote): raiz com 4
+  (3 moderadas, **1 alta**), todas do `undici` puxado por `miniflare`/`wrangler`/
+  `@cloudflare/vitest-pool-workers` (cadeia de teste e build, nao do Worker publicado); a
+  correcao sugerida rebaixa o pool de testes (breaking). `frontend` e `mcp-server-niso`: 0. O
+  job `audit` do CI e informativo (`continue-on-error`). Rode `npm audit` antes de repetir
+  qualquer afirmacao sobre ele.
 
 ## Segundo fator (MFA) — e como destravar alguem
 
@@ -246,7 +255,7 @@ errar um digito destruia a sessao.
 ## Regras da ness.
 
 - Marca: ness. (sempre minusculo, com ponto).
-- Layout: Enterprise Grade, header 56px com backdrop-filter.
+- Layout: Enterprise Grade, header de 64px (`--hdr-h` em `frontend/src/style.css`), sem blur.
 - **Fonte única dos tokens: `frontend/src/style.css` (`:root`).** Não repita
   valores aqui — a cópia anterior (#070b14, "proibido peso 600") envelheceu e
   a landing antiga seguiu a cópia, não o app. Hoje: `--bg #0b1326`,
@@ -260,23 +269,25 @@ errar um digito destruia a sessao.
 
 ## Documentos que valem a leitura
 
-- `docs/plano-2026-10-fechamento.md` — o que esta aberto, de quem e a ordem
-
+- `docs/README.md` — indice da documentacao; `docs/arquivo/` guarda o que ja foi executado
+- `docs/plano-2026-10-fechamento.md` — estado de cada item do plano de outubro (quase todo entregue)
+- `docs/superpowers/plans/2026-10-05-plano-mestre-execucao.md` — o plano mestre e o estado de hoje
 - `CONTRIBUTING.md` — verificacao antes do PR, regras de schema e de teste
 - `SECURITY.md` — invariantes de seguranca que nao podem regredir
 - `backups/README.md` — runbook de backup e restauracao
 - `migrations/README.md` — estado real das migrations em producao e como
   reconciliar quando a `d1_migrations` divergir do banco
-- `test/e2e/README.md` — como rodar os testes de navegador
-- `CONSTITUTION.md`, `design.md`, `specs/` — Spec Kit
+- `test/e2e/README.md` — o E2E legado de MFA (o E2E principal e `frontend/e2e/`)
+- `CONSTITUTION.md`, `design.md` — principios e identidade visual
 
 <!-- SPECKIT START -->
 ## Contexto Spec Kit
 Este projeto utiliza o GitHub Spec Kit para desenvolvimento orientado a
 especificacoes.
-- Constituicao: CONSTITUTION.md
+- Constituicao: CONSTITUTION.md (a unica; `.specify/memory/constitution.md` foi removida)
 - Design: design.md
-- Especificacoes: Localizadas em specs/
+- Especificacoes e planos: `docs/superpowers/specs/` e `docs/superpowers/plans/`; os ja
+  executados e as specs iniciais do Spec Kit estao em `docs/arquivo/`
 <!-- SPECKIT END -->
 
 ## Skills instaladas
@@ -339,31 +350,30 @@ base so nessas skills sem conferir contra a norma publicada.
 
 ## Portões de revisão — o que existe e o que não existe
 
-O repositório ficou **privado** em 2026-08-03. Consequências que não são óbvias
-e que já custaram uma execução de CI falhando em silêncio:
+O repositório está **público** (`gh api repos/resper1965/n.iso --jq .visibility`, 2026-10-06).
+O dono pretende torná-lo privado ao fim da arrumação final; quando isso acontecer, reveja esta
+seção: em repositório privado o code scanning exige GitHub Advanced Security, e o CodeQL
+passaria a falhar no upload (já aconteceu em 2026-08, quando o repo foi privado pela primeira vez).
 
-- **CodeQL foi removido.** `.github/workflows/codeql.yml` passou a falhar com
-  `Code scanning is not enabled for this repository` — em repositório privado,
-  code scanning exige GitHub Advanced Security (pago). O job continuava rodando
-  ~4 min por execução e falhava no upload. Se o repo voltar a ser público, ou se
-  houver GHAS, o arquivo está no histórico do git.
-- **CodeRabbit caiu para o plano Free**, que só gera resumo — sem revisão linha
-  a linha. Não existe plano gratuito para repositório privado.
-- **Codex continua funcionando**, atrelado à assinatura e não à visibilidade do
-  repo. Hoje é o único revisor automático que lê o diff de verdade.
+- **CodeQL roda** (`.github/workflows/codeql.yml`; última execução com sucesso em 2026-10-06:
+  `gh api "repos/resper1965/n.iso/actions/workflows/codeql.yml/runs?per_page=1"`).
+- **Codex** revisa o diff, atrelado à assinatura e não à visibilidade do repo.
 
 ### Protecao da `main` e deploy — ja configurados
 
-- **Ruleset "main protegida"**: exige PR, exige o check `test`, exige branch
-  atualizado com a base, bloqueia delecao e force-push. `bypass_actors` vazio —
-  em rulesets, admin do repo **nao** tem bypass automatico.
-- **Exija apenas o check `test`.** `CodeQL` foi removido; exigir um check
-  inexistente trava todo merge para sempre.
+- **Ruleset "main protegida"**: exige PR, exige os checks **`test` e `e2e`**
+  (`gh api repos/resper1965/n.iso/rulesets/20312002`), exige branch atualizado com a base,
+  bloqueia delecao e force-push. `bypass_actors` vazio — em rulesets, admin do repo **nao**
+  tem bypass automatico.
+- Nao exija check que pode deixar de existir (o `CodeQL`, se o repo ficar privado): um check
+  obrigatorio inexistente trava todo merge para sempre.
 - **Deploy e automatico** desde 2026-08-03: merge na `main` dispara
   `.github/workflows/deploy.yml`, que roda `npm ci`, `tsc --noEmit`, a suite,
   o build do frontend, **recusa se houver migration pendente**, e so entao
   publica. O secret `CLOUDFLARE_API_TOKEN` e **environment secret** de
   `production`, nao repository secret — assim so jobs que declaram
-  `environment: production` o enxergam.
+  `environment: production` o enxergam (conferido em 2026-10-06:
+  `gh api repos/resper1965/n.iso/environments/production/secrets` lista o token e
+  `gh api repos/resper1965/n.iso/actions/secrets` volta vazio).
 - `wrangler secret put` grava no **Worker**, nao no Actions. Sao lugares
   diferentes; o Worker nao precisa do token de deploy e nao deve carrega-lo.

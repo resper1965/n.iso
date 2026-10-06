@@ -1,8 +1,11 @@
 # Staging — o que existe e como usar
 
-> Estado em 2026-09-06: **provisionado e no ar** —
-> `https://niso-staging.ness.workers.dev`. Falta só o portão do CI: uma
-> variável e um environment no GitHub (seção final).
+> Estado: o Worker de staging foi **provisionado** em 2026-09-06 —
+> `https://niso-staging.ness.workers.dev`. O portão do CI **continua faltando**
+> (conferido em 2026-10-06: `gh api repos/resper1965/n.iso/environments` lista só
+> `production`, e `gh api repos/resper1965/n.iso/actions/variables` volta vazio, sem
+> `STAGING_ATIVO`). Enquanto isso, os passos de staging do deploy e do `db-migrate`
+> são pulados e migration vai direto para produção. Ação do dono, na seção final.
 
 ## Para que serve
 
