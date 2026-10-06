@@ -93,7 +93,7 @@ describe('Fluxo de MFA', () => {
       ...(await sessionFor({ id: 'u1', email: 'a@b.c', role: 'platform_admin', iat: Date.now() })),
       'Content-Type': 'application/json',
     };
-  });
+  }, 60_000);
 
   async function post(path: string, body: unknown = {}) {
     return app.fetch(

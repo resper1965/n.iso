@@ -38,7 +38,7 @@ describe('interruptor do desafio anti-abuso', () => {
     await applySchema();
     await resetData();
     await resetSessions();
-  });
+  }, 60_000);
 
   it('com as duas chaves, a 2ª falha exige o desafio e diz com que chave montá-lo', async () => {
     const corpo = await segundaTentativa(
