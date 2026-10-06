@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, workerEnv } from './helpers/d1';
+import { INTERVIEW_TRACKS } from '../src/constants';
 import { MAPA_DA_APP, INSTRUCOES } from '../src/mcp/contexto';
 
 const P = { userId: 'u-cons', email: 'cons@ness.lat', projectId: 'p-a', concessaoId: 'c-1' };
@@ -36,6 +37,19 @@ describe('Resumo das entrevistas e mapa da app', () => {
     expect(r.status, await r.clone().text()).toBe(200);
     const l = await env.DB.prepare(`SELECT answer, gap_detected FROM project_interviews WHERE track = 'pessoas'`).first<any>();
     expect([l.answer, Number(l.gap_detected)]).toEqual(['R3', 1]);
+  });
+
+  // A tela de entrevistas lê `questions`; a rota só devolvia `interviews`, e a tela mostrava
+  // "Sem perguntas" para sempre.
+  it('GET /interviews/:track devolve as perguntas da trilha com a resposta já salva', async () => {
+    await env.DB.prepare(`INSERT INTO project_interviews (id, project_id, track, question, answer, interviewee, gap_detected) VALUES ('i-x','p-a','executiva',?, 'R-x','Ana',1)`)
+      .bind(INTERVIEW_TRACKS.executiva[0].question).run();
+    const r = await comoAgente('/api/v1/projects/p-a/interviews/executiva');
+    const corpo = await r.json<any>();
+    expect(corpo.questions).toHaveLength(INTERVIEW_TRACKS.executiva.length);
+    expect(corpo.questions[0]).toMatchObject({ key: 'exec_vision', answer: 'R-x', interviewee: 'Ana', gap_detected: 1 });
+    expect(corpo.questions[1].answer).toBeUndefined();
+    expect(Array.isArray(corpo.interviews)).toBe(true);
   });
 
   it('o mapa cobre as áreas do consultor e não a comercial', () => {

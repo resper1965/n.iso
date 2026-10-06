@@ -294,8 +294,7 @@ platformApp.get('/marketplace/templates', async (c) => {
     description: `Policy template for ${t.iso_ref} (${t.title})`,
     iso_ref: t.iso_ref,
     difficulty: 'Intermediate',
-    estimated_time: '15 mins',
-    popularity: Math.floor(Math.random() * 50 + 50)
+    estimated_time: '15 mins'
   }));
   return c.json({ ok: true, total: marketplace.length, templates: marketplace });
 });

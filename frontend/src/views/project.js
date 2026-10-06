@@ -787,22 +787,20 @@ const ISO_GUIDELINES = {
         btnEl.textContent = 'Salvando...';
 
         try {
-            // Post each question-answer sequentially
+            // Um envio só, no formato do interviewSchema: { answers: [...] }.
+            const answers = [];
             for (const q of qs) {
                 const answer = document.getElementById('ans-' + q.key).value.trim();
-                const interviewee = document.getElementById('who-' + q.key).value.trim();
-                const gap_detected = document.getElementById('gap-' + q.key).checked ? 1 : 0;
-
-                if (answer) {
-                    await api('POST', `/api/v1/projects/${projectId}/interviews`, {
-                        track,
-                        question: q.question,
-                        answer,
-                        interviewee,
-                        gap_detected
-                    });
-                }
+                if (!answer) continue;
+                answers.push({
+                    track,
+                    question: q.question,
+                    answer,
+                    interviewee: document.getElementById('who-' + q.key).value.trim(),
+                    gap_detected: document.getElementById('gap-' + q.key).checked ? 1 : 0
+                });
             }
+            if (answers.length) await api('POST', `/api/v1/projects/${projectId}/interviews`, { answers });
 
             showToast(`Trilha '${track.toUpperCase()}' salva com sucesso!`);
             
