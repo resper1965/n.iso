@@ -208,6 +208,7 @@ describe('500 correlaciona em vez de vazar', () => {
     const corpo = (await res.json()) as Record<string, unknown>;
     expect(corpo.error).toBe(mensagem);
     expect(corpo.detail).toBeUndefined();
+    expect(corpo.details).toBeUndefined();
     expect(JSON.stringify(corpo)).not.toMatch(new RegExp(`${PROVEDOR}|ai-gateway|workers-ai`));
     expect(typeof corpo.request_id).toBe('string');
   }
@@ -228,6 +229,24 @@ describe('500 correlaciona em vez de vazar', () => {
       method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_id: 'A.5.1' }),
     }), envSemIa());
     await exigeSemProvedor(res, 'Falha ao gerar política');
+  });
+
+  it('ai: diagnóstico executivo com IA indisponível não devolve o texto do provedor', async () => {
+    await env.DB.prepare(`INSERT INTO project_interviews (id, project_id, track, question, answer) VALUES (?,?,?,?,?)`)
+      .bind('int-vaz', PROJ, 'governanca', 'Há política?', 'Sim').run();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/assessment/evaluate`, {
+      method: 'POST', headers: admin,
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Falha no processamento agêntico do diagnóstico');
+  });
+
+  it('ai: chat com IA indisponível não devolve a exceção', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/chat`, {
+      method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'oi' }),
+    }), envSemIa());
+    await exigeSemProvedor(res, 'Erro ao comunicar com a IA');
   });
 
   it('webhooks: teste que falha devolve 502 sem a mensagem da exceção', async () => {
