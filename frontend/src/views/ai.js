@@ -33,7 +33,7 @@ import { navigate, render } from '../router.js';
                                 <div class="item-name">${escapeHTML(m.title || item.id)}</div>
                                 <div class="item-meta">${escapeHTML(m.type || 'Documento')} | ${escapeHTML(m.summary || 'Sem resumo disponível')}</div>
                                 <div style="margin-top:0.5rem;display:flex;gap:0.35rem">
-                                    ${(m.controls || []).map(ctrl => `<span class="ctx-tag">${ctrl}</span>`).join('')}
+                                    ${(m.controls || []).map(ctrl => `<span class="ctx-tag">${escapeHTML(ctrl)}</span>`).join('')}
                                 </div>
                             </div>
                             <button class="btn btn-ghost" data-action="viewKnowledge" data-args='["${item.id}","${proj.id}"]'>Ver</button>

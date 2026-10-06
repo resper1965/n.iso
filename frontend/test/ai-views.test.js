@@ -93,7 +93,7 @@ describe('renderKnowledge', () => {
   });
 
   // BUG (ai.js:36): `${ctrl}` das tags de controle sem escapeHTML.
-  it.fails('tags de controles são escapadas (ai.js:36)', async () => {
+  it('tags de controles são escapadas (ai.js:36)', async () => {
     S.activeProject = { id: 'p1' };
     apiMock.mockResolvedValue([{ id: 'k1', metadata: { controls: ['<i id="ctl">A.5</i>'] } }]);
     const [c, h, a] = dom();
