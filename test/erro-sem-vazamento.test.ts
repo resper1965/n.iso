@@ -138,4 +138,58 @@ describe('500 correlaciona em vez de vazar', () => {
     const corpo = (await res.json()) as { error: string };
     expect(corpo.error).toMatch(/^Forbidden/);
   });
+
+  // evidence.ts e ropa.ts ainda devolviam `detail: e.message` — achado quando um
+  // mock de D1 virou D1 real e o 500 passou a trazer `D1_ERROR: FOREIGN KEY ...`.
+  // Os dois erros abaixo também são reais: FK violada no próprio SQLite.
+  const VAZAMENTO_FK = /FOREIGN KEY|constraint|SQLITE|D1_ERROR|INSERT INTO|DELETE FROM/i;
+
+  async function exigeSemVazamento(res: Response, mensagem: string) {
+    expect(res.status).toBe(500);
+    const corpo = (await res.json()) as Record<string, unknown>;
+    expect(corpo.error).toBe(mensagem);
+    expect(corpo.detail).toBeUndefined();
+    expect(JSON.stringify(corpo)).not.toMatch(VAZAMENTO_FK);
+    expect(typeof corpo.request_id).toBe('string');
+    expect((corpo.request_id as string).length).toBeGreaterThan(0);
+  }
+
+  it('evidence: excluir evidência referenciada pelo checklist vira 500 sem texto do D1', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, uploaded_by) VALUES (?,?,?,?,?,?)`)
+        .bind('ev-vaz', PROJ, 'a.pdf', 'evidence/proj-vaz/ev-vaz-a.pdf', 'h', 'vaz@ness.io'),
+      env.DB.prepare(`INSERT INTO checklist_progress (project_id, phase_number, item_id, evidence_id) VALUES (?,?,?,?)`)
+        .bind(PROJ, 1, 'item-vaz', 'ev-vaz'),
+    ]);
+    const res = await req('/api/v1/evidence/ev-vaz', { method: 'DELETE', headers: admin });
+    await exigeSemVazamento(res, 'Erro ao excluir evidência');
+  });
+
+  it('ropa: criar ROPA em projeto inexistente vira 500 sem texto do D1', async () => {
+    const res = await req('/api/v1/projects/proj-vaz-inexistente/ropa', {
+      method: 'POST',
+      headers: { ...admin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ processing_purpose: 'Folha', legal_basis: 'Contrato' }),
+    });
+    await exigeSemVazamento(res, 'Falha ao criar ROPA');
+  });
+});
+
+/**
+ * Catraca: nenhum handler em src/routes volta a devolver a mensagem crua da
+ * exceção em `detail`. O caminho certo é `erro500(c, mensagem, e)`.
+ * `?raw` inlina o fonte em tempo de build (mesmo método de any-catraca.test.ts).
+ */
+const ROTAS = import.meta.glob('../src/routes/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
+describe('catraca: detail com e.message em src/routes', () => {
+  it('o leitor enxerga as rotas', () => {
+    expect(Object.keys(ROTAS).length).toBeGreaterThan(10);
+  });
+
+  it('nenhuma rota devolve detail: <erro>.message', () => {
+    const achados = Object.entries(ROTAS).flatMap(([arq, txt]) =>
+      txt.split('\n').flatMap((l, i) => (/detail:\s*\w+\??\.message/.test(l) ? [`${arq}:${i + 1}`] : [])));
+    expect(achados, `Use erro500(c, mensagem, e) em vez de detail: e.message: ${achados.join(', ')}`).toEqual([]);
+  });
 });

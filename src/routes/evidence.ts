@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, ForbiddenError } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500 } from '../helpers';
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
@@ -20,8 +20,7 @@ evidenceApp.get('/:id/detail', async (c) => {
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
     return c.json(evidence);
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao buscar detalhe da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar detalhe da evidência', e);
   }
 });
 
@@ -41,8 +40,7 @@ async function downloadEvidence(c: any, id: string) {
 
     return new Response(obj.body, { headers });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao baixar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao baixar evidência', e);
   }
 }
 
@@ -62,8 +60,7 @@ evidenceApp.get('/:id/content', async (c) => {
     const content = await obj.text();
     return c.json({ ok: true, file_name: ev.file_name, content });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao buscar conteúdo da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao buscar conteúdo da evidência', e);
   }
 });
 
@@ -97,8 +94,7 @@ evidenceApp.put('/:id/content', async (c) => {
     await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system', `Conteúdo da evidência ${id} atualizado.`);
     return c.json({ ok: true, sha256: realSha256 });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao atualizar conteúdo da evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao atualizar conteúdo da evidência', e);
   }
 });
 
@@ -117,8 +113,7 @@ evidenceApp.delete('/:id', async (c) => {
     await logAudit(c.env.DB, 'evidence.deleted', c.get('user')?.email ?? 'system', `Evidência ${ev.file_name} excluída permanentemente.`, '', '', ev.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Erro ao excluir evidência', detail: e.message }, 500);
+    return erro500(c, 'Erro ao excluir evidência', e);
   }
 });
 
@@ -159,8 +154,7 @@ evidenceApp.put('/:id', async (c) => {
     }
     return c.json({ ok: true, control_id: novoControle, relinked: mudou });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Erro ao re-associar evidência', detail: e.message }, 500);
+    return erro500(c, 'Erro ao re-associar evidência', e);
   }
 });
 
@@ -216,8 +210,7 @@ evidenceApp.post('/:id/evaluate', async (c) => {
       metadata: result.metadata
     });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao avaliar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao avaliar evidência', e);
   }
 });
 
@@ -291,8 +284,7 @@ async function handleApprove(c: any) {
 
     return c.json({ ok: true, role: targetRole, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
-    if (e instanceof ForbiddenError) return c.json({ error: e.message }, 403);
-    return c.json({ error: 'Falha ao assinar evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha ao assinar evidência', e);
   }
 }
 
@@ -348,6 +340,6 @@ projectEvidenceApp.post('/upload', async (c) => {
 
     return c.json({ ok: true, id, sha256: realSha256 }, 201);
   } catch (e: any) {
-    return c.json({ error: 'Falha no upload de evidência', detail: e.message }, 500);
+    return erro500(c, 'Falha no upload de evidência', e);
   }
 });
