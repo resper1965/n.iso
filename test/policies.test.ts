@@ -163,6 +163,26 @@ describe('Edição manual de política (D1 real)', () => {
     const body = await res.json() as any;
     expect(body.error).toMatch(/text é obrigatório/);
   });
+
+  it('restaurar versão grava o texto antigo e zera as duas aprovações', async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE compliance_controls SET ciso_approved_by = 'Ana', ciso_approved_at = '2026-10-07', ciso_approved_ip = '1.1.1.1', ciso_approved_ua = 'ua',
+           ceo_approved_by = 'Dir', ceo_approved_at = '2026-10-07', ceo_approved_ip = '2.2.2.2', ceo_approved_ua = 'ua' WHERE id = ?`
+      ).bind(CONTROL_ID),
+      env.DB.prepare(`INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES ('ver-1', ?, ?, 1, 'Texto da versão 1', 'x@y.com')`)
+        .bind(PROJ, CONTROL_ID),
+    ]);
+
+    const res = await req(`/api/v1/projects/${PROJ}/controls/${CONTROL_ID}/restore-version`, { method: 'POST', body: JSON.stringify({ version_id: 'ver-1' }) }, headers);
+    expect(res.status, await res.clone().text()).toBe(200);
+
+    const ctrl = await env.DB.prepare('SELECT * FROM compliance_controls WHERE id = ?').bind(CONTROL_ID).first<any>();
+    expect(ctrl.description).toBe('Texto da versão 1');
+    for (const col of ['ciso_approved_by', 'ciso_approved_at', 'ciso_approved_ip', 'ciso_approved_ua', 'ceo_approved_by', 'ceo_approved_at', 'ceo_approved_ip', 'ceo_approved_ua']) {
+      expect(ctrl[col], col).toBeNull();
+    }
+  });
 });
 
 describe('GET da política e do relatório: o controle em qualquer formato de id (D1 real)', () => {

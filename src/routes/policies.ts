@@ -6,6 +6,7 @@ import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha25
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 import { conferirPedidosDoDocumento } from './pedidos';
+import { COLUNAS_REVOGACAO } from './controls';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -513,9 +514,9 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version',
 
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
 
-  // Update compliance_controls description
+  // Texto restaurado é texto diferente do assinado: zera as duas aprovações, como a edição e a geração.
   await c.env.DB.prepare(
-    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+    `UPDATE compliance_controls SET description = ?, ${COLUNAS_REVOGACAO.ciso}, ${COLUNAS_REVOGACAO.ceo}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
   ).bind(row.policy_text, controlId, projectId).run();
   await conferirPedidosDoDocumento(c, 'politica', controlId, projectId);
 
