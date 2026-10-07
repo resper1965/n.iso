@@ -28,6 +28,13 @@ const ACEITA_DE = { link: ['enviada', 'visualizada'], manual: ['gerada', 'enviad
 const ABERTAS = ['rascunho', 'gerada', 'enviada', 'visualizada', 'aguardando_aprovacao'];
 /** Ator da trilha do aceite pelo link: o e-mail é digitado pelo cliente, não é identidade. */
 export const ATOR_LINK = 'cliente (link)';
+/**
+ * Cargo do contato do aceite na matriz de governança. Fixo de propósito: autoridadeDeAssinatura
+ * decide pelo job_title ('ceo', 'diret', 'execut', 'sgsi', 'dpo', 'ciso'), e o cargo DIGITADO pelo
+ * cliente ("Diretora") daria assinatura sem ninguém decidir. Promover a Direção ou Líder SGSI é ato
+ * do consultor na tela de governança. O cargo digitado fica em propostas.aceite_cargo.
+ */
+export const CARGO_CONTATO_ACEITE = 'Contato do cliente (aceite da proposta)';
 
 const NAO_ACHADA: ResultadoFechamento = { ok: false, motivo: 'nao_encontrada', mensagem: 'Proposta não encontrada' };
 const JA_FECHADA: ResultadoFechamento = { ok: false, motivo: 'ja_fechada', mensagem: 'A proposta já foi aceita' };
@@ -134,6 +141,17 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
           AND NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`)
         .bind(projetoId, consultorEmail, consultorEmail, consultorEmail, projetoId, projetoId, consultorEmail));
       trilha.push(['governance.created', `Consultor ${consultorEmail} designado no projeto ${projetoId} pelo aceite da proposta ${p.id}`, projetoId]);
+    }
+
+    // Contato de quem aceitou, depois do consultor. Projeto novo: o único e-mail que pode já estar lá é o do consultor,
+    // e só nesse caso o INSERT é pulado, e a trilha também (ela registra o que foi gravado).
+    const contatoEmail = e.aceite.email;
+    stmts.push(db.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title)
+      SELECT ?, ?, ?, 'executivo', ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?)
+        AND NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?))`)
+      .bind(projetoId, linha(e.aceite.nome, 120), contatoEmail, CARGO_CONTATO_ACEITE, projetoId, projetoId, contatoEmail));
+    if (contatoEmail.toLowerCase() !== consultorEmail?.toLowerCase()) {
+      trilha.push(['governance.created', `Contato do aceite ${linha(e.aceite.nome)} registrado sem autoridade de assinatura no projeto ${projetoId} pelo aceite da proposta ${p.id}`, projetoId]);
     }
   }
 

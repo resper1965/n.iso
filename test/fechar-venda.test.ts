@@ -3,9 +3,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { applySchema } from './helpers/d1';
-import { fecharVenda, type EntradaFechamento } from '../src/services/fechar-venda';
+import { fecharVenda, CARGO_CONTATO_ACEITE, type EntradaFechamento } from '../src/services/fechar-venda';
 import { PHASE_TITLES } from '../src/constants';
-import { idDoControle } from '../src/helpers';
+import { idDoControle, autoridadeDeAssinatura, recusaDeAssinatura } from '../src/helpers';
 
 const db = () => env.DB as D1Database;
 
@@ -100,7 +100,7 @@ describe('fecharVenda', () => {
     const notas = await db().prepare(`SELECT user_id FROM notifications WHERE target_id = ? ORDER BY user_id`).bind(id).all<any>();
     expect(notas.results.map((n: any) => n.user_id)).toEqual(['u-com', 'u-cons']);
     const trilha = await db().prepare(`SELECT action FROM audit_logs WHERE details LIKE ? ORDER BY action`).bind(`%${id}%`).all<any>();
-    expect(trilha.results.map((t: any) => t.action)).toEqual(['contrato.criado', 'governance.created', 'project.created', 'proposta.aceita']);
+    expect(trilha.results.map((t: any) => t.action)).toEqual(['contrato.criado', 'governance.created', 'governance.created', 'project.created', 'proposta.aceita']);
   });
 
   it('só recorrente: contrato registra a mensalidade, sem projeto', async () => {
@@ -222,8 +222,8 @@ describe('fecharVenda', () => {
     const ra = await fecharVenda(db(), entrada(a.id, { origem: 'manual', atorEmail: 'cons2@ness.lat' }));
     const rb = await fecharVenda(db(), entrada((await proposta({ consultor: null })).id, { origem: 'manual', atorEmail: 'com@ness.lat' }));
     if (!ra.ok || !rb.ok) throw new Error('fechamento falhou');
-    expect((await db().prepare(`SELECT email FROM project_governance WHERE project_id = ?`).bind(ra.projetoId).all<any>()).results).toEqual([{ email: 'cons2@ness.lat' }]);
-    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, rb.projetoId)).toBe(0);
+    expect((await db().prepare(`SELECT email FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`).bind(ra.projetoId).all<any>()).results).toEqual([{ email: 'cons2@ness.lat' }]);
+    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`, rb.projetoId)).toBe(0);
   });
 
   // ——— revisão final da fatia 4 ———
@@ -284,7 +284,7 @@ describe('fecharVenda', () => {
     for (const p of [a, b]) {
       const r = await fecharVenda(db(), entrada(p.id));
       if (!r.ok) throw new Error('fechamento falhou');
-      expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, r.projetoId)).toBe(0);
+      expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`, r.projetoId)).toBe(0);
     }
   });
   // ——— P3: projeto nasce completo ———
@@ -352,5 +352,39 @@ describe('fecharVenda', () => {
     const nome = async (pid: string | null) => (await db().prepare('SELECT project_name FROM projects WHERE id = ?').bind(pid).first<any>()).project_name;
     expect(await nome(a.projetoId)).toBe('Cliente Ltda. — ISO/IEC 27001:2022 + 27701:2025');
     expect(await nome(b.projetoId)).toBe('Cliente Ltda. — Implementação ISO 27001');
+  });
+
+  it('contato do aceite entra na governança como executivo, sem autoridade de assinatura (cargo digitado não conta)', async () => {
+    for (const cargo of ['CEO', 'Diretora Executiva', 'CISO', 'DPO e Líder SGSI']) {
+      const { id } = await proposta();
+      const r = await fecharVenda(db(), entrada(id, { aceite: { nome: 'Maria\nCliente', cargo, email: 'Maria@Cliente.com', ip: '1.1.1.1' } }));
+      if (!r.ok) throw new Error('fechamento falhou');
+      const gov = await db().prepare(`SELECT name, email, role_category, job_title FROM project_governance WHERE project_id = ? AND role_category <> 'consultor'`)
+        .bind(r.projetoId).all<any>();
+      expect(gov.results, cargo).toEqual([{ name: 'Maria Cliente', email: 'Maria@Cliente.com', role_category: 'executivo', job_title: CARGO_CONTATO_ACEITE }]);
+      const a = await autoridadeDeAssinatura(db(), r.projetoId!, { email: 'maria@cliente.com', role: 'org_admin' });
+      expect(a.designado).toBe(true);
+      expect(recusaDeAssinatura(a, 'ceo'), cargo).not.toBeNull();
+      expect(recusaDeAssinatura(a, 'ciso'), cargo).not.toBeNull();
+    }
+  });
+
+  it('e-mail do aceite igual ao do consultor: só a linha do consultor, e sem trilha do contato', async () => {
+    const { id } = await proposta();
+    const r = await fecharVenda(db(), entrada(id, { aceite: { nome: 'Ana', cargo: 'CEO', email: 'CONS@ness.lat', ip: '' } }));
+    if (!r.ok) throw new Error('fechamento falhou');
+    const gov = await db().prepare('SELECT email, role_category FROM project_governance WHERE project_id = ?').bind(r.projetoId).all<any>();
+    expect(gov.results).toEqual([{ email: 'cons@ness.lat', role_category: 'consultor' }]);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND details LIKE 'Contato do aceite%' AND project_id = ?`, r.projetoId)).toBe(0);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND project_id = ?`, r.projetoId)).toBe(1);
+  });
+
+  it('re-aceite não duplica o contato', async () => {
+    const { id } = await proposta();
+    const r = await fecharVenda(db(), entrada(id));
+    if (!r.ok) throw new Error('fechamento falhou');
+    await fecharVenda(db(), entrada(id, { origem: 'manual', atorEmail: 'com@ness.lat' }));
+    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'executivo'`, r.projetoId)).toBe(1);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND details LIKE 'Contato do aceite%' AND project_id = ?`, r.projetoId)).toBe(1);
   });
 });
