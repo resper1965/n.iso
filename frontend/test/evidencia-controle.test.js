@@ -60,4 +60,35 @@ describe('Central de Evidências', () => {
             [expect.stringContaining('/api/v1/evidence/ev-2'), { control_id: null }],
         ]);
     });
+
+    it('troca de controle redesenha a lista; rótulos do Líder SGSI', async () => {
+        document.body.innerHTML = '<div id="main-content"></div><div id="header-title"></div><div id="header-actions"></div>';
+        S.view = 'evidence';
+        await window.vincularEvidenciaControle('ev-1', 'ctl-1');
+        const c = document.getElementById('main-content');
+        expect(c.querySelectorAll('select[data-action-change="vincularEvidenciaControle"]')).toHaveLength(2);
+        expect(c.textContent).toContain('Revisar (Líder SGSI)');
+        expect(c.textContent).toContain('Revisadas (Líder SGSI)');
+        expect(c.textContent).not.toContain('DPO');
+        S.view = undefined;
+    });
+
+    it('upload do modal usa {ok,id,sha256} e o nome do arquivo escolhido, e relista', async () => {
+        document.body.innerHTML = '<div id="main-content"></div><div id="header-title"></div><div id="header-actions"></div>'
+            + '<input type="file" id="ev-file"><input id="ev-control-id"><div id="ev-msg"></div><button id="btn-ev-upload"></button>';
+        S.view = 'evidence';
+        const sha = 'ab'.repeat(32);
+        const f2 = servir({
+            'POST /api/v1/projects/p1/evidence/upload': { ok: true, id: 'ev-9', sha256: sha },
+            'GET /api/v1/projects/p1/evidence': { ok: true, evidence: EVIDENCIAS },
+            'GET /api/v1/projects/p1/controls': { ok: true, controls: CONTROLES },
+        });
+        const input = document.getElementById('ev-file');
+        Object.defineProperty(input, 'files', { value: [new File(['x'], 'laudo.pdf')], configurable: true });
+        await window.doEvidenceUpload('p1');
+        expect(document.getElementById('ev-msg').textContent).toBe(`Evidencia enviada: laudo.pdf (SHA-256: ${sha.substring(0, 16)}...)`);
+        expect(f2.mock.calls.some(([u, o]) => (o?.method || 'GET') === 'GET' && String(u).endsWith('/evidence'))).toBe(true);
+        expect(document.getElementById('main-content').querySelectorAll('select').length).toBe(2);
+        S.view = undefined;
+    });
 });

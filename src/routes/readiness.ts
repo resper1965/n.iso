@@ -87,16 +87,16 @@ readinessApp.get('/', async (c) => {
       });
     }
 
-    // R4 (ALTO): evidência REJEITADA na avaliação — não sustenta o controle.
+    // R4 (ALTO): evidência NÃO CONFORME na avaliação — não sustenta o controle.
     const evidRejeitada = await c.env.DB.prepare(
       `SELECT e.id, e.file_name, e.control_id FROM evidence e
-       WHERE e.project_id = ? AND e.evaluation_status = 'rejected'`
+       WHERE e.project_id = ? AND e.evaluation_status = 'non_conforming'`
     ).bind(projectId).all();
     for (const r of (evidRejeitada.results ?? []) as any[]) {
       achados.push({
         categoria: 'evidencia_faltante', severidade: 'alto',
         requisito: 'Evidência válida', referencia: r.control_id || r.id,
-        descricao: `Evidência "${r.file_name}" foi rejeitada na avaliação — o controle segue sem lastro válido.`,
+        descricao: `Evidência "${r.file_name}" foi avaliada como não conforme — o controle segue sem lastro válido.`,
       });
     }
 

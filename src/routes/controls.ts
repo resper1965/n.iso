@@ -253,6 +253,7 @@ controlsApp.put('/:id/status', async (c) => {
 const handleControlApprove = async (c: any) => {
   try {
     const controlId = c.req.param('id');
+    // openapi: controlsApp POST /:id/approve
     const v = await validateBody(c, assinaturaSchema);
     if (!v.success) return v.response;
     const { password } = v.data as any;

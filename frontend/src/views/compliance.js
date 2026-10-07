@@ -1461,6 +1461,14 @@ import { navigate } from '../router.js';
         }
     };
 
+    // Redesenha a lista (status e assinaturas mudam com upload e com troca de controle).
+    async function recarregaEvidencias() {
+        const c = document.getElementById('main-content');
+        const h = document.getElementById('header-title');
+        const a = document.getElementById('header-actions');
+        if (c && h && a && S.view === 'evidence') await renderEvidence(c, h, a);
+    }
+
     async function renderEvidence(c, h, a) {
         h.textContent = 'Central de Evidências';
         const proj = S.currentProject || S.activeProject || S.projects[0];
@@ -1487,7 +1495,7 @@ import { navigate } from '../router.js';
 
         const statsHtml = window.renderStatCards([
             { label: 'Total de Evidências', value: totalEvidence, color: 'var(--accent)', subtext: 'Arquivos no repositório R2' },
-            { label: 'Assinadas DPO', value: dpoSignedCount, color: '#34c759', subtext: 'Aprovação técnica' },
+            { label: 'Revisadas (Líder SGSI)', value: dpoSignedCount, color: '#34c759', subtext: 'Aprovação técnica' },
             { label: 'Assinadas CEO', value: ceoSignedCount, color: '#34c759', subtext: 'Aprovação executiva' },
             { label: 'Avaliadas', value: aiEvaluatedCount, color: '#ffcc00', subtext: 'Revisão ou avaliação concluída' }
         ]);
@@ -1495,7 +1503,7 @@ import { navigate } from '../router.js';
         const isOrgUser = S.user && S.user.role === 'org_user';
 
         const tableHtml = window.renderDataTable(
-            ['Arquivo Evidência', 'Controle', 'Tamanho', 'Hash (SHA-256)', 'Assinatura DPO', 'Assinatura CEO', 'Avaliação', 'Ações'],
+            ['Arquivo Evidência', 'Controle', 'Tamanho', 'Hash (SHA-256)', 'Revisão Líder SGSI', 'Assinatura CEO', 'Avaliação', 'Ações'],
             evidence.map(e => {
                 const fileName = e.file_name || e.filename || 'Evidência sem nome';
                 const fileHash = e.file_hash || e.sha256_hash || '';
@@ -1522,7 +1530,7 @@ import { navigate } from '../router.js';
                        </select>`;
 
                 const dpoBtn = (!e.ciso_approved_by && !isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso","${escapeHTML(fileHash)}"]'>Assinar DPO</button>`
+                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso","${escapeHTML(fileHash)}"]'>Revisar (Líder SGSI)</button>`
                     : '';
                 const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
                     ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ceo","${escapeHTML(fileHash)}"]'>Assinar CEO</button>`
@@ -1574,8 +1582,9 @@ import { navigate } from '../router.js';
         const btn = document.getElementById('btn-ev-upload');
         if (!fileInput.files.length) { msg.style.color = 'var(--danger)'; msg.textContent = 'Selecione um arquivo'; return; }
 
+        const arquivo = fileInput.files[0];
         const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+        formData.append('file', arquivo);
         if (controlId) formData.append('control_id', controlId);
 
         btn.disabled = true;
@@ -1590,10 +1599,11 @@ import { navigate } from '../router.js';
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || 'Erro');
             msg.style.color = 'var(--accent)';
-            msg.textContent = `Evidencia enviada: ${data.file_name} (SHA-256: ${data.file_hash.substring(0,16)}...)`;
+            msg.textContent = `Evidencia enviada: ${arquivo.name} (SHA-256: ${data.sha256.substring(0,16)}...)`;
             btn.textContent = 'Enviar outra';
             btn.disabled = false;
             fileInput.value = '';
+            await recarregaEvidencias();
         } catch(e) {
             msg.style.color = 'var(--danger)';
             msg.textContent = `Erro: ${e.message}`;
@@ -2393,6 +2403,7 @@ window.vincularEvidenciaControle = async function(evidenceId, controlId) {
     try {
         await api('PUT', `/api/v1/evidence/${evidenceId}`, { control_id: controlId || null });
         showToast(controlId ? 'Evidência ligada ao controle.' : 'Evidência desligada do controle.');
+        await recarregaEvidencias();
     } catch (e) {
         showToast('Erro ao trocar o controle: ' + e.message, 'error');
     }

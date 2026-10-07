@@ -82,6 +82,7 @@ evidenceApp.put('/:id/content', async (c) => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const realSha256 = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
+    const user = c.get('user');
     await c.env.STORAGE.put(ev.r2_key, arrayBuffer, {
       httpMetadata: { contentType: ev.file_type || 'text/markdown' }
     });
@@ -89,16 +90,15 @@ evidenceApp.put('/:id/content', async (c) => {
     // Conteúdo novo é documento novo: a revisão e as assinaturas eram do texto anterior.
     // Sem isto o cliente (org_user pode editar) reescrevia documento já revisado e ele seguia conforme.
     await c.env.DB.prepare(
-      `UPDATE evidence SET file_size = ?, file_hash = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL,
+      `UPDATE evidence SET file_size = ?, file_hash = ?, uploaded_by = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL,
          ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL,
          ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL,
          updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-    ).bind(arrayBuffer.byteLength, realSha256, id).run();
+    ).bind(arrayBuffer.byteLength, realSha256, user?.email || 'system', id).run();
 
-    const user = c.get('user');
     const assinaram = [ev.ciso_approved_by ? `Líder SGSI (${ev.ciso_approved_by})` : '', ev.ceo_approved_by ? `Direção (${ev.ceo_approved_by})` : ''].filter(Boolean).join(' e ') || 'ninguém';
     await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system',
-      `Conteúdo da evidência ${id} atualizado. Status anterior: ${ev.evaluation_status ?? 'pending'}; assinaturas apagadas de: ${assinaram}; hash ${ev.file_hash ?? '-'} -> ${realSha256}.`, '', '', ev.project_id ?? undefined);
+      `Conteúdo da evidência ${id} atualizado. Status anterior: ${ev.evaluation_status ?? 'pending'}; assinaturas apagadas de: ${assinaram}; autor anterior ${ev.uploaded_by ?? '-'} -> ${user?.email || 'system'}; hash ${ev.file_hash ?? '-'} -> ${realSha256}.`, '', '', ev.project_id ?? undefined);
     return c.json({ ok: true, sha256: realSha256 });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar conteúdo da evidência', e);
@@ -133,7 +133,7 @@ evidenceApp.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
-    const ev = await c.env.DB.prepare('SELECT id, project_id, control_id FROM evidence WHERE id = ?').bind(id).first<any>();
+    const ev = await c.env.DB.prepare('SELECT id, project_id, control_id, ciso_approved_by, ceo_approved_by FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
 
     const v = await validateBody(c, evidenciaVincularSchema);
@@ -153,13 +153,18 @@ evidenceApp.put('/:id', async (c) => {
     }
 
     // Mudar o controle-alvo invalida a avaliação anterior (foi feita contra outro
-    // controle): volta a 'pending'. Sem efeito se o vínculo não mudou.
+    // controle): volta a 'pending' e as assinaturas (revisão contra o outro controle) caem.
+    // Sem efeito se o vínculo não mudou.
     const mudou = novoControle !== (ev.control_id ?? null);
     if (mudou) {
       await c.env.DB.prepare(
-        "UPDATE evidence SET control_id = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL, updated_at = datetime('now') WHERE id = ?"
+        `UPDATE evidence SET control_id = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL,
+           ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL,
+           ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL,
+           updated_at = datetime('now') WHERE id = ?`
       ).bind(novoControle, id).run();
-      await logAudit(c.env.DB, 'evidence.relinked', c.get('user')?.email ?? 'system', `Evidência ${id} re-associada ao controle ${novoControle ?? '(nenhum)'} — avaliação resetada`, '', '', ev.project_id);
+      const assinaram = [ev.ciso_approved_by ? `Líder SGSI (${ev.ciso_approved_by})` : '', ev.ceo_approved_by ? `Direção (${ev.ceo_approved_by})` : ''].filter(Boolean).join(' e ') || 'ninguém';
+      await logAudit(c.env.DB, 'evidence.relinked', c.get('user')?.email ?? 'system', `Evidência ${id} re-associada: controle ${ev.control_id ?? '(nenhum)'} -> ${novoControle ?? '(nenhum)'}; avaliação resetada; assinaturas apagadas de: ${assinaram}.`, '', '', ev.project_id);
     }
     return c.json({ ok: true, control_id: novoControle, relinked: mudou });
   } catch (e: any) {

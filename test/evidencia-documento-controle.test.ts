@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
+import { sha256Hex } from '../src/helpers';
 import { applySchema, sessionFor, workerEnv } from './helpers/d1';
 
 /**
@@ -52,6 +53,14 @@ describe('geração por IA a partir do checklist', () => {
     expect(prog!.evidence_id).toBe(body.evidence_id);
   });
 
+  it('file_hash é o SHA-256 do que está no R2', async () => {
+    const res = await chamar(`/api/v1/projects/${P}/checklist/p15_1/generate`, { method: 'POST', headers: json(consultor) });
+    const { evidence_id } = await res.json<{ evidence_id: string }>();
+    const ev = await evidencia(evidence_id);
+    const obj = await env.STORAGE.get(String(ev!.r2_key));
+    expect(await sha256Hex(await obj!.text())).toBe(ev!.file_hash);
+  });
+
   it('item sem controle no texto grava sem controle', async () => {
     const res = await chamar(`/api/v1/projects/${P}/checklist/p3_1/generate`, { method: 'POST', headers: json(consultor) });
     const { evidence_id } = await res.json<{ evidence_id: string }>();
@@ -95,6 +104,14 @@ describe('upload de documento', () => {
     expect(ev!.evaluation_status).toBe('pending');
     expect(ev!.control_id).toBe('ctl-a51');
     expect((await progresso('p15_1'))!.evidence_id).toBe(body.id);
+  });
+
+  it('file_hash é o SHA-256 dos bytes guardados no R2', async () => {
+    const { id } = await (await enviar(cliente, 'p15_1')).json<{ id: string }>();
+    const ev = await evidencia(id);
+    const obj = await env.STORAGE.get(String(ev!.r2_key));
+    const h = await crypto.subtle.digest('SHA-256', await obj!.arrayBuffer());
+    expect(Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('')).toBe(ev!.file_hash);
   });
 
   it('sem item: pendente, sem controle e sem marcar nada', async () => {
