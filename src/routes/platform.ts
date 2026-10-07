@@ -96,6 +96,26 @@ platformApp.put('/dpia/:id', async (c) => {
   }
 });
 
+// A tela de DPIA tinha o botão Excluir chamando esta rota, que não existia. DPIA aprovado
+// não sai por aqui: a aprovação é prova; quem quer apagar revoga antes (motivo na trilha).
+platformApp.delete('/dpia/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
+    const atual = await c.env.DB.prepare('SELECT status FROM dpia_assessments WHERE id = ?').bind(id).first<{ status: string | null }>();
+    if (!atual) return c.json({ error: 'DPIA não encontrado' }, 404);
+    if (atual.status === 'Approved') {
+      return c.json({ error: 'DPIA aprovado não pode ser excluído. Revogue a aprovação antes (motivo obrigatório).' }, 409);
+    }
+    await c.env.DB.prepare("DELETE FROM dpia_assessments WHERE id = ? AND status != 'Approved'").bind(id).run();
+    const user = c.get('user');
+    await logAudit(c.env.DB, 'dpia_deleted', user?.email || 'system', `DPIA ${id} excluído`);
+    return c.json({ ok: true });
+  } catch (e) {
+    return erro500(c, 'Falha ao excluir DPIA', e);
+  }
+});
+
 // Revogar a aprovação do DPIA (F6, decisão D1): humano, pela interface, platform_admin e administrador
 // do cliente. Limpa assinaturas e aprovação do DPO e volta o DPIA a rascunho; o motivo é obrigatório
 // e vai para a trilha com o projeto.

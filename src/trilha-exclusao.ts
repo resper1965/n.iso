@@ -21,6 +21,7 @@ export const TABELA_DO_RECURSO: Record<string, string> = {
   audits: 'audit_schedule',
   capa: 'corrective_actions',
   certification: 'certification_tracking',
+  dpia: 'dpia_assessments',
   evidence: 'evidence',
   'management-reviews': 'management_reviews',
   metrics: 'performance_metrics',
