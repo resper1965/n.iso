@@ -1920,6 +1920,7 @@ import { navigate } from '../router.js';
                             <button class="btn" data-action="forceCloseModal">Fechar</button>
                             <button class="btn btn-secondary" id="btn-edit-policy">Editar Documento</button>
                             <button class="btn btn-secondary" data-action="openPolicyReport" data-args='["${projectId}","${escapeHTML(ctrl.id)}"]'>Imprimir</button>
+                            ${window.podePedirAprovacao?.(S.user) ? `<button class="btn btn-secondary" data-action="abrirPedidoAprovacao" data-args='${escapeHTML(JSON.stringify([projectId, 'politica', ctrl.id]))}'>Pedir aprovação</button>` : ''}
                         </div>
                         <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
                     </div>

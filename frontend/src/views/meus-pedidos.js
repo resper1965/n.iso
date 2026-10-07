@@ -1,7 +1,7 @@
 // "Meus pedidos": única tela do papel `stakeholder` (e de quem mais for destinatário). Lista os
 // pedidos atribuídos (`GET /api/v1/pedidos`), abre o conteúdo CONGELADO no momento do pedido e
 // aprova ou recusa com a senha. O hash mostrado é o que vai para a prova: é a versão lida.
-// Também aqui: o modal com que a consultoria pede a aprovação de um documento (DPIA, por ora).
+// Também aqui: o modal com que a consultoria pede a aprovação de um documento (DPIA e política).
 import { api } from '../api.js';
 import { openModal, forceCloseModal, showToast, escapeHTML } from '../ui.js';
 
@@ -23,6 +23,7 @@ const CAMPOS_DPIA = [
     ['technical_measures', 'Medidas técnicas e de segurança'], ['residual_risk_level', 'Risco residual'],
     ['dpo_recommendations', 'Recomendações do DPO'], ['dpo_opinion', 'Parecer do DPO'],
 ];
+const CAMPOS_POLITICA = [['title', 'Título'], ['description', 'Texto da política']];
 
 const data = (s) => (s ? new Date(s).toLocaleString('pt-BR') : '');
 const el = (id) => document.getElementById(id);
@@ -57,7 +58,7 @@ window.renderMeusPedidos = async function renderMeusPedidos(c, h, a) {
 };
 
 function conteudoHtml(tipo, conteudo) {
-    const campos = tipo === 'dpia' ? CAMPOS_DPIA : Object.keys(conteudo).map((k) => [k, k]);
+    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : Object.keys(conteudo).map((k) => [k, k]);
     return campos.filter(([k]) => conteudo[k] !== null && conteudo[k] !== undefined && conteudo[k] !== '')
         .map(([k, rotulo]) => `<div style="margin-bottom:12px">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:4px">${escapeHTML(rotulo)}</div>
@@ -162,7 +163,7 @@ window.abrirPedidoAprovacao = async function abrirPedidoAprovacao(projectId, tip
             <div class="form-group">
                 <label class="form-label" for="pn-papel">O que é pedido</label>
                 <select class="form-input" id="pn-papel">
-                    ${Object.entries(PAPEIS).map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
+                    ${Object.entries(PAPEIS).filter(([v]) => tipo !== 'politica' || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
                 </select>
             </div>
             <fieldset class="form-group" style="border:0;padding:0;margin:0 0 12px">
@@ -203,7 +204,7 @@ window.enviarPedidoAprovacao = async function enviarPedidoAprovacao(_evento, pro
 
 // ─── Ciência por link com código (fatia 3): lote para quem não tem conta, e acompanhamento ───────
 
-const SITUACAO = { ciente: 'Ciente', pendente: 'Abriu, pendente', nao_abriu: 'Não abriu', aprovado: 'Concluído', recusado: 'Recusado' };
+const SITUACAO = { ciente: 'Ciente', pendente: 'Abriu, pendente', nao_abriu: 'Não abriu', aprovado: 'Aprovou', recusado: 'Recusado' };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Bloco da tela "Ciência de Políticas": pedidos de ciência do projeto e o botão de criar um lote. */
@@ -212,26 +213,28 @@ window.renderCienciaLink = async function renderCienciaLink(alvo, projectId) {
     let pedidos = [];
     try {
         pedidos = ((await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos`)).pedidos || [])
-            .filter((p) => p.papel_exigido === 'ciente');
+            // Ciência por link e, desde o P2, aprovação de política: é aqui que quem pediu acompanha.
+            .filter((p) => p.papel_exigido === 'ciente' || p.tipo === 'politica');
     } catch (e) {
         alvo.innerHTML = `<p style="color:var(--text-dim)">Não foi possível carregar os pedidos de ciência: ${escapeHTML(e.message)}</p>`;
         return;
     }
     alvo.innerHTML = `<div class="card" style="margin-bottom:1.5rem">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:0.75rem">
-            <div class="card-label" style="margin:0">Ciência por link (quem não tem conta)</div>
+            <div class="card-label" style="margin:0">Pedidos de ciência e de aprovação de políticas</div>
             <button type="button" class="btn btn-primary" data-action="abrirCienciaLink" data-args='${args(projectId)}'>Nova ciência por link</button>
         </div>
-        ${pedidos.length ? `<table class="data-table"><thead><tr><th>Documento</th><th>Situação</th><th>Cientes</th><th>Pendentes</th><th>Não abriram</th><th></th></tr></thead><tbody>
+        ${pedidos.length ? `<table class="data-table"><thead><tr><th>Documento</th><th>Pedido</th><th>Situação</th><th>Concluídos</th><th>Pendentes</th><th>Não abriram</th><th></th></tr></thead><tbody>
             ${pedidos.map((p) => `<tr>
                 <td>${escapeHTML(p.titulo)}<div style="font-size:11px;color:var(--text-dim)">${escapeHTML(data(p.criado_em))}</div></td>
+                <td>${escapeHTML(PAPEIS[p.papel_exigido] || p.papel_exigido)}</td>
                 <td>${escapeHTML(STATUS[p.status] || p.status)}</td>
                 <td>${escapeHTML(String(p.cientes ?? 0))} de ${escapeHTML(String(p.total ?? 0))}</td>
                 <td>${escapeHTML(String(p.pendentes ?? 0))}</td>
                 <td>${escapeHTML(String(p.nao_abriram ?? 0))}</td>
                 <td style="text-align:right"><button type="button" class="btn-secondary" data-action="abrirAcompanhamento" data-args='${args(projectId, p.id)}'>Acompanhamento</button></td>
             </tr>`).join('')}
-        </tbody></table>` : '<p style="font-size:13px;color:var(--text-dim)">Nenhum pedido de ciência por link neste projeto.</p>'}
+        </tbody></table>` : '<p style="font-size:13px;color:var(--text-dim)">Nenhum pedido de ciência ou de aprovação de política neste projeto.</p>'}
     </div>`;
 };
 
@@ -311,6 +314,7 @@ window.abrirAcompanhamento = async function abrirAcompanhamento(projectId, id) {
     }
     const { pedido: p, destinatarios: ds } = r;
     const nota = (d) => [
+        d.motivo ? `motivo: ${d.motivo}` : '',
         d.versao_anterior ? `ciente da versão anterior em ${data(d.versao_anterior.decidido_em)}` : '',
         d.portal_antigo ? `ciência pelo portal antigo em ${data(d.portal_antigo.acknowledged_at)} (versão não registrada)` : '',
     ].filter(Boolean).join('; ');

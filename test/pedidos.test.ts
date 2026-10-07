@@ -116,7 +116,8 @@ describe('congelar o conteúdo', () => {
     expect((await criar(consultor, { ...corpoDpia('ciso'), ref_id: 'nao-existe' })).status).toBe(404);
     expect((await criar(consultor, { ...corpoDpia('ciso'), papel_exigido: 'rei' })).status).toBe(400);
     expect((await criar(consultor, { ...corpoDpia('ciso'), destinatarios: [] })).status).toBe(400);
-    expect((await criar(consultor, { ...corpoDpia('ciso'), tipo: 'politica' })).status).toBe(400);
+    // `politica` é aceito desde o P2 (aprovação de política); o id de um DPIA não é controle do projeto: 404.
+    expect((await criar(consultor, { ...corpoDpia('ciso'), tipo: 'politica' })).status).toBe(404);
   });
 });
 

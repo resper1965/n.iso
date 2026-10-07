@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import {
-  logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
+  logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis, idDoControle,
   type PapelAssinatura,
   sendEmail, escapeHtml, genToken, sha256Hex, registraErro,
 } from '../helpers';
@@ -91,17 +91,24 @@ projectPedidosApp.post('/', async (c) => {
     const valid = await validateBody(c, pedidoCriarSchema);
     if (!valid.success) return valid.response;
     const b = valid.data;
+    // Política: só aprovação. A ciência de política é pelo lote por link (POST /ciencia).
+    if (b.tipo === 'politica' && b.papel_exigido === 'ciente') {
+      return c.json({ error: 'Ciência de política é pelo envio por link ("Nova ciência por link"). Este pedido é de aprovação: escolha Líder SGSI ou Direção.' }, 400);
+    }
+    // O id do controle chega em qualquer formato ou como código; o pedido guarda o id da linha.
+    const refId = b.tipo === 'politica' ? await idDoControle(c.env.DB, projectId, b.ref_id) : b.ref_id;
+    if (!refId) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
 
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
     const criado = await criarPedido(c.env.DB, {
-      projectId, tipo: b.tipo, refId: b.ref_id, papel: b.papel_exigido,
+      projectId, tipo: b.tipo, refId, papel: b.papel_exigido,
       destinatarios: b.destinatarios, criadoPor: user.email,
     });
     if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
     await logAudit(c.env.DB, 'pedido.criado', user.email,
-      `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, papel ${b.papel_exigido}) para ${b.destinatarios.length} destinatário(s); hash ${criado.hash}`,
+      `Pedido ${criado.id} (${b.tipo} ${refId}, papel ${b.papel_exigido}) para ${b.destinatarios.length} destinatário(s); hash ${criado.hash}`,
       '', c.req.header('CF-Connecting-IP') ?? '', projectId);
     return c.json({ ok: true, ...criado }, 201);
   } catch (e: any) {
@@ -370,7 +377,7 @@ projectPedidosApp.get('/:id', async (c) => {
     if (!vig.vigente) p = { ...p, status: vig.status, substituido_por: vig.substituido_por ?? p.substituido_por };
 
     const { results: dests } = await db.prepare(
-      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
+      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido, motivo FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
     ).bind(p.id).all<any>();
     const { results: anteriores } = await db.prepare(
       `SELECT d.email, d.decidido_em, d.hash_lido FROM pedido_destinatarios d JOIN pedidos q ON q.id = d.pedido_id

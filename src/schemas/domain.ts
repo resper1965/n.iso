@@ -651,7 +651,9 @@ export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z
 // ─── Pedidos de aprovação/ciência (acesso de stakeholders, fatia 2) ─────────────
 // `tipo` acompanha o CHECK da tabela `pedidos` (migration 0041): tipo novo exige migration.
 export const pedidoCriarSchema = z.object({
-  tipo: z.enum(['dpia']),
+  // `politica` só para aprovação (ciso/ceo): a ciência de política é pelo lote por link (pedidoCienciaLoteSchema).
+  // A rota recusa `politica` + `ciente` com 400.
+  tipo: z.enum(['dpia', 'politica']),
   ref_id: z.string().trim().min(1).max(200),
   papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
   destinatarios: z.array(z.object({
@@ -661,7 +663,7 @@ export const pedidoCriarSchema = z.object({
 });
 
 // Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
-// Teto de 200 por lote. `dpia` por conta continua em `pedidoCriarSchema` (a assinatura é só dele).
+// Teto de 200 por lote. A aprovação (com assinatura) de DPIA e de política fica em `pedidoCriarSchema`.
 export const pedidoCienciaLoteSchema = z.object({
   tipo: z.enum(['politica', 'dpia']),
   ref_id: z.string().trim().min(1).max(200),

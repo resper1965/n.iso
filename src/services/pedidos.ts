@@ -8,7 +8,8 @@
  * documento (PUT do DPIA) E de novo na hora de decidir, porque o documento pode mudar por outro
  * caminho (agente, ferramenta genérica, banco).
  *
- * Tipos: `dpia` e `politica` (texto da política no controle, `compliance_controls`). Tipo novo =
+ * Tipos: `dpia` e `politica` (texto da política no controle, `compliance_controls`); ambos assinam
+ * (`assinaturaDpia`, `assinaturaPolitica`). Tipo novo =
  * uma entrada em `DOCUMENTOS`, o CHECK da tabela (migration) e, se assina, a ação em
  * `routes/pedidos.ts`.
  */
@@ -313,8 +314,11 @@ export async function registrarDecisao(db: D1Database, a: {
         ...(link ? [a.tokenHash ?? ''] : []), p.id, p.hash, p.ref_id, p.project_id, ...ok.binds),
   ];
   if (a.assinar) {
-    const st = await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome,
-      { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json });
+    const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
+    // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
+    const st = p.tipo === 'politica'
+      ? await assinaturaPolitica(db, p.project_id, p.ref_id, a.assinar.papel, { por: a.nome, em: decididoEm, ip: a.ip, ua: a.ua }, guarda)
+      : await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome, guarda);
     if (!st) return false;
     stmts.push(st);
   }
