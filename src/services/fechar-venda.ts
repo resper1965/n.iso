@@ -102,7 +102,7 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
     stmts.push(
       db.prepare(`INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, assessment_id, cnpj,
         employee_count, proposta_id, org_id, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, datetime('now') WHERE ${G}`)
-        .bind(projetoId, deProjeto[0].servico.nome, p.cliente, dados.sector, dados.scope, dados.standards, dados.orgRole, p.assessment_id,
+        .bind(projetoId, `${p.cliente} — ${dados.normas || deProjeto[0].servico.nome}`, p.cliente, dados.sector, dados.scope, dados.standards, dados.orgRole, p.assessment_id,
           dados.cnpj, dados.pessoas, p.id, p.org_id, ...g),
       // cada fase só entra se o projeto acima existe, isto é, se foi criado por esta chamada
       ...stmtsFases(db, projetoId),
@@ -177,12 +177,24 @@ async function dadosDoProjeto(db: D1Database, p: any, servicos: Servico[]) {
   const normas = [...new Set(servicos.map((s) => s.norma).filter(Boolean))].join(' + ');
   return {
     sector: respostas.sector ?? '',
-    scope: respostas.scope_type ?? '',
+    scope: escopoVendido(p) || respostas.scope_type || '',
     orgRole: respostas.data_role ?? '',
     standards: respostas.target_standard || normas || 'ISO 27001',
+    normas,
     cnpj: lead?.cnpj ?? null,
     pessoas: Object.keys(respostas).length ? diagnosticoDe(respostas).pessoas : null,
   };
+}
+
+/**
+ * O escopo que o cliente aceitou: a seção "Objeto e escopo" reescrita no documento, se houve
+ * (documento-proposta.ts usa ela no lugar do campo), senão o campo escopo da proposta.
+ * É texto puro; a tela do projeto escapa na saída (escapeHTML).
+ */
+function escopoVendido(p: { escopo?: string | null; secoes_editadas?: string | null }): string {
+  let editado: unknown;
+  try { editado = (JSON.parse(p.secoes_editadas || '{}') as Record<string, unknown>)?.objeto; } catch { editado = undefined; }
+  return (typeof editado === 'string' && editado.trim() ? editado : p.escopo ?? '').trim();
 }
 
 type Catalogo = { standard: string; lista: readonly { code: string; title: string }[] };

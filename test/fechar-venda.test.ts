@@ -86,7 +86,7 @@ describe('fecharVenda', () => {
     expect(servicos[0].fases.map((f: any) => f.nome)).toEqual(['Diagnóstico', 'Implementação']);
 
     const pj = await db().prepare('SELECT * FROM projects WHERE id = ?').bind(r.projetoId).first<any>();
-    expect(pj).toMatchObject({ client_name: 'Cliente Ltda.', project_name: 'Implementação ISO 27001', sector: 'Saúde', org_role: 'Controlador',
+    expect(pj).toMatchObject({ client_name: 'Cliente Ltda.', project_name: 'Cliente Ltda. — ISO/IEC 27001', sector: 'Saúde', org_role: 'Controlador',
       standards: 'ISO 27001 + 27701', scope: 'Toda a empresa', employee_count: 120, assessment_id: 'as-1', proposta_id: id, status: 'active' });
     expect(pj.cnpj).toMatch(/^1122233300/);
     expect(await conta('SELECT COUNT(*) n FROM project_phases WHERE project_id = ?', r.projetoId)).toBe(PHASE_TITLES.length);
@@ -327,5 +327,30 @@ describe('fecharVenda', () => {
       expect((await porNorma(r.projetoId))['ISO 27701:2025'], papel).toBe(n);
       expect((await porNorma(r.projetoId))['ISO 27001:2022'], papel).toBe(93);
     }
+  });
+
+  it('escopo vendido vai para o projeto: a seção reescrita vence o campo; sem os dois, o do levantamento', async () => {
+    const casos: [{ escopo?: string; secoes?: string | null }, string][] = [
+      [{ escopo: '  Sede em São Paulo e o sistema de pagamentos  ' }, 'Sede em São Paulo e o sistema de pagamentos'],
+      [{ escopo: 'campo antigo', secoes: JSON.stringify({ objeto: 'Escopo reescrito no documento aceito' }) }, 'Escopo reescrito no documento aceito'],
+      [{ escopo: 'campo', secoes: JSON.stringify({ objeto: null, plano: 'x' }) }, 'campo'],
+      [{ escopo: 'campo', secoes: 'nao-e-json' }, 'campo'],
+      [{ secoes: JSON.stringify({ objeto: '   ' }) }, 'Toda a empresa'],
+    ];
+    for (const [o, esperado] of casos) {
+      const { id } = await proposta(o);
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect((await db().prepare('SELECT scope FROM projects WHERE id = ?').bind(r.projetoId).first<any>()).scope, JSON.stringify(o)).toBe(esperado);
+    }
+  });
+
+  it('nome do projeto: cliente e normas vendidas; sem norma, o nome do serviço', async () => {
+    const a = await fecharVenda(db(), entrada((await proposta({ itens: [{ servico: { ...PROJETO, norma: 'ISO/IEC 27001:2022 + 27701:2025' }, valor: 1 }] })).id));
+    const b = await fecharVenda(db(), entrada((await proposta({ itens: [{ servico: { ...PROJETO, norma: '' }, valor: 1 }] })).id));
+    if (!a.ok || !b.ok) throw new Error('fechamento falhou');
+    const nome = async (pid: string | null) => (await db().prepare('SELECT project_name FROM projects WHERE id = ?').bind(pid).first<any>()).project_name;
+    expect(await nome(a.projetoId)).toBe('Cliente Ltda. — ISO/IEC 27001:2022 + 27701:2025');
+    expect(await nome(b.projetoId)).toBe('Cliente Ltda. — Implementação ISO 27001');
   });
 });
