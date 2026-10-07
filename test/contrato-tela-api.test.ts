@@ -86,8 +86,6 @@ const TOLERADAS: { chave: string; motivo: string; expande: string[] }[] = [
   { chave: 'GET /api/v1/projects/:p/controls/:p/policy', motivo: 'modal de política; removida no P2', expande: [] },
   { chave: '* /api/v1/projects/:p/controls/:p/policy/report', motivo: 'Imprimir PDF da política; removida no P2', expande: [] },
   // Temporárias deste plano: cada tarefa que corrige a chamada apaga a entrada.
-  { chave: 'GET /api/v1/projects/:p/chat/history', motivo: 'histórico do chat sem rota; corrigida na Task 5', expande: [] },
-  { chave: 'DELETE /api/v1/projects/:p/chat/history', motivo: 'limpar histórico sem rota; corrigida na Task 5', expande: [] },
 ];
 
 const CHAMADAS = Object.entries(FONTES).flatMap(([arq, src]) => chamadasDoFonte(arq.replace(/^\.\.\//, ''), src));

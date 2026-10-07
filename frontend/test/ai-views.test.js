@@ -34,34 +34,20 @@ describe('renderAIChat', () => {
     expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('histórico vazio ou resposta não-array: mostra a dica; "Limpar" aponta para o projeto', async () => {
+  // Não há histórico no servidor: nada grava ai_chat_history e GET/DELETE /chat/history nunca
+  // existiram (404 engolido pelo catch; "Limpar" dava erro).
+  it('abre sem chamar a API e sem "Limpar Histórico"', async () => {
     S.activeProject = { id: 'p1' };
-    apiMock.mockResolvedValue({ nao: 'array' });
     const [c, h, a] = dom();
     await window.renderAIChat(c, h, a);
-    expect(apiMock).toHaveBeenCalledWith('GET', '/api/v1/projects/p1/chat/history');
+    expect(apiMock).not.toHaveBeenCalled();
     expect(c.textContent).toMatch(/Faca uma pergunta/);
-    expect(a.querySelector('[data-action="clearChatHistory"]').dataset.args).toBe('["p1"]');
-  });
-
-  it('histórico: alinha por papel e escapa o conteúdo', async () => {
-    S.activeProject = { id: 'p1' };
-    apiMock.mockResolvedValue([
-      { role: 'user', content: 'oi <b id="u">x</b>' },
-      { role: 'assistant', content: 'olá' },
-    ]);
-    const [c, h, a] = dom();
-    await window.renderAIChat(c, h, a);
-    const msgs = $('chat-messages').children;
-    expect(msgs).toHaveLength(2);
-    expect(msgs[0].style.alignSelf).toBe('flex-end');
-    expect(msgs[1].style.alignSelf).toBe('flex-start');
-    expect($('u')).toBeNull();
+    expect(a.innerHTML).toBe('');
+    expect(window.clearChatHistory).toBeUndefined();
   });
 
   async function comChat() {
     S.activeProject = { id: 'p1' };
-    apiMock.mockResolvedValueOnce([]);
     const [c, h, a] = dom();
     await window.renderAIChat(c, h, a);
     apiMock.mockReset();
@@ -102,23 +88,5 @@ describe('renderAIChat', () => {
     $('chat-input').value = 'oi';
     await window.sendChatMessage('p1');
     expect($('chat-loading').textContent).toBe('Erro: timeout');
-  });
-});
-
-describe('clearChatHistory', () => {
-  it('sem confirmação não apaga', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => false));
-    await window.clearChatHistory('p1');
-    expect(apiMock).not.toHaveBeenCalled();
-    expect(renderMock).not.toHaveBeenCalled();
-  });
-
-  it('confirmado: DELETE no projeto certo e re-renderiza', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
-    apiMock.mockResolvedValue({});
-    await window.clearChatHistory('p1');
-    await espera();
-    expect(apiMock).toHaveBeenCalledWith('DELETE', '/api/v1/projects/p1/chat/history');
-    expect(renderMock).toHaveBeenCalledOnce();
   });
 });
