@@ -13,7 +13,7 @@ describe('migration 0044 — IP/UA das aprovações', () => {
     `);
     await execSql(migration0044);
     for (const t of ['compliance_controls', 'evidence', 'ropa_records']) {
-      const { results } = await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<any>();
+      const { results } = await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<{ name: string }>();
       const cols = results.map((r) => r.name);
       for (const c of ['ciso_approved_ip', 'ciso_approved_ua', 'ceo_approved_ip', 'ceo_approved_ua']) expect(cols).toContain(c);
     }
