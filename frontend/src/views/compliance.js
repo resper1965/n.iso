@@ -591,7 +591,7 @@ import { navigate } from '../router.js';
 
     // Piso de qualidade para justificativa NOVA, digitada por pessoa. NÃO é o
     // critério de bloqueio: a norma exige justificativa, não 40 caracteres. As
-    // justificativas geradas pelo SoALogicEngine são curtas de propósito
+    // justificativas de exclusão são curtas de propósito
     // ("No software development activities." tem 35) e travar a exportação por
     // causa delas bloquearia todo projeto já existente sem ganho de conformidade.
     const MIN_NA_JUSTIFICATION = 40;

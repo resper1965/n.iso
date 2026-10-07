@@ -6,22 +6,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   NA_STATUS,
-  SoALogicEngine,
   SoAValidationError,
   assertSoAExportable,
   exclusionsMissingJustification,
   hasValidApplicability,
   recordFromControlRow,
-  type DiscoveryAnswers,
 } from '../src/services/soa-logic';
 import { recusaAplicabilidade } from '../src/routes/controls';
-
-const respostasMinimas: DiscoveryAnswers = {
-  hasCloud: false, hasRemoteWork: false, hasSoftwareDev: false, hasPhysicalOffice: false,
-  processesPII: false, vendors: [], hasMobileDevices: false, hasThirdPartyAccess: false,
-  hasCriticalData: false, handlesPayments: false, hasWebApps: false, hasAPIs: false,
-  hasEncryption: false, hasBYOD: false, hasCloudMulti: false, sector: 'other',
-};
 
 describe('regra: applic = 0 exige na_why', () => {
   it('controle aplicável não precisa de justificativa', () => {
@@ -82,23 +73,6 @@ describe('regra: a SoA é recusada quando há exclusão sem justificativa', () =
 
   it('lista vazia não é erro: projeto sem controle não tem exclusão muda', () => {
     expect(() => assertSoAExportable([])).not.toThrow();
-  });
-});
-
-describe('regra: a geração da SoA falha fechada', () => {
-  it('as 93 regras do 27001 geram exclusões todas justificadas', () => {
-    const soa = SoALogicEngine.generateDraftSoA(respostasMinimas);
-    expect(soa.length).toBe(93);
-    // Com respostas mínimas há MUITA exclusão: é o caso que mais expõe a regra.
-    const excluidos = soa.filter(d => !d.isApplicable);
-    expect(excluidos.length).toBeGreaterThan(0);
-    expect(exclusionsMissingJustification(soa)).toEqual([]);
-  });
-
-  it('o mesmo vale para o 27701', () => {
-    const soa = SoALogicEngine.generateDraftSoA(respostasMinimas, 'ISO 27701:2025', 'Both');
-    expect(soa.length).toBeGreaterThan(0);
-    expect(exclusionsMissingJustification(soa)).toEqual([]);
   });
 });
 
