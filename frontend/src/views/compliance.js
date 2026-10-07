@@ -1512,10 +1512,10 @@ import { navigate } from '../router.js';
                     : window.renderStatusBadge('Não avaliado', 'neutral');
 
                 const dpoBtn = (!e.ciso_approved_by && !isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso"]'>Assinar DPO</button>`
+                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso","${escapeHTML(fileHash)}"]'>Assinar DPO</button>`
                     : '';
                 const ceoBtn = (!e.ceo_approved_by && !isOrgUser)
-                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ceo"]'>Assinar CEO</button>`
+                    ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ceo","${escapeHTML(fileHash)}"]'>Assinar CEO</button>`
                     : '';
                 const evalBtn = (!isOrgUser)
                     ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" data-action="evaluateEvidenceAI" data-args='["${e.id}"]'>IA</button>`

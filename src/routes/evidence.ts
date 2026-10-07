@@ -96,7 +96,9 @@ evidenceApp.put('/:id/content', async (c) => {
     ).bind(arrayBuffer.byteLength, realSha256, id).run();
 
     const user = c.get('user');
-    await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system', `Conteúdo da evidência ${id} atualizado.`);
+    const assinaram = [ev.ciso_approved_by ? `Líder SGSI (${ev.ciso_approved_by})` : '', ev.ceo_approved_by ? `Direção (${ev.ceo_approved_by})` : ''].filter(Boolean).join(' e ') || 'ninguém';
+    await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system',
+      `Conteúdo da evidência ${id} atualizado. Status anterior: ${ev.evaluation_status ?? 'pending'}; assinaturas apagadas de: ${assinaram}; hash ${ev.file_hash ?? '-'} -> ${realSha256}.`);
     return c.json({ ok: true, sha256: realSha256 });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar conteúdo da evidência', e);
@@ -200,18 +202,28 @@ evidenceApp.post('/:id/evaluate', async (c) => {
 
     // O veredito vem na linha "Veredito:" (prompt do EvidenceAgent). Antes, includes('CONFORME')
     // casava também "NÃO CONFORME" e gravava conforming para evidência reprovada.
-    const veredito = /Veredito:\W*(N[ÃA]O CONFORME|PARCIAL|CONFORME)/i.exec(result.content)?.[1]?.toUpperCase();
-    const evalStatus = !veredito ? 'pending' : veredito === 'CONFORME' ? 'conforming' : veredito === 'PARCIAL' ? 'partial' : 'non_conforming';
+    // Duas opções na linha (ou o eco "[CONFORME | PARCIAL | NÃO CONFORME]" do template) = sem veredito.
+    // A IA nunca grava conforming: conforme é a assinatura do Líder SGSI. CONFORME da IA fica pending.
+    const linha = (/Veredito:[ \t]*([^\n]*)/i.exec(result.content)?.[1] ?? '')
+      .toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const sinais = linha.includes('|') ? [] : [
+      /NAO\s+CONFORME/.test(linha) && 'non_conforming',
+      /PARCIAL/.test(linha) && 'partial',
+      /(?<!NAO\s)(?<!PARCIALMENTE\s)\bCONFORME/.test(linha) && 'pending',
+    ].filter(Boolean) as string[];
+    const evalStatus = sinais.length === 1 ? sinais[0] : 'pending';
 
+    // Evidência já assinada pelo Líder SGSI mantém o status; a avaliação grava só nota e texto.
     await c.env.DB.prepare(
-      'UPDATE evidence SET evaluation_status = ?, evaluation_score = ?, evaluation_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      `UPDATE evidence SET evaluation_status = CASE WHEN ciso_approved_by IS NOT NULL THEN evaluation_status ELSE ? END,
+         evaluation_score = ?, evaluation_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(evalStatus, result.confidence || 0, result.content, evidenceId).run();
 
     await logAudit(c.env.DB, 'evidence.evaluated', c.get('user')?.email ?? 'system', `Evidência ${evidenceId} avaliada como ${evalStatus}.`);
 
     return c.json({
       ok: true,
-      evaluation_status: evalStatus,
+      evaluation_status: evidence.ciso_approved_by ? evidence.evaluation_status : evalStatus,
       evaluation_markdown: result.content,
       confidence: result.confidence,
       control: evidence.control_id,
@@ -221,6 +233,8 @@ evidenceApp.post('/:id/evaluate', async (c) => {
     return erro500(c, 'Falha ao avaliar evidência', e);
   }
 });
+
+const MUDOU = 'O conteúdo da evidência mudou desde que você abriu; recarregue e revise de novo';
 
 async function handleApprove(c: any) {
   try {
@@ -271,6 +285,13 @@ async function handleApprove(c: any) {
     const recusa = recusaDeAssinatura(autoridade, targetRole as PapelAssinatura);
     if (recusa) return c.json({ error: recusa }, 403);
 
+    // Quem enviou a evidência não a revisa (segregação de funções).
+    if (targetRole === 'ciso' && evidence.uploaded_by && email && String(evidence.uploaded_by).toLowerCase() === email.toLowerCase()) {
+      return c.json({ error: 'Quem enviou a evidência não pode revisá-la' }, 403);
+    }
+    // A assinatura vale para o conteúdo que a tela mostrou (hash), não para o que estiver lá depois.
+    if (!body.file_hash) return c.json({ error: 'file_hash é obrigatório: assine o conteúdo que você revisou' }, 400);
+
     // O carimbo leva o nome da matriz: é sob aquela designação que se assina.
     approvedBy = autoridade.nome || approvedBy;
 
@@ -281,16 +302,20 @@ async function handleApprove(c: any) {
     if (targetRole === 'ciso') {
       // A assinatura do Líder SGSI é a revisão humana: leva a evidência pendente a conforme.
       // Não passa por cima de parcial/não conforme: essas voltam a pendente ao serem corrigidas.
-      await c.env.DB.prepare(
+      const r = await c.env.DB.prepare(
         `UPDATE evidence SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?,
            evaluation_status = CASE WHEN COALESCE(evaluation_status, 'pending') = 'pending' THEN 'conforming' ELSE evaluation_status END
-         WHERE id = ?`
-      ).bind(approvedBy, now, ip, ua, id).run();
-      await logAudit(c.env.DB, 'evidence.approved_ciso', email, `Evidência ${id} aprovada pelo Líder SGSI (${approvedBy})`);
+         WHERE id = ? AND file_hash = ?`
+      ).bind(approvedBy, now, ip, ua, id, body.file_hash).run();
+      if (!r.meta.changes) return c.json({ error: MUDOU }, 409);
+      const antes = evidence.evaluation_status || 'pending';
+      const transicao = antes === 'pending' ? 'pending→conforming' : `status mantido: ${antes}`;
+      await logAudit(c.env.DB, 'evidence.approved_ciso', email, `Evidência ${id} aprovada pelo Líder SGSI (${approvedBy}); ${transicao}`);
     } else {
-      await c.env.DB.prepare(
-        'UPDATE evidence SET ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ? WHERE id = ?'
-      ).bind(approvedBy, now, ip, ua, id).run();
+      const r = await c.env.DB.prepare(
+        'UPDATE evidence SET ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ? WHERE id = ? AND file_hash = ?'
+      ).bind(approvedBy, now, ip, ua, id, body.file_hash).run();
+      if (!r.meta.changes) return c.json({ error: MUDOU }, 409);
       await logAudit(c.env.DB, 'evidence.approved_ceo', email, `Evidência ${id} aprovada pela Direção Executiva (${approvedBy})`);
     }
 

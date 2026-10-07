@@ -45,7 +45,8 @@ describe('evidência pelo checklist até a rastreabilidade', () => {
     expect(gap.controls_with_evidence).toBe(1);
     expect(gap.gaps.find((g: any) => g.control_id === 'ctl-j51').evidence_count).toBe(1);
 
-    const rev = await chamar(`/api/v1/evidence/${id}/approve`, { method: 'POST', headers: lider, body: JSON.stringify({ role: 'ciso', password: 'password123' }) });
+    const { file_hash } = (await env.DB.prepare('SELECT file_hash FROM evidence WHERE id = ?').bind(id).first<{ file_hash: string }>())!;
+    const rev = await chamar(`/api/v1/evidence/${id}/approve`, { method: 'POST', headers: lider, body: JSON.stringify({ role: 'ciso', password: 'password123', file_hash }) });
     expect(rev.status, await rev.clone().text()).toBe(200);
 
     const depois = await (await chamar(`/api/v1/projects/${P}/traceability`, { headers: lider })).json<any>();

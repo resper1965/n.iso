@@ -151,7 +151,7 @@ describe('IDOR cross-tenant nos routers de topo', () => {
 
     it('POSITIVO: o Líder SGSI do projeto A assina a evidência do próprio projeto', async () => {
       const res = await req('/api/v1/evidence/ev-a/approve', {
-        method: 'POST', headers: jsonA, body: JSON.stringify({ password: 'password123', role: 'ciso' }),
+        method: 'POST', headers: jsonA, body: JSON.stringify({ password: 'password123', role: 'ciso', file_hash: 'aa' }),
       });
       expect(res.status, await res.clone().text()).toBe(200);
 

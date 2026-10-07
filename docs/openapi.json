@@ -4429,6 +4429,10 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
+                  "file_hash": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
                   "password": {
                     "type": "string",
                     "maxLength": 500

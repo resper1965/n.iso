@@ -43,7 +43,7 @@ describe('Assinatura eletrônica (D1 real)', () => {
       ),
       env.DB.prepare(
         `INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status)
-         VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'ana@exemplo.com.br','pending')`
+         VALUES ('ev-1','proj-1','doc.md','k/doc.md','deadbeef','text/markdown',10,'cliente@exemplo.com.br','pending')`
       ),
 
       // Direção Executiva do projeto: pessoa DIFERENTE do Líder SGSI. É o que
@@ -80,6 +80,8 @@ describe('Assinatura eletrônica (D1 real)', () => {
   });
 
   async function post(path: string, body: unknown, h: Record<string, string> = headers) {
+    // A assinatura de evidência leva o hash que a tela exibiu; ev-1 nasce com 'deadbeef'.
+    if (/\/evidence\/[^/]+\/approve$/.test(path) && body && typeof body === 'object' && !('file_hash' in body)) body = { ...body, file_hash: 'deadbeef' };
     return worker.fetch(
       new Request(`http://localhost${path}`, { method: 'POST', headers: h, body: JSON.stringify(body) }),
       env as any
@@ -323,29 +325,89 @@ describe('Assinatura eletrônica (D1 real)', () => {
 
     // Review Focus 3
     it('editar o conteúdo devolve a pendente e apaga as assinaturas', async () => {
+      await env.DB.prepare("UPDATE evidence SET evaluation_score = 90, evaluation_notes = 'ok' WHERE id = 'ev-1'").run();
       await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' }, headersDirecao);
       const res = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/content', {
         method: 'PUT', headers, body: JSON.stringify({ content: '# Texto alterado' }),
       }), env as any);
       expect(res.status, await res.clone().text()).toBe(200);
-      const ev = await env.DB.prepare('SELECT evaluation_status, ciso_approved_by, ceo_approved_by FROM evidence WHERE id = ?').bind('ev-1').first<any>();
+      const ev = await env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind('ev-1').first<any>();
       expect(ev.evaluation_status).toBe('pending');
-      expect(ev.ciso_approved_by).toBeNull();
-      expect(ev.ceo_approved_by).toBeNull();
+      expect(ev.evaluation_score).toBeNull();
+      expect(ev.evaluation_notes).toBeNull();
+      for (const col of ['by', 'at', 'ip', 'ua']) {
+        expect(ev[`ciso_approved_${col}`]).toBeNull();
+        expect(ev[`ceo_approved_${col}`]).toBeNull();
+      }
     });
 
     // Review Focus 4
+    const avaliar = (saida: string) => worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/evaluate', {
+      method: 'POST', headers, body: JSON.stringify({ text: 'conteúdo' }),
+    }), { ...env, AI: { run: async () => ({ response: saida }) } } as any);
+
     it('avaliação por IA lê o veredito ("NÃO CONFORME" não vira conforme)', async () => {
-      const avaliar = (saida: string) => worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/evaluate', {
-        method: 'POST', headers, body: JSON.stringify({ text: 'conteúdo' }),
-      }), { ...env, AI: { run: async () => ({ response: saida }) } } as any);
       expect((await avaliar('# Veredito: NÃO CONFORME\n- **Score de Confiança**: 30')).status).toBe(200);
       expect(await statusDe('ev-1')).toBe('non_conforming');
       await avaliar('# Veredito: **PARCIAL**');
       expect(await statusDe('ev-1')).toBe('partial');
-      await avaliar('# Veredito: CONFORME');
-      expect(await statusDe('ev-1')).toBe('conforming');
       await avaliar('Sem veredito nenhum');
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
+    it('a IA nunca grava conforme: CONFORME da IA espera a assinatura', async () => {
+      await avaliar('# Veredito: CONFORME');
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
+    it.each([
+      ['Não conforme', 'non_conforming'], ['nao conforme', 'non_conforming'],
+      ['PARCIALMENTE CONFORME', 'partial'], ['Parcial', 'partial'],
+      ['[CONFORME | PARCIAL | NÃO CONFORME]', 'pending'], ['PARCIAL ou NÃO CONFORME', 'pending'],
+    ])('veredito "%s" vira %s', async (linha, esperado) => {
+      await avaliar(`# Veredito: ${linha}`);
+      expect(await statusDe('ev-1')).toBe(esperado);
+    });
+
+    it('a IA não mexe no status de evidência já assinada pelo Líder SGSI, só em nota e texto', async () => {
+      await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      await avaliar('# Veredito: NÃO CONFORME\n- **Score de Confiança**: 30');
+      const ev = await env.DB.prepare('SELECT evaluation_status, evaluation_notes FROM evidence WHERE id = ?').bind('ev-1').first<any>();
+      expect(ev.evaluation_status).toBe('conforming');
+      expect(ev.evaluation_notes).toContain('NÃO CONFORME');
+    });
+
+    it('evaluation_status NULL também vira conforme na assinatura', async () => {
+      await env.DB.prepare("UPDATE evidence SET evaluation_status = NULL WHERE id = 'ev-1'").run();
+      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
+      expect(await statusDe('ev-1')).toBe('conforming');
+    });
+
+    it('assinar com o hash antigo depois de editar o conteúdo dá 409 e segue pendente', async () => {
+      const put = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/content', {
+        method: 'PUT', headers, body: JSON.stringify({ content: '# Outro texto' }),
+      }), env as any);
+      expect(put.status, await put.clone().text()).toBe(200);
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123', file_hash: 'deadbeef' });
+      expect(res.status).toBe(409);
+      expect(await res.text()).toContain('mudou desde que você abriu');
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
+    it('sem file_hash a assinatura é recusada (400)', async () => {
+      const res = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/approve', {
+        method: 'POST', headers, body: JSON.stringify({ role: 'ciso', password: 'password123' }),
+      }), env as any);
+      expect(res.status).toBe(400);
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
+    it('quem enviou a evidência não a revisa como Líder SGSI', async () => {
+      await env.DB.prepare("UPDATE evidence SET uploaded_by = 'Ana@Exemplo.com.br' WHERE id = 'ev-1'").run();
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Quem enviou a evidência não pode revisá-la');
       expect(await statusDe('ev-1')).toBe('pending');
     });
   });

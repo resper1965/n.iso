@@ -1606,7 +1606,7 @@ window.closeDoDDrawerEl = function(e) {
         window.cancelDoDCompletion();
     }
 
-window.signEvidence = async function(evidenceId, role) {
+window.signEvidence = async function(evidenceId, role, fileHash) {
         if (!evidenceId) {
             alert('Não é possível assinar: ID da evidência inválido.');
             return;
@@ -1617,7 +1617,7 @@ window.signEvidence = async function(evidenceId, role) {
         if (!password) return;
         
         try {
-            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name, password });
+            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name, password, file_hash: fileHash });
             showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
             const c = document.getElementById('main-content');
             const h = document.getElementById('header-title');

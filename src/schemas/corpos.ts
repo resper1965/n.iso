@@ -166,6 +166,8 @@ export const evidenciaVincularSchema = z.object({
 export const evidenciaTextoSchema = z.object({ text: z.string().optional() });
 
 export const evidenciaAssinarSchema = z.object({
+  // Hash SHA-256 que a tela exibiu; obrigatório (o handler responde 400 depois das checagens de autoridade).
+  file_hash: z.string().max(128).optional(),
   password: z.string().max(500).optional(),
   role: z.string().max(20).optional().nullable(),
 });
