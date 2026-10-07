@@ -47,9 +47,9 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
            location, classification, confidentiality_rating, integrity_rating, availability_rating, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       ).bind(
-        id, projectId, body.name, body.type, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '',
+        id, projectId, body.name, body.type ?? null, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '',
         body.location ?? null, body.classification || 'Confidential',
-        body.confidentiality_rating ?? null, body.integrity_rating ?? null, body.availability_rating ?? null,
+        body.confidentiality_rating ?? 3, body.integrity_rating ?? 3, body.availability_rating ?? 3,
       ).run();
 
       await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`, '', '', projectId);

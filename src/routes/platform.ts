@@ -38,7 +38,7 @@ platformApp.put('/assets/:id', async (c) => {
     const p = setParcial(body, {
       name: null, type: null, category: 'Hardware', owner: '', criticality: 'Medium', description: '',
       location: null, classification: 'Confidential',
-      confidentiality_rating: null, integrity_rating: null, availability_rating: null,
+      confidentiality_rating: 3, integrity_rating: 3, availability_rating: 3,
     });
     if (p.sql) await c.env.DB.prepare(`UPDATE assets SET ${p.sql}, updated_at = datetime('now') WHERE id = ?`).bind(...p.binds, id).run();
 
