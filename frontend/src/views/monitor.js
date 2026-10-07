@@ -451,11 +451,24 @@ import { navigate } from '../router.js';
     }
 
     // Quem designa consultor na governança (mesma regra do servidor, #210):
-    // platform_admin ou o administrador do cliente. Só decide o que MOSTRAR.
-    const podeDesignarConsultor = () => !!(S.user && (S.user.role === 'platform_admin' || S.user.role === 'org_admin'));
+    // platform_admin, o administrador da consultoria ou o administrador do cliente
+    // (PODE_DESIGNAR_CONSULTOR em src/routes/governance.ts). Só decide o que MOSTRAR.
+    const podeDesignarConsultor = () => !!(S.user && ['platform_admin', 'consultoria_admin', 'org_admin'].includes(S.user.role));
     // Quem edita a governança pela tela. O org_admin entra desde o #210: é ele
     // quem designa o consultor do próprio cliente.
-    const podeEditarGovernanca = () => !!(S.user && ['platform_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
+    const podeEditarGovernanca = () => !!(S.user && ['platform_admin', 'consultoria_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
+
+    // Autoridade de assinatura pelo cargo. Fonte: autoridadeDeAssinatura em src/helpers.ts (mesmas
+    // palavras, sem caixa); se uma mudar, mude a outra.
+    const autoridadeDosCargos = (membros) => {
+        const cargos = membros.map(g => String(g.job_title || '').toLowerCase());
+        return {
+            direcao: cargos.some(t => t.includes('ceo') || t.includes('diret') || t.includes('execut')),
+            lider: cargos.some(t => t.includes('sgsi') || t.includes('dpo') || t.includes('ciso')),
+        };
+    };
+    // Cargo gravado pelo aceite da proposta: CARGO_CONTATO_ACEITE em src/services/fechar-venda.ts.
+    const CARGO_CONTATO_ACEITE = 'Contato do cliente (aceite da proposta)';
 
     // Quem convida e revoga stakeholder (o servidor decide de verdade; isto só mostra os botões).
     const podeConvidarStakeholder = () => !!(S.user && ['platform_admin', 'consultoria_admin', 'consultor', 'consultant', 'org_admin'].includes(S.user.role));
@@ -521,6 +534,7 @@ import { navigate } from '../router.js';
                     <div class="gov-member-name">${escapeHTML(m.name)}</div>
                     <div class="gov-member-title">${escapeHTML(m.job_title)}</div>
                     ${m.email ? `<div class="gov-member-email" title="${escapeHTML(m.email)}">${escapeHTML(m.email)}</div>` : ''}
+                    ${m.job_title === CARGO_CONTATO_ACEITE ? '<div class="gov-empty-list" style="padding:2px 0 0">e-mail informado no aceite da proposta, não verificado</div>' : ''}
                 </div>
                 ${acoesAcesso(m)}
             </div>`;
@@ -532,13 +546,21 @@ import { navigate } from '../router.js';
                     <div class="org-anchor-name"><span>${escapeHTML(anchor.name)}</span><span class="org-badge">Líder do SGSI</span></div>
                     <div class="org-anchor-title">${escapeHTML(anchor.job_title)}</div>
                     ${anchor.email ? `<div class="gov-member-email org-anchor-email" title="${escapeHTML(anchor.email)}">${escapeHTML(anchor.email)}</div>` : ''}
+                    ${anchor.job_title === CARGO_CONTATO_ACEITE ? '<div class="gov-empty-list" style="padding:2px 0 0">e-mail informado no aceite da proposta, não verificado</div>' : ''}
                 </div>
                 ${acoesAcesso(anchor)}
             </div>` : `
             <div class="org-anchor org-anchor-empty">
                 <div class="org-anchor-name">Líder do SGSI não designado</div>
-                <div class="org-anchor-title">Marque o responsável em “Gerenciar governança”.</div>
+                <div class="org-anchor-title">A autoridade vem do cargo (Líder SGSI, CISO ou DPO), não de marcação. Cadastre o responsável em “Gerenciar governança”.</div>
             </div>`;
+
+        const aut = autoridadeDosCargos(members);
+        const avisos = [
+            aut.direcao ? '' : 'Nenhum membro tem cargo de Direção (CEO, Diretor(a) ou Executivo): ninguém poderá assinar como Direção.',
+            aut.lider ? '' : 'Nenhum membro tem cargo de Líder SGSI (Líder SGSI, CISO ou DPO): ninguém poderá assinar como Líder SGSI.',
+        ].filter(Boolean);
+        const avisoHtml = avisos.map(t => `<p class="gov-empty-list" role="alert">${escapeHTML(t)}</p>`).join('');
 
         let branchesHtml = '';
         for (const key in categories) {
@@ -556,9 +578,10 @@ import { navigate } from '../router.js';
         return `
             <div class="org-chart">
                 <div class="org-header">
-                    <p class="org-header-intro">Quem responde pelo SGSI deste cliente, por área. O líder é um só; consultores são designados pelo administrador do cliente.</p>
+                    <p class="org-header-intro">Quem responde pelo SGSI deste cliente, por área. O líder é um só; consultores são designados pelo administrador do cliente ou da consultoria.</p>
                     ${manageBtn}
                 </div>
+                ${avisoHtml}
                 ${anchorHtml}
                 <div class="org-trunk" aria-hidden="true"></div>
                 <div class="org-branches">${branchesHtml}</div>
@@ -759,11 +782,12 @@ import { navigate } from '../router.js';
                             <option value="operacoes">Operações & Segurança</option>
                             ${podeDesignarConsultor() ? '<option value="consultor">Consultoria / Apoio</option>' : ''}
                         </select>
-                        ${podeDesignarConsultor() ? '' : '<p class="gov-empty-list" style="padding:4px 0 0">Designar consultor é feito pelo administrador do cliente.</p>'}
+                        ${podeDesignarConsultor() ? '' : '<p class="gov-empty-list" style="padding:4px 0 0">Designar consultor é feito pelo administrador do cliente ou da consultoria.</p>'}
                     </div>
                     <div class="form-group">
                         <label class="form-label">Cargo / Função</label>
                         <input class="form-input" id="gov-title" required placeholder="Ex: CEO, CFO, DPO, Consultor">
+                        <p class="gov-empty-list" style="padding:4px 0 0">A autoridade de assinatura vem do cargo: 'CEO', 'Diretor(a)' ou 'Executivo' assina como Direção; 'Líder SGSI', 'CISO' ou 'DPO' assina como Líder SGSI.</p>
                     </div>
                     <div class="form-group" style="grid-column: span 2; display:flex; align-items:center; gap:8px">
                         <input type="checkbox" id="gov-primary" style="cursor:pointer">

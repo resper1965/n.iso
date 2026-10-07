@@ -29,8 +29,8 @@ type ItemDeCatalogo = { code: string; title: string };
 
 /**
  * INSERT único dos controles de um catálogo ("A.5.1 — título") que o projeto ainda não tem, para
- * entrar num batch. Só age se o projeto existe: no batch com guarda de fecharVenda, o projeto que não
- * foi criado por esta chamada não ganha controle nem estoura a FK. Idempotente: o código vive como
+ * entrar num batch. Só age se o projeto existe. Em fecharVenda o id é novo a cada chamada e o projeto só
+ * nasce sob a guarda G, então a chamada que perde a corrida não semeia nada nem estoura a FK. Idempotente: o código vive como
  * primeiro token do título, e o que já existe naquela norma é pulado em qualquer formato de id
  * (ctrl-a51, A.5.1, gerado).
  */

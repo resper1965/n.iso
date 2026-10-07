@@ -25,13 +25,14 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Sair encerra a sessão no servidor (sem esperar a resposta).
 - Exportar CSV importa `API_BASE`.
 - Políticas: a assinatura grava o Líder SGSI e a Direção (nome da matriz, data, IP e user-agent) com autoridade e segregação pela matriz de Governança, como ROPA, DPIA e evidência; assinar não reescreve mais o status do controle na SoA. Restaurar versão zera as assinaturas. O modal acha o controle em qualquer formato de id, salva a edição (antes sempre falhava) e o "Imprimir" abre o relatório da política.
-- Projeto criado pelo aceite da proposta já nasce com os controles da norma vendida (93 da ISO 27001:2022 e os da ISO 27701:2025 pelo papel, quando vendida), com o escopo aceito no lugar do tipo de escopo do levantamento e com o nome "cliente — norma". O contato de quem aceitou entra na governança sem autoridade de assinatura (a promoção é do consultor). Sem consultor, a administração da consultoria é avisada.
 
 ### Adicionado
 - Teste de contrato: toda chamada do frontend a `/api/v1/*` precisa casar com uma rota do backend (`test/contrato-tela-api.test.ts`), e um teste reprova global usado sem import no frontend.
 - `POST /api/v1/projects/:id/seed-27001-2022` e o botão "Carregar catálogo": projeto novo recebe o Anexo A da ISO 27001:2022 e os controles da ISO 27701:2025. A lista de controles mostra o código.
 - `GET /api/v1/projects/:id/controls/:controlId/policy` (texto, SHA-256, assinaturas e versões) e `GET .../policy/report` (relatório para imprimir).
 - Pedido de aprovação de política (Líder SGSI ou Direção): a direção com conta só de leitura aprova em "Meus pedidos", e a assinatura vai para o controle; quem pediu acompanha a aprovação e a recusa em "Ciência de Políticas".
+- Projeto criado pelo aceite da proposta já nasce com os controles da norma vendida (93 da ISO 27001:2022 e os da ISO 27701:2025 pelo papel, quando vendida), com o escopo aceito no lugar do tipo de escopo do levantamento e com o nome "cliente — norma". O contato de quem aceitou entra na governança sem autoridade de assinatura (a promoção é do consultor). Sem consultor, a administração da consultoria é avisada.
+- Governança: aviso quando nenhum membro tem cargo de Direção ou de Líder SGSI (a autoridade de assinatura vem do cargo), ajuda no campo Cargo, e o contato do aceite da proposta aparece marcado como e-mail não verificado; `consultoria_admin` gerencia a matriz e designa consultor na tela, como já podia no servidor.
 
 ### Removido
 - `SoALogicEngine`, `OLD_RULES` e `PIMS_RULES`: motor de SoA sem uso e o segundo catálogo 27701 (fica o da edição 2025).
