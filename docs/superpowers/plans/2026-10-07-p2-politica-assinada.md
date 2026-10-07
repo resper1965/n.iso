@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A assinatura de política grava CISO/CEO pela matriz de governança (como ROPA, DPIA e evidência), o modal e o relatório da política acham o controle em qualquer formato de id, e restaurar versão zera as aprovações.
+**Goal:** A assinatura de política grava CISO/CEO pela matriz de governança, direto ou por pedido de aprovação (para a direção que só tem conta `org_user`). O modal e o relatório da política acham o controle em qualquer formato de id, e restaurar versão zera as aprovações.
 
-**Architecture:** `handleControlApprove` (src/routes/controls.ts) passa a usar `autoridadeDeAssinatura`/`recusaDeAssinatura` e grava as quatro colunas do papel; o `status` do controle deixa de ser tocado. Duas rotas GET novas em src/routes/policies.ts (`/controls/:controlId/policy` e `/policy/report`), resolvidas por `idDoControle` e presas ao projeto pelo `projectAccessMiddleware`. O modal de política (frontend/src/views/compliance.js) passa a ler só a rota nova e a salvar pela rota de edição que já existe.
+**Architecture:** Uma função só grava a assinatura de política: `assinaturaPolitica` (src/services/pedidos.ts, irmã de `assinaturaDpia`). Quem a usa: `handleControlApprove` (src/routes/controls.ts), com autoridade por `autoridadeDeAssinatura`/`recusaDeAssinatura`, e `registrarDecisao`, quando o pedido é do tipo `politica`. O `status` do controle deixa de ser tocado. Duas rotas GET novas em src/routes/policies.ts (`/controls/:controlId/policy` e `/policy/report`), resolvidas por `idDoControle` e presas ao projeto. O modal de política (frontend/src/views/compliance.js) lê só a rota nova e salva pela rota de edição que já existe. O modal "Pedir aprovação" (frontend/src/views/meus-pedidos.js) passa a servir à política.
 
 **Tech Stack:** Cloudflare Workers + Hono + D1; frontend Vanilla JS; testes Vitest (pool de Workers no backend, jsdom no frontend).
 
@@ -12,67 +12,88 @@
 
 ## Global Constraints
 
-- **Depende do P1.** Este plano assume que o `api()` de `frontend/src/api.js` já devolve o objeto inteiro quando a resposta tem `ok` e outros campos além de uma lista (entrega do P1). A rota `GET .../policy` responde `{ ok, control, content, hash, versions }`; com o `api()` antigo a tela receberia só `versions`. Os testes de frontend mockam o `api()` e NÃO pegam isso: a Task 4 começa conferindo que o P1 está na base.
-- Testes de backend: `npx vitest run <arq>` na raiz (pool de Workers, D1 real via `cloudflare:test`; helpers em `test/helpers/d1.ts`: `applySchema`, `resetData`, `resetSessions`, `sessionFor`). `sessionFor({ id, email, role: 'platform_admin' })` dá platform_admin.
-- INSERT em `projects` nos testes precisa de `standards` e `org_role`.
-- Testes de frontend: `cd frontend && npx vitest run <arq> --pool=threads` (jsdom; o pool padrão estoura timeout nesta máquina). Padrão de mock do `api()` em `frontend/test/soa-sem-gerar.test.js`.
-- `test/any-catraca.test.ts` (TETO 557): código novo sem `any`; em catch use `catch (e) { return erro500(c, '...', e); }`. A catraca também reprova se o número DESCER sem baixar o `TETO`: se a contagem cair, baixe o `TETO` para o valor medido no mesmo commit.
-- Sem migration: as colunas `ciso_approved_*`/`ceo_approved_*` já existem em `compliance_controls` (`schema.sql:359-366`).
-- Rotas novas deste plano são GET sem corpo: não entram em `src/openapi.ts`, não precisam de entrada no allow-list de escrita (`src/middleware/auth.ts:334-347`) nem em `src/trilha-exclusao.ts`. O agente MCP pode lê-las (leitura do próprio projeto); não entram em `FORA_DO_AGENTE`. A assinatura continua barrada para o agente pela própria regra: o e-mail do agente (`agente de …`) não está na matriz e não casa senha.
-- Toda consulta presa ao projeto (`idDoControle` + `AND project_id = ?`).
-- Frontend: CSP `script-src 'self'`, sem handler inline, eventos por `data-action`, `escapeHTML` em todo dado interpolado. Sem emoji nem ícone (inclusive no relatório HTML: nada de "✓").
+- **O P1 já está no branch** (HEAD `a5d4326`). O `api()` de `frontend/src/api.js` desembrulha só o envelope `{ ok: true, <uma lista> }`; com qualquer outro campo devolve o objeto inteiro. A rota `GET .../policy` responde `{ ok, control, content, hash, versions }` e chega inteira à tela.
+- Testes de frontend do P2 usam o `api()` REAL com o dublê de `fetch` de `frontend/test/servir-api.js`: `servir({ 'MÉTODO /caminho': corpo })` devolve 200 com o corpo, e o que não estiver mapeado devolve 404. Para outro status, use `resposta(corpo, status)` num `vi.stubGlobal('fetch', ...)`. Não mocke o `api()`. Ao lado de cada corpo dublado vai o arquivo:linha do handler que o devolve.
+- Testes de backend: `npx vitest run <arq>` na raiz (pool de Workers, D1 real via `cloudflare:test`; helpers em `test/helpers/d1.ts`). INSERT em `projects` precisa de `standards` e `org_role`.
+- Testes de frontend: `cd frontend && npx vitest run <arq> --pool=threads`.
+- `test/any-catraca.test.ts` (TETO 557): código novo sem `any`; em catch use `catch (e) { return erro500(c, '...', e); }`. Se a contagem DESCER, baixe o `TETO` para o valor medido no mesmo commit.
+- `test/colunas-catraca.test.ts` lê o fonte e confere cada coluna de `INSERT`/`UPDATE` contra o schema. Ele descarta o trecho `${...}`, então **nome de coluna montado por interpolação (`${role}_approved_by`) reprova**. Use um mapa de SETs literais, como `COLUNAS_REVOGACAO` (`src/routes/controls.ts:362-365`).
+- `test/pedidos-prova.test.ts` lê o fonte: nada de `UPDATE pedidos`/`UPDATE pedido_destinatarios` novo, nem `DELETE` ou `REPLACE` neles. Este plano não cria nenhum.
+- Sem migration: as colunas `ciso_approved_*`/`ceo_approved_*` existem em `compliance_controls` (`schema.sql:359-366`). O CHECK de `pedidos` já aceita `tipo = 'politica'` e `papel_exigido IN ('ciso','ceo','ciente')` (`schema.sql:1158-1161`).
+- As rotas novas são GET, sem corpo: ficam fora de `src/openapi.ts`, do allow-list de escrita e de `src/trilha-exclusao.ts`. O agente MCP pode lê-las. Mudar o enum de `pedidoCriarSchema` muda o OpenAPI: rode `npm run openapi` e commite o que ele regenerar.
+- **Números de linha são da base `b8c9ff1`.** O P1 removeu 2 linhas de `compliance.js` perto da 1726 e mexeu em `routes/pedidos.ts`. Ancore cada edição pelo TRECHO citado, não pelo número.
+- Toda consulta fica presa ao projeto (`idDoControle` e `AND project_id = ?`).
+- Frontend: CSP `script-src 'self'`, sem handler inline, eventos por `data-action`, `escapeHTML` em todo dado interpolado. Sem emoji nem ícone, inclusive no relatório HTML.
 - Arquivos em UTF-8 sem BOM.
-- Commits: `git -c user.email=44273656+resper1965@users.noreply.github.com commit`, mensagem em português (conventional), terminando com linha em branco e `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Suíte de backend completa leva ~20 min: tarefas rodam testes focados; a suíte completa só na Task 5.
+- Commits: `git -c user.email=44273656+resper1965@users.noreply.github.com commit`, com mensagem em português (conventional) terminando com linha em branco e `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- A suíte de backend completa leva ~20 min: as tarefas rodam testes focados, e a suíte completa roda só na Task 6.
 
 ## Decisões para o dono revisar
 
-1. **Assinar política não muda mais `compliance_controls.status`.** Hoje a primeira assinatura grava `status='Approved'` (`src/routes/controls.ts:287-289`), sobrescrevendo o status da SoA (Missing/Partial/Compliant/N/A — `frontend/src/views/compliance.js:119-121`), inclusive o N/A justificado, e a tela conta `Approved` como sucesso (`compliance.js:779`, `:861`, `:1190`). "Vigente" passa a ser as duas assinaturas, que é o que o painel (`compliance.js:1611-1613`, `:1627`) e o readiness (`src/routes/readiness.ts:47-53`) já leem; é também o que a evidência faz (`src/routes/evidence.ts:276-286`). Os padrões vizinhos divergem: ROPA grava `Approved` já na primeira assinatura (`src/routes/ropa.ts:150-160`), DPIA só com as duas (`src/services/pedidos.ts:245-247`). Custo se errado: uma linha `status = CASE WHEN ceo_approved_by IS NOT NULL ... END`, como no DPIA. Linhas antigas com `status='Approved'` ficam como estão.
-2. **Sem `role` no corpo, o papel sai do cargo na matriz** (Líder SGSI → `ciso`; só Direção → `ceo`), como em evidência (`evidence.ts:259-264`). A tela sempre manda `role`; o padrão só vale para quem chama a API sem ele. Custo se errado: tornar `role` obrigatório e ajustar o corpo em `test/contrato-isolamento-org.test.ts:68-69` e `test/contrato-isolamento-topo.test.ts:211-212`.
-3. **Reassinar o mesmo papel sobrescreve o carimbo**, como ROPA e evidência; cada assinatura fica em `audit_logs` (`control.approved`). Custo: o carimbo anterior só existe na trilha.
-4. **Aprovação de política por pedido fica fora.** `pedidoCriarSchema.tipo` segue só `'dpia'` (`src/schemas/domain.ts:654`) e `registrarDecisao` só sabe assinar DPIA (`src/services/pedidos.ts:284-289`). Consequência: quem assina política pela tela é `org_admin` ou equipe designada na matriz; `org_user`/`client` tomam 403 do allow-list (`src/middleware/auth.ts:329-351`, que bloqueia aprovação para papéis read-only de propósito). Custo: se a direção do cliente só tiver conta `org_user`, o critério 3 da spec ("a direção assina") não fecha sem um plano de "pedido de aprovação de política".
-5. **Botão "Revogar aprovação" do controle fica fora.** A rota `POST /api/v1/controls/:id/revoke-approval` (`controls.ts:373-397`) continua sem tela. Corrigir assinatura errada = editar o texto (zera as duas, `controls.ts:110-118` e `policies.ts:493-495`) ou a rota via API/agente (com confirmação). Custo: o dono não tem como desfazer só uma assinatura pela tela.
-6. **"Imprimir PDF" vira relatório HTML** no padrão de ROPA/DPIA (`ropa.ts:168-256`, `platform.ts:188-253`), impresso pelo navegador; o rótulo do botão passa a "Imprimir". Custo: nenhum PDF gerado no servidor.
-7. **Salvar e restaurar pedem confirmação quando há assinatura** ("Mudar o texto anula as assinaturas já registradas"). Custo: um clique a mais.
-8. **O prompt "Digite seu nome completo" sai da assinatura.** O servidor ignora `approved_by` do corpo; o carimbo é o nome da matriz. Pedir o nome sugeria o contrário.
+1. **Assinar política não muda mais `compliance_controls.status`.**
+   - **Hoje:** a primeira assinatura grava `status='Approved'` (`src/routes/controls.ts:287-289`). Isso sobrescreve o status da SoA (Missing/Partial/Compliant/N/A, `compliance.js:119-121`), inclusive um N/A justificado.
+   - **Passa a ser:** "vigente" são as duas assinaturas. É o que o painel de políticas (`compliance.js:1611-1613`) e o readiness (`src/routes/readiness.ts:47-53`) já leem, e o que a evidência faz.
+   - **Padrões vizinhos divergem:** o ROPA grava `Approved` já na primeira assinatura; o DPIA só com as duas.
+   - **Custo se errado:** uma linha `CASE`, como no DPIA.
+2. **Sem `role` no corpo da aprovação direta, o papel sai do cargo na matriz**, como na evidência (`evidence.ts:259-264`). A tela sempre manda `role`.
+3. **Reassinar o mesmo papel sobrescreve o carimbo**, como ROPA e evidência. Cada assinatura fica em `audit_logs`.
+4. **Pedido de política é só de aprovação (`ciso`/`ceo`).**
+   - `POST /projects/:p/pedidos` com `tipo: 'politica'` e `papel_exigido: 'ciente'` responde 400. A ciência de política continua pelo lote por link (`/pedidos/ciencia`), que já existe.
+   - **Custo:** quem tem conta não dá ciência de política por este endpoint.
+5. **Criar o pedido não confere a autoridade de cada destinatário.**
+   - Como no DPIA: o destinatário sem cargo na matriz recebe o pedido e toma 403 ao aprovar.
+   - O modal só oferece pessoas da matriz de Governança.
+   - **Custo:** o consultor descobre o erro só quando a pessoa tenta aprovar.
+6. **O botão "Revogar aprovação" do controle fica fora.**
+   - Para corrigir uma assinatura, edita-se o texto (o que zera as duas) ou usa-se a rota `POST /api/v1/controls/:id/revoke-approval` pela API ou pelo agente.
+   - **Custo:** não há tela para desfazer só uma assinatura.
+7. **"Imprimir PDF" vira "Imprimir"**, um relatório HTML no padrão de ROPA/DPIA, impresso pelo navegador.
+8. **Salvar e restaurar texto já assinado pedem confirmação** na tela.
+9. **O prompt "Digite seu nome completo" sai da assinatura direta.** O servidor nunca usou o nome digitado; o carimbo é o nome da matriz.
+10. **"Ciência de Políticas" passa a listar também os pedidos de APROVAÇÃO de política**, com a situação de cada destinatário e o motivo da recusa. É onde quem pediu acompanha o pedido.
 
 ## Achados conferidos
 
-- Confirmado: `handleControlApprove` só grava `status='Approved'` (`controls.ts:287-289`), sem CISO/CEO e sem matriz.
-- Confirmado: o modal chama `GET /api/v1/projects/:p/controls/:c/policy` (`compliance.js:1701`), que não existe (só o POST, `policies.ts:465`), e cai no fallback `ctrl-<código>` na lista global `/api/v1/controls` (`compliance.js:1694`, `:1712-1720`). O mesmo fallback está em `doGeneratePolicy` (`compliance.js:2098-2105`).
-- Confirmado: "Imprimir PDF" abre `/policy/report` (`compliance.js:2435-2437`), que não existe.
-- Confirmado: restaurar versão não zera as aprovações (`policies.ts:439-442`), ao contrário da edição (`policies.ts:493-495`), da geração (`policies.ts:58-60`, `:571-573`) e do PUT do controle (`controls.ts:110-118`).
-- Confirmado e pior que o relatado: "Não há evidência vinculada" (`compliance.js:1979-1982`) é resquício. `evidenceId` só viria da rota GET que não existe, então **salvar edição pelo modal sempre falha**; a rota certa é `POST .../controls/:c/policy {text}` (`policies.ts:465-514`).
-- Achado novo: o selo mostra "Calculando..." para sempre — `policyRes` é `const` dentro do `try` (`compliance.js:1701`) e o `typeof policyRes` da linha 1843 é sempre `undefined`.
-- Achado novo: `signPolicy` usa o global `event` (`compliance.js:2163`) e mostra na tela o nome digitado, não o carimbado.
-- Achado novo: o painel passa ao modal um código remontado do id (`compliance.js:1643-1659`), que erra para ids fora do padrão `ctrl-aNN` (ex.: `ctrl-a5` vira `A.5.0`). Passa a mandar o `ctrl.id`.
-- Não precisa de migration (a spec fala da 0045): as colunas já existem.
+- **Confirmado:** `handleControlApprove` só grava `status='Approved'`, sem CISO/CEO e sem matriz.
+- **Confirmado:** o modal chama `GET .../controls/:c/policy`, que não existe (só o POST). Ele cai no fallback `ctrl-<código>` na lista global `/api/v1/controls`. O mesmo fallback está em `doGeneratePolicy`.
+- **Confirmado:** "Imprimir PDF" abre `/policy/report`, que não existe. O P1 deixou as duas chamadas como tolerâncias temporárias em `test/contrato-tela-api.test.ts`.
+- **Confirmado:** restaurar versão não zera as aprovações. A edição, a geração e o PUT do controle zeram.
+- **Confirmado e pior que o relatado:** salvar edição pelo modal sempre falhava. `evidenceId` só viria da rota GET inexistente.
+- **Confirmado:** pedido de aprovação aceitava só `'dpia'` (`src/schemas/domain.ts:654`). O documento `politica` já existia em `DOCUMENTOS` (`src/services/pedidos.ts:88-91`, congelando `title` e `description`), e `registrarDecisao` só sabia assinar DPIA (`pedidos.ts:284-289`).
+- **Confirmado:** o painel de pedidos de quem pede filtra só `papel_exigido === 'ciente'` (`meus-pedidos.js:215`). O acompanhamento não mostra o motivo da recusa: o SELECT de `routes/pedidos.ts` não traz `motivo`.
+- **Novo:** o selo mostra "Calculando..." para sempre. `policyRes` é declarado dentro do `try`.
+- **Novo:** `signPolicy` usa o global `event` e mostra o nome digitado, não o carimbado.
+- **Novo:** o painel remonta o código a partir do id e erra fora do padrão `ctrl-aNN`.
+- **Não precisa de migration.**
 
 ## Review Focus
 
-As cinco entradas mais prováveis de morder o usuário que um teste "caminho feliz" não cobre — cada uma tem teste na tarefa dona:
+As cinco entradas mais prováveis de morder o usuário que um teste de caminho feliz não cobre, cada uma com teste na tarefa dona:
 
-1. **Mesma pessoa com duas linhas na matriz (DPO e Diretora) tenta assinar como Direção** → 403 por segregação (Task 1, teste "duas linhas na matriz").
-2. **Assinar não mexe no status da SoA** (Task 1: o primeiro teste confere que `status` continua `'Missing'` depois da assinatura).
-3. **Id de controle de outro projeto na URL da política** (o genId de `p-d` pedido em `p-a`) → 404, e o código `A.5.1` resolve o controle do próprio projeto (Task 2).
-4. **Título/texto com `<script>` no relatório HTML** sai escapado (Task 2).
-5. **Controle inexistente no projeto abre o modal**: mostra o erro e não cai na lista global `/api/v1/controls` nem no formulário de geração (Task 4).
+1. **Mesma pessoa com duas linhas na matriz (DPO e Diretora) tenta assinar como Direção:** 403 por segregação (Task 1).
+2. **Texto da política alterado por fora entre o pedido e a decisão:** 409 e nada assinado. É a guarda do `batch` (Task 5).
+3. **Id de controle de outro projeto na URL da política:** 404. O código `A.5.1` resolve o controle do próprio projeto (Task 2).
+4. **Título ou texto com `<script>` no relatório HTML:** sai escapado (Task 2).
+5. **Controle inexistente no projeto abre o modal:** mostra o erro e não cai na lista global nem no formulário de geração (Task 4).
 
 ---
 
 ### Task 1: Assinatura de política pela matriz de governança
 
 **Files:**
-- Modify: `src/routes/controls.ts:1-3` (import), `src/routes/controls.ts:252-303` (`handleControlApprove`)
-- Test: `test/signatures.test.ts` (describe "Aprovação de controle"), `test/api.test.ts:174-195`
+- Modify: `src/services/pedidos.ts` (nova `assinaturaPolitica`, logo depois de `assinaturaDpia`)
+- Modify: `src/routes/controls.ts` (import e `handleControlApprove`)
+- Test: `test/signatures.test.ts` (describe "Aprovação de controle"), `test/api.test.ts` (teste "mas o controle do próprio projeto continua editável e assinável")
 
 **Interfaces:**
-- Consumes: `autoridadeDeAssinatura(db, projectId, user): Promise<AutoridadeAssinatura>`, `recusaDeAssinatura(a, papel): string | null`, `type PapelAssinatura = 'ciso' | 'ceo'` (src/helpers.ts:404-480).
-- Produces: `POST|PUT /api/v1/controls/:id/approve` com corpo `{ password, role? }` responde `{ ok: true, role, approved_by, approved_at }`; grava `<role>_approved_by/at/ip/ua`; não toca `status`. Recusa: 401 senha, 403 com a mensagem de `recusaDeAssinatura`.
+- Consumes: `autoridadeDeAssinatura(db, projectId, user): Promise<AutoridadeAssinatura>`, `recusaDeAssinatura(a, papel): string | null`, `type PapelAssinatura = 'ciso' | 'ceo'` (src/helpers.ts); `type GuardaAssinatura` e `intacto(...)`, já existentes em src/services/pedidos.ts.
+- Produces:
+  - `assinaturaPolitica(db: D1Database, projectId: string, controlId: string, role: PapelAssinatura, carimbo: { por: string; em: string; ip: string | null; ua: string | null }, guarda?: GuardaAssinatura): Promise<D1PreparedStatement | null>`: devolve o UPDATE (para `run()` ou `batch`), ou `null` se o controle não existe no projeto. A Task 5 a usa em `registrarDecisao`.
+  - `POST|PUT /api/v1/controls/:id/approve` com corpo `{ password, role? }` responde `{ ok: true, role, approved_by, approved_at }`, grava as quatro colunas do papel e não toca `status`. Senha errada dá 401; falta de autoridade dá 403 com a mensagem de `recusaDeAssinatura`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Em `test/signatures.test.ts`, substitua o teste `'aprova com a senha correta e grava o status no banco'` (linhas 108-131) por estes, dentro do mesmo `describe('Aprovação de controle')`:
+Em `test/signatures.test.ts`, substitua o teste `'aprova com a senha correta e grava o status no banco'` por estes, dentro do mesmo `describe('Aprovação de controle')`. Eles usam o fixture do arquivo: Ana é consultora com cargo "DPO / Líder do SGSI"; `headersDirecao` é o `org_admin` com cargo "Diretora Executiva".
 
 ```ts
     it('o Líder SGSI designado assina como ciso: grava quem, quando, IP e UA, e não muda o status', async () => {
@@ -85,7 +106,7 @@ Em `test/signatures.test.ts`, substitua o teste `'aprova com a senha correta e g
         "SELECT status, ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua, ceo_approved_by FROM compliance_controls WHERE id='ctrl-a51'"
       ).first<any>();
       expect(ctrl.ciso_approved_by).toBe('Ana Souza');
-      expect(ctrl.ciso_approved_at).toBeTruthy();
+      expect(ctrl.ciso_approved_at).toBe(data.approved_at);
       expect(ctrl.ciso_approved_ip).toBeTruthy();
       expect(ctrl.ciso_approved_ua).toBeTruthy();
       expect(ctrl.ceo_approved_by).toBeNull();
@@ -104,7 +125,6 @@ Em `test/signatures.test.ts`, substitua o teste `'aprova com a senha correta e g
       expect((await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
       const r = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ceo', password: 'password123' }, headersDirecao);
       expect(r.status, await r.clone().text()).toBe(200);
-
       const ctrl = await env.DB.prepare("SELECT ciso_approved_by, ceo_approved_by, ceo_approved_at FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
       expect(ctrl.ciso_approved_by).toBe('Ana Souza');
       expect(ctrl.ceo_approved_by).toBe('Direcao Executiva');
@@ -166,7 +186,7 @@ Em `test/signatures.test.ts`, substitua o teste `'aprova com a senha correta e g
     });
 ```
 
-Em `test/api.test.ts`, no teste `'mas o controle do próprio projeto continua editável e assinável'` (linhas 175-195): antes da chamada de assinatura, designe o `org_admin` na matriz, e troque a asserção de status pela da assinatura:
+Em `test/api.test.ts`, no teste `'mas o controle do próprio projeto continua editável e assinável'`, designe o `org_admin` na matriz antes da assinatura e troque a asserção de status pela da assinatura. Substitua o trecho do `const assinatura = await req('/api/v1/controls/ctrl-proprio/approve', {` até `expect(l.status).toBe('Approved');` por:
 
 ```ts
         // Assinar exige designação na matriz de Governança do projeto (como ROPA, DPIA e evidência).
@@ -191,17 +211,61 @@ Em `test/api.test.ts`, no teste `'mas o controle do próprio projeto continua ed
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run test/signatures.test.ts test/api.test.ts`
-Expected: FAIL — `ciso_approved_by` é `null` (hoje só o status muda), `data.role` é `undefined`, e os testes de recusa (Segregação, Direção como ciso, fora da matriz, plataforma) recebem 200 em vez de 403.
+Expected: FAIL. `ciso_approved_by` vem `null` (hoje só o status muda), `data.role` vem `undefined`, e os testes de recusa recebem 200 em vez de 403.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Em `src/routes/controls.ts`, linha 3, acrescente os helpers de assinatura ao import:
+Em `src/services/pedidos.ts`, logo depois da função `assinaturaDpia` (que termina com `return db.prepare(\`UPDATE dpia_assessments SET ${set.sql} WHERE ${onde}\`)...`), acrescente:
+
+```ts
+// SET literal por papel: a catraca de colunas (test/colunas-catraca.test.ts) não enxerga nome de
+// coluna montado por interpolação. Mesmo formato de COLUNAS_REVOGACAO (routes/controls.ts).
+const SET_ASSINATURA_POLITICA: Record<PapelAssinatura, string> = {
+  ciso: 'ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?',
+  ceo: 'ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?',
+};
+
+/**
+ * Assinatura da política (o texto vive em `compliance_controls.description`) por papel. É a MESMA
+ * usada por `POST /api/v1/controls/:id/approve` e pelo pedido de aprovação de política. Devolve o
+ * UPDATE (para `run()` ou `batch`), ou `null` se o controle não existe no projeto. Não toca `status`:
+ * ele é o da SoA. Com `guarda`, só pega se a prova do destinatário foi gravada no mesmo `batch` e o
+ * título/texto são os congelados no pedido.
+ */
+export async function assinaturaPolitica(
+  db: D1Database, projectId: string, controlId: string, role: PapelAssinatura,
+  carimbo: { por: string; em: string; ip: string | null; ua: string | null }, guarda?: GuardaAssinatura,
+): Promise<D1PreparedStatement | null> {
+  const existe = await db.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
+  if (!existe) return null;
+  let onde = 'id = ? AND project_id = ?';
+  const bindsOnde: unknown[] = [controlId, projectId];
+  if (guarda) {
+    const ok = intacto('politica', '', guarda.conteudoJson);
+    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${ok.sql}`;
+    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...ok.binds);
+  }
+  return db.prepare(`UPDATE compliance_controls SET ${SET_ASSINATURA_POLITICA[role]}, updated_at = CURRENT_TIMESTAMP WHERE ${onde}`)
+    .bind(carimbo.por, carimbo.em, carimbo.ip, carimbo.ua, ...bindsOnde);
+}
+```
+
+Em `src/routes/controls.ts`, troque a linha de import de `'../helpers'` por esta e acrescente o import do serviço:
 
 ```ts
 import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis, autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura } from '../helpers';
+import { assinaturaPolitica } from '../services/pedidos';
 ```
 
-Substitua o trecho de `handleControlApprove` das linhas 287-299 (do `await c.env.DB.prepare(\`UPDATE compliance_controls SET status = 'Approved'` até o `return c.json({ ok: true, approved_by: approvedBy, approved_at: now });`) por:
+Em `handleControlApprove`, substitua o trecho que vai de
+
+```ts
+    await c.env.DB.prepare(
+      `UPDATE compliance_controls SET status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(controlId).run();
+```
+
+até `return c.json({ ok: true, approved_by: approvedBy, approved_at: now });` (inclusive) por:
 
 ```ts
     // A autoridade sai da matriz de governança DESTE projeto, como em ROPA, DPIA e evidência. Antes
@@ -218,36 +282,35 @@ Substitua o trecho de `handleControlApprove` das linhas 287-299 (do `await c.env
     // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
     const approvedBy = autoridade.nome || dbUser.name || user.email;
 
-    // `role` é o enum do schema ('ciso' | 'ceo'): só ele entra interpolado. O `status` não muda: ele é
-    // o da SoA (Missing/Partial/Compliant/N/A); política vigente = as duas assinaturas, que é o que o
-    // painel de políticas e o readiness leem.
-    await c.env.DB.prepare(
-      `UPDATE compliance_controls SET ${role}_approved_by = ?, ${role}_approved_at = ?, ${role}_approved_ip = ?, ${role}_approved_ua = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
-    ).bind(approvedBy, now, ip, ua, controlId, targetProjectId).run();
+    // A mesma assinatura que o pedido de aprovação de política aciona (services/pedidos.ts).
+    const assinatura = await assinaturaPolitica(c.env.DB, targetProjectId, controlId, role, { por: approvedBy, em: now, ip, ua });
+    if (!assinatura) return c.json({ error: 'Controle não encontrado' }, 404);
+    await assinatura.run();
 
     const quem = role === 'ciso' ? 'pelo Líder SGSI' : 'pela Direção Executiva';
     await logAudit(c.env.DB, 'control.approved', user.email, `Política do controle ${controlId} assinada ${quem} (${approvedBy}; IP: ${ip})`, '', '', targetProjectId);
     return c.json({ ok: true, role, approved_by: approvedBy, approved_at: now });
 ```
 
-(O resto do handler — validação, 404, `requireResourceAccess` antes da senha, conferência da senha — fica como está. A ordem importa para os testes de isolamento: controle alheio continua 403 antes da senha.)
+O resto do handler fica como está: validação, 404, `requireResourceAccess` antes da senha e conferência da senha. A ordem importa: controle alheio continua dando 403 antes de a senha ser conferida.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run test/signatures.test.ts test/api.test.ts test/contrato-isolamento-org.test.ts test/contrato-isolamento-topo.test.ts test/idor-tenant.test.ts test/any-catraca.test.ts`
-Expected: PASS. Se a catraca acusar contagem MENOR que o `TETO`, baixe o `TETO` em `test/any-catraca.test.ts:19` para o número que ela mediu e rode de novo.
+Run: `npx vitest run test/signatures.test.ts test/api.test.ts test/colunas-catraca.test.ts test/contrato-isolamento-org.test.ts test/contrato-isolamento-topo.test.ts test/idor-tenant.test.ts test/pedidos.test.ts test/any-catraca.test.ts`
+Expected: PASS. Se a catraca de `any` acusar contagem MENOR que o `TETO`, baixe o `TETO` para o valor medido e rode de novo.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/routes/controls.ts test/signatures.test.ts test/api.test.ts test/any-catraca.test.ts
+git add src/services/pedidos.ts src/routes/controls.ts test/signatures.test.ts test/api.test.ts test/any-catraca.test.ts
 git -c user.email=44273656+resper1965@users.noreply.github.com commit -F - <<'EOF'
 fix(politicas): assinatura de política grava CISO/CEO pela matriz de governança
 
 A aprovação de controle só gravava status='Approved', sem quem assinou e sem
 consultar a matriz. Agora segue ROPA, DPIA e evidência: autoridade e segregação
 por autoridadeDeAssinatura/recusaDeAssinatura, carimbo com nome, data, IP e UA
-do papel, e o status da SoA não é mais reescrito.
+do papel por assinaturaPolitica (a mesma que o pedido de aprovação vai usar), e
+o status da SoA não é mais reescrito.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
@@ -258,19 +321,20 @@ EOF
 ### Task 2: Rotas GET da política e do relatório
 
 **Files:**
-- Modify: `src/routes/policies.ts:5` (import), acrescentar as rotas depois de `policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionId', …)` (termina na linha 422)
+- Modify: `src/routes/policies.ts` (import de helpers; rotas novas depois de `policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionId', …)`)
+- Modify: `test/contrato-tela-api.test.ts` (remover as 2 tolerâncias do modal)
 - Test: `test/policies.test.ts` (novo `describe` no fim do arquivo)
 
 **Interfaces:**
-- Consumes: `idDoControle(db, projectId, ref): Promise<string | null>`, `sha256Hex(input: string): Promise<string>`, `escapeHtml(s: string): string`, `registraErro(c, e): string`, `erro500(c, msg, e)` (src/helpers.ts).
+- Consumes: `idDoControle`, `sha256Hex`, `escapeHtml`, `registraErro`, `erro500` (src/helpers.ts).
 - Produces:
-  - `GET /api/v1/projects/:projectId/controls/:controlId/policy` → `200 { ok: true, control: <linha de compliance_controls>, content: string, hash: string (SHA-256 hex de description), versions: { id, version, created_by, created_at }[] }` (versões em ordem decrescente); `404 { error: 'Controle não encontrado' }`.
-  - `GET /api/v1/projects/:projectId/controls/:controlId/policy/report` → HTML (200) ou `404` HTML.
-  - Função local `politicaDoControle(db, projectId, ref): Promise<{ control: ControleComPolitica; hash: string } | null>`, usada só pelas duas rotas desta task.
+  - `GET /api/v1/projects/:projectId/controls/:controlId/policy` responde `200 { ok: true, control: <linha de compliance_controls>, content: string, hash: string (SHA-256 hex de description), versions: { id, version, created_by, created_at }[] }`, com as versões em ordem decrescente, ou `404 { error: 'Controle não encontrado' }`.
+  - `GET /api/v1/projects/:projectId/controls/:controlId/policy/report` responde HTML (200) ou HTML 404.
+  - Função local `politicaDoControle(db, projectId, ref)`, usada só por estas duas rotas.
 
 - [ ] **Step 1: Write the failing test**
 
-No fim de `test/policies.test.ts`, acrescente (o `describe` fica no topo do arquivo, fora do `describe` existente, para não herdar o `beforeEach` dele). Acrescente `sha256Hex` ao import: `import { sha256Hex } from '../src/helpers';`.
+No fim de `test/policies.test.ts`, acrescente o `describe` abaixo no topo do arquivo, fora do `describe` existente, para não herdar o `beforeEach` dele. Acrescente também o import `import { sha256Hex } from '../src/helpers';`.
 
 ```ts
 describe('GET da política e do relatório: o controle em qualquer formato de id (D1 real)', () => {
@@ -326,8 +390,7 @@ describe('GET da política e do relatório: o controle em qualquer formato de id
   });
 
   it('id de controle de outro projeto dá 404, nunca o controle alheio', async () => {
-    const r = await ler(`/api/v1/projects/p-a/controls/${GEN}/policy`);
-    expect(r.status).toBe(404);
+    expect((await ler(`/api/v1/projects/p-a/controls/${GEN}/policy`)).status).toBe(404);
     expect((await ler(`/api/v1/projects/p-a/controls/${GEN}/policy/report`)).status).toBe(404);
   });
 
@@ -361,20 +424,28 @@ describe('GET da política e do relatório: o controle em qualquer formato de id
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+Em `test/contrato-tela-api.test.ts`, apague as duas entradas temporárias de `TOLERADAS`:
 
-Run: `npx vitest run test/policies.test.ts`
-Expected: FAIL — as rotas GET não existem: o catch-all de estáticos responde (status diferente de 200/404 JSON, `r.json()` falha ou `body.ok` indefinido).
+```ts
+  // Temporárias: rota inexistente, chamada que sai no P2 (modal de política).
+  { chave: 'GET /api/v1/projects/:p/controls/:p/policy', motivo: 'modal de política; removida no P2', expande: [] },
+  { chave: '* /api/v1/projects/:p/controls/:p/policy/report', motivo: 'Imprimir PDF da política; removida no P2', expande: [] },
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npx vitest run test/policies.test.ts test/contrato-tela-api.test.ts`
+Expected: FAIL. As rotas GET não existem: o catch-all de estáticos responde, e `body.ok` vem indefinido. O contrato tela↔API reprova as duas chamadas sem rota.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Em `src/routes/policies.ts`, linha 5, acrescente `sha256Hex` ao import:
+Em `src/routes/policies.ts`, acrescente `sha256Hex` ao import de `'../helpers'`:
 
 ```ts
 import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 ```
 
-Depois da rota `GET .../versions/:versionId` (linha 422), acrescente:
+Depois da rota `GET .../versions/:versionId` (o bloco que termina em `return c.json(row);\n});`), acrescente:
 
 ```ts
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -455,23 +526,22 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', as
 });
 ```
 
-Se o teste de contrato tela↔API do P1 tiver exceção registrada para `GET /api/v1/projects/:p/controls/:p/policy` ou `.../policy/report` (rota que o front chama e o back não tinha), remova a exceção agora.
+- [ ] **Step 4: Run tests to verify they pass**
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run test/policies.test.ts test/contrato-isolamento-org.test.ts test/contrato-isolamento-topo.test.ts test/any-catraca.test.ts`
-Expected: PASS. Os dois testes de isolamento varrem `app.routes` e passam a cobrir as rotas novas: conta de outra organização tem de tomar 403/404 nelas.
+Run: `npx vitest run test/policies.test.ts test/contrato-tela-api.test.ts test/colunas-catraca.test.ts test/contrato-isolamento-org.test.ts test/contrato-isolamento-topo.test.ts test/any-catraca.test.ts`
+Expected: PASS. Os dois testes de isolamento varrem `app.routes` e passam a cobrir as rotas novas.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/routes/policies.ts test/policies.test.ts
+git add src/routes/policies.ts test/policies.test.ts test/contrato-tela-api.test.ts
 git -c user.email=44273656+resper1965@users.noreply.github.com commit -F - <<'EOF'
 feat(politicas): GET da política e relatório imprimível, com o controle em qualquer formato de id
 
 O modal chamava GET .../controls/:c/policy e .../policy/report, que não
 existiam. As duas rotas resolvem o controle por idDoControle, presas ao
-projeto, e devolvem texto, SHA-256, estado das assinaturas e versões.
+projeto, e devolvem texto, SHA-256, estado das assinaturas e versões. Saem as
+duas tolerâncias temporárias do contrato tela↔API.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
@@ -482,16 +552,16 @@ EOF
 ### Task 3: Restaurar versão zera as aprovações
 
 **Files:**
-- Modify: `src/routes/policies.ts` (import de `./controls`; o UPDATE de `restore-version`, linhas 439-442)
+- Modify: `src/routes/policies.ts` (import de `./controls`; o UPDATE dentro de `policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version', …)`)
 - Test: `test/policies.test.ts` (dentro do `describe('Edição manual de política (D1 real)')` existente)
 
 **Interfaces:**
-- Consumes: `COLUNAS_REVOGACAO: Record<'ciso' | 'ceo', string>` exportado por `src/routes/controls.ts:362-365`.
-- Produces: `POST /api/v1/projects/:projectId/controls/:controlId/restore-version` grava o texto da versão e zera as oito colunas de aprovação; resposta inalterada (`{ ok, version, policy_markdown }`).
+- Consumes: `COLUNAS_REVOGACAO: Record<'ciso' | 'ceo', string>` (exportado por `src/routes/controls.ts`).
+- Produces: `POST .../restore-version` grava o texto da versão e zera as oito colunas de aprovação. A resposta não muda (`{ ok, version, policy_markdown }`).
 
 - [ ] **Step 1: Write the failing test**
 
-Dentro do `describe('Edição manual de política (D1 real)')` de `test/policies.test.ts` (usa `PROJ`, `CONTROL_ID` e `headers` dele):
+Dentro do `describe('Edição manual de política (D1 real)')` de `test/policies.test.ts`. Ele usa `PROJ`, `CONTROL_ID`, `headers` e `req` do arquivo.
 
 ```ts
   it('restaurar versão grava o texto antigo e zera as duas aprovações', async () => {
@@ -518,17 +588,26 @@ Dentro do `describe('Edição manual de política (D1 real)')` de `test/policies
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/policies.test.ts -t "restaurar versão"`
-Expected: FAIL — `ciso_approved_by` continua `'Ana'`.
+Expected: FAIL. `ciso_approved_by` continua `'Ana'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Em `src/routes/policies.ts`, acrescente o import (perto das linhas 5-8):
+Em `src/routes/policies.ts`, acrescente o import junto dos outros imports do topo:
 
 ```ts
 import { COLUNAS_REVOGACAO } from './controls';
 ```
 
-Troque o UPDATE de `restore-version` (linhas 439-442):
+Dentro da rota `restore-version`, troque este trecho (é o único UPDATE de `description` sem zerar aprovação no arquivo):
+
+```ts
+  // Update compliance_controls description
+  await c.env.DB.prepare(
+    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+  ).bind(row.policy_text, controlId, projectId).run();
+```
+
+por:
 
 ```ts
   // Texto restaurado é texto diferente do assinado: zera as duas aprovações, como a edição e a geração.
@@ -537,10 +616,12 @@ Troque o UPDATE de `restore-version` (linhas 439-442):
   ).bind(row.policy_text, controlId, projectId).run();
 ```
 
+O `conferirPedidosDoDocumento` logo abaixo continua: um pedido de aprovação aberto sobre o texto anterior é substituído.
+
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run test/policies.test.ts test/pedidos-publico.test.ts`
-Expected: PASS (o `pedidos-publico` exercita `conferirPedidosDoDocumento` na mesma família de rotas).
+Run: `npx vitest run test/policies.test.ts test/pedidos-publico.test.ts test/colunas-catraca.test.ts`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -561,17 +642,17 @@ EOF
 ### Task 4: Modal de política usa a rota nova
 
 **Files:**
-- Modify: `frontend/src/views/compliance.js` — painel (linha 1671), `openGeneratePolicyModal` (1686-2057), `doGeneratePolicy` (2097-2131), `signPolicy` (2144-2169), `openPolicyReport` (2435-2437)
+- Modify: `frontend/src/views/compliance.js`: o botão do painel de políticas, `openGeneratePolicyModal`, `doGeneratePolicy`, `window.signPolicy` e `window.openPolicyReport`
+- Modify: `frontend/test/contrato-consumidores.test.js` (o teste de templates)
 - Test: Create `frontend/test/politica-modal.test.js`
 
 **Interfaces:**
-- Consumes: `GET /api/v1/projects/:p/controls/:c/policy` → `{ ok, control, content, hash, versions }` (Task 2); `POST /api/v1/controls/:id/approve {role, password}` → `{ ok, role, approved_by, approved_at }` (Task 1); `POST /api/v1/projects/:p/controls/:c/policy {text}` (já existe, `policies.ts:465`); `codigoDoControle(ctrl)` (`compliance.js:7-10`).
-- Produces: `window.signPolicy(projectId, controlId, role)` (assinatura nova, três argumentos); `window.openGeneratePolicyModal(projectId, controlRef)` aceita id da linha ou código.
-
-- [ ] **Step 0: Confira que o P1 está na base**
-
-Run: `git log --oneline -5 -- frontend/src/api.js` e leia o bloco `if (data && data.ok === true)` de `frontend/src/api.js`.
-Expected: o commit do P1 aparece e o `api()` devolve o objeto inteiro quando há mais de uma chave além de `ok`. Se não aparecer, PARE: sem o P1 o modal recebe só `versions` e quebra em produção, embora este teste passe (ele mocka o `api()`).
+- Consumes:
+  - `GET /api/v1/projects/:p/controls/:c/policy` → `{ ok, control, content, hash, versions }` (Task 2).
+  - `POST /api/v1/controls/:id/approve {role, password}` → `{ ok, role, approved_by, approved_at }` (Task 1).
+  - `POST /api/v1/projects/:p/controls/:c/policy {text}` → `{ ok, control_id, version }` (`policies.ts:465-514`).
+  - `codigoDoControle(ctrl)` (topo de `compliance.js`).
+- Produces: `window.signPolicy(projectId, controlId, role)`, com três argumentos; `window.openGeneratePolicyModal(projectId, controlRef)`, que aceita o id da linha ou o código. A variável `ctrl` dentro do modal é o controle devolvido pelo servidor (a Task 5 usa `ctrl.id`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -580,119 +661,147 @@ Crie `frontend/test/politica-modal.test.js`:
 ```js
 // O modal de política chamava GET .../policy (inexistente), caía na lista GLOBAL de controles
 // procurando 'ctrl-<código>' e salvava edição por uma "evidência vinculada" que nunca existia.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// api() REAL; só o fetch é dublado, com o corpo de cada handler (arquivo:linha ao lado).
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { servir, resposta } from './servir-api.js';
 
-const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
-vi.mock('../src/api.js', () => ({ api: apiMock, API_BASE: 'http://localhost' }));
+vi.mock('../src/router.js', () => ({ navigate: vi.fn(), render: vi.fn() }));
 
+import { S } from '../src/state.js';
 import '../src/views/compliance.js';
 
 const TEXTO = 'Texto da política de segurança da informação. '.repeat(5);
 const controle = (extra = {}) => ({
-  id: 'ctrl_b_a51', project_id: 'p1', title: 'A.5.1 Políticas de segurança da informação', description: TEXTO,
-  ciso_approved_by: null, ciso_approved_at: null, ceo_approved_by: null, ceo_approved_at: null, ...extra,
+    id: 'ctrl_b_a51', project_id: 'p1', title: 'A.5.1 Políticas de segurança da informação', description: TEXTO,
+    ciso_approved_by: null, ciso_approved_at: null, ceo_approved_by: null, ceo_approved_at: null, ...extra,
 });
-const respostaPolitica = (ctrl) => ({ ok: true, control: ctrl, content: ctrl.description, hash: 'ab'.repeat(32), versions: [{ id: 'v1', version: 1, created_by: 'x@y.com', created_at: '2026-10-07' }] });
+// policies.ts, GET .../controls/:controlId/policy (Task 2)
+const corpoPolitica = (ctrl) => ({ ok: true, control: ctrl, content: ctrl.description, hash: 'ab'.repeat(32), versions: [{ id: 'v1', version: 1, created_by: 'x@y.com', created_at: '2026-10-07' }] });
+const rotasDoModal = (ctrl, extra = {}) => ({
+    'GET /api/v1/projects/p1/controls/ctrl_b_a51/policy': corpoPolitica(ctrl),
+    'GET /api/v1/projects/p1/controls/A.5.1/policy': corpoPolitica(ctrl),
+    'GET /api/v1/policies/templates': { ok: true, templates: [] }, // policies.ts:521
+    ...extra,
+});
+const chamadas = (f) => f.mock.calls.map(([u, o]) => `${o?.method || 'GET'} ${new URL(u, 'http://localhost').pathname}`);
+const corpoDe = (f, chave) => {
+    const c = f.mock.calls.find(([u, o]) => `${o?.method || 'GET'} ${new URL(u, 'http://localhost').pathname}` === chave);
+    return c ? JSON.parse(c[1].body) : undefined;
+};
 const espera = () => new Promise((r) => setTimeout(r, 0));
 const modal = () => document.getElementById('modal-content');
 
 beforeEach(() => {
-  document.body.innerHTML = '<div id="modal-overlay"><div id="modal"><div id="modal-content"></div></div></div>';
-  apiMock.mockReset();
+    document.body.innerHTML = '<div id="modal-overlay"><div id="modal"><div id="modal-content"></div></div></div>';
+    S.token = 'tok123';
+    S.user = { role: 'consultor' };
 });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('modal de política', () => {
-  it('lê só a rota do projeto, com o id como veio, e nunca a lista global', async () => {
-    // Com uma assinatura: o selo (que mostra o hash) só aparece quando há assinatura.
-    const ctrl = controle({ ciso_approved_by: 'Ana', ciso_approved_at: '2026-10-07' });
-    apiMock.mockImplementation(async (m, p) => (p.endsWith('/policy') ? respostaPolitica(ctrl) : { ok: true, templates: [] }));
-    await window.openGeneratePolicyModal('p1', 'ctrl_b_a51');
-    expect(apiMock).toHaveBeenCalledWith('GET', '/api/v1/projects/p1/controls/ctrl_b_a51/policy');
-    expect(apiMock.mock.calls.some(([, p]) => p === '/api/v1/controls')).toBe(false);
-    expect(apiMock.mock.calls.some(([, p]) => p.endsWith('/versions'))).toBe(false);
-    expect(modal().textContent).toContain('A.5.1');
-    expect(modal().textContent).toContain('ab'.repeat(32));
-    const assinar = modal().querySelector('[data-action="signPolicy"]');
-    // o Líder SGSI já assinou: o único botão "Assinar" é o da Direção
-    expect(JSON.parse(assinar.getAttribute('data-args'))).toEqual(['p1', 'ctrl_b_a51', 'ceo']);
-    expect(JSON.parse(modal().querySelector('[data-action="openPolicyReport"]').getAttribute('data-args'))).toEqual(['p1', 'ctrl_b_a51']);
-  });
-
-  it('controle que não existe no projeto mostra o erro, sem fallback nem formulário de geração', async () => {
-    apiMock.mockImplementation(async (m, p) => {
-      if (p.endsWith('/policy')) throw new Error('Controle não encontrado');
-      return [];
+    it('lê só a rota do projeto, com o id como veio, e nunca a lista global', async () => {
+        // Com uma assinatura: o selo (que mostra o hash) só aparece quando há assinatura.
+        const f = servir(rotasDoModal(controle({ ciso_approved_by: 'Ana', ciso_approved_at: '2026-10-07' })));
+        await window.openGeneratePolicyModal('p1', 'ctrl_b_a51');
+        expect(chamadas(f)).toContain('GET /api/v1/projects/p1/controls/ctrl_b_a51/policy');
+        expect(chamadas(f).some((k) => k === 'GET /api/v1/controls' || k.endsWith('/versions'))).toBe(false);
+        expect(modal().textContent).toContain('A.5.1');
+        expect(modal().textContent).toContain('ab'.repeat(32));
+        // o Líder SGSI já assinou: o único botão "Assinar" é o da Direção
+        const assinar = modal().querySelector('[data-action="signPolicy"]');
+        expect(JSON.parse(assinar.getAttribute('data-args'))).toEqual(['p1', 'ctrl_b_a51', 'ceo']);
+        expect(JSON.parse(modal().querySelector('[data-action="openPolicyReport"]').getAttribute('data-args'))).toEqual(['p1', 'ctrl_b_a51']);
     });
-    await window.openGeneratePolicyModal('p1', 'A.9.9');
-    expect(modal().textContent).toContain('Controle não encontrado');
-    expect(modal().querySelector('#btn-gen-policy')).toBeNull();
-    expect(apiMock.mock.calls.some(([, p]) => p === '/api/v1/controls')).toBe(false);
-  });
 
-  it('salvar edição grava pela rota de política do controle, sem depender de evidência', async () => {
-    apiMock.mockImplementation(async (m, p) => (m === 'GET' && p.endsWith('/policy') ? respostaPolitica(controle()) : { ok: true, templates: [] }));
-    await window.openGeneratePolicyModal('p1', 'A.5.1');
-    const editar = document.getElementById('btn-edit-policy');
-    editar.onclick();
-    document.getElementById('policy-editor-textarea').value = 'Texto novo';
-    editar.onclick();
-    await espera();
-    expect(apiMock).toHaveBeenCalledWith('POST', '/api/v1/projects/p1/controls/ctrl_b_a51/policy', { text: 'Texto novo' });
-    expect(modal().textContent).not.toContain('evidência vinculada');
-  });
-
-  it('salvar texto já assinado pede confirmação; sem ela, não grava', async () => {
-    apiMock.mockImplementation(async (m, p) => (m === 'GET' && p.endsWith('/policy') ? respostaPolitica(controle({ ciso_approved_by: 'Ana', ciso_approved_at: '2026-10-07' })) : { ok: true, templates: [] }));
-    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await window.openGeneratePolicyModal('p1', 'A.5.1');
-    const editar = document.getElementById('btn-edit-policy');
-    editar.onclick();
-    editar.onclick();
-    await espera();
-    expect(confirmar).toHaveBeenCalled();
-    expect(apiMock.mock.calls.some(([m]) => m === 'POST')).toBe(false);
-    confirmar.mockRestore();
-  });
-
-  it('assinar pede só a senha e manda o papel para o id real do controle', async () => {
-    apiMock.mockImplementation(async (m, p) => {
-      if (m === 'POST') return { ok: true, role: 'ceo', approved_by: 'Direção', approved_at: '2026-10-07' };
-      return p.endsWith('/policy') ? respostaPolitica(controle()) : { ok: true, templates: [] };
+    it('controle que não existe no projeto mostra o erro, sem fallback nem formulário de geração', async () => {
+        const f = vi.fn(async () => resposta({ error: 'Controle não encontrado' }, 404)); // policies.ts, 404 da Task 2
+        vi.stubGlobal('fetch', f);
+        await window.openGeneratePolicyModal('p1', 'A.9.9');
+        expect(modal().textContent).toContain('Controle não encontrado');
+        expect(modal().querySelector('#btn-gen-policy')).toBeNull();
+        expect(chamadas(f)).toEqual(['GET /api/v1/projects/p1/controls/A.9.9/policy']);
     });
-    const pedir = vi.spyOn(window, 'prompt').mockReturnValue('senha');
-    await window.signPolicy('p1', 'ctrl_b_a51', 'ceo');
-    expect(pedir).toHaveBeenCalledTimes(1);
-    expect(apiMock).toHaveBeenCalledWith('POST', '/api/v1/controls/ctrl_b_a51/approve', { role: 'ceo', password: 'senha' });
-    // reabre o modal com o estado gravado pelo servidor
-    expect(apiMock).toHaveBeenCalledWith('GET', '/api/v1/projects/p1/controls/ctrl_b_a51/policy');
-    pedir.mockRestore();
-  });
 
-  it('o relatório abre a rota de relatório da política', () => {
-    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
-    window.openPolicyReport('p1', 'ctrl_b_a51');
-    expect(abrir.mock.calls[0][0]).toContain('/api/v1/projects/p1/controls/ctrl_b_a51/policy/report?token=');
-    abrir.mockRestore();
-  });
+    it('salvar edição grava pela rota de política do controle, sem depender de evidência', async () => {
+        const f = servir(rotasDoModal(controle(), {
+            'POST /api/v1/projects/p1/controls/ctrl_b_a51/policy': { ok: true, control_id: 'ctrl_b_a51', version: 2 }, // policies.ts:510
+        }));
+        await window.openGeneratePolicyModal('p1', 'A.5.1');
+        const editar = document.getElementById('btn-edit-policy');
+        editar.onclick();
+        document.getElementById('policy-editor-textarea').value = 'Texto novo';
+        editar.onclick();
+        await espera();
+        expect(corpoDe(f, 'POST /api/v1/projects/p1/controls/ctrl_b_a51/policy')).toEqual({ text: 'Texto novo' });
+        expect(modal().textContent).not.toContain('evidência vinculada');
+    });
+
+    it('salvar texto já assinado pede confirmação; sem ela, não grava', async () => {
+        const f = servir(rotasDoModal(controle({ ciso_approved_by: 'Ana', ciso_approved_at: '2026-10-07' })));
+        const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        await window.openGeneratePolicyModal('p1', 'A.5.1');
+        const editar = document.getElementById('btn-edit-policy');
+        editar.onclick();
+        editar.onclick();
+        await espera();
+        expect(confirmar).toHaveBeenCalled();
+        expect(chamadas(f).some((k) => k.startsWith('POST'))).toBe(false);
+    });
+
+    it('assinar pede só a senha, manda o papel para o id real e reabre com o estado do servidor', async () => {
+        const f = servir(rotasDoModal(controle(), {
+            'POST /api/v1/controls/ctrl_b_a51/approve': { ok: true, role: 'ceo', approved_by: 'Direção', approved_at: '2026-10-07' }, // controls.ts, Task 1
+        }));
+        const pedir = vi.spyOn(window, 'prompt').mockReturnValue('senha');
+        await window.signPolicy('p1', 'ctrl_b_a51', 'ceo');
+        expect(pedir).toHaveBeenCalledTimes(1);
+        expect(corpoDe(f, 'POST /api/v1/controls/ctrl_b_a51/approve')).toEqual({ role: 'ceo', password: 'senha' });
+        expect(chamadas(f)).toContain('GET /api/v1/projects/p1/controls/ctrl_b_a51/policy');
+    });
+
+    it('o relatório abre a rota de relatório da política', () => {
+        const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+        window.openPolicyReport('p1', 'ctrl_b_a51');
+        expect(abrir.mock.calls[0][0]).toContain('/api/v1/projects/p1/controls/ctrl_b_a51/policy/report?token=tok123');
+    });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+Em `frontend/test/contrato-consumidores.test.js`, o teste `'templates de política: viram opções do seletor (policies.ts:521)'` precisa da rota nova, porque o modal deixa de cair na lista global. Troque o `servir({...})` dele por:
+
+```js
+        servir({
+            // policies.ts, GET .../controls/:controlId/policy (P2): sem texto de política, o modal abre o formulário de geração.
+            'GET /api/v1/projects/p1/controls/A.5.1/policy': {
+                ok: true, control: { id: 'ctrl-a51', project_id: 'p1', title: 'A.5.1 Políticas', description: '' },
+                content: '', hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', versions: [],
+            },
+            'GET /api/v1/policies/templates': { ok: true, templates: ['isms-policy', 'access-control-policy'] },
+        });
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd frontend && npx vitest run test/politica-modal.test.js --pool=threads`
-Expected: FAIL — o modal chama `/versions` e `/api/v1/controls`, o `data-args` do botão é `["ctrl_b_a51","ciso"]`, a edição mostra "Não há evidência vinculada", e `signPolicy` pede o nome antes da senha.
+Expected: FAIL. O modal chama `/versions` e `/api/v1/controls`, o `data-args` do botão é `["ctrl_b_a51","ceo"]` com dois itens, a edição mostra "Não há evidência vinculada", e `signPolicy` pede o nome antes da senha.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Todas as edições em `frontend/src/views/compliance.js`.
+Todas as edições são em `frontend/src/views/compliance.js`. Ancore cada uma pelo trecho citado.
 
-**3a.** Painel (linha 1671): o modal recebe o id da linha, não o código remontado (que erra fora do padrão `ctrl-aNN`):
+**3a.** No painel de políticas, o modal recebe o id da linha, não o código remontado. Troque
+
+```js
+                        `<button data-action="openGeneratePolicyModal" data-args='["${proj.id}","${escapeHTML(displayId)}"]' class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
+```
+
+por
 
 ```js
                         `<button data-action="openGeneratePolicyModal" data-args='["${proj.id}","${escapeHTML(ctrl.id)}"]' class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
 ```
 
-**3b.** Logo antes de `async function openGeneratePolicyModal` (linha 1686), acrescente:
+**3b.** Logo antes de `async function openGeneratePolicyModal(projectId, controlIdArg) {`, acrescente:
 
 ```js
     // Mudar o texto zera as duas assinaturas no servidor (policies.ts): quem clica precisa saber antes.
@@ -702,7 +811,7 @@ Todas as edições em `frontend/src/views/compliance.js`.
     }
 ```
 
-**3c.** Em `openGeneratePolicyModal`, troque as linhas 1694-1720 (de `const normId = ...` até o fim do bloco `// 2. Fallback ...`) por:
+**3c.** Em `openGeneratePolicyModal`, troque o trecho de `const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');` até o fim do bloco `// 2. Fallback caso a requisição falhe ou retorne vazio` (o `}` que fecha o `if (!ctrl.id) { ... }`) por:
 
 ```js
         // Uma rota só, presa ao projeto: o servidor acha o controle pelo id em qualquer formato ou
@@ -722,33 +831,48 @@ Todas as edições em `frontend/src/views/compliance.js`.
         const codigo = codigoDoControle(ctrl);
 ```
 
-**3d.** Troque a linha 1737 (`const hasPolicy = ...`) por:
+**3d.** Troque
+
+```js
+        const hasPolicy = (policyText && policyText.length > 100 && !isDefaultDescription) || (evidenceId !== null);
+```
+
+por
 
 ```js
         const hasPolicy = policyText.length > 100 && !isDefaultDescription;
 ```
 
-**3e.** Em `showGenerationFormHtml`, troque `${escapeHTML(controlId)}` por `${escapeHTML(codigo)}` nas duas ocorrências (título do modal, linha 1741, e `value` do input `policy-control-id`, linha 1744). O gerador usa o valor no prompt da IA e o resolve por `idDoControle`; o código é o que faz sentido nos dois.
+**3e.** Em `showGenerationFormHtml`, troque `Gerar Política ISO — ${escapeHTML(controlId)}` por `Gerar Política ISO — ${escapeHTML(codigo)}` e `<input class="form-input" id="policy-control-id" value="${escapeHTML(controlId)}">` por `<input class="form-input" id="policy-control-id" value="${escapeHTML(codigo)}">`. O gerador usa esse valor no prompt da IA e o resolve por `idDoControle`.
 
-**3f.** Troque as linhas 1772-1775 (o `let versions = []; try { versions = await api('GET', .../versions) ... } catch(e) {}`) por:
+**3f.** Troque
+
+```js
+            let versions = [];
+            try {
+                versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
+            } catch(e) {}
+```
+
+por
 
 ```js
             const versions = policyRes.versions || [];
 ```
 
-**3g.** Nos dois botões "Assinar" (linhas 1798 e 1823), o `data-args` passa a levar projeto, id real e papel:
+**3g.** Nos dois botões "Assinar" do modal (`data-action="signPolicy" data-args='["${ctrl.id || ''}","ciso"]'` e o de `"ceo"`), troque o `data-args` para levar projeto, id real e papel:
 
 ```js
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${projectId}","${escapeHTML(ctrl.id)}","ciso"]'>Assinar</button>
+data-args='["${projectId}","${escapeHTML(ctrl.id)}","ciso"]'
 ```
 
 ```js
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${projectId}","${escapeHTML(ctrl.id)}","ceo"]'>Assinar</button>
+data-args='["${projectId}","${escapeHTML(ctrl.id)}","ceo"]'
 ```
 
-**3h.** Nos `data-args` do seletor de versão (linha 1834), do botão restaurar (1837), do "Visualizar" de versão (1884) e do relatório (1933), troque `"${controlId}"` por `"${escapeHTML(ctrl.id)}"`. Troque o rótulo do botão da linha 1933 de `Imprimir PDF` para `Imprimir`.
+**3h.** Dentro de `openGeneratePolicyModal`, nos `data-args` de `onPolicyVersionChange`, `doRestorePolicyVersion`, `__cmpViewPolicyVersion` e `openPolicyReport`, troque `"${controlId}"` por `"${escapeHTML(ctrl.id)}"`. No botão do relatório, troque o rótulo `Imprimir PDF` por `Imprimir`.
 
-**3i.** Selo (linha 1843): troque
+**3i.** Selo: troque
 
 ```js
             const evidenceHash = (typeof policyRes !== 'undefined' && policyRes) ? policyRes.evidence_hash : null;
@@ -760,11 +884,11 @@ por
             const evidenceHash = policyRes.hash;
 ```
 
-e, na linha 1855, troque `${evidenceHash || 'Calculando...'}` por `${escapeHTML(evidenceHash)}`.
+e troque `${evidenceHash || 'Calculando...'}` por `${escapeHTML(evidenceHash)}`.
 
-**3j.** Título do modal (linha 1898): `Política Ativa — ${escapeHTML(controlId)}` vira `Política Ativa — ${escapeHTML(codigo)}`.
+**3j.** Título do modal: `Política Ativa — ${escapeHTML(controlId)}` vira `Política Ativa — ${escapeHTML(codigo)}`.
 
-**3k.** Salvar edição: troque as linhas 1978-1999 (de `const newContent = ...` até o fim do `.catch(...)`) por:
+**3k.** Salvar edição: troque o trecho de `const newContent = document.getElementById('policy-editor-textarea').value;` até o fim do `.catch(err => { ... });` que o segue por:
 
 ```js
                     const newContent = document.getElementById('policy-editor-textarea').value;
@@ -783,24 +907,23 @@ e, na linha 1855, troque `${evidenceHash || 'Calculando...'}` por `${escapeHTML(
                         });
 ```
 
-**3l.** Em `window.doRestorePolicyVersion` (linha 2038), logo depois de `if (!verId) return;`, acrescente:
+**3l.** Em `window.doRestorePolicyVersion`, logo depois de `if (!verId) return;`, acrescente:
 
 ```js
                 if (!avisarQueAnulaAssinaturas(ctrl)) return;
 ```
 
-**3m.** Em `doGeneratePolicy`, troque o corpo do `if (res.ok) { ... }` (linhas 2097-2133, do `let ctrl = {};` até `btn.disabled = false;` antes do `} else {`) por:
+**3m.** Em `doGeneratePolicy`, troque o corpo do `if (res.ok) {`, do `let ctrl = {};` até `btn.disabled = false;` (logo antes de `} else {`), por:
 
 ```js
-            if (res.ok) {
                 // O modal da política mostra o texto gerado com as assinaturas, lidas do servidor.
                 showToast('Política gerada. Revise o texto antes de pedir as assinaturas.');
                 await openGeneratePolicyModal(projectId, controlId);
 ```
 
-(O `} else { throw ... }` e o `catch` ficam como estão.)
+O `} else { throw ... }` e o `catch` ficam como estão.
 
-**3n.** Troque `window.signPolicy` inteiro (linhas 2144-2169) por:
+**3n.** Troque `window.signPolicy = async function(controlId, role) { ... };` inteiro por:
 
 ```js
     // O carimbo é o nome que consta na matriz de Governança (o servidor decide quem pode assinar o quê);
@@ -819,7 +942,7 @@ e, na linha 1855, troque `${evidenceHash || 'Calculando...'}` por `${escapeHTML(
     };
 ```
 
-**3o.** `openPolicyReport` (linhas 2435-2437): codifique o id:
+**3o.** `window.openPolicyReport`: codifique o id:
 
 ```js
 window.openPolicyReport = function(projectId, controlId) {
@@ -827,19 +950,17 @@ window.openPolicyReport = function(projectId, controlId) {
 };
 ```
 
-Depois das edições, confira que não sobrou referência morta: `grep -n "normId\|evidenceId\|evidence_hash\|ctrl-' +" frontend/src/views/compliance.js` deve voltar vazio nas funções de política (o `codigoDoControle` e outras telas podem ter `ctrl-` próprio; confira cada linha).
+Por fim, confira que não sobrou referência morta. Rode `grep -n "normId\|evidenceId\|evidence_hash" frontend/src/views/compliance.js`: o resultado tem de vir vazio.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd frontend && npx vitest run test/politica-modal.test.js test/soa-sem-gerar.test.js --pool=threads`
-Expected: PASS.
-
-Se o P1 entregou o teste de contrato tela↔API, rode-o também na raiz (`npx vitest run test/<arquivo do P1>`): as chamadas novas (`GET .../policy`, `POST .../policy`, `.../policy/report`) têm de casar com rota do backend.
+Run: `cd frontend && npx vitest run test/politica-modal.test.js test/contrato-consumidores.test.js test/soa-sem-gerar.test.js --pool=threads` e, na raiz, `npx vitest run test/contrato-tela-api.test.ts`
+Expected: PASS. As chamadas novas casam com rota do backend.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/views/compliance.js frontend/test/politica-modal.test.js
+git add frontend/src/views/compliance.js frontend/test/politica-modal.test.js frontend/test/contrato-consumidores.test.js
 git -c user.email=44273656+resper1965@users.noreply.github.com commit -F - <<'EOF'
 fix(politicas): modal de política lê a rota do projeto e salva sem "evidência vinculada"
 
@@ -854,7 +975,461 @@ EOF
 
 ---
 
-### Task 5: Verificação final e changelog
+### Task 5: Aprovação de política por pedido
+
+**Files:**
+- Modify: `src/schemas/domain.ts` (`pedidoCriarSchema.tipo`)
+- Modify: `src/services/pedidos.ts` (`registrarDecisao`: assinar política)
+- Modify: `src/routes/pedidos.ts` (`POST /`: resolver o controle e recusar ciência de política; `GET /:id`: devolver `motivo`)
+- Modify: `frontend/src/views/meus-pedidos.js` (modal "Pedir aprovação", rótulos da política, lista e acompanhamento de quem pediu)
+- Modify: `frontend/src/views/compliance.js` (botão "Pedir aprovação" no modal da política)
+- Test: Create `test/pedido-politica.test.ts`, `frontend/test/pedido-politica.test.js`
+- Regenerar: `npm run openapi` (o enum mudou)
+
+**Interfaces:**
+- Consumes:
+  - `assinaturaPolitica(db, projectId, controlId, role, carimbo, guarda?)` (Task 1).
+  - `conferirPedidosDoDocumento(c, 'politica', id, projectId)`, que já substitui o pedido aberto quando o texto muda (chamado pela edição, pela geração e pela restauração, `policies.ts`).
+  - `window.abrirPedidoAprovacao(projectId, tipo, refId)` (`meus-pedidos.js:150`).
+  - `ctrl.id` dentro do modal (Task 4).
+- Produces:
+  - `POST /api/v1/projects/:p/pedidos` aceita `{ tipo: 'politica', ref_id: <id ou código>, papel_exigido: 'ciso'|'ceo', destinatarios }` e responde 201 `{ ok, id, hash, links }`. Com `papel_exigido: 'ciente'` responde 400; controle fora do projeto, 404.
+  - `POST /api/v1/pedidos/:id/aprovar` em pedido de política grava a assinatura no controle no mesmo `batch` da prova.
+  - `GET /api/v1/projects/:p/pedidos/:id` passa a trazer `motivo` em cada destinatário.
+
+- [ ] **Step 1: Write the failing backend test**
+
+Crie `test/pedido-politica.test.ts`:
+
+```ts
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { env } from 'cloudflare:test';
+import app from '../src/index';
+import { hashPassword } from '../src/helpers';
+import { hashConteudo } from '../src/services/pedidos';
+import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+
+/**
+ * Aprovação de política por pedido: a direção do cliente que só tem conta `org_user` (read-only, o
+ * write-guard barra POST /controls/:id/approve) aprova pelo pedido. A assinatura cai no controle
+ * pela mesma assinaturaPolitica da aprovação direta, com a autoridade da matriz de governança.
+ */
+const SENHA = 'Senha-forte-123!';
+const P = 'pp-proj';
+const CTRL = 'ctrl_b_a51';
+const TITULO = 'A.5.1 Políticas de segurança da informação';
+const TEXTO = 'Política de segurança da informação: texto para aprovação da direção.';
+
+const chamar = (h: Record<string, string>, metodo: string, caminho: string, corpo?: unknown) =>
+  app.fetch(new Request('http://localhost' + caminho, {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json', ...h },
+    body: metodo === 'GET' ? undefined : JSON.stringify(corpo ?? {}),
+  }), workerEnv());
+const controle = () => env.DB.prepare('SELECT * FROM compliance_controls WHERE id = ?').bind(CTRL).first<any>();
+const pedido = (id: string) => env.DB.prepare('SELECT * FROM pedidos WHERE id = ?').bind(id).first<any>();
+const dest = (id: string) => env.DB.prepare('SELECT * FROM pedido_destinatarios WHERE pedido_id = ?').bind(id).first<any>();
+
+let consultor: Record<string, string>, ciso: Record<string, string>, dir: Record<string, string>, analista: Record<string, string>;
+
+const criar = (papel: string, emails: string[], ref = 'A.5.1', h = consultor) =>
+  chamar(h, 'POST', `/api/v1/projects/${P}/pedidos`, { tipo: 'politica', ref_id: ref, papel_exigido: papel, destinatarios: emails.map((email) => ({ email })) });
+const criado = async (papel: string, emails: string[]) => {
+  const r = await criar(papel, emails);
+  expect(r.status, await r.clone().text()).toBe(201);
+  return (await r.json() as any).id as string;
+};
+const decidir = (h: Record<string, string>, id: string, acao: 'aprovar' | 'recusar', corpo: Record<string, unknown> = { senha: SENHA }) =>
+  chamar(h, 'POST', `/api/v1/pedidos/${id}/${acao}`, corpo);
+
+beforeAll(async () => {
+  await applySchema();
+  const senha = await hashPassword(SENHA);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES (?, 'Cliente', 'ISO 27001:2022', 'Controller', 'Active', 'org_ness')`).bind(P),
+    env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, description, status) VALUES (?, ?, 'ISO 27001:2022', ?, ?, 'Partial')`).bind(CTRL, P, TITULO, TEXTO),
+    env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id) VALUES
+      ('u-cons', 'cons@ness.lat', ?, 'Cons', 'consultor', NULL, 'org_ness'),
+      ('u-ciso', 'ciso@cliente.com', ?, 'Cida', 'org_user', ?, 'org_ness'),
+      ('u-dir', 'dir@cliente.com', ?, 'Davi', 'org_user', ?, 'org_ness'),
+      ('u-ana', 'analista@cliente.com', ?, 'Ana', 'org_user', ?, 'org_ness')`).bind(senha, senha, P, senha, P, senha, P),
+    env.DB.prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES
+      ('g-cons', ?, 'Cons', 'cons@ness.lat', 'consultor', 'Consultor'),
+      ('g-ciso', ?, 'Cida Matriz', 'ciso@cliente.com', 'executivo', 'CISO'),
+      ('g-dir', ?, 'Davi Matriz', 'dir@cliente.com', 'executivo', 'Diretor Executivo'),
+      ('g-ana', ?, 'Ana', 'analista@cliente.com', 'executivo', 'Analista de TI')`).bind(P, P, P, P),
+  ]);
+  consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
+  ciso = await sessionFor({ id: 'u-ciso', email: 'ciso@cliente.com', role: 'org_user', client_project_id: P });
+  dir = await sessionFor({ id: 'u-dir', email: 'dir@cliente.com', role: 'org_user', client_project_id: P });
+  analista = await sessionFor({ id: 'u-ana', email: 'analista@cliente.com', role: 'org_user', client_project_id: P });
+});
+
+// O controle volta ao texto original e sem assinatura antes de cada teste. Pedidos de testes
+// anteriores ficam no banco (prova imutável) e são substituídos se o texto mudar: não interferem.
+beforeEach(async () => {
+  await env.DB.prepare(
+    `UPDATE compliance_controls SET title = ?, description = ?, status = 'Partial',
+       ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL,
+       ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL WHERE id = ?`
+  ).bind(TITULO, TEXTO, CTRL).run();
+});
+
+describe('aprovação de política por pedido', () => {
+  it('o consultor pede pelo código; o pedido guarda o id da linha e congela título e texto', async () => {
+    const id = await criado('ciso', ['ciso@cliente.com']);
+    const p = await pedido(id);
+    expect(p).toMatchObject({ tipo: 'politica', ref_id: CTRL, papel_exigido: 'ciso', status: 'aberto' });
+    expect(JSON.parse(p.conteudo_json)).toEqual({ title: TITULO, description: TEXTO });
+    expect(p.hash).toBe(await hashConteudo({ title: TITULO, description: TEXTO }));
+  });
+
+  it('ciência de política por conta é recusada (é pelo lote por link); controle fora do projeto: 404', async () => {
+    expect((await criar('ciente', ['ciso@cliente.com'])).status).toBe(400);
+    expect((await criar('ciso', ['ciso@cliente.com'], 'A.99.9')).status).toBe(404);
+  });
+
+  it('org_user não cria pedido de política', async () => {
+    expect((await criar('ciso', ['ciso@cliente.com'], 'A.5.1', ciso)).status).toBe(403);
+  });
+
+  it('org_user CISO aprova pelo pedido: assinatura no controle com o nome da matriz, prova gravada, status da SoA intacto', async () => {
+    const id = await criado('ciso', ['ciso@cliente.com']);
+    const r = await decidir(ciso, id, 'aprovar');
+    expect(r.status, await r.clone().text()).toBe(200);
+    const k = await controle();
+    expect(k.ciso_approved_by).toBe('Cida Matriz');
+    expect(k.ciso_approved_at).toBeTruthy();
+    expect(k.ceo_approved_by).toBeNull();
+    expect(k.status).toBe('Partial');
+    const p = await pedido(id);
+    expect(p.status).toBe('aprovado');
+    const d = await dest(id);
+    expect(d.status).toBe('aprovado');
+    expect(d.hash_lido).toBe(p.hash);
+  });
+
+  it('a Direção aprova o pedido de papel ceo', async () => {
+    const id = await criado('ceo', ['dir@cliente.com']);
+    expect((await decidir(dir, id, 'aprovar')).status).toBe(200);
+    expect((await controle()).ceo_approved_by).toBe('Davi Matriz');
+  });
+
+  it('quem não tem o cargo na matriz não aprova: 403 e nada gravado', async () => {
+    const id = await criado('ciso', ['analista@cliente.com']);
+    const r = await decidir(analista, id, 'aprovar');
+    expect(r.status).toBe(403);
+    expect((await controle()).ciso_approved_by).toBeNull();
+    expect((await dest(id)).status).toBe('pendente');
+  });
+
+  it('o CISO não aprova pedido de papel ceo (segregação de funções)', async () => {
+    const id = await criado('ceo', ['ciso@cliente.com']);
+    const r = await decidir(ciso, id, 'aprovar');
+    expect(r.status).toBe(403);
+    expect(await r.text()).toContain('Segregação de Funções');
+    expect((await controle()).ceo_approved_by).toBeNull();
+  });
+
+  it('mudar o texto substitui o pedido; o antigo dá 409 e o novo assina', async () => {
+    const id = await criado('ceo', ['dir@cliente.com']);
+    const ed = await chamar(consultor, 'POST', `/api/v1/projects/${P}/controls/${CTRL}/policy`, { text: 'Texto revisto da política.' });
+    expect(ed.status, await ed.clone().text()).toBe(200);
+    const antigo = await pedido(id);
+    expect(antigo.status).toBe('substituido');
+    expect((await decidir(dir, id, 'aprovar')).status).toBe(409);
+    const novo = await pedido(antigo.substituido_por);
+    expect(JSON.parse(novo.conteudo_json).description).toBe('Texto revisto da política.');
+    expect((await decidir(dir, novo.id, 'aprovar')).status).toBe(200);
+    expect((await controle()).ceo_approved_by).toBe('Davi Matriz');
+  });
+
+  it('texto alterado por fora entre o pedido e a decisão: 409 e nada assinado', async () => {
+    const id = await criado('ciso', ['ciso@cliente.com']);
+    await env.DB.prepare('UPDATE compliance_controls SET description = ? WHERE id = ?').bind('Mudado direto no banco', CTRL).run();
+    expect((await decidir(ciso, id, 'aprovar')).status).toBe(409);
+    expect((await controle()).ciso_approved_by).toBeNull();
+  });
+
+  it('a recusa aparece para quem pediu, com o motivo, e não assina', async () => {
+    const id = await criado('ceo', ['dir@cliente.com']);
+    const r = await decidir(dir, id, 'recusar', { senha: SENHA, motivo: 'Falta a seção de backup' });
+    expect(r.status, await r.clone().text()).toBe(200);
+    expect((await controle()).ceo_approved_by).toBeNull();
+
+    const painel = await (await chamar(consultor, 'GET', `/api/v1/projects/${P}/pedidos/${id}`)).json() as any;
+    expect(painel.pedido.status).toBe('recusado');
+    expect(painel.destinatarios[0]).toMatchObject({ email: 'dir@cliente.com', situacao: 'recusado', motivo: 'Falta a seção de backup' });
+
+    const lista = await (await chamar(consultor, 'GET', `/api/v1/projects/${P}/pedidos`)).json() as any;
+    expect(lista.pedidos.find((p: any) => p.id === id)).toMatchObject({ tipo: 'politica', papel_exigido: 'ceo', status: 'recusado' });
+  });
+});
+```
+
+- [ ] **Step 2: Run backend test to verify it fails**
+
+Run: `npx vitest run test/pedido-politica.test.ts`
+Expected: FAIL. `tipo: 'politica'` dá 400 no schema; depois de liberado, a aprovação não assina o controle (`registrarDecisao` só assina DPIA, e o `assinaturaDpia` devolve `null` para o id do controle, então a decisão volta 409); e `motivo` não vem no painel.
+
+- [ ] **Step 3: Backend implementation**
+
+Em `src/schemas/domain.ts`, em `pedidoCriarSchema`, troque `tipo: z.enum(['dpia']),` por:
+
+```ts
+  // `politica` só para aprovação (ciso/ceo): a ciência de política é pelo lote por link (pedidoCienciaLoteSchema).
+  // A rota recusa `politica` + `ciente` com 400.
+  tipo: z.enum(['dpia', 'politica']),
+```
+
+Em `src/services/pedidos.ts`, dentro de `registrarDecisao`, troque o bloco
+
+```ts
+  if (a.assinar) {
+    const st = await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome,
+      { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json });
+    if (!st) return false;
+    stmts.push(st);
+  }
+```
+
+por
+
+```ts
+  if (a.assinar) {
+    const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
+    // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
+    const st = p.tipo === 'politica'
+      ? await assinaturaPolitica(db, p.project_id, p.ref_id, a.assinar.papel, { por: a.nome, em: decididoEm, ip: a.ip, ua: a.ua }, guarda)
+      : await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome, guarda);
+    if (!st) return false;
+    stmts.push(st);
+  }
+```
+
+Atualize também o comentário de topo do arquivo: em "Tipos: `dpia` e `politica` ...", acrescente "ambos assinam (`assinaturaDpia`, `assinaturaPolitica`)".
+
+Em `src/routes/pedidos.ts`:
+
+1. Acrescente `idDoControle` ao import de `'../helpers'`.
+2. Em `projectPedidosApp.post('/', ...)`, logo depois de `const b = valid.data;`, acrescente:
+
+```ts
+    // Política: só aprovação. A ciência de política é pelo lote por link (POST /ciencia).
+    if (b.tipo === 'politica' && b.papel_exigido === 'ciente') {
+      return c.json({ error: 'Ciência de política é pelo envio por link ("Nova ciência por link"). Este pedido é de aprovação: escolha Líder SGSI ou Direção.' }, 400);
+    }
+    // O id do controle chega em qualquer formato ou como código; o pedido guarda o id da linha.
+    const refId = b.tipo === 'politica' ? await idDoControle(c.env.DB, projectId, b.ref_id) : b.ref_id;
+    if (!refId) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
+```
+
+   No mesmo handler, troque `refId: b.ref_id` por `refId` na chamada de `criarPedido`, e `${b.ref_id}` por `${refId}` no `logAudit`.
+
+3. Em `projectPedidosApp.get('/:id', ...)`, acrescente `motivo` ao SELECT dos destinatários:
+
+```ts
+      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido, motivo FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
+```
+
+Regenere o OpenAPI: `npm run openapi`.
+
+- [ ] **Step 4: Run backend tests**
+
+Run: `npx vitest run test/pedido-politica.test.ts test/pedidos.test.ts test/pedidos-prova.test.ts test/pedidos-corrida.test.ts test/pedidos-autoridade.test.ts test/pedidos-publico.test.ts test/colunas-catraca.test.ts test/openapi.test.ts test/contrato-writes-validados.test.ts test/any-catraca.test.ts`
+Expected: PASS. Os testes de DPIA seguem verdes porque o ramo `dpia` não mudou.
+
+- [ ] **Step 5: Write the failing frontend test**
+
+Crie `frontend/test/pedido-politica.test.js`:
+
+```js
+// Pedido de aprovação de política: quem pede escolhe só Líder SGSI ou Direção, e acompanha a
+// aprovação ou a recusa (com o motivo). api() REAL; só o fetch é dublado.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { servir } from './servir-api.js';
+
+vi.mock('../src/router.js', () => ({ navigate: vi.fn(), render: vi.fn() }));
+
+import { S } from '../src/state.js';
+import '../src/views/meus-pedidos.js';
+import '../src/views/compliance.js';
+
+const $ = (id) => document.getElementById(id);
+const espera = () => new Promise((r) => setTimeout(r, 0));
+const corpoDe = (f, chave) => {
+    const c = f.mock.calls.find(([u, o]) => `${o?.method || 'GET'} ${new URL(u, 'http://localhost').pathname}` === chave);
+    return c ? JSON.parse(c[1].body) : undefined;
+};
+
+beforeEach(() => {
+    document.body.innerHTML = '<div id="modal-overlay"><div id="modal"><div id="modal-content"></div></div></div><div id="alvo"></div>';
+    S.token = 'tok123';
+    S.user = { role: 'consultor' };
+});
+afterEach(() => { vi.unstubAllGlobals(); });
+
+describe('pedido de aprovação de política', () => {
+    it('o modal oferece só Líder SGSI e Direção e envia tipo politica com o id do controle', async () => {
+        const f = servir({
+            // governance.ts:66-70 devolve a lista crua
+            'GET /api/v1/projects/p1/governance': [{ email: 'dir@cliente.com', name: 'Davi', job_title: 'Diretor Executivo', role_category: 'executivo' }],
+            // routes/pedidos.ts, POST / (201)
+            'POST /api/v1/projects/p1/pedidos': { ok: true, id: 'pd1', hash: 'h', links: [] },
+        });
+        await window.abrirPedidoAprovacao('p1', 'politica', 'ctrl_b_a51');
+        expect([...$('pn-papel').options].map((o) => o.value)).toEqual(['ciso', 'ceo']);
+        $('pn-papel').value = 'ceo';
+        document.querySelector('input[name="pn-dest"]').checked = true;
+        await window.enviarPedidoAprovacao(null, 'p1', 'politica', 'ctrl_b_a51');
+        expect(corpoDe(f, 'POST /api/v1/projects/p1/pedidos')).toEqual({
+            tipo: 'politica', ref_id: 'ctrl_b_a51', papel_exigido: 'ceo', destinatarios: [{ email: 'dir@cliente.com', nome: 'Davi' }],
+        });
+    });
+
+    it('para DPIA, a ciência continua entre as opções', async () => {
+        servir({ 'GET /api/v1/projects/p1/governance': [] });
+        await window.abrirPedidoAprovacao('p1', 'dpia', 'dp1');
+        expect([...$('pn-papel').options].map((o) => o.value)).toEqual(['ciso', 'ceo', 'ciente']);
+    });
+
+    it('quem pediu vê o pedido de aprovação de política e a recusa com o motivo', async () => {
+        servir({
+            // routes/pedidos.ts, GET / do projeto (sem `ok`: o api() devolve o objeto)
+            'GET /api/v1/projects/p1/pedidos': { pedidos: [
+                { id: 'pd1', tipo: 'politica', titulo: 'Política: A.5.1 Políticas', papel_exigido: 'ceo', status: 'recusado', total: 1, cientes: 0, pendentes: 0, nao_abriram: 0, criado_em: '2026-10-07' },
+                { id: 'pd2', tipo: 'dpia', titulo: 'DPIA: Folha', papel_exigido: 'ciso', status: 'aberto', total: 1, cientes: 0, pendentes: 1, nao_abriram: 1, criado_em: '2026-10-07' },
+            ] },
+            // routes/pedidos.ts, GET /:id do projeto
+            'GET /api/v1/projects/p1/pedidos/pd1': {
+                pedido: { id: 'pd1', tipo: 'politica', titulo: 'Política: A.5.1 Políticas', papel_exigido: 'ceo', status: 'recusado', hash: 'h' },
+                sem_link: 0,
+                destinatarios: [{ email: 'dir@cliente.com', nome: 'Davi', status: 'recusado', situacao: 'recusado', decidido_em: '2026-10-07', motivo: 'Falta a seção de backup', versao_anterior: null, portal_antigo: null }],
+            },
+        });
+        await window.renderCienciaLink($('alvo'), 'p1');
+        expect($('alvo').textContent).toContain('Política: A.5.1 Políticas');
+        expect($('alvo').textContent).toContain('Aprovação da Direção Executiva');
+        expect($('alvo').textContent).not.toContain('DPIA: Folha');
+        await window.abrirAcompanhamento('p1', 'pd1');
+        expect($('modal-content').textContent).toContain('Recusado');
+        expect($('modal-content').textContent).toContain('Falta a seção de backup');
+    });
+
+    it('o modal da política mostra "Pedir aprovação" para quem pede, com o id do controle', async () => {
+        const texto = 'Texto da política. '.repeat(10);
+        servir({
+            'GET /api/v1/projects/p1/controls/ctrl_b_a51/policy': { ok: true, control: { id: 'ctrl_b_a51', project_id: 'p1', title: 'A.5.1 Políticas', description: texto }, content: texto, hash: 'h', versions: [] },
+            'GET /api/v1/policies/templates': { ok: true, templates: [] },
+        });
+        await window.openGeneratePolicyModal('p1', 'ctrl_b_a51');
+        const b = $('modal-content').querySelector('[data-action="abrirPedidoAprovacao"]');
+        expect(JSON.parse(b.getAttribute('data-args'))).toEqual(['p1', 'politica', 'ctrl_b_a51']);
+
+        S.user = { role: 'org_user' };
+        await window.openGeneratePolicyModal('p1', 'ctrl_b_a51');
+        await espera();
+        expect($('modal-content').querySelector('[data-action="abrirPedidoAprovacao"]')).toBeNull();
+    });
+});
+```
+
+- [ ] **Step 6: Run frontend test to verify it fails**
+
+Run: `cd frontend && npx vitest run test/pedido-politica.test.js --pool=threads`
+Expected: FAIL. O seletor oferece `ciente` para política, a lista filtra só ciência, o acompanhamento não mostra o motivo, e o modal da política não tem o botão.
+
+- [ ] **Step 7: Frontend implementation**
+
+Em `frontend/src/views/meus-pedidos.js`:
+
+1. Ajuste o comentário do topo: "o modal com que a consultoria pede a aprovação de um documento (DPIA e política)".
+2. Depois de `CAMPOS_DPIA`, acrescente os rótulos da política e use-os em `conteudoHtml`:
+
+```js
+const CAMPOS_POLITICA = [['title', 'Título'], ['description', 'Texto da política']];
+```
+
+```js
+    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : Object.keys(conteudo).map((k) => [k, k]);
+```
+
+3. Em `abrirPedidoAprovacao`, troque a linha do `<select id="pn-papel">`
+
+```js
+                    ${Object.entries(PAPEIS).map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
+```
+
+por
+
+```js
+                    ${Object.entries(PAPEIS).filter(([v]) => tipo !== 'politica' || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
+```
+
+4. Em `SITUACAO`, troque `aprovado: 'Concluído'` por `aprovado: 'Aprovou'`.
+5. Em `renderCienciaLink`, troque o filtro
+
+```js
+            .filter((p) => p.papel_exigido === 'ciente');
+```
+
+por
+
+```js
+            // Ciência por link e, desde o P2, aprovação de política: é aqui que quem pediu acompanha.
+            .filter((p) => p.papel_exigido === 'ciente' || p.tipo === 'politica');
+```
+
+   Na tabela, acrescente a coluna "Pedido": no cabeçalho, troque `<th>Documento</th><th>Situação</th><th>Cientes</th>` por `<th>Documento</th><th>Pedido</th><th>Situação</th><th>Concluídos</th>`, e logo depois da célula do título acrescente:
+
+```js
+                <td>${escapeHTML(PAPEIS[p.papel_exigido] || p.papel_exigido)}</td>
+```
+
+   Troque o rótulo do cartão `Ciência por link (quem não tem conta)` por `Pedidos de ciência e de aprovação de políticas`, e a frase de lista vazia por `Nenhum pedido de ciência ou de aprovação de política neste projeto.`.
+6. Em `abrirAcompanhamento`, acrescente o motivo da recusa à observação. Troque o início do array de `nota` por:
+
+```js
+    const nota = (d) => [
+        d.motivo ? `motivo: ${d.motivo}` : '',
+```
+
+   O texto passa por `escapeHTML(nota(d))`, que já está na linha da tabela.
+
+Em `frontend/src/views/compliance.js`, no rodapé do modal de política (o `<div style="display:flex; gap:8px">` que tem "Fechar", "Editar Documento" e "Imprimir"), acrescente depois do botão "Imprimir":
+
+```js
+                            ${window.podePedirAprovacao?.(S.user) ? `<button class="btn btn-secondary" data-action="abrirPedidoAprovacao" data-args='${escapeHTML(JSON.stringify([projectId, 'politica', ctrl.id]))}'>Pedir aprovação</button>` : ''}
+```
+
+O padrão é o do DPIA (`privacy.js:377`). Quem só tem conta `org_user` aprova pelo pedido, em "Meus pedidos".
+
+- [ ] **Step 8: Run frontend tests**
+
+Run: `cd frontend && npx vitest run test/pedido-politica.test.js test/politica-modal.test.js test/contrato-consumidores.test.js --pool=threads` e, na raiz, `npx vitest run test/contrato-tela-api.test.ts`
+Expected: PASS. Se existir teste de frontend de "Meus pedidos" ou de ciência por link (`ls frontend/test | grep -i "pedido\|ciencia"`), rode-o também: a coluna nova e o rótulo `Aprovou` podem mudar texto que ele conferia.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/schemas/domain.ts src/services/pedidos.ts src/routes/pedidos.ts frontend/src/views/meus-pedidos.js frontend/src/views/compliance.js test/pedido-politica.test.ts frontend/test/pedido-politica.test.js
+git add -u   # o OpenAPI regenerado por `npm run openapi`
+git -c user.email=44273656+resper1965@users.noreply.github.com commit -F - <<'EOF'
+feat(politicas): aprovação de política por pedido, para a direção com conta só de leitura
+
+O pedido de aprovação aceitava só DPIA. Agora aceita política (Líder SGSI ou
+Direção): congela título e texto, é substituído quando o texto muda e, ao ser
+aprovado, grava a assinatura no controle pela mesma assinaturaPolitica da
+aprovação direta, com a autoridade da matriz de Governança. Quem pediu
+acompanha a aprovação e a recusa, com o motivo, em Ciência de Políticas.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+EOF
+```
+
+---
+
+### Task 6: Verificação final e changelog
 
 **Files:**
 - Modify: `CHANGELOG.md` (seção `## [Não publicado]`)
@@ -871,17 +1446,18 @@ e em `### Adicionado`:
 
 ```markdown
 - `GET /api/v1/projects/:id/controls/:controlId/policy` (texto, SHA-256, assinaturas e versões) e `GET .../policy/report` (relatório para imprimir).
+- Pedido de aprovação de política (Líder SGSI ou Direção): a direção com conta só de leitura aprova em "Meus pedidos", e a assinatura vai para o controle; quem pediu acompanha a aprovação e a recusa em "Ciência de Políticas".
 ```
 
-- [ ] **Step 2: Typecheck e catraca**
+- [ ] **Step 2: Typecheck e catracas**
 
-Run: `npx tsc --noEmit && npx vitest run test/any-catraca.test.ts`
-Expected: sem erro; catraca passa (se a contagem caiu, o `TETO` já foi baixado na Task 1).
+Run: `npx tsc --noEmit && npx vitest run test/any-catraca.test.ts test/colunas-catraca.test.ts test/contrato-tela-api.test.ts`
+Expected: sem erro; as catracas passam.
 
 - [ ] **Step 3: Suíte completa (backend ~20 min, frontend)**
 
 Run: `npx vitest run` (raiz) e `cd frontend && npx vitest run --pool=threads`
-Expected: tudo verde, exit 0. Cole o resumo final (`Test Files … passed`) e o exit code; "N/N passed" com exit 1 (rejeição não tratada) não conta.
+Expected: tudo verde, com exit 0. Cole o resumo final (`Test Files … passed`) e o exit code. "N/N passed" com exit 1 (rejeição não tratada) não conta.
 
 - [ ] **Step 4: Build do frontend**
 
@@ -893,7 +1469,7 @@ Expected: build sem erro.
 ```bash
 git add CHANGELOG.md
 git -c user.email=44273656+resper1965@users.noreply.github.com commit -F - <<'EOF'
-docs(changelog): política assinada pela matriz, rotas de leitura e relatório
+docs(changelog): política assinada pela matriz, por pedido, rotas de leitura e relatório
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
@@ -903,7 +1479,7 @@ EOF
 
 ## Fora deste plano
 
-- Aprovação de política por pedido (stakeholder/conta read-only): exige `'politica'` em `pedidoCriarSchema.tipo` e assinatura de controle em `registrarDecisao` (decisão 4).
-- Tela para revogar uma assinatura de política (decisão 5).
-- O selo "ISO 27001 CONFORME" do modal (`compliance.js:1852`) aparece com uma assinatura só; não foi mexido.
-- A senha da assinatura continua num `prompt()` nativo (texto visível), como antes.
+- Conferir a autoridade de cada destinatário já na criação do pedido (decisão 5).
+- Tela para revogar uma assinatura de política (decisão 6).
+- O selo "ISO 27001 CONFORME" do modal aparece com uma assinatura só; não foi mexido.
+- A senha da assinatura direta continua num `prompt()` nativo, com o texto visível, como antes.
