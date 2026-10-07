@@ -83,6 +83,8 @@ const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   // Desaprovar é ato da direção, pela interface (F6, decisão D1): o agente não revoga a aprovação de
   // ROPA nem de DPIA, e não apaga análise crítica, que é registro assinado. Revogar aprovação de
   // CONTROLE segue possível, com confirmação (acaoDestrutiva).
+  // Assinatura eletrônica é ato humano, pela interface (senha do assinante).
+  [/^\/api\/v1\/(evidence|controls)\/[^/]+\/(signatures\/)?approve$/, 'assinatura eletrônica é ato humano, pela interface', ['POST', 'PUT']],
   [/^\/api\/v1\/projects\/[^/]+\/(ropa|dpia)\/[^/]+\/revoke-approval$/, 'revogar aprovação de ROPA e DPIA é da direção, pela interface'],
   [/^\/api\/v1\/management-reviews\/[^/]+$/, 'excluir análise crítica destrói registro assinado: use a interface', ['DELETE']],
 ];

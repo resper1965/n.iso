@@ -66,6 +66,15 @@ for (const [routerVar, modulo] of Object.entries(moduloDe)) {
         : null;
       return;
     }
+    // Handler declarado à parte (função nomeada registrada em várias rotas): a rota que vale para
+    // o contrato é declarada com `// openapi: router METODO /caminho`, logo antes do validateBody.
+    const marca = linha.match(/\/\/\s*openapi:\s*(\w+)\s+(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/);
+    if (marca) {
+      atual = marca[1] === routerVar
+        ? { metodo: marca[2], caminho: (mount[routerVar] + marca[3]).replace(/\/$/, '') || '/' }
+        : null;
+      return;
+    }
     const vb = linha.match(/validateBody\(c,\s*(\w+)\)/);
     if (vb && atual) entradas.push({ ...atual, nome: vb[1] });
   });

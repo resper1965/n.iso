@@ -34,6 +34,16 @@ describe('Principal agente', () => {
     expect((await comoAgente('/api/v1/projects/p-b/risks')).status).toBe(403);
   });
 
+  it('não assina evidência nem controle: assinatura eletrônica é ato humano', async () => {
+    for (const caminho of ['/api/v1/evidence/ev-x/approve', '/api/v1/evidence/ev-x/signatures/approve', '/api/v1/controls/ctl-x/approve']) {
+      for (const method of ['POST', 'PUT']) {
+        const res = await comoAgente(caminho, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'x', role: 'ciso', file_hash: 'x' }) });
+        expect(res.status, `${method} ${caminho}`).toBe(403);
+        expect(await res.text()).toContain('assinatura eletrônica é ato humano');
+      }
+    }
+  });
+
   it('não apaga sem confirmação', async () => {
     expect((await comoAgente('/api/v1/projects/p-a/risks/qualquer', { method: 'DELETE' })).status).toBe(403);
   });

@@ -98,7 +98,7 @@ evidenceApp.put('/:id/content', async (c) => {
     const user = c.get('user');
     const assinaram = [ev.ciso_approved_by ? `Líder SGSI (${ev.ciso_approved_by})` : '', ev.ceo_approved_by ? `Direção (${ev.ceo_approved_by})` : ''].filter(Boolean).join(' e ') || 'ninguém';
     await logAudit(c.env.DB, 'evidence.content_updated', user?.email || 'system',
-      `Conteúdo da evidência ${id} atualizado. Status anterior: ${ev.evaluation_status ?? 'pending'}; assinaturas apagadas de: ${assinaram}; hash ${ev.file_hash ?? '-'} -> ${realSha256}.`);
+      `Conteúdo da evidência ${id} atualizado. Status anterior: ${ev.evaluation_status ?? 'pending'}; assinaturas apagadas de: ${assinaram}; hash ${ev.file_hash ?? '-'} -> ${realSha256}.`, '', '', ev.project_id ?? undefined);
     return c.json({ ok: true, sha256: realSha256 });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar conteúdo da evidência', e);
@@ -219,7 +219,9 @@ evidenceApp.post('/:id/evaluate', async (c) => {
          evaluation_score = ?, evaluation_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(evalStatus, result.confidence || 0, result.content, evidenceId).run();
 
-    await logAudit(c.env.DB, 'evidence.evaluated', c.get('user')?.email ?? 'system', `Evidência ${evidenceId} avaliada como ${evalStatus}.`);
+    await logAudit(c.env.DB, 'evidence.evaluated', c.get('user')?.email ?? 'system', evidence.ciso_approved_by
+      ? `Evidência ${evidenceId} reavaliada pela IA (${evalStatus}); status mantido (já assinada).`
+      : `Evidência ${evidenceId} avaliada como ${evalStatus}.`);
 
     return c.json({
       ok: true,
@@ -233,6 +235,9 @@ evidenceApp.post('/:id/evaluate', async (c) => {
     return erro500(c, 'Falha ao avaliar evidência', e);
   }
 });
+
+// `uploaded_by` é o e-mail de quem enviou; evidência criada pelo agente grava "agente de <email> (<projeto>)".
+const enviadoPor = (u: string) => (/^agente de (\S+) \(/i.exec(u)?.[1] ?? u).toLowerCase();
 
 const MUDOU = 'O conteúdo da evidência mudou desde que você abriu; recarregue e revise de novo';
 
@@ -252,6 +257,7 @@ async function handleApprove(c: any) {
     const user = c.get('user');
     if (!user) return c.json({ error: 'Não autorizado' }, 401);
 
+    // openapi: evidenceApp POST /:id/approve
     const v = await validateBody(c, evidenciaAssinarSchema);
     if (!v.success) return v.response;
     const body = v.data;
@@ -286,7 +292,7 @@ async function handleApprove(c: any) {
     if (recusa) return c.json({ error: recusa }, 403);
 
     // Quem enviou a evidência não a revisa (segregação de funções).
-    if (targetRole === 'ciso' && evidence.uploaded_by && email && String(evidence.uploaded_by).toLowerCase() === email.toLowerCase()) {
+    if (targetRole === 'ciso' && evidence.uploaded_by && email && enviadoPor(evidence.uploaded_by) === email.toLowerCase()) {
       return c.json({ error: 'Quem enviou a evidência não pode revisá-la' }, 403);
     }
     // A assinatura vale para o conteúdo que a tela mostrou (hash), não para o que estiver lá depois.

@@ -403,6 +403,14 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(await statusDe('ev-1')).toBe('pending');
     });
 
+    it('evidência criada pelo agente do Líder SGSI também não é revisada por ele', async () => {
+      await env.DB.prepare("UPDATE evidence SET uploaded_by = 'agente de ana@exemplo.com.br (Cliente Um)' WHERE id = 'ev-1'").run();
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Quem enviou a evidência não pode revisá-la');
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
     it('quem enviou a evidência não a revisa como Líder SGSI', async () => {
       await env.DB.prepare("UPDATE evidence SET uploaded_by = 'Ana@Exemplo.com.br' WHERE id = 'ev-1'").run();
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
