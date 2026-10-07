@@ -28,4 +28,19 @@ describe('DELETE /api/v1/dpia/:id', () => {
     expect(res.status).toBe(409);
     expect(await env.DB.prepare(`SELECT id FROM dpia_assessments WHERE id='d2'`).first()).not.toBeNull();
   });
+
+  it('cancela na hora o pedido aberto do DPIA excluído', async () => {
+    await env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, system_name, status) VALUES ('d3','p1','Sistema','Draft')`).run();
+    await env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, criado_por)
+      VALUES ('ped-d3', 'org_ness', 'p1', 'dpia', 'd3', 'DPIA', 'ciente', '{}', 'h', 'u1')`).run();
+    expect((await del('d3')).status).toBe(200);
+    const p = await env.DB.prepare(`SELECT status FROM pedidos WHERE id='ped-d3'`).first<{ status: string }>();
+    expect(p?.status).toBe('cancelado');
+  });
+
+  it('apaga DPIA com status NULL (IS NOT, não !=)', async () => {
+    await env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, system_name, status) VALUES ('d4','p1','Sistema',NULL)`).run();
+    expect((await del('d4')).status).toBe(200);
+    expect(await env.DB.prepare(`SELECT id FROM dpia_assessments WHERE id='d4'`).first()).toBeNull();
+  });
 });

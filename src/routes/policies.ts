@@ -35,6 +35,10 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
       orgMemory = (answers || []).map(a => `${a.question_key}: ${a.answer}`).join('\n');
     }
 
+    // Resolve o controle antes de gastar chamada de IA.
+    const idLinha = await idDoControle(c.env.DB, projectId, controlId);
+    if (!idLinha) return c.json({ error: 'Controle não encontrado' }, 404);
+
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const result = await agent.run(
       `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
@@ -51,8 +55,6 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     }
 
     // Save policy markdown directly to compliance_controls.description
-    const idLinha = await idDoControle(c.env.DB, projectId, controlId);
-    if (!idLinha) return c.json({ error: 'Controle não encontrado' }, 404);
     await c.env.DB.prepare(
       'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
     ).bind(result.content, idLinha, projectId).run();
@@ -328,6 +330,13 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
 
     // ponytail: sequential to respect Cloudflare AI rate limits
     for (const controlId of controlIds) {
+      // Controle que não existe no projeto: falha sem gastar chamada de IA nem gravar versão órfã.
+      const idLinha = await idDoControle(c.env.DB, projectId, controlId);
+      if (!idLinha) {
+        failed++;
+        policies.push({ control_id: controlId, success: false, content_preview: '', error: 'Controle não encontrado' });
+        continue;
+      }
       try {
         const result = await agent.run(
           `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
@@ -339,13 +348,6 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
         );
 
         if (result.success) {
-          const idLinha = await idDoControle(c.env.DB, projectId, controlId);
-          if (!idLinha) {
-            // Controle que não existe no projeto: pula, sem gravar versão órfã.
-            failed++;
-            policies.push({ control_id: controlId, success: false, content_preview: '', error: 'Controle não encontrado' });
-            continue;
-          }
           successful++;
 
           // Salvar markdown da política e limpar assinaturas de demonstração

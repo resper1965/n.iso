@@ -146,7 +146,7 @@ describe('bloqueio da produção da SoA', () => {
   });
 
   // O piso de 40 caracteres vale para justificativa NOVA, digitada por pessoa.
-  // As geradas pelo SoALogicEngine sao curtas de proposito ("No software
+  // As geradas na exclusao sao curtas de proposito ("No software
   // development activities." tem 35) e travar a exportacao por causa delas
   // bloquearia todo projeto existente sem ganho de conformidade.
   it('justificativa curta já gravada não bloqueia: a norma exige registro, não 40 caracteres', () => {

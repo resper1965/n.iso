@@ -28,6 +28,10 @@ describe('idDoControle', () => {
     expect(await idDoControle(env.DB, 'p1', 'ctrl-a51')).toBe('ctrl-a51');
     expect(await idDoControle(env.DB, 'p4', 'A.5.10')).toBe('y7');
   });
+  it('% e _ não casam controle arbitrário (sem curinga do cliente)', async () => {
+    expect(await idDoControle(env.DB, 'p4', '%')).toBeNull();
+    expect(await idDoControle(env.DB, 'p4', '_')).toBeNull();
+  });
   it('não atravessa projeto', async () => {
     expect(await idDoControle(env.DB, 'p4', 'ctrl-a51')).toBeNull();
   });
@@ -53,5 +57,25 @@ describe('rotas de política com id de outro formato', () => {
     expect(rest.status).toBe(200);
     const c = await env.DB.prepare(`SELECT description FROM compliance_controls WHERE id='ctrl_b_a51'`).first<any>();
     expect(c.description).toBe('texto v1');
+  });
+});
+
+describe('geração em lote com controle inexistente', () => {
+  it('conta failed, não chama a IA e não grava versão', async () => {
+    await applySchema(); await resetData(); await resetSessions();
+    await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p5','C','ISO 27001:2022','Controller','Active')`).run();
+    await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u1','c@ness.dev','x','C','platform_admin')`).run();
+    const headers = await sessionFor({ id: 'u1', email: 'c@ness.dev', role: 'platform_admin' });
+    let chamadas = 0;
+    const res = await worker.fetch(
+      new Request('http://localhost/api/v1/projects/p5/generate-policies-bulk', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_ids: ['Z.9.9'] }),
+      }),
+      { ...env, AI: { run: async () => { chamadas++; return { response: 'x' }; } } } as any);
+    const corpo = await res.json() as any;
+    expect(res.status).toBe(200);
+    expect(corpo.failed).toBe(1);
+    expect(chamadas).toBe(0);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM policy_versions WHERE project_id='p5'`).first<{ n: number }>())?.n).toBe(0);
   });
 });

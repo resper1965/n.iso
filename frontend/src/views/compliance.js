@@ -12,7 +12,10 @@ import { navigate } from '../router.js';
     window.carregarCatalogo = async function (projectId) {
         try {
             const r1 = await api('POST', `/api/v1/projects/${projectId}/seed-27001-2022`);
-            const r2 = await api('POST', `/api/v1/projects/${projectId}/seed-27701-2025`);
+            // O seed 27701 acrescenta a norma em projects.standards: só roda se o projeto já a tem.
+            const p = S.currentProject;
+            const com27701 = p?.id === projectId && String(p.standards || '').includes('27701');
+            const r2 = com27701 ? await api('POST', `/api/v1/projects/${projectId}/seed-27701-2025`) : null;
             await window.loadControls();
             showToast(`Catálogo carregado: ${(r1?.seeded || 0) + (r2?.seeded || 0)} controles novos.`, 'success');
             navigate('controls');
@@ -27,13 +30,16 @@ import { navigate } from '../router.js';
         a.innerHTML = S.currentProject
             ? `<button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${S.currentProject.id}"]'>Diagnóstico de prontidão</button>`
             : '';
-        if (!S.controls.length) {
+        // /controls traz controles de todos os projetos visíveis ao consultor: filtra pelo projeto atual.
+        const controls = S.currentProject ? S.controls.filter(x => x.project_id === S.currentProject.id) : S.controls;
+        if (!controls.length) {
+            const com27701 = String(S.currentProject?.standards || '').includes('27701');
             c.innerHTML = S.currentProject
-                ? `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Carregue o Anexo A da ISO 27001:2022 e os controles de privacidade da ISO 27701:2025 deste projeto.</p><button class="btn btn-primary" data-action="carregarCatalogo" data-args='["${escapeHTML(S.currentProject.id)}"]'>Carregar catálogo</button></div>`
+                ? `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Carregue o Anexo A da ISO 27001:2022${com27701 ? ' e os controles de privacidade da ISO 27701:2025' : ''} deste projeto.</p><button class="btn btn-primary" data-action="carregarCatalogo" data-args='["${escapeHTML(S.currentProject.id)}"]'>Carregar catálogo</button></div>`
                 : `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Escolha um projeto para carregar o catálogo.</p></div>`;
             return;
         }
-        c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${S.controls.map(ctrl => `
+        c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${controls.map(ctrl => `
             <div class="phase-item" data-action="openControlDetail" data-args='["${ctrl.id}"]' style="cursor:pointer">
                 <div class="phase-num" style="width:3.5rem;color:var(--accent)">${escapeHTML(codigoDoControle(ctrl))}</div>
                 <div style="flex:1">

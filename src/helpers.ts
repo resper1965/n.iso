@@ -344,8 +344,8 @@ export async function idDoControle(db: D1Database, projectId: string, ref: strin
   const norm = 'ctrl-' + ref.toLowerCase().replace(/[^a-z0-9]/g, '');
   const row = await db.prepare(
     `SELECT id FROM compliance_controls
-      WHERE project_id = ?1 AND (id = ?2 OR id = ?3 OR title = ?2 OR title LIKE ?2 || ' %')
-      ORDER BY (id = ?2) DESC, (id = ?3) DESC LIMIT 1`
+      WHERE project_id = ?1 AND (id = ?2 OR id = ?3 OR title = ?2 OR substr(title, 1, length(?2) + 1) = ?2 || ' ')
+      ORDER BY (id = ?2) DESC, (id = ?3) DESC, id LIMIT 1`
   ).bind(projectId, ref, norm).first<{ id: string }>();
   return row?.id ?? null;
 }

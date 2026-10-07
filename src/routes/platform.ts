@@ -112,7 +112,9 @@ platformApp.delete('/dpia/:id', async (c) => {
     if (atual.status === 'Approved') {
       return c.json({ error: 'DPIA aprovado não pode ser excluído. Revogue a aprovação antes (motivo obrigatório).' }, 409);
     }
-    await c.env.DB.prepare("DELETE FROM dpia_assessments WHERE id = ? AND status != 'Approved'").bind(id).run();
+    await c.env.DB.prepare("DELETE FROM dpia_assessments WHERE id = ? AND status IS NOT 'Approved'").bind(id).run();
+    // Com o documento apagado, o pedido aberto dele é cancelado na hora (conferirVigencia).
+    await conferirPedidosDoDocumento(c, 'dpia', id);
     const user = c.get('user');
     await logAudit(c.env.DB, 'dpia_deleted', user?.email || 'system', `DPIA ${id} excluído`);
     return c.json({ ok: true });
