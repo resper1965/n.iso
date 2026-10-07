@@ -201,14 +201,14 @@ Medido em `main` `e9db819`, com 58 tabelas (comando do `AGENTS.md`). As linhas c
 
 Não fazem parte do estudo, mas estão no terreno que o núcleo vai pisar. Todos foram conferidos no código, salvo onde dito.
 
-1. **A tela de DPIA chama `DELETE /api/v1/dpia/:id`, que não existe.** Só há `PUT` (`src/routes/platform.ts:66`); a exclusão pela tela recebe 404 (`frontend/src/views/privacy.js:475`). **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-2. **O modal de risco não lista ativos.** `GET .../assets` devolve `{ok, assets}`, mas `grc.js:267-270` espera um array e zera a lista. **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-3. **`location`, `classification` e as notas CID somem ao criar ativo.** O INSERT de `src/routes/project-assets.ts:46` não grava esses campos, embora a API e o MCP os aceitem. (Afirmação do levantamento, não reconferida linha a linha.) **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-4. **Colunas `*_approved_ip/ua` sem migration.** Existem em `schema.sql` para controles, evidências e RoPA, mas nenhuma migration as cria. Produção tem as colunas: `pragma_table_info('ropa_records')` mostra as duas, então é deriva só para banco novo montado por migrations. **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).** Produção e staging foram conferidos; a 0044 é só registrada nos dois.
-5. **Nenhum caminho semeia os 93 controles do Anexo A** (ver 3.2). **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-6. **Dois catálogos 27701:2025 divergentes** (ver 3.2). **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-7. **`vendor.created` vai para a trilha sem `project_id`; PUT e DELETE de fornecedor não registram nada.** **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
-8. **O CSV de ativos exporta os removidos.** **Corrigido na fatia 0 (branch `fix/fatia-0-chao-firme`).**
+1. **A tela de DPIA chama `DELETE /api/v1/dpia/:id`, que não existe.** Só há `PUT` (`src/routes/platform.ts:66`); a exclusão pela tela recebe 404 (`frontend/src/views/privacy.js:475`). **Corrigido na fatia 0 (#293).**
+2. **O modal de risco não lista ativos.** `GET .../assets` devolve `{ok, assets}`, mas `grc.js:267-270` espera um array e zera a lista. **Corrigido na fatia 0 (#293).**
+3. **`location`, `classification` e as notas CID somem ao criar ativo.** O INSERT de `src/routes/project-assets.ts:46` não grava esses campos, embora a API e o MCP os aceitem. (Afirmação do levantamento, não reconferida linha a linha.) **Corrigido na fatia 0 (#293).**
+4. **Colunas `*_approved_ip/ua` sem migration.** Existem em `schema.sql` para controles, evidências e RoPA, mas nenhuma migration as cria. Produção tem as colunas: `pragma_table_info('ropa_records')` mostra as duas, então é deriva só para banco novo montado por migrations. **Corrigido na fatia 0 (#293).** Produção e staging foram conferidos; a 0044 é só registrada nos dois.
+5. **Nenhum caminho semeia os 93 controles do Anexo A** (ver 3.2). **Corrigido na fatia 0 (#293).**
+6. **Dois catálogos 27701:2025 divergentes** (ver 3.2). **Corrigido na fatia 0 (#293).**
+7. **`vendor.created` vai para a trilha sem `project_id`; PUT e DELETE de fornecedor não registram nada.** **Corrigido na fatia 0 (#293).**
+8. **O CSV de ativos exporta os removidos.** **Corrigido na fatia 0 (#293).**
 
 Pendência fora da fatia: o staging está com `d1_migrations` parado na 0028 (conferido em 2026-10-07).
 
