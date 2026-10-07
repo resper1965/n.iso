@@ -24,10 +24,13 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Chat de IA deixa de pedir histórico a rotas que nunca existiram.
 - Sair encerra a sessão no servidor (sem esperar a resposta).
 - Exportar CSV importa `API_BASE`.
+- Políticas: a assinatura grava o Líder SGSI e a Direção (nome da matriz, data, IP e user-agent) com autoridade e segregação pela matriz de Governança, como ROPA, DPIA e evidência; assinar não reescreve mais o status do controle na SoA. Restaurar versão zera as assinaturas. O modal acha o controle em qualquer formato de id, salva a edição (antes sempre falhava) e o "Imprimir" abre o relatório da política.
 
 ### Adicionado
 - Teste de contrato: toda chamada do frontend a `/api/v1/*` precisa casar com uma rota do backend (`test/contrato-tela-api.test.ts`), e um teste reprova global usado sem import no frontend.
 - `POST /api/v1/projects/:id/seed-27001-2022` e o botão "Carregar catálogo": projeto novo recebe o Anexo A da ISO 27001:2022 e os controles da ISO 27701:2025. A lista de controles mostra o código.
+- `GET /api/v1/projects/:id/controls/:controlId/policy` (texto, SHA-256, assinaturas e versões) e `GET .../policy/report` (relatório para imprimir).
+- Pedido de aprovação de política (Líder SGSI ou Direção): a direção com conta só de leitura aprova em "Meus pedidos", e a assinatura vai para o controle; quem pediu acompanha a aprovação e a recusa em "Ciência de Políticas".
 
 ### Removido
 - `SoALogicEngine`, `OLD_RULES` e `PIMS_RULES`: motor de SoA sem uso e o segundo catálogo 27701 (fica o da edição 2025).
