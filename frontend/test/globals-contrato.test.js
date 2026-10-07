@@ -35,6 +35,11 @@ describe('alteração de escopo (projects.ts:745-767)', () => {
         expect(t).toContain('Produto novo');
         expect(t).toContain('Novos ativos de cartão');
         expect(t).toContain('ciso@acme.com.br');
+        // solicitação pendente não é versão vigente
+        expect(t).toContain('Pendente');
+        expect(t).not.toMatch(/Versão \d/);
+        expect(t).toContain('Solicitado por');
+        expect(t).not.toContain('Aprovador');
     });
 
     it('registrar: manda os campos que scopeChangeSchema exige', async () => {
@@ -45,6 +50,19 @@ describe('alteração de escopo (projects.ts:745-767)', () => {
         await window.submitScopeChange('p1', 'Escopo atual');
         const [, opts] = f.mock.calls.find(([u]) => String(u).endsWith('/scope-changes'));
         expect(JSON.parse(opts.body)).toEqual({ change_description: 'Novo escopo', reason: 'Motivo', impact_analysis: 'Impacto', requested_by: 'CISO' });
+    });
+
+    it('registrar com sucesso: a solicitação fica pendente e o escopo atual não muda', async () => {
+        servir({ 'POST /api/v1/projects/p1/scope-changes': { ok: true, id: 's2' } });
+        document.body.insertAdjacentHTML('beforeend', `
+            <textarea id="scope-new">Novo escopo</textarea><input id="scope-reason" value="Motivo">
+            <textarea id="scope-impact">Impacto</textarea><input id="scope-approved-by" value="CISO">`);
+        S.activeProject = { id: 'p1', scope: 'Escopo atual' };
+        S.currentProject = { id: 'p1', scope: 'Escopo atual' };
+        await window.submitScopeChange('p1', 'Escopo atual');
+        expect(S.activeProject.scope).toBe('Escopo atual');
+        expect(S.currentProject.scope).toBe('Escopo atual');
+        expect(document.querySelector('.toast')?.textContent).toContain('Solicitação de mudança de escopo registrada (pendente)');
     });
 
     it('registrar recusado pelo servidor: avisa e não finge que gravou', async () => {

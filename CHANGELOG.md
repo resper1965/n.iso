@@ -19,8 +19,8 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Políticas acham o controle pelo código em qualquer formato de id, preso ao projeto (7 rotas, incluindo `generate-from-template`); o GET de versões de controle inexistente responde 404.
 - Banco novo ganha as colunas de IP/UA das aprovações (migration 0044, só registrada em produção e staging).
 - Contrato tela↔API: `api()` desembrulha só envelope de lista pura (`{ ok, <uma lista> }`); com outro campo ou duas listas devolve o objeto. Entrevistas, jornada, lacunas, lotes, certificação, notas do auditor, rastreabilidade e templates voltam a ler o que o servidor manda.
-- Alteração de escopo passa a gravar (os campos do POST não casavam com o schema e davam 400); o escopo só muda de fato quando a solicitação é tratada.
-- Autoatendimento do questionário chama `/assessments/public`, leva os blocos no bundle e não conclui mais sem salvar; saem o atalho do dashboard e o ramo `self-service` do roteador (fica o link `?assessment=<token>`).
+- Alteração de escopo passa a gravar (os campos do POST não casavam com o schema e davam 400): registra uma solicitação de mudança de escopo, pendente; ainda não há fluxo que a aprove.
+- Autoatendimento do questionário chama `/assessments/public`, leva os blocos no bundle e não conclui mais sem salvar; saem o atalho do dashboard e o ramo `self-service` do roteador (fica o link `?assessment=<token>`, que a tela do levantamento entrega no botão "Copiar link do questionário").
 - Chat de IA deixa de pedir histórico a rotas que nunca existiram.
 - Sair encerra a sessão no servidor (sem esperar a resposta).
 - Exportar CSV importa `API_BASE`.

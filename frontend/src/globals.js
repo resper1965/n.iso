@@ -1630,6 +1630,9 @@ window.signEvidence = async function(evidenceId, role) {
         }
     }
 
+// scope_changes.status nasce 'Pending' (schema.sql); ainda não há fluxo que aprove.
+const STATUS_ESCOPO = { Pending: 'Pendente', Approved: 'Aprovada', Rejected: 'Rejeitada' };
+
 window.openScopeChangeModal = async function(projectId, projData) {
         let history = [];
         try {
@@ -1657,7 +1660,7 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <textarea class="form-input" id="scope-impact" rows="2" placeholder="Quais novos riscos ou mudanças de ativos essa alteração traz?"></textarea>
             </div>
             <div class="form-group">
-                <label class="form-label">Aprovador ness. / Cliente</label>
+                <label class="form-label">Solicitado por</label>
                 <input class="form-input" id="scope-approved-by" placeholder="Ex: João (ness.) / CISO Cliente">
             </div>
             
@@ -1668,7 +1671,7 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <div style="font-size:0.65rem; color:var(--text-dim); max-height:100px; overflow-y:auto; line-height:1.4">
                     ${history.length ? history.map((c, i) => `
                         <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
-                            <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.requested_by)}<br>
+                            <strong>${escapeHTML(STATUS_ESCOPO[c.status] || c.status || 'Pendente')}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Solicitado por: ${escapeHTML(c.requested_by)}<br>
                             <strong>Motivo:</strong> ${escapeHTML(c.reason)}<br>
                             <strong>Impacto de Seg.:</strong> ${escapeHTML(c.impact_analysis)}<br>
                             <strong>Novo Escopo:</strong> ${escapeHTML(c.change_description)}
@@ -1703,10 +1706,9 @@ window.submitScopeChange = async function(projectId, prevScope) {
             showToast('Erro ao registrar a alteração de escopo: ' + e.message, 'error');
             return;
         }
-        
-        if (S.activeProject && S.activeProject.id === projectId) S.activeProject.scope = body.new_scope;
-        if (S.currentProject && S.currentProject.id === projectId) S.currentProject.scope = body.new_scope;
 
+        // A solicitação fica pendente: o escopo vigente do projeto não muda aqui.
+        showToast('Solicitação de mudança de escopo registrada (pendente)');
         forceCloseModal(); render();
     }
 

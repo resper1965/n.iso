@@ -371,6 +371,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                         ${sidebarHtml}
                         <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-dim)">
                             ${as.status === 'converted' ? '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>' : ''}
+                            ${as.access_token && as.status !== 'converted' ? `<button class="btn" style="width:100%" data-action="copyAssessmentLink" data-args="${escapeHTML(JSON.stringify([as.access_token]))}">Copiar link do questionário</button><div id="assessment-link-slot"></div>` : ''}
                         </div>
                     </div>
                     <div class="wizard-content">
@@ -400,6 +401,20 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
 
         } catch(e) {
             c.innerHTML = '<div class="error">Erro ao carregar detalhes: ' + e.message + '</div>';
+        }
+    }
+
+    // O token só aparece nesta tela; a rota pública (?assessment=) devolve 410 depois da venda.
+    async function copyAssessmentLink(token) {
+        const url = `${location.origin}/?assessment=${encodeURIComponent(token)}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showToast('Link do questionário copiado');
+        } catch {
+            const slot = document.getElementById('assessment-link-slot');
+            if (slot) slot.innerHTML = `<input class="form-input" id="assessment-link-url" type="text" readonly value="${escapeHTML(url)}" style="margin-top:0.5rem">`;
+            const el = document.getElementById('assessment-link-url');
+            if (el) { el.focus(); el.select(); }
         }
     }
 
@@ -512,6 +527,7 @@ window.renderAssessments = renderAssessments;
 window.createAssessmentFromLead = createAssessmentFromLead;
 window.openAssessmentDetail = openAssessmentDetail;
 window.renderAssessmentDetail = renderAssessmentDetail;
+window.copyAssessmentLink = copyAssessmentLink;
 window.toggleNessSelect = toggleNessSelect;
 window.selectNessOption = selectNessOption;
 window.goToBlock = goToBlock;

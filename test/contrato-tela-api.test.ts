@@ -10,7 +10,7 @@ import app from '../src/index';
  * servidor: `app.routes`, como em test/trilha-exclusao.test.ts.
  */
 const FONTES = import.meta.glob(
-  ['../frontend/src/**/*.js', '../frontend/public/*.{js,html}', '../frontend/login.html', '!../frontend/public/marked.min.js'],
+  ['../frontend/src/**/*.js', '../frontend/public/**/*.{js,html}', '../frontend/login.html', '!../frontend/public/marked.min.js'],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>;
 
@@ -25,7 +25,13 @@ export function chamadasDoFonte(arquivo: string, src: string): Chamada[] {
   const out: Chamada[] = [];
   for (const m of src.matchAll(LITERAL)) {
     const inicio = m.index ?? 0;
-    const metodo = /api\(\s*'([A-Z]+)'\s*,\s*$/.exec(src.slice(Math.max(0, inicio - 40), inicio))?.[1] ?? null;
+    const antes = src.slice(Math.max(0, inicio - 40), inicio);
+    let metodo = /api\(\s*'([A-Z]+)'\s*,\s*$/.exec(antes)?.[1] ?? null;
+    if (!metodo && /fetch\(\s*(?:API_BASE\s*\+\s*)?$/.test(antes)) {
+      // fetch sem `method:` é GET (padrão do fetch); o init vem logo depois do literal.
+      const depois = src.slice(inicio + m[0].length, inicio + m[0].length + 200).split('fetch(')[0];
+      metodo = /method:\s*['"]([A-Z]+)['"]/.exec(depois)?.[1] ?? 'GET';
+    }
     let caminho: string;
     if (m[1] !== undefined) {
       const cru = m[1];
@@ -78,9 +84,9 @@ const chave = (c: { metodo: string | null; caminho: string }) => `${c.metodo ?? 
 const TOLERADAS: { chave: string; motivo: string; expande: string[] }[] = [
   { chave: 'POST /api/v1/servicos/:p/:p', motivo: 'catalogo.js mudarSituacao(id, acao)', expande: ['POST /api/v1/servicos/:p/arquivar', 'POST /api/v1/servicos/:p/reativar'] },
   { chave: 'POST /api/v1/pedidos/:p/:p', motivo: 'meus-pedidos.js enviarDecisao(id, acao)', expande: ['POST /api/v1/pedidos/:p/aprovar', 'POST /api/v1/pedidos/:p/recusar'] },
-  { chave: '* /api/v1/public/pedidos/:p', motivo: 'public/politicas.js postLink(acao)', expande: ['POST /api/v1/public/pedidos/ver', 'POST /api/v1/public/pedidos/codigo', 'POST /api/v1/public/pedidos/ciencia'] },
+  { chave: 'POST /api/v1/public/pedidos/:p', motivo: 'public/politicas.js postLink(acao)', expande: ['POST /api/v1/public/pedidos/ver', 'POST /api/v1/public/pedidos/codigo', 'POST /api/v1/public/pedidos/ciencia'] },
   { chave: '* /api/v1/public/propostas/:p', motivo: "public/proposta.js: const API = '/api/v1/public/propostas/'; chamar(acao)", expande: ['POST /api/v1/public/propostas/ver', 'POST /api/v1/public/propostas/aceitar', 'POST /api/v1/public/propostas/ajuste', 'POST /api/v1/public/propostas/recusar'] },
-  { chave: '* /api/v1/projects/:p/export/:p', motivo: 'monitor.js exportCSV(type)', expande: ['GET /api/v1/projects/:p/export/risks', 'GET /api/v1/projects/:p/export/vendors', 'GET /api/v1/projects/:p/export/training', 'GET /api/v1/projects/:p/export/assets'] },
+  { chave: 'GET /api/v1/projects/:p/export/:p', motivo: 'monitor.js exportCSV(type)', expande: ['GET /api/v1/projects/:p/export/risks', 'GET /api/v1/projects/:p/export/vendors', 'GET /api/v1/projects/:p/export/training', 'GET /api/v1/projects/:p/export/assets'] },
   { chave: '* /api/v1/auth/mfa/:p', motivo: 'api.js: prefixo de startsWith que isenta o 401 do MFA; não é chamada', expande: ['POST /api/v1/auth/mfa/verify'] },
   // Temporárias: rota inexistente, chamada que sai no P2 (modal de política).
   { chave: 'GET /api/v1/projects/:p/controls/:p/policy', motivo: 'modal de política; removida no P2', expande: [] },
@@ -107,14 +113,16 @@ describe('contrato tela↔API', () => {
       'fetch(`${API_BASE}/api/v1/projects/${id}/evidence/${e}/download`)',
       "api('GET', '/api/v1/funil' + consulta)",
       'window.open(`/api/v1/projects/${p}/ropa/report?token=${S.token}`)',
+      "fetch(`/api/v1/public/y/${a}`, { method: 'POST', body })",
     ].join('\n');
     expect(chamadasDoFonte('f.js', src).map(chave)).toEqual([
       'GET /api/v1/projects/:p/readiness-check',
       'POST /api/v1/leads/:p/enrich-cnpj',
-      '* /api/v1/public/x/:p',
-      '* /api/v1/projects/:p/evidence/:p/download',
+      'GET /api/v1/public/x/:p',
+      'GET /api/v1/projects/:p/evidence/:p/download',
       'GET /api/v1/funil',
       '* /api/v1/projects/:p/ropa/report',
+      'POST /api/v1/public/y/:p',
     ]);
   });
 
