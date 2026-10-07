@@ -11,8 +11,10 @@
 import { genId } from '../helpers';
 import { orgDoUsuario, limiteDoPlanoAtingido } from './organizacao';
 import type { Servico } from '../schemas';
-import { stmtsFases } from './project-setup';
+import { stmtsFases, stmtControles } from './project-setup';
 import { diagnosticoDe } from './diagnostico';
+import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
+import { ISO_27701_2025_STANDARD, controlsForRole } from '../data/iso27701-2025';
 
 /** tokenHash: com origem 'link', o hash do token que a rota usou; rotação ou revogação no meio e nada grava. */
 export interface EntradaFechamento { propostaId: string; orgId: string; origem: 'link' | 'manual'; aceite: { nome: string; cargo: string; email: string; ip: string; comprovante?: string }; atorEmail: string; tokenHash?: string }
@@ -105,12 +107,17 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
       // cada fase só entra se o projeto acima existe, isto é, se foi criado por esta chamada
       ...stmtsFases(db, projetoId),
     );
+    // controles da norma vendida, com a mesma guarda das fases (o projeto desta chamada)
+    const catalogos = catalogosDoProjeto(
+      `${dados.standards} ${deProjeto.map((i) => `${i.servico.norma ?? ''} ${i.servico.nome}`).join(' ')}`, dados.orgRole);
+    stmts.push(...catalogos.map((k) => stmtControles(db, projetoId, k.standard, k.lista)));
     if (p.assessment_id) {
       // levantamento já convertido pelo fluxo antigo mantém o vínculo que tinha
       stmts.push(db.prepare(`UPDATE assessments SET status = 'converted', converted_project_id = COALESCE(converted_project_id, ?),
         completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND ${G}`).bind(projetoId, p.assessment_id, ...g));
     }
-    trilha.push(['project.created', `Projeto ${projetoId} criado com a trilha de fases pelo aceite da proposta ${p.id}`, projetoId]);
+    const resumo = catalogos.map((k) => `${k.lista.length} ${k.standard}`).join(', ');
+    trilha.push(['project.created', `Projeto ${projetoId} criado com a trilha de fases${resumo ? ` e os controles (${resumo})` : ''} pelo aceite da proposta ${p.id}`, projetoId]);
     // Limite do plano: o aceite NÃO falha por ele (o cliente já aceitou; recusar aqui quebraria a venda
     // fechada). O limite barra a criação MANUAL (`POST /projects`); aqui o estouro fica na trilha.
     if (await limiteDoPlanoAtingido(db, p.org_id, 'projetos')) {
@@ -176,4 +183,22 @@ async function dadosDoProjeto(db: D1Database, p: any, servicos: Servico[]) {
     cnpj: lead?.cnpj ?? null,
     pessoas: Object.keys(respostas).length ? diagnosticoDe(respostas).pessoas : null,
   };
+}
+
+type Catalogo = { standard: string; lista: readonly { code: string; title: string }[] };
+
+/**
+ * Catálogos que o projeto vendido ganha, pelo rótulo de normas do projeto e pela norma e nome dos
+ * serviços de projeto. O 27701 estende o SGSI e traz o 27001 junto. Texto sem nenhuma das duas
+ * ("Adequação LGPD") não semeia nada. Papel 27701 não mapeado cai no Controlador, como o papel vazio.
+ */
+function catalogosDoProjeto(texto: string, orgRole: string): Catalogo[] {
+  const com27701 = /27701/.test(texto);
+  const out: Catalogo[] = [];
+  if (com27701 || /27001/.test(texto)) out.push({ standard: ISO_27001_2022_STANDARD, lista: ISO_27001_2022 });
+  if (com27701) {
+    const porPapel = controlsForRole(orgRole);
+    out.push({ standard: ISO_27701_2025_STANDARD, lista: porPapel.length ? porPapel : controlsForRole('') });
+  }
+  return out;
 }

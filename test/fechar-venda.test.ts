@@ -5,6 +5,7 @@ import { env } from 'cloudflare:test';
 import { applySchema } from './helpers/d1';
 import { fecharVenda, type EntradaFechamento } from '../src/services/fechar-venda';
 import { PHASE_TITLES } from '../src/constants';
+import { idDoControle } from '../src/helpers';
 
 const db = () => env.DB as D1Database;
 
@@ -21,16 +22,17 @@ const DPO = { nome: 'DPO as a service', norma: 'LGPD', tipo: 'recorrente', descr
 
 let seq = 0;
 /** Proposta nova com itens; devolve o id. Cada teste usa a sua (o storage é por arquivo). */
-async function proposta(o: { status?: string; org?: string; itens?: { servico: any; valor: number; meses?: number }[]; consultor?: string | null; total?: number; mensal?: number } = {}) {
+async function proposta(o: { status?: string; org?: string; itens?: { servico: any; valor: number; meses?: number }[]; consultor?: string | null; total?: number; mensal?: number;
+  assessment?: string | null; escopo?: string; secoes?: string | null } = {}) {
   const id = `prop-${String(++seq).padStart(3, '0')}`;
   const leadId = `lead-${seq}`;
   const itens = o.itens ?? [{ servico: PROJETO, valor: 180000 }, { servico: MSSP, valor: 60000, meses: 12 }];
   await db().batch([
     db().prepare(`INSERT INTO leads (id, company_name, cnpj, status, org_id) VALUES (?, 'Cliente', ?, 'Proposal', ?)`).bind(leadId, `1122233300${String(1000 + seq)}`, o.org ?? 'org_ness'),
     db().prepare(`INSERT INTO propostas (id, org_id, lead_id, assessment_id, numero, status, cliente, consultor_email, total_projeto, mensalidade,
-      documento_html, documento_hash, criada_por) VALUES (?, ?, ?, 'as-1', ?, ?, 'Cliente Ltda.', ?, ?, ?, '<p>doc</p>', 'hash-abc', 'com@ness.lat')`)
-      .bind(id, o.org ?? 'org_ness', leadId, `NESS-2026-${seq}`, o.status ?? 'enviada', o.consultor === undefined ? 'cons@ness.lat' : o.consultor,
-        o.total ?? 180000, o.mensal ?? 5000),
+      documento_html, documento_hash, criada_por, escopo, secoes_editadas) VALUES (?, ?, ?, ?, ?, ?, 'Cliente Ltda.', ?, ?, ?, '<p>doc</p>', 'hash-abc', 'com@ness.lat', ?, ?)`)
+      .bind(id, o.org ?? 'org_ness', leadId, o.assessment === undefined ? 'as-1' : o.assessment, `NESS-2026-${seq}`, o.status ?? 'enviada',
+        o.consultor === undefined ? 'cons@ness.lat' : o.consultor, o.total ?? 180000, o.mensal ?? 5000, o.escopo ?? '', o.secoes ?? null),
     ...itens.map((i, k) => db().prepare(`INSERT INTO proposta_itens (id, proposta_id, ordem, servico_id, servico, meses, valor) VALUES (?, ?, ?, NULL, ?, ?, ?)`)
       .bind(`${id}-i${k}`, id, k, JSON.stringify(i.servico), i.meses ?? null, i.valor)),
   ]);
@@ -44,6 +46,11 @@ const entrada = (propostaId: string, o: Partial<EntradaFechamento> = {}): Entrad
 });
 
 const conta = async (sql: string, ...b: unknown[]) => (await db().prepare(sql).bind(...b).first<{ n: number }>())!.n;
+
+/** Controles do projeto por norma: { 'ISO 27001:2022': 93, ... }. */
+const porNorma = async (projeto: string | null) => Object.fromEntries((await db().prepare(
+  'SELECT standard, COUNT(*) n FROM compliance_controls WHERE project_id = ? GROUP BY standard').bind(projeto).all<{ standard: string; n: number }>())
+  .results.map((r) => [r.standard, r.n]));
 
 describe('fecharVenda', () => {
   beforeAll(async () => {
@@ -278,6 +285,47 @@ describe('fecharVenda', () => {
       const r = await fecharVenda(db(), entrada(p.id));
       if (!r.ok) throw new Error('fechamento falhou');
       expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, r.projetoId)).toBe(0);
+    }
+  });
+  // ——— P3: projeto nasce completo ———
+  it('controles: 27001 quando vendido; 27701 pelo rótulo ou pelo serviço; re-aceite não duplica', async () => {
+    // as-1: target_standard 'ISO 27001 + 27701', papel Controlador
+    const a = await proposta();
+    const ra = await fecharVenda(db(), entrada(a.id));
+    if (!ra.ok) throw new Error('fechamento falhou');
+    expect(await porNorma(ra.projetoId)).toEqual({ 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 });
+    expect(await idDoControle(db(), ra.projetoId!, 'A.8.34')).not.toBeNull();
+    expect(await fecharVenda(db(), entrada(a.id))).toMatchObject({ ok: false, motivo: 'ja_fechada' });
+    expect(await porNorma(ra.projetoId)).toEqual({ 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 });
+
+    // sem levantamento: o serviço decide
+    const casos: [any, Record<string, number>][] = [
+      [PROJETO, { 'ISO 27001:2022': 93 }],
+      [{ ...PROJETO, nome: 'Implementação integrada', norma: 'ISO/IEC 27001:2022 + 27701:2025' }, { 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 }],
+      [{ ...PROJETO, nome: 'Adequação LGPD', norma: 'LGPD' }, {}],
+    ];
+    for (const [servico, esperado] of casos) {
+      const { id } = await proposta({ assessment: null, itens: [{ servico, valor: 1 }] });
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect(await porNorma(r.projetoId), servico.nome).toEqual(esperado);
+    }
+  });
+
+  it('papel do levantamento decide a tabela 27701; "Ainda não mapeado" cai no Controlador', async () => {
+    const papeis: [string, number][] = [['Controlador + Operador', 49], ['Operador', 18], ['Ainda não mapeado', 31]];
+    for (const [k, [papel, n]] of papeis.entries()) {
+      const as = `as-papel-${k}`;
+      await db().batch([
+        db().prepare(`INSERT INTO assessments (id, client_name) VALUES (?, 'Cliente')`).bind(as),
+        db().prepare(`INSERT INTO assessment_answers (id, assessment_id, block, question_key, question, answer) VALUES (?, ?, 1, 'data_role', 'data_role', ?)`).bind(`${as}-r`, as, papel),
+        db().prepare(`INSERT INTO assessment_answers (id, assessment_id, block, question_key, question, answer) VALUES (?, ?, 1, 'target_standard', 'target_standard', 'ISO 27001 + ISO 27701 (integrada)')`).bind(`${as}-t`, as),
+      ]);
+      const { id } = await proposta({ assessment: as });
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect((await porNorma(r.projetoId))['ISO 27701:2025'], papel).toBe(n);
+      expect((await porNorma(r.projetoId))['ISO 27001:2022'], papel).toBe(93);
     }
   });
 });
