@@ -135,7 +135,11 @@ describe('consumidores que liam campo que a resposta não tem', () => {
 
     it('templates de política: viram opções do seletor (policies.ts:521)', async () => {
         servir({
-            'GET /api/v1/controls': [],
+            // policies.ts, GET .../controls/:controlId/policy (P2): sem texto de política, o modal abre o formulário de geração.
+            'GET /api/v1/projects/p1/controls/A.5.1/policy': {
+                ok: true, control: { id: 'ctrl-a51', project_id: 'p1', title: 'A.5.1 Políticas', description: '' },
+                content: '', hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', versions: [],
+            },
             'GET /api/v1/policies/templates': { ok: true, templates: ['isms-policy', 'access-control-policy'] },
         });
         await window.openGeneratePolicyModal('p1', 'A.5.1');

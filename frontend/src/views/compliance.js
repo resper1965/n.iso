@@ -1668,7 +1668,7 @@ import { navigate } from '../router.js';
                         ceoSign,
                         window.renderStatusBadge(stageText, stageType),
                         window.renderStatusBadge(ctrl.status || 'IMPLEMENTED', statusType),
-                        `<button data-action="openGeneratePolicyModal" data-args='["${proj.id}","${escapeHTML(displayId)}"]' class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
+                        `<button data-action="openGeneratePolicyModal" data-args='["${proj.id}","${escapeHTML(ctrl.id)}"]' class="btn btn-ghost btn-sm">Visualizar / Gerar</button>`
                     ];
                 }),
                 { emptyState: 'Nenhuma política cadastrada.' }
@@ -1683,6 +1683,12 @@ import { navigate } from '../router.js';
         }
     }
 
+    // Mudar o texto zera as duas assinaturas no servidor (policies.ts): quem clica precisa saber antes.
+    function avisarQueAnulaAssinaturas(ctrl) {
+        if (!ctrl.ciso_approved_by && !ctrl.ceo_approved_by) return true;
+        return window.confirm('Mudar o texto anula as assinaturas já registradas desta política. Continuar?');
+    }
+
     async function openGeneratePolicyModal(projectId, controlIdArg) {
         const controlId = controlIdArg || 'A.5.1';
         
@@ -1691,33 +1697,21 @@ import { navigate } from '../router.js';
             <div style="padding: 2rem; text-align: center; color: var(--text-dim);">Carregando detalhes do controle...</div>
         `);
 
-        const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-        let ctrl = {};
-        let policyText = '';
-        let evidenceId = null;
-
-        // 1. Busca a política no endpoint dedicado
+        // Uma rota só, presa ao projeto: o servidor acha o controle pelo id em qualquer formato ou
+        // pelo código. Sem fallback para a lista global de controles, que mistura projetos.
+        let policyRes;
         try {
-            const policyRes = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/policy`);
-            if (policyRes) {
-                policyText = policyRes.content || '';
-                evidenceId = policyRes.evidence_id || null;
-                ctrl = policyRes.control || {};
-            }
-        } catch(e) {
-            console.error("Erro ao carregar politica do R2:", e);
+            policyRes = await api('GET', `/api/v1/projects/${projectId}/controls/${encodeURIComponent(controlId)}/policy`);
+        } catch (e) {
+            openModal(`
+                <div class="modal-header"><span class="modal-title">Gestão de Política</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
+                <div style="padding: 2rem; text-align: center; color: var(--danger);">${escapeHTML(e.message || 'Controle não encontrado neste projeto')}</div>
+            `);
+            return;
         }
-
-        // 2. Fallback caso a requisição falhe ou retorne vazio
-        if (!ctrl.id) {
-            try {
-                const controls = await api('GET', '/api/v1/controls');
-                if (Array.isArray(controls)) {
-                    ctrl = controls.find(c => c.id === normId) || {};
-                    if (!policyText) policyText = ctrl.description || '';
-                }
-            } catch(e) {}
-        }
+        const ctrl = policyRes.control;
+        const policyText = policyRes.content || '';
+        const codigo = codigoDoControle(ctrl);
 
         let templates = [];
         let options = '';
@@ -1732,14 +1726,14 @@ import { navigate } from '../router.js';
         const isDefaultDescription = !policyText || 
                                      policyText === 'Universal ISMS requirement.' || 
                                      policyText.startsWith('SGSI-POLICY-') && policyText.includes('aguardando assinatura');
-        const hasPolicy = (policyText && policyText.length > 100 && !isDefaultDescription) || (evidenceId !== null);
+        const hasPolicy = policyText.length > 100 && !isDefaultDescription;
 
         const showGenerationFormHtml = () => {
             const formHtml = `
-                <div class="modal-header"><span class="modal-title">Gerar Política ISO — ${escapeHTML(controlId)}</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
+                <div class="modal-header"><span class="modal-title">Gerar Política ISO — ${escapeHTML(codigo)}</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
                 <div class="form-group" style="display:none">
                     <label class="form-label">Controle ISO</label>
-                    <input class="form-input" id="policy-control-id" value="${escapeHTML(controlId)}">
+                    <input class="form-input" id="policy-control-id" value="${escapeHTML(codigo)}">
                 </div>
                 
                 <div class="form-group">
@@ -1767,10 +1761,7 @@ import { navigate } from '../router.js';
 
         if (hasPolicy) {
             // Buscar histórico de versões da política
-            let versions = [];
-            try {
-                versions = await api('GET', `/api/v1/projects/${projectId}/controls/${controlId}/versions`) || [];
-            } catch(e) {}
+            const versions = policyRes.versions || [];
 
             
 
@@ -1793,7 +1784,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ciso"]'>Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${projectId}","${escapeHTML(ctrl.id)}","ciso"]'>Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1818,7 +1809,7 @@ import { navigate } from '../router.js';
                             <span style="color:var(--text-dim)">Aguardando assinatura</span>
                         </div>
                         <div style="display:flex; gap:8px">
-                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ceo"]'>Assinar</button>
+                            <button class="btn" style="padding:0.2rem 0.6rem; font-size:0.75rem" data-action="signPolicy" data-args='["${projectId}","${escapeHTML(ctrl.id)}","ceo"]'>Assinar</button>
                         </div>
                     </div>
                 `;
@@ -1829,16 +1820,16 @@ import { navigate } from '../router.js';
                 versionsSelectHtml = `
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">
                         <label style="font-size:0.7rem; color:var(--text-dim); text-transform:uppercase; font-weight:600; min-width:120px">Histórico de Versões:</label>
-                        <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" data-action-change="onPolicyVersionChange" data-args='["${projectId}","${controlId}"]' data-arg-val>
+                        <select class="form-input" style="height:32px; padding:0 8px; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.02); border-color:var(--border); flex:1" id="policy-version-selector" data-action-change="onPolicyVersionChange" data-args='["${projectId}","${escapeHTML(ctrl.id)}"]' data-arg-val>
                             ${versions.map((v, index) => `<option value="${v.id}">${index === 0 ? 'v' + v.version + ' (Atual)' : 'v' + v.version} - por ${escapeHTML(v.created_by)} em ${new Date(v.created_at).toLocaleDateString()}</option>`).join('')}
                         </select>
-                        <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" data-action="doRestorePolicyVersion" data-args='["${projectId}","${controlId}"]'>Restaurar vX</button>
+                        <button class="btn" id="btn-restore-version" style="display:none; padding:4px 10px; font-size:0.7rem; border-color:var(--accent); color:var(--accent);" data-action="doRestorePolicyVersion" data-args='["${projectId}","${escapeHTML(ctrl.id)}"]'>Restaurar vX</button>
                     </div>
                 `;
             }
 
             let signatureSealHtml = '';
-            const evidenceHash = (typeof policyRes !== 'undefined' && policyRes) ? policyRes.evidence_hash : null;
+            const evidenceHash = policyRes.hash;
             if (ctrl.ciso_approved_by || ctrl.ceo_approved_by) {
                 signatureSealHtml = `
                     <div style="background: rgba(0, 173, 232, 0.03); border: 1px solid rgba(0, 173, 232, 0.15); border-radius: 12px; padding: 1rem 1.25rem; backdrop-filter: blur(12px);">
@@ -1850,7 +1841,7 @@ import { navigate } from '../router.js';
                             <span style="font-family: 'Montserrat', sans-serif; font-size:0.72rem; font-weight: 700; color: #00ade8; background: rgba(0, 173, 232, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 173, 232, 0.2);">ISO 27001 CONFORME</span>
                         </div>
                         <div style="font-size: 0.7rem; font-family: monospace; display: flex; flex-direction: column; gap: 4px; color: rgba(229, 235, 255, 0.75);">
-                            <div><span style="color: var(--text-dim);">INTEGRIDADE (SHA-256):</span> <span style="color: #00ade8; word-break: break-all;">${evidenceHash || 'Calculando...'}</span></div>
+                            <div><span style="color: var(--text-dim);">INTEGRIDADE (SHA-256):</span> <span style="color: #00ade8; word-break: break-all;">${escapeHTML(evidenceHash)}</span></div>
                             <div><span style="color: var(--text-dim);">MÉTODO:</span> Assinatura Eletrônica Simples (Senha & Autenticação de Sessão via HTTPS)</div>
                         </div>
                     </div>
@@ -1879,7 +1870,7 @@ import { navigate } from '../router.js';
                                             <td style="padding:6px 12px">${new Date(v.created_at).toLocaleDateString()}</td>
                                             <td style="padding:6px 12px">${escapeHTML(v.created_by)}</td>
                                             <td style="padding:6px 12px">
-                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.72rem; margin:0;" data-action="__cmpViewPolicyVersion" data-args='["${projectId}","${controlId}","${v.id}"]'>Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
+                                                ${i > 0 ? `<button class="btn btn-ghost" style="padding:2px 6px; font-size:0.72rem; margin:0;" data-action="__cmpViewPolicyVersion" data-args='["${projectId}","${escapeHTML(ctrl.id)}","${v.id}"]'>Visualizar</button>` : `<span style="color:var(--success)">Atual (Ativa)</span>`}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -1893,7 +1884,7 @@ import { navigate } from '../router.js';
             const renderedHtml = window.marked ? window.marked.parse(policyText) : escapeHTML(policyText);
             const html = `
                 <div class="modal-header">
-                    <span class="modal-title">Política Ativa — ${escapeHTML(controlId)}</span>
+                    <span class="modal-title">Política Ativa — ${escapeHTML(codigo)}</span>
                     <button class="btn-ghost" data-action="forceCloseModal">&times;</button>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:16px;">
@@ -1928,7 +1919,7 @@ import { navigate } from '../router.js';
                         <div style="display:flex; gap:8px">
                             <button class="btn" data-action="forceCloseModal">Fechar</button>
                             <button class="btn btn-secondary" id="btn-edit-policy">Editar Documento</button>
-                            <button class="btn btn-secondary" data-action="openPolicyReport" data-args='["${projectId}","${controlId}"]'>Imprimir PDF</button>
+                            <button class="btn btn-secondary" data-action="openPolicyReport" data-args='["${projectId}","${escapeHTML(ctrl.id)}"]'>Imprimir</button>
                         </div>
                         <button class="btn btn-primary" id="btn-regen-trigger">Regerar com IA / Template</button>
                     </div>
@@ -1974,24 +1965,16 @@ import { navigate } from '../router.js';
                 } else {
                     // Salvar as alterações
                     const newContent = document.getElementById('policy-editor-textarea').value;
-                    if (!evidenceId) {
-                        showToast('Erro: Não há evidência vinculada a este controle para salvar.', 'error');
-                        return;
-                    }
-                    
+                    if (!avisarQueAnulaAssinaturas(ctrl)) return;
                     editBtn.disabled = true;
                     editBtn.textContent = 'Salvando...';
-
-                    api('PUT', `/api/v1/evidence/${evidenceId}/content`, { content: newContent })
-                        .then(res => {
-                            showToast('Política atualizada com sucesso!');
-                            forceCloseModal();
-                            setTimeout(() => {
-                                window.openGeneratePolicyModal(projectId, controlId);
-                            }, 300);
+                    api('POST', `/api/v1/projects/${projectId}/controls/${encodeURIComponent(ctrl.id)}/policy`, { text: newContent })
+                        .then(() => {
+                            showToast('Política atualizada. Uma nova versão foi registrada.');
+                            return window.openGeneratePolicyModal(projectId, ctrl.id);
                         })
                         .catch(err => {
-                            showToast('Erro ao salvar política', 'error');
+                            showToast('Erro ao salvar política: ' + err.message, 'error');
                             editBtn.disabled = false;
                             editBtn.textContent = 'Salvar Alterações';
                         });
@@ -2037,6 +2020,7 @@ import { navigate } from '../router.js';
                 const selector = document.getElementById('policy-version-selector');
                 const verId = selector.value;
                 if (!verId) return;
+                if (!avisarQueAnulaAssinaturas(ctrl)) return;
                 
                 try {
                     const res = await api('POST', `/api/v1/projects/${pId}/controls/${cId}/restore-version`, { version_id: verId });
@@ -2093,42 +2077,9 @@ import { navigate } from '../router.js';
                 res = await api('POST', `/api/v1/projects/${projectId}/generate-policy`, { control_id: controlId });
             }
             if (res.ok) {
-                let ctrl = {};
-                try {
-                    const controls = await api('GET', '/api/v1/controls');
-                    if (Array.isArray(controls)) {
-                        const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        ctrl = controls.find(c => c.id === normId) || {};
-                    }
-                } catch(e) {}
-
-                result.innerHTML = `
-                    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);font-weight:500;margin-bottom:0.5rem;font-family:'Montserrat',sans-serif">Política Gerada — ${escapeHTML(controlId)}</div>
-                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:1rem;max-height:180px;overflow-y:auto;font-size:0.75rem;line-height:1.6;white-space:pre-wrap" id="policy-content-text">${escapeHTML(res.policy_markdown)}</div>
-                    <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--muted)">Confiança: ${(res.confidence * 100).toFixed(0)}% | Modelo: ${res.metadata?.model || 'AI'}</div>
-                    
-                    <div style="margin-top:1.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:1rem">
-                        <h4 style="font-family:'Montserrat',sans-serif;font-size:0.7rem;color:var(--accent);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Workflow de Assinatura (A.5.1)</h4>
-                        <div style="display:flex;flex-direction:column;gap:0.75rem">
-                            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
-                                <div>
-                                    <strong>Líder SGSI:</strong> 
-                                    <span id="ciso-sign-status" style="color:var(--text-dim)">${ctrl.ciso_approved_by ? `Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
-                                </div>
-                                ${!ctrl.ciso_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ciso"]'>Assinar como Líder SGSI</button>` : ''}
-                            </div>
-                            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.02);padding:0.5rem;border-radius:8px;font-size:0.75rem">
-                                <div>
-                                    <strong>Direção Executiva:</strong> 
-                                    <span id="ceo-sign-status" style="color:var(--text-dim)">${ctrl.ceo_approved_by ? `Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleDateString()}` : 'Aguardando assinatura'}</span>
-                                </div>
-                                ${!ctrl.ceo_approved_by ? `<button class="btn" style="padding:0.2rem 0.6rem;font-size:0.75rem" data-action="signPolicy" data-args='["${ctrl.id || ''}","ceo"]'>Assinar como Direção Executiva</button>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                btn.textContent = 'Gerar outra';
-                btn.disabled = false;
+                // O modal da política mostra o texto gerado com as assinaturas, lidas do servidor.
+                showToast('Política gerada. Revise o texto antes de pedir as assinaturas.');
+                await openGeneratePolicyModal(projectId, controlId);
             } else {
                 throw new Error(res.error || 'Erro desconhecido');
             }
@@ -2139,30 +2090,18 @@ import { navigate } from '../router.js';
         }
     }
 
-    window.signPolicy = async function(controlId, role) {
-        if (!controlId) {
-            alert('Não é possível assinar: ID do controle não mapeado.');
-            return;
-        }
+    // O carimbo é o nome que consta na matriz de Governança (o servidor decide quem pode assinar o quê);
+    // por isso a tela pede só a senha.
+    window.signPolicy = async function(projectId, controlId, role) {
         const roleLabel = role === 'ciso' ? 'Líder SGSI' : 'Direção Executiva';
-        const name = prompt(`Digite seu nome completo para assinar eletronicamente como ${roleLabel}:`);
-        if (!name) return;
-        const password = prompt(`Digite sua senha de login para confirmar a assinatura eletrônica como ${roleLabel}:`);
+        const password = prompt(`Digite sua senha de login para assinar eletronicamente como ${roleLabel}:`);
         if (!password) return;
-        
         try {
-            await api('POST', `/api/v1/controls/${controlId}/approve`, { role, approved_by: name, password });
-            showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
-            const statusSpan = document.getElementById(`${role}-sign-status`);
-            if (statusSpan) {
-                statusSpan.textContent = `Aprovado por ${escapeHTML(name)} em ${new Date().toLocaleDateString()}`;
-                statusSpan.style.color = 'var(--accent)';
-            }
-            const btnClicked = event.target;
-            if (btnClicked) btnClicked.style.display = 'none';
-            render();
-        } catch(e) {
-            alert('Erro ao registrar assinatura: ' + e.message);
+            const res = await api('POST', `/api/v1/controls/${encodeURIComponent(controlId)}/approve`, { role, password });
+            showToast(`Assinatura registrada como ${roleLabel}: ${res.approved_by}.`);
+            await openGeneratePolicyModal(projectId, controlId);
+        } catch (e) {
+            showToast('Assinatura não registrada: ' + e.message, 'error');
         }
     };
 
@@ -2431,7 +2370,7 @@ window.bulkGeneratePolicies = bulkGeneratePolicies;
 window.migrate27701 = migrate27701;
 
 window.openPolicyReport = function(projectId, controlId) {
-    window.open(`/api/v1/projects/${projectId}/controls/${controlId}/policy/report?token=${S.token}`, '_blank');
+    window.open(`/api/v1/projects/${projectId}/controls/${encodeURIComponent(controlId)}/policy/report?token=${S.token}`, '_blank');
 };
 
 // A rota de avaliação trabalha sobre o TEXTO do documento (o arquivo vive no R2, não é lido
