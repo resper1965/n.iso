@@ -153,3 +153,7 @@ export     const ASSESSMENT_BLOCKS = [
             ]
         }
     ];
+
+// globals.js (autoatendimento) e commercial.js (levantamento do consultor) leem como global.
+// Sem isto o Vite descarta o modulo, que so exporta, e a constante some do bundle.
+window.ASSESSMENT_BLOCKS = ASSESSMENT_BLOCKS;

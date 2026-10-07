@@ -63,7 +63,6 @@ export     function navigate(view, data) {
         else if (S.view === 'config-comercial') renderConfigComercial(c, h, a);
         else if (S.view === 'organizacoes') renderOrganizacoes(c, h, a);
         else if (S.view === 'assessment-detail') renderAssessmentDetail(c, h, a);
-        else if (S.view === 'self-service') renderSelfServiceAssessment(S.currentAssessmentId);
         else if (S.view === 'project-detail') renderProjectDetail(c, h, a);
         else if (S.view === 'soa') renderSoA(c, h, a);
         else if (S.view === 'stakeholders') renderStakeholders(c, h, a);

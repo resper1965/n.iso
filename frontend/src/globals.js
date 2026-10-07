@@ -1712,10 +1712,9 @@ window.renderSelfServiceAssessment = async function renderSelfServiceAssessment(
         c.innerHTML = '<div style="max-width:700px;margin:2rem auto;padding:0 1rem"><div style="text-align:center;color:var(--muted)">Carregando assessment...</div></div>';
 
         try {
-            const r = await fetch(API_BASE + '/api/v1/public/assessment/' + encodeURIComponent(token));
-            if (!r.ok) throw new Error('Link invalido ou expirado');
-            const data = await r.json();
-            if (data.error) throw new Error(data.error);
+            const r = await fetch(API_BASE + '/api/v1/assessments/public/' + encodeURIComponent(token));
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || 'Link invalido ou expirado');
 
             // Group existing answers by block
             const existingByBlock = {};
@@ -1810,13 +1809,17 @@ window.ssNext = async function() {
         if (!window._ssAnswers[block.block]) window._ssAnswers[block.block] = {};
         answers.forEach(a => { window._ssAnswers[block.block][a.question_key] = a.answer; });
 
-        // Save to API
+        // Save to API. Falhou: fica no bloco e diz o motivo (antes concluia sem ter salvo).
         try {
-            await fetch(API_BASE + '/api/v1/public/assessment/' + window._ssToken + '/answers', {
+            const r = await fetch(API_BASE + '/api/v1/assessments/public/' + encodeURIComponent(window._ssToken) + '/answers', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ block: block.block, answers })
             });
-        } catch(e) {}
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+        } catch (e) {
+            showToast('Não foi possível salvar as respostas: ' + e.message, 'error');
+            return;
+        }
 
         if (window._ssBlock < blocks.length - 1) {
             window._ssBlock++;
