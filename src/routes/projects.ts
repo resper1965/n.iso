@@ -970,7 +970,7 @@ projectsApp.get('/:id/traceability', async (c) => {
   ).bind(projectId).all();
 
   const evidenceResult = await db.prepare(
-    `SELECT id, file_name, created_at, control_id FROM evidence
+    `SELECT id, file_name, created_at, control_id, evaluation_status FROM evidence
       WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`
   ).bind(projectId).all();
 
@@ -980,7 +980,7 @@ projectsApp.get('/:id/traceability', async (c) => {
   }
   const evidenceMap: Record<string, any[]> = {};
   for (const e of (evidenceResult.results || []) as any[]) {
-    (evidenceMap[e.control_id] ||= []).push({ id: e.id, file_name: e.file_name, created_at: e.created_at });
+    (evidenceMap[e.control_id] ||= []).push({ id: e.id, file_name: e.file_name, created_at: e.created_at, evaluation_status: e.evaluation_status });
   }
 
   const linked = rows.map((ctrl: any) => ({

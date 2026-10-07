@@ -86,8 +86,13 @@ evidenceApp.put('/:id/content', async (c) => {
       httpMetadata: { contentType: ev.file_type || 'text/markdown' }
     });
 
+    // Conteúdo novo é documento novo: a revisão e as assinaturas eram do texto anterior.
+    // Sem isto o cliente (org_user pode editar) reescrevia documento já revisado e ele seguia conforme.
     await c.env.DB.prepare(
-      'UPDATE evidence SET file_size = ?, file_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      `UPDATE evidence SET file_size = ?, file_hash = ?, evaluation_status = 'pending', evaluation_score = NULL, evaluation_notes = NULL,
+         ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL,
+         ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL,
+         updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(arrayBuffer.byteLength, realSha256, id).run();
 
     const user = c.get('user');
@@ -193,10 +198,10 @@ evidenceApp.post('/:id/evaluate', async (c) => {
       return erro500(c, 'Falha ao avaliar evidência', new Error(result.content));
     }
 
-    let evalStatus = 'pending';
-    if (result.content.includes('CONFORME')) evalStatus = 'conforming';
-    else if (result.content.includes('PARCIAL')) evalStatus = 'partial';
-    else if (result.content.includes('NÃO CONFORME')) evalStatus = 'non_conforming';
+    // O veredito vem na linha "Veredito:" (prompt do EvidenceAgent). Antes, includes('CONFORME')
+    // casava também "NÃO CONFORME" e gravava conforming para evidência reprovada.
+    const veredito = /Veredito:\W*(N[ÃA]O CONFORME|PARCIAL|CONFORME)/i.exec(result.content)?.[1]?.toUpperCase();
+    const evalStatus = !veredito ? 'pending' : veredito === 'CONFORME' ? 'conforming' : veredito === 'PARCIAL' ? 'partial' : 'non_conforming';
 
     await c.env.DB.prepare(
       'UPDATE evidence SET evaluation_status = ?, evaluation_score = ?, evaluation_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -274,8 +279,12 @@ async function handleApprove(c: any) {
     const ua = c.req.header('User-Agent') || 'Unknown';
 
     if (targetRole === 'ciso') {
+      // A assinatura do Líder SGSI é a revisão humana: leva a evidência pendente a conforme.
+      // Não passa por cima de parcial/não conforme: essas voltam a pendente ao serem corrigidas.
       await c.env.DB.prepare(
-        'UPDATE evidence SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ? WHERE id = ?'
+        `UPDATE evidence SET ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?,
+           evaluation_status = CASE WHEN COALESCE(evaluation_status, 'pending') = 'pending' THEN 'conforming' ELSE evaluation_status END
+         WHERE id = ?`
       ).bind(approvedBy, now, ip, ua, id).run();
       await logAudit(c.env.DB, 'evidence.approved_ciso', email, `Evidência ${id} aprovada pelo Líder SGSI (${approvedBy})`);
     } else {

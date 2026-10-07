@@ -298,4 +298,55 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(ev.ciso_approved_by).toBeNull();
     });
   });
+
+  describe('a assinatura do Líder SGSI é a revisão', () => {
+    const statusDe = async (id: string) =>
+      (await env.DB.prepare('SELECT evaluation_status FROM evidence WHERE id = ?').bind(id).first<{ evaluation_status: string }>())!.evaluation_status;
+
+    it('pendente assinada pelo Líder SGSI vira conforme', async () => {
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      expect(res.status, await res.clone().text()).toBe(200);
+      expect(await statusDe('ev-1')).toBe('conforming');
+    });
+
+    it('a assinatura da Direção sozinha não conclui a revisão', async () => {
+      const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ceo', password: 'password123' }, headersDirecao);
+      expect(res.status, await res.clone().text()).toBe(200);
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+
+    it('não passa por cima de evidência reprovada', async () => {
+      await env.DB.prepare("UPDATE evidence SET evaluation_status = 'non_conforming' WHERE id = 'ev-1'").run();
+      expect((await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
+      expect(await statusDe('ev-1')).toBe('non_conforming');
+    });
+
+    // Review Focus 3
+    it('editar o conteúdo devolve a pendente e apaga as assinaturas', async () => {
+      await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123' });
+      const res = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/content', {
+        method: 'PUT', headers, body: JSON.stringify({ content: '# Texto alterado' }),
+      }), env as any);
+      expect(res.status, await res.clone().text()).toBe(200);
+      const ev = await env.DB.prepare('SELECT evaluation_status, ciso_approved_by, ceo_approved_by FROM evidence WHERE id = ?').bind('ev-1').first<any>();
+      expect(ev.evaluation_status).toBe('pending');
+      expect(ev.ciso_approved_by).toBeNull();
+      expect(ev.ceo_approved_by).toBeNull();
+    });
+
+    // Review Focus 4
+    it('avaliação por IA lê o veredito ("NÃO CONFORME" não vira conforme)', async () => {
+      const avaliar = (saida: string) => worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/evaluate', {
+        method: 'POST', headers, body: JSON.stringify({ text: 'conteúdo' }),
+      }), { ...env, AI: { run: async () => ({ response: saida }) } } as any);
+      expect((await avaliar('# Veredito: NÃO CONFORME\n- **Score de Confiança**: 30')).status).toBe(200);
+      expect(await statusDe('ev-1')).toBe('non_conforming');
+      await avaliar('# Veredito: **PARCIAL**');
+      expect(await statusDe('ev-1')).toBe('partial');
+      await avaliar('# Veredito: CONFORME');
+      expect(await statusDe('ev-1')).toBe('conforming');
+      await avaliar('Sem veredito nenhum');
+      expect(await statusDe('ev-1')).toBe('pending');
+    });
+  });
 });
