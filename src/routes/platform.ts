@@ -33,9 +33,14 @@ platformApp.put('/assets/:id', async (c) => {
     const valid = await validateBody(c, assetSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
-    await c.env.DB.prepare(
-      `UPDATE assets SET name=?, type=?, category=?, owner=?, criticality=?, description=? WHERE id=?`
-    ).bind(body.name, body.type, body.category, body.owner, body.criticality, body.description, id).run();
+    // Parcial: campo ausente preserva (antes o UPDATE fixo gravava NULL em type/category/owner
+    // e ignorava location, classification e as notas CID).
+    const p = setParcial(body, {
+      name: null, type: null, category: 'Hardware', owner: '', criticality: 'Medium', description: '',
+      location: null, classification: 'Confidential',
+      confidentiality_rating: null, integrity_rating: null, availability_rating: null,
+    });
+    if (p.sql) await c.env.DB.prepare(`UPDATE assets SET ${p.sql}, updated_at = datetime('now') WHERE id = ?`).bind(...p.binds, id).run();
 
     await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Asset ${id} updated`);
     return c.json({ ok: true });
