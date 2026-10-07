@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
-import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
+import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 import { conferirPedidosDoDocumento } from './pedidos';
@@ -419,6 +419,83 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionI
 
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
   return c.json(row);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LEITURA DA POLÍTICA — o modal e o relatório. O id do controle chega em qualquer formato
+//  ('ctrl-a51', 'A.5.1', 'ctrl_b_a51', genId) ou como código; idDoControle resolve preso ao projeto.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type ControleComPolitica = {
+  id: string; project_id: string; title: string; description: string | null; status: string | null;
+  ciso_approved_by: string | null; ciso_approved_at: string | null; ciso_approved_ip: string | null; ciso_approved_ua: string | null;
+  ceo_approved_by: string | null; ceo_approved_at: string | null; ceo_approved_ip: string | null; ceo_approved_ua: string | null;
+};
+
+/** O controle do projeto com o texto da política e o SHA-256 desse texto (o que as assinaturas cobrem). */
+async function politicaDoControle(db: D1Database, projectId: string, ref: string): Promise<{ control: ControleComPolitica; hash: string } | null> {
+  const id = await idDoControle(db, projectId, ref);
+  const control = id ? await db.prepare('SELECT * FROM compliance_controls WHERE id = ? AND project_id = ?')
+    .bind(id, projectId).first<ControleComPolitica>() : null;
+  if (!control) return null;
+  return { control, hash: await sha256Hex(control.description ?? '') };
+}
+
+policies.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
+  try {
+    const projectId = c.req.param('projectId');
+    const ref = c.req.param('controlId');
+    const p = await politicaDoControle(c.env.DB, projectId, ref);
+    if (!p) return c.json({ error: 'Controle não encontrado' }, 404);
+    // `control_id = ref` cobre versões antigas gravadas com o código em vez do id (como em /versions).
+    const { results: versions } = await c.env.DB.prepare(
+      'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
+    ).bind(projectId, p.control.id, ref).all();
+    return c.json({ ok: true, control: p.control, content: p.control.description ?? '', hash: p.hash, versions });
+  } catch (e) {
+    return erro500(c, 'Falha ao ler a política', e);
+  }
+});
+
+// Relatório para imprimir pelo navegador, no padrão dos de ROPA e DPIA. Tudo que vem do banco passa
+// por escapeHtml: título e texto da política são digitados ou gerados por IA.
+policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (c) => {
+  try {
+    const projectId = c.req.param('projectId');
+    const project = await c.env.DB.prepare('SELECT client_name FROM projects WHERE id = ?').bind(projectId).first<{ client_name: string | null }>();
+    const p = project ? await politicaDoControle(c.env.DB, projectId, c.req.param('controlId')) : null;
+    if (!project || !p) return c.html('<h3>Política não encontrada</h3>', 404);
+    const k = p.control;
+    const assinatura = (rotulo: string, por: string | null, em: string | null) =>
+      `<div class="label">${rotulo}</div><div class="value">${por ? `Assinado por ${escapeHtml(por)} em ${escapeHtml(em ?? '')}` : 'Aguardando assinatura'}</div>`;
+    return c.html(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Política — ${escapeHtml(k.title)}</title>
+  <style>
+    body { background: #ffffff; color: #0f172a; font-family: Inter, system-ui, sans-serif; margin: 0; padding: 2rem; line-height: 1.6; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-family: Montserrat, Inter, sans-serif; font-weight: 600; font-size: 1.4rem; margin: 0 0 0.25rem; }
+    .label { font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600; margin-top: 1rem; }
+    .value { font-size: 0.95rem; margin-top: 4px; word-break: break-all; }
+    .texto { white-space: pre-wrap; border-top: 1px solid #e2e8f0; margin-top: 1.5rem; padding-top: 1rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${escapeHtml(k.title)}</h1>
+    <div class="value">${escapeHtml(project.client_name ?? '')}</div>
+    ${assinatura('Líder SGSI', k.ciso_approved_by, k.ciso_approved_at)}
+    ${assinatura('Direção Executiva', k.ceo_approved_by, k.ceo_approved_at)}
+    <div class="label">Integridade do texto (SHA-256)</div><div class="value">${p.hash}</div>
+    <div class="texto">${escapeHtml(k.description ?? '')}</div>
+  </div>
+</body>
+</html>`);
+  } catch (e) {
+    return c.html(`<h3>Erro ao gerar o relatório da política</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`, 500);
+  }
 });
 
 policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version', async (c) => {

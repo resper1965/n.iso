@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { sha256Hex } from '../src/helpers';
 
 /**
  * Edição manual de política (POST /api/v1/projects/:id/controls/:controlId/policy)
@@ -161,5 +162,91 @@ describe('Edição manual de política (D1 real)', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as any;
     expect(body.error).toMatch(/text é obrigatório/);
+  });
+});
+
+describe('GET da política e do relatório: o controle em qualquer formato de id (D1 real)', () => {
+  let admin: Record<string, string>;
+  const GEN = 'k3f9a1b2c4d5e6f7'; // formato do genId: id sem relação com o código
+
+  beforeEach(async () => {
+    await applySchema();
+    await resetData();
+    await resetSessions();
+    const projeto = (id: string) => env.DB.prepare(
+      `INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?, ?, 'ISO 27001:2022', 'Controller', 'Active')`
+    ).bind(id, `Cliente ${id}`);
+    const controle = (id: string, proj: string, texto: string) => env.DB.prepare(
+      `INSERT INTO compliance_controls (id, project_id, standard, title, description) VALUES (?, ?, 'ISO 27001:2022', 'A.5.1 Políticas de segurança da informação', ?)`
+    ).bind(id, proj, texto);
+    await env.DB.batch([
+      projeto('p-a'), projeto('p-b'), projeto('p-c'), projeto('p-d'),
+      controle('ctrl-a51', 'p-a', 'Texto da política A'),
+      controle('A.5.1', 'p-b', 'Texto da política B'),
+      controle('ctrl_b_a51', 'p-c', 'Texto da política C'),
+      controle(GEN, 'p-d', 'Texto da política D'),
+      env.DB.prepare(`UPDATE compliance_controls SET ciso_approved_by = 'Ana Souza', ciso_approved_at = '2026-10-07T10:00:00Z' WHERE id = 'ctrl-a51'`),
+      env.DB.prepare(`INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES ('v1','p-a','ctrl-a51',1,'Texto antigo','x@y.com')`),
+      env.DB.prepare(`INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES ('v2','p-a','ctrl-a51',2,'Texto da política A','x@y.com')`),
+    ]);
+    admin = await sessionFor({ id: 'u-adm', email: 'adm@ness.lat', role: 'platform_admin' });
+  });
+
+  const ler = (caminho: string) => worker.fetch(new Request(`http://localhost${caminho}`, { headers: admin }), testEnv());
+
+  it.each([
+    ['p-a', 'ctrl-a51'], ['p-b', 'A.5.1'], ['p-c', 'ctrl_b_a51'], ['p-d', GEN],
+  ])('projeto %s: acha o controle %s pelo id e pelo código', async (proj, id) => {
+    for (const ref of [id, 'A.5.1']) {
+      const r = await ler(`/api/v1/projects/${proj}/controls/${encodeURIComponent(ref)}/policy`);
+      const body = await r.json() as any;
+      expect(r.status, JSON.stringify(body)).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.control.id).toBe(id);
+      expect(body.control.project_id).toBe(proj);
+      expect(body.content).toBe(body.control.description);
+      expect(body.hash).toBe(await sha256Hex(body.control.description));
+    }
+  });
+
+  it('devolve o estado das assinaturas e as versões, a mais nova primeiro', async () => {
+    const body = await (await ler('/api/v1/projects/p-a/controls/ctrl-a51/policy')).json() as any;
+    expect(body.control.ciso_approved_by).toBe('Ana Souza');
+    expect(body.control.ceo_approved_by).toBeNull();
+    expect(body.versions.map((v: any) => v.version)).toEqual([2, 1]);
+    expect(body.versions[0]).not.toHaveProperty('policy_text');
+  });
+
+  it('id de controle de outro projeto dá 404, nunca o controle alheio', async () => {
+    expect((await ler(`/api/v1/projects/p-a/controls/${GEN}/policy`)).status).toBe(404);
+    expect((await ler(`/api/v1/projects/p-a/controls/${GEN}/policy/report`)).status).toBe(404);
+  });
+
+  it('o hash acompanha o texto depois de uma edição', async () => {
+    await env.DB.prepare(`UPDATE compliance_controls SET description = 'Texto novo' WHERE id = 'ctrl_b_a51'`).run();
+    const body = await (await ler('/api/v1/projects/p-c/controls/A.5.1/policy')).json() as any;
+    expect(body.hash).toBe(await sha256Hex('Texto novo'));
+  });
+
+  it('o relatório traz cliente, título, texto, hash e assinaturas, tudo escapado', async () => {
+    await env.DB.prepare(
+      `UPDATE compliance_controls SET title = 'A.5.1 <script>alert(1)</script>', description = '<img src=x onerror=alert(2)>', ceo_approved_by = 'Dir <b>', ceo_approved_at = '2026-10-07T11:00:00Z' WHERE id = 'ctrl-a51'`
+    ).run();
+    const r = await ler('/api/v1/projects/p-a/controls/ctrl-a51/policy/report');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toContain('text/html');
+    const html = await r.text();
+    expect(html).toContain('Cliente p-a');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>alert(1)');
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('Ana Souza');
+    expect(html).toContain('Dir &lt;b&gt;');
+    expect(html).toContain(await sha256Hex('<img src=x onerror=alert(2)>'));
+  });
+
+  it('relatório de controle sem assinatura diz que aguarda', async () => {
+    const html = await (await ler('/api/v1/projects/p-b/controls/A.5.1/policy/report')).text();
+    expect(html).toContain('Aguardando assinatura');
   });
 });
