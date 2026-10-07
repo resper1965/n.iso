@@ -3,19 +3,45 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
 
+    // O id varia por projeto (ctrl-a51, A.5.1, gerado); o código estável é o primeiro token do título.
+    function codigoDoControle(ctrl) {
+        const m = (ctrl.title || '').match(/^(A\.\d+(?:\.\d+)*)\b/);
+        return m ? m[1] : ctrl.id;
+    }
+
+    window.carregarCatalogo = async function (projectId) {
+        try {
+            const r1 = await api('POST', `/api/v1/projects/${projectId}/seed-27001-2022`);
+            // O seed 27701 acrescenta a norma em projects.standards: só roda se o projeto já a tem.
+            const p = S.currentProject;
+            const com27701 = p?.id === projectId && String(p.standards || '').includes('27701');
+            const r2 = com27701 ? await api('POST', `/api/v1/projects/${projectId}/seed-27701-2025`) : null;
+            await window.loadControls();
+            showToast(`Catálogo carregado: ${(r1?.seeded || 0) + (r2?.seeded || 0)} controles novos.`, 'success');
+            navigate('controls');
+        } catch (e) {
+            showToast('Falha ao carregar o catálogo: ' + (e.message || e), 'error');
+        }
+    };
+
     function renderControls(c, h, a) {
         h.textContent = 'Controles';
         // Botão do Diagnóstico de Prontidão ("gap em voo") — só com projeto ativo.
         a.innerHTML = S.currentProject
             ? `<button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${S.currentProject.id}"]'>Diagnóstico de prontidão</button>`
             : '';
-        if (!S.controls.length) {
-            c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
+        // /controls traz controles de todos os projetos visíveis ao consultor: filtra pelo projeto atual.
+        const controls = S.currentProject ? S.controls.filter(x => x.project_id === S.currentProject.id) : S.controls;
+        if (!controls.length) {
+            const com27701 = String(S.currentProject?.standards || '').includes('27701');
+            c.innerHTML = S.currentProject
+                ? `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Carregue o Anexo A da ISO 27001:2022${com27701 ? ' e os controles de privacidade da ISO 27701:2025' : ''} deste projeto.</p><button class="btn btn-primary" data-action="carregarCatalogo" data-args='["${escapeHTML(S.currentProject.id)}"]'>Carregar catálogo</button></div>`
+                : `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Escolha um projeto para carregar o catálogo.</p></div>`;
             return;
         }
-        c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${S.controls.map(ctrl => `
+        c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${controls.map(ctrl => `
             <div class="phase-item" data-action="openControlDetail" data-args='["${ctrl.id}"]' style="cursor:pointer">
-                <div class="phase-num" style="width:3.5rem;color:var(--accent)">${ctrl.id}</div>
+                <div class="phase-num" style="width:3.5rem;color:var(--accent)">${escapeHTML(codigoDoControle(ctrl))}</div>
                 <div style="flex:1">
                     <div class="phase-title">${escapeHTML(ctrl.title)}</div>
                     ${ctrl.maturity ? `<div style="font-size:0.72rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
@@ -571,7 +597,7 @@ import { navigate } from '../router.js';
 
     // Piso de qualidade para justificativa NOVA, digitada por pessoa. NÃO é o
     // critério de bloqueio: a norma exige justificativa, não 40 caracteres. As
-    // justificativas geradas pelo SoALogicEngine são curtas de propósito
+    // justificativas de exclusão são curtas de propósito
     // ("No software development activities." tem 35) e travar a exportação por
     // causa delas bloquearia todo projeto já existente sem ganho de conformidade.
     const MIN_NA_JUSTIFICATION = 40;

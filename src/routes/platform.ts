@@ -33,9 +33,14 @@ platformApp.put('/assets/:id', async (c) => {
     const valid = await validateBody(c, assetSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
-    await c.env.DB.prepare(
-      `UPDATE assets SET name=?, type=?, category=?, owner=?, criticality=?, description=? WHERE id=?`
-    ).bind(body.name, body.type, body.category, body.owner, body.criticality, body.description, id).run();
+    // Parcial: campo ausente preserva (antes o UPDATE fixo gravava NULL em type/category/owner
+    // e ignorava location, classification e as notas CID).
+    const p = setParcial(body, {
+      name: null, type: null, category: 'Hardware', owner: '', criticality: 'Medium', description: '',
+      location: null, classification: 'Confidential',
+      confidentiality_rating: 3, integrity_rating: 3, availability_rating: 3,
+    });
+    if (p.sql) await c.env.DB.prepare(`UPDATE assets SET ${p.sql}, updated_at = datetime('now') WHERE id = ?`).bind(...p.binds, id).run();
 
     await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Asset ${id} updated`);
     return c.json({ ok: true });
@@ -93,6 +98,28 @@ platformApp.put('/dpia/:id', async (c) => {
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar DPIA', e);
+  }
+});
+
+// A tela de DPIA tinha o botão Excluir chamando esta rota, que não existia. DPIA aprovado
+// não sai por aqui: a aprovação é prova; quem quer apagar revoga antes (motivo na trilha).
+platformApp.delete('/dpia/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await requireResourceAccess(c.env.DB, 'dpia_assessments', id, c.get('user'));
+    const atual = await c.env.DB.prepare('SELECT status FROM dpia_assessments WHERE id = ?').bind(id).first<{ status: string | null }>();
+    if (!atual) return c.json({ error: 'DPIA não encontrado' }, 404);
+    if (atual.status === 'Approved') {
+      return c.json({ error: 'DPIA aprovado não pode ser excluído. Revogue a aprovação antes (motivo obrigatório).' }, 409);
+    }
+    await c.env.DB.prepare("DELETE FROM dpia_assessments WHERE id = ? AND status IS NOT 'Approved'").bind(id).run();
+    // Com o documento apagado, o pedido aberto dele é cancelado na hora (conferirVigencia).
+    await conferirPedidosDoDocumento(c, 'dpia', id);
+    const user = c.get('user');
+    await logAudit(c.env.DB, 'dpia_deleted', user?.email || 'system', `DPIA ${id} excluído`);
+    return c.json({ ok: true });
+  } catch (e) {
+    return erro500(c, 'Falha ao excluir DPIA', e);
   }
 });
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
-import { genId, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
+import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 import { conferirPedidosDoDocumento } from './pedidos';
@@ -35,6 +35,10 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
       orgMemory = (answers || []).map(a => `${a.question_key}: ${a.answer}`).join('\n');
     }
 
+    // Resolve o controle antes de gastar chamada de IA.
+    const idLinha = await idDoControle(c.env.DB, projectId, controlId);
+    if (!idLinha) return c.json({ error: 'Controle não encontrado' }, 404);
+
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const result = await agent.run(
       `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
@@ -51,22 +55,21 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     }
 
     // Save policy markdown directly to compliance_controls.description
-    const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(result.content, normId, controlId, projectId).run();
-    await conferirPedidosDoDocumento(c, 'politica', [normId, controlId], projectId);
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+    ).bind(result.content, idLinha, projectId).run();
+    await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
 
     // Insert new version in policy_versions
     try {
       const countRow = await c.env.DB.prepare(
         'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, normId, controlId).first<{ count: number }>();
+      ).bind(projectId, idLinha, controlId).first<{ count: number }>();
       const nextVer = (countRow?.count || 0) + 1;
       const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       await c.env.DB.prepare(
         'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, normId, nextVer, result.content, c.get('user')?.email || 'system').run();
+      ).bind(versionId, projectId, idLinha, nextVer, result.content, c.get('user')?.email || 'system').run();
     } catch (e) {
       console.error("Erro ao registrar versão da política", e);
     }
@@ -168,7 +171,7 @@ policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
     const v = await validateBody(c, documentoAprovarSchema);
     if (!v.success) return v.response;
     const { itemId, content } = v.data;
-    
+
     // ponytail: validate document size maximum limit (2MB) to prevent Edge memory exhaustion
     if (content.length > 2 * 1024 * 1024) {
       return c.json({ error: 'Document size exceeds 2MB limit' }, 400);
@@ -234,7 +237,7 @@ policies.post('/api/v1/projects/:projectId/checklist/:itemId/generate', async (c
     // Gerar conteúdo com o PolicyAgent
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const prompt = `Gere um documento ou política detalhada em formato markdown para atender ao item de checklist "${item.text}" do projeto "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}). O documento deve ser completo, profissional, prático e pronto para auditoria, sem placeholders e com formatação markdown limpa.`;
-    
+
     const result = await agent.run(prompt, { organizationId: projectId });
     let docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
 
@@ -327,6 +330,13 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
 
     // ponytail: sequential to respect Cloudflare AI rate limits
     for (const controlId of controlIds) {
+      // Controle que não existe no projeto: falha sem gastar chamada de IA nem gravar versão órfã.
+      const idLinha = await idDoControle(c.env.DB, projectId, controlId);
+      if (!idLinha) {
+        failed++;
+        policies.push({ control_id: controlId, success: false, content_preview: '', error: 'Controle não encontrado' });
+        continue;
+      }
       try {
         const result = await agent.run(
           `Gere uma política completa para o controle ${controlId} da organização ${project.client_name} (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}).`,
@@ -339,24 +349,23 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
 
         if (result.success) {
           successful++;
-          const normId = 'ctrl-' + controlId.toLowerCase().replace(/[^a-z0-9]/g, '');
 
           // Salvar markdown da política e limpar assinaturas de demonstração
           await c.env.DB.prepare(
-            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-          ).bind(result.content, normId, controlId, projectId).run();
-          await conferirPedidosDoDocumento(c, 'politica', [normId, controlId], projectId);
+            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+          ).bind(result.content, idLinha, projectId).run();
+          await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
 
           // Registrar histórico de versão
           try {
             const countRow = await c.env.DB.prepare(
               'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-            ).bind(projectId, normId, controlId).first<{ count: number }>();
+            ).bind(projectId, idLinha, controlId).first<{ count: number }>();
             const nextVer = (countRow?.count || 0) + 1;
             const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
             await c.env.DB.prepare(
               'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-            ).bind(versionId, projectId, normId, nextVer, result.content, c.get('user')?.email || 'system').run();
+            ).bind(versionId, projectId, idLinha, nextVer, result.content, c.get('user')?.email || 'system').run();
           } catch (e) {
             console.error("Erro ao registrar versão no bulk", e);
           }
@@ -387,12 +396,13 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
 policies.get('/api/v1/projects/:projectId/controls/:controlId/versions', async (c) => {
   const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
+  const controlId = await idDoControle(c.env.DB, projectId, controlIdRaw);
+  if (!controlId) return c.json({ error: 'Controle não encontrado' }, 404);
+
   const result = await c.env.DB.prepare(
     'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
-  ).bind(projectId, normId, controlIdRaw).all();
-  
+  ).bind(projectId, controlId, controlIdRaw).all();
+
   return c.json(result.results || []);
 });
 
@@ -400,12 +410,13 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionI
   const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
   const versionId = c.req.param('versionId');
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
+  const controlId = await idDoControle(c.env.DB, projectId, controlIdRaw);
+  if (!controlId) return c.json({ error: 'Controle não encontrado' }, 404);
+
   const row = await c.env.DB.prepare(
     'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(versionId, projectId, normId, controlIdRaw).first<any>();
-  
+  ).bind(versionId, projectId, controlId, controlIdRaw).first<any>();
+
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
   return c.json(row);
 });
@@ -416,32 +427,33 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version',
   const v = await validateBody(c, versaoRestaurarSchema);
   if (!v.success) return v.response;
   const { version_id } = v.data;
-  const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
+  const controlId = await idDoControle(c.env.DB, projectId, controlIdRaw);
+  if (!controlId) return c.json({ error: 'Controle não encontrado' }, 404);
+
   const row = await c.env.DB.prepare(
     'SELECT * FROM policy_versions WHERE id = ? AND project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(version_id, projectId, normId, controlIdRaw).first<any>();
-  
+  ).bind(version_id, projectId, controlId, controlIdRaw).first<any>();
+
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
-  
+
   // Update compliance_controls description
   await c.env.DB.prepare(
-    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-  ).bind(row.policy_text, normId, controlIdRaw, projectId).run();
-  await conferirPedidosDoDocumento(c, 'politica', [normId, controlIdRaw], projectId);
-  
+    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+  ).bind(row.policy_text, controlId, projectId).run();
+  await conferirPedidosDoDocumento(c, 'politica', controlId, projectId);
+
   const countRow = await c.env.DB.prepare(
     'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(projectId, normId, controlIdRaw).first<{ count: number }>();
+  ).bind(projectId, controlId, controlIdRaw).first<{ count: number }>();
   const nextVer = (countRow?.count || 0) + 1;
   const newVerId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-  
+
   await c.env.DB.prepare(
     'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(newVerId, projectId, normId, nextVer, row.policy_text, c.get('user')?.email || 'system').run();
-  
+  ).bind(newVerId, projectId, controlId, nextVer, row.policy_text, c.get('user')?.email || 'system').run();
+
   await logAudit(c.env.DB, 'policy.restored', c.get('user')?.email || 'system', `Política ${controlIdRaw} restaurada para versão ${row.version}, projeto ${projectId}`);
-  
+
   return c.json({ ok: true, version: nextVer, policy_markdown: row.policy_text });
 });
 
@@ -467,17 +479,15 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const normId = 'ctrl-' + controlIdRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const control = await c.env.DB.prepare(
-      'SELECT * FROM compliance_controls WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(normId, controlIdRaw, projectId).first<any>();
+    const controlId = await idDoControle(c.env.DB, projectId, controlIdRaw);
+    const control = controlId && await c.env.DB.prepare(
+      'SELECT id FROM compliance_controls WHERE id = ? AND project_id = ?'
+    ).bind(controlId, projectId).first<{ id: string }>();
     if (!control) return c.json({ error: 'Controle não encontrado' }, 404);
 
     const userEmail = c.get('user')?.email ?? 'system';
-    // control.id é o id canônico que de fato existe em compliance_controls — usar
-    // normId aqui quebraria a FK de policy_versions.control_id quando controlIdRaw
-    // já vier normalizado (ex.: "ctrl-a51"), pois normId dobraria o prefixo.
-    const canonicalId = control.id as string;
+    // control.id é o id canônico que de fato existe em compliance_controls (FK de policy_versions).
+    const canonicalId = control.id;
 
     // Atualiza o texto "atual" e zera aprovações — o conteúdo mudou, aprovações anteriores não valem mais
     await c.env.DB.prepare(
@@ -556,22 +566,23 @@ policies.post('/api/v1/projects/:projectId/policies/generate-from-template', asy
     });
 
     // Save policy markdown directly to compliance_controls.description
-    const normId = 'ctrl-' + control_id.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const idLinha = await idDoControle(c.env.DB, projectId, control_id);
+    if (!idLinha) return c.json({ error: 'Controle não encontrado' }, 404);
     await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE (id = ? OR id = ?) AND project_id = ?'
-    ).bind(markdown, normId, control_id, projectId).run();
-    await conferirPedidosDoDocumento(c, 'politica', [normId, control_id], projectId);
+      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+    ).bind(markdown, idLinha, projectId).run();
+    await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
 
     // Insert new version in policy_versions
     try {
       const countRow = await c.env.DB.prepare(
         'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, normId, control_id).first<{ count: number }>();
+      ).bind(projectId, idLinha, control_id).first<{ count: number }>();
       const nextVer = (countRow?.count || 0) + 1;
       const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       await c.env.DB.prepare(
         'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, normId, nextVer, markdown, user?.email || 'system').run();
+      ).bind(versionId, projectId, idLinha, nextVer, markdown, user?.email || 'system').run();
     } catch (e) {
       console.error("Erro ao registrar versão da política", e);
     }

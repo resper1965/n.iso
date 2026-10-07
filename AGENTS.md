@@ -125,7 +125,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **58 tabelas** (2026-10-06: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
   em 2026-10-05 o mesmo 58 saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
-  numeradas em `migrations/`, ultima a **0043** (`ls migrations/*.sql | tail -1`). Procedimento
+  numeradas em `migrations/`, ultima a **0044** (`ls migrations/*.sql | tail -1`). Procedimento
   de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
   `migrations/README.md` — leia antes de tocar em migration.
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
@@ -188,13 +188,13 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **558 `any` em `src/`** (medido em 2026-10-06, fora `*.test.ts`:
+- **557 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
   `git grep -ahoE ': any\b|as any\b|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
   `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 153 arquivos de teste do backend mocka o D1 inteiro** (2026-10-06;
+- **Nenhum dos 158 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
@@ -205,7 +205,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
 - **Frontend com pouco teste por linha.** ~14,8 mil linhas de JS
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 46 arquivos de teste em jsdom
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 48 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.

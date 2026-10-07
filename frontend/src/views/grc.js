@@ -264,10 +264,10 @@ window.__grcCloseExecAudit = function (id) {
         let assets = [];
         let controls = [];
         try { 
-            assets = await api('GET', `/api/v1/projects/${projectId}/assets`); 
+            const r = await api('GET', `/api/v1/projects/${projectId}/assets`);
+            assets = Array.isArray(r) ? r : (r?.assets || []);
             controls = await api('GET', `/api/v1/projects/${projectId}/controls`);
         } catch(e) {}
-        if (!Array.isArray(assets)) assets = [];
         if (!Array.isArray(controls)) controls = [];
 
         const controlOptions = controls

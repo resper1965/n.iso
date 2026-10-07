@@ -49,6 +49,8 @@ vendorsApp.put('/:id', async (c) => {
       id
     ).run();
 
+    const proj = await c.env.DB.prepare('SELECT project_id FROM vendors WHERE id = ?').bind(id).first<{ project_id: string | null }>();
+    await logAudit(c.env.DB, 'vendor.updated', c.get('user')?.email ?? 'system', `Vendor ${id} atualizado`, '', '', proj?.project_id ?? undefined);
     return c.json({ ok: true, id, diligence_level: dl, trust_score: ts });
   } catch (e: any) {
     if (e.message && e.message.startsWith('Forbidden')) return c.json({ error: e.message }, 403);
@@ -97,7 +99,7 @@ projectVendorsApp.post('/', async (c) => {
       body.has_mfa ?? 0, body.has_encryption ?? 0, body.has_backup ?? 0, body.has_incident_plan ?? 0, body.has_pentest ?? 0, body.trust_center_url ?? null, body.dpa_url ?? null, body.attached_certifications ?? null
     ).run();
 
-    await logAudit(c.env.DB, 'vendor.created', c.get('user')?.email ?? 'system', `Vendor ${body.name} created for project ${projectId}`);
+    await logAudit(c.env.DB, 'vendor.created', c.get('user')?.email ?? 'system', `Vendor ${body.name} created for project ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id, diligence_level: dl, trust_score: ts }, 201);
   } catch (e: any) {
     return erro500(c, 'Falha ao criar vendor', e);

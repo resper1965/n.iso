@@ -43,9 +43,14 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       const body = valid.data as any;
       const id = genId();
       await c.env.DB.prepare(
-        `INSERT INTO assets (id, project_id, name, type, category, owner, criticality, description, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-      ).bind(id, projectId, body.name, body.type, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '').run();
+        `INSERT INTO assets (id, project_id, name, type, category, owner, criticality, description,
+           location, classification, confidentiality_rating, integrity_rating, availability_rating, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        id, projectId, body.name, body.type ?? null, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '',
+        body.location ?? null, body.classification || 'Confidential',
+        body.confidentiality_rating ?? 3, body.integrity_rating ?? 3, body.availability_rating ?? 3,
+      ).run();
 
       await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`, '', '', projectId);
       return c.json({ ok: true, id }, 201);

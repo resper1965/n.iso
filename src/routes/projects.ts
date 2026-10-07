@@ -6,6 +6,7 @@ import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '..
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases } from '../services/project-setup';
+import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
 import { NA_STATUS } from '../services/soa-logic';
@@ -880,6 +881,26 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
   }
 });
 
+// Cria, como 'Missing', os controles da lista que o projeto ainda não tem. Idempotente: o código
+// vive como primeiro token do título ("A.5.1 — ..."), e o que já existe é pulado em qualquer
+// formato de id (ctrl-a51, A.5.1, genId).
+async function semearControles(
+  db: D1Database, projectId: string, standard: string, lista: readonly { code: string; title: string }[],
+): Promise<{ created: number; total: number }> {
+  const { results: existing } = await db.prepare(
+    'SELECT title FROM compliance_controls WHERE project_id = ? AND standard = ?'
+  ).bind(projectId, standard).all<{ title: string }>();
+  const existentes = new Set((existing || []).map((r) => (r.title || '').split(' ')[0]));
+  const novos = lista.filter((ctrl) => !existentes.has(ctrl.code));
+  if (novos.length) {
+    await db.batch(novos.map((ctrl) => db.prepare(
+      `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
+       VALUES (?, ?, ?, ?, '', 'Missing', 0, datetime('now'))`
+    ).bind(genId(), projectId, standard, `${ctrl.code} — ${ctrl.title}`)));
+  }
+  return { created: novos.length, total: lista.length };
+}
+
 // Semeia o control-set 27701:2025 (Anexo A) DO ZERO, por papel do projeto.
 //
 // O migrate-27701-2025 acima só TRANSFORMA um SoA 27701:2019 existente — inútil
@@ -896,22 +917,7 @@ projectsApp.post('/:id/seed-27701-2025', async (c) => {
 
     const wanted = controlsForRole(proj.org_role);
 
-    // Idempotência: o código do controle vive como primeiro token do título
-    // (ex.: "A.1.2.2 — ..."). Pula o que já foi semeado.
-    const { results: existing } = await c.env.DB.prepare(
-      'SELECT title FROM compliance_controls WHERE project_id = ? AND standard = ?'
-    ).bind(projectId, ISO_27701_2025_STANDARD).all<{ title: string }>();
-    const existingCodes = new Set((existing || []).map((r) => (r.title || '').split(' ')[0]));
-
-    let created = 0;
-    for (const ctrl of wanted) {
-      if (existingCodes.has(ctrl.code)) continue;
-      await c.env.DB.prepare(
-        `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
-         VALUES (?, ?, ?, ?, '', 'Missing', 0, datetime('now'))`
-      ).bind(genId(), projectId, ISO_27701_2025_STANDARD, `${ctrl.code} — ${ctrl.title}`).run();
-      created++;
-    }
+    const { created } = await semearControles(c.env.DB, projectId, ISO_27701_2025_STANDARD, wanted);
 
     // Rótulo da norma: garante 27701:2025 (substitui 2019 se presente).
     let standards = (proj.standards || '').toString();
@@ -931,6 +937,23 @@ projectsApp.post('/:id/seed-27701-2025', async (c) => {
     return c.json({ ok: true, standard: ISO_27701_2025_STANDARD, role: proj.org_role, seeded: created, catalog_total: wanted.length, standards });
   } catch (e: any) {
     return erro500(c, 'Falha ao semear controles 27701:2025', e);
+  }
+});
+
+projectsApp.post('/:id/seed-27001-2022', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
+    if (!proj) return c.json({ error: 'Projeto não encontrado' }, 404);
+    const { created, total } = await semearControles(c.env.DB, projectId, ISO_27001_2022_STANDARD, ISO_27001_2022);
+    await logAudit(
+      c.env.DB, 'seed.27001.2022', c.get('user')?.email ?? 'system',
+      `Seed 27001:2022: ${created} controles criados, ${total - created} já existiam, projeto ${projectId}`,
+      '', c.req.header('CF-Connecting-IP') ?? '', projectId,
+    );
+    return c.json({ ok: true, standard: ISO_27001_2022_STANDARD, seeded: created, catalog_total: total });
+  } catch (e) {
+    return erro500(c, 'Falha ao semear controles 27001:2022', e);
   }
 });
 

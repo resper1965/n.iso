@@ -335,6 +335,22 @@ export async function refForaDoProjeto(
 }
 
 /**
+ * Acha o controle do projeto pelo que o cliente mandou: o id da linha ou o código ("A.5.1").
+ * Os ids variam por projeto ('ctrl-a51', 'A.5.1', 'ctrl_b_a51', genId) e são únicos no banco
+ * inteiro, então o código, que vive como primeiro token do título, é o único identificador
+ * estável. Sempre preso ao projeto.
+ */
+export async function idDoControle(db: D1Database, projectId: string, ref: string): Promise<string | null> {
+  const norm = 'ctrl-' + ref.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const row = await db.prepare(
+    `SELECT id FROM compliance_controls
+      WHERE project_id = ?1 AND (id = ?2 OR id = ?3 OR title = ?2 OR substr(title, 1, length(?2) + 1) = ?2 || ' ')
+      ORDER BY (id = ?2) DESC, (id = ?3) DESC, id LIMIT 1`
+  ).bind(projectId, ref, norm).first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+/**
  * SET de atualização PARCIAL: só as colunas presentes no corpo. Campo ausente preserva o valor
  * gravado; `null` ou `''` explícito grava o "vazio" da coluna (NULL, ou o padrão dela). `colunas`
  * mapeia coluna → vazio e é allowlist fixa da rota: o nome entra interpolado no SQL. O schema da
