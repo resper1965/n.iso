@@ -202,6 +202,10 @@ describe('500 correlaciona em vez de vazar', () => {
   // provedor (gateway, Workers AI, binding direto). Isso fica no log, não no 500.
   const PROVEDOR = 'texto-cru-do-provedor-xyz';
   const envSemIa = () => ({ ...testEnv(), AI: { run: async () => { throw new Error(PROVEDOR); } } });
+  // A geração de política só chama a IA depois de achar o controle no projeto (idDoControle).
+  const comControleA51 = () => env.DB.prepare(
+    `INSERT OR IGNORE INTO compliance_controls (id, project_id, standard, title) VALUES (?,?,?,?)`
+  ).bind('ctrl-vaz-a51', PROJ, 'ISO 27001:2022', 'A.5.1 Políticas').run();
 
   async function exigeSemProvedor(res: Response, mensagem: string) {
     expect(res.status).toBe(500);
@@ -224,6 +228,7 @@ describe('500 correlaciona em vez de vazar', () => {
   });
 
   it('policies: gerar política com IA indisponível não devolve o texto do provedor', async () => {
+    await comControleA51();
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/generate-policy`, {
       method: 'POST', headers: { ...admin, 'Content-Type': 'application/json' }, body: JSON.stringify({ control_id: 'A.5.1' }),
@@ -250,6 +255,7 @@ describe('500 correlaciona em vez de vazar', () => {
   });
 
   it('policies: lote com IA indisponível não devolve o erro do provedor na prévia', async () => {
+    await comControleA51();
     const linhas: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { linhas.push(String(args[0])); });
     const res = await worker.fetch(new Request(`http://localhost/api/v1/projects/${PROJ}/generate-policies-bulk`, {
