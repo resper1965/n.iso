@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0043** (`ls migrations/*.sql | tail -1`). São 41 arquivos
+- Última migration no repositório: **0044** (`ls migrations/*.sql | tail -1`). São 42 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -195,3 +195,19 @@ devolve uma linha.
 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db
 --remote` (esperado: "No migrations to apply") → merge, porque `deploy.yml`
 recusa migration pendente.
+
+## 0044 — IP e user agent das aprovações (fatia 0, 2026-10)
+
+As 12 colunas `*_approved_ip/ua` de `compliance_controls`, `evidence` e `ropa_records` existem
+em produção e no `schema.sql`, mas nenhuma migration as criava. A 0044 leva o DDL a banco novo.
+Produção (`niso-db`) e staging (`niso-db-staging`) têm as 12 colunas (conferido por
+`pragma_table_info` em 2026-10-07). O staging tinha a `d1_migrations` parada na 0028 em
+2026-10-07 (fora do escopo desta migration).
+
+**Em produção e no staging a 0044 NÃO é executada** (abortaria com "duplicate column"). Só se
+registra, antes do merge:
+
+    npx wrangler d1 execute niso-db --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0044_aprovacao_ip_ua.sql');"
+    npx wrangler d1 migrations list niso-db --remote   # esperado: "No migrations to apply"
+    npx wrangler d1 execute niso-db-staging --env staging --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0044_aprovacao_ip_ua.sql');"
+
