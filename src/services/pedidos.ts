@@ -255,6 +255,37 @@ export async function assinaturaDpia(db: D1Database, projectId: string, assessme
   return db.prepare(`UPDATE dpia_assessments SET ${set.sql} WHERE ${onde}`).bind(...set.binds, ...bindsOnde);
 }
 
+// SET literal por papel: a catraca de colunas (test/colunas-catraca.test.ts) não enxerga nome de
+// coluna montado por interpolação. Mesmo formato de COLUNAS_REVOGACAO (routes/controls.ts).
+const SET_ASSINATURA_POLITICA: Record<PapelAssinatura, string> = {
+  ciso: 'ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?',
+  ceo: 'ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?',
+};
+
+/**
+ * Assinatura da política (o texto vive em `compliance_controls.description`) por papel. É a MESMA
+ * usada por `POST /api/v1/controls/:id/approve` e pelo pedido de aprovação de política. Devolve o
+ * UPDATE (para `run()` ou `batch`), ou `null` se o controle não existe no projeto. Não toca `status`:
+ * ele é o da SoA. Com `guarda`, só pega se a prova do destinatário foi gravada no mesmo `batch` e o
+ * título/texto são os congelados no pedido.
+ */
+export async function assinaturaPolitica(
+  db: D1Database, projectId: string, controlId: string, role: PapelAssinatura,
+  carimbo: { por: string; em: string; ip: string | null; ua: string | null }, guarda?: GuardaAssinatura,
+): Promise<D1PreparedStatement | null> {
+  const existe = await db.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
+  if (!existe) return null;
+  let onde = 'id = ? AND project_id = ?';
+  const bindsOnde: unknown[] = [controlId, projectId];
+  if (guarda) {
+    const ok = intacto('politica', '', guarda.conteudoJson);
+    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${ok.sql}`;
+    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...ok.binds);
+  }
+  return db.prepare(`UPDATE compliance_controls SET ${SET_ASSINATURA_POLITICA[role]}, updated_at = CURRENT_TIMESTAMP WHERE ${onde}`)
+    .bind(carimbo.por, carimbo.em, carimbo.ip, carimbo.ua, ...bindsOnde);
+}
+
 /**
  * Grava a decisão do destinatário, a assinatura (se houver) e o novo status do pedido num `batch`
  * só, com toda condição conferida no SQL: o destinatário ainda pendente, o pedido ainda `aberto` com

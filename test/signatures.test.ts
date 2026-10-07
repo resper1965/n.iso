@@ -108,29 +108,93 @@ describe('Assinatura eletrônica (D1 real)', () => {
       expect(ctrl.status).toBe('Missing');
     });
 
-    it('aprova com a senha correta e grava o status no banco', async () => {
-      const res = await post('/api/v1/controls/ctrl-a51/approve', {
-        role: 'ciso',
-        password: 'password123',
-        project_id: 'proj-1',
-      });
+    it('o Líder SGSI designado assina como ciso: grava quem, quando, IP e UA, e não muda o status', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123', project_id: 'proj-1' });
       const data = await res.json() as any;
       expect(res.status, JSON.stringify(data)).toBe(200);
-      expect(data.ok).toBe(true);
-      expect(data.approved_by).toBe('Ana Souza');
+      expect(data).toMatchObject({ ok: true, role: 'ciso', approved_by: 'Ana Souza' });
 
-      const ctrl = await env.DB.prepare("SELECT status FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
-      expect(ctrl.status).toBe('Approved');
-
-      // A trilha é conferida aqui dentro, não num `it` seguinte: o pool isola o
-      // storage por teste, então escrita feita num teste não existe no próximo.
-      // Um teste que dependesse disso passaria por engano com a base vazia.
-      const log = await env.DB.prepare(
-        "SELECT actor, details FROM audit_logs WHERE action = 'control.approved' ORDER BY rowid DESC LIMIT 1"
+      const ctrl = await env.DB.prepare(
+        "SELECT status, ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua, ceo_approved_by FROM compliance_controls WHERE id='ctrl-a51'"
       ).first<any>();
-      expect(log).not.toBeNull();
+      expect(ctrl.ciso_approved_by).toBe('Ana Souza');
+      expect(ctrl.ciso_approved_at).toBe(data.approved_at);
+      expect(ctrl.ciso_approved_ip).toBeTruthy();
+      expect(ctrl.ciso_approved_ua).toBeTruthy();
+      expect(ctrl.ceo_approved_by).toBeNull();
+      // O status é o da SoA (Missing/Partial/Compliant/N/A): assinar a política não o reescreve.
+      expect(ctrl.status).toBe('Missing');
+
+      const log = await env.DB.prepare(
+        "SELECT actor, details, project_id FROM audit_logs WHERE action = 'control.approved' ORDER BY rowid DESC LIMIT 1"
+      ).first<any>();
       expect(log.actor).toBe('ana@exemplo.com.br');
       expect(log.details).toContain('ctrl-a51');
+      expect(log.project_id).toBe('proj-1');
+    });
+
+    it('as duas assinaturas vêm de duas pessoas designadas', async () => {
+      expect((await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123' })).status).toBe(200);
+      const r = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ceo', password: 'password123' }, headersDirecao);
+      expect(r.status, await r.clone().text()).toBe(200);
+      const ctrl = await env.DB.prepare("SELECT ciso_approved_by, ceo_approved_by, ceo_approved_at FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.ciso_approved_by).toBe('Ana Souza');
+      expect(ctrl.ceo_approved_by).toBe('Direcao Executiva');
+      expect(ctrl.ceo_approved_at).toBeTruthy();
+    });
+
+    it('sem role no corpo, o papel sai do cargo na matriz', async () => {
+      const r = await post('/api/v1/controls/ctrl-a51/approve', { password: 'password123' }, headersDirecao);
+      expect(r.status, await r.clone().text()).toBe(200);
+      expect((await r.json() as any).role).toBe('ceo');
+      const ctrl = await env.DB.prepare("SELECT ciso_approved_by, ceo_approved_by FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.ceo_approved_by).toBe('Direcao Executiva');
+      expect(ctrl.ciso_approved_by).toBeNull();
+    });
+
+    it('o Líder SGSI não assina como Direção', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ceo', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Segregação de Funções');
+      const ctrl = await env.DB.prepare("SELECT ceo_approved_by FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.ceo_approved_by).toBeNull();
+    });
+
+    it('duas linhas na matriz (DPO e Diretora) não dão os dois papéis à mesma pessoa', async () => {
+      await env.DB.prepare(
+        `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
+         VALUES ('gov-sgsi-2','proj-1','Ana Souza','ANA@exemplo.com.br ','exec','Diretora de Operações')`
+      ).run();
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ceo', password: 'password123' });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Segregação de Funções');
+    });
+
+    it('a Direção não assina como Líder SGSI', async () => {
+      const res = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123' }, headersDirecao);
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain('Líder SGSI');
+      const ctrl = await env.DB.prepare("SELECT ciso_approved_by FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.ciso_approved_by).toBeNull();
+    });
+
+    it('quem alcança o projeto mas não está na matriz não assina', async () => {
+      await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-fora','fora@cliente.com',?,'Fora','org_admin','proj-1')`)
+        .bind(await hashPassword('password123')).run();
+      const fora = { ...(await sessionFor({ id: 'usr-fora', email: 'fora@cliente.com', role: 'org_admin', client_project_id: 'proj-1' })), 'Content-Type': 'application/json' };
+      const r = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123' }, fora);
+      expect(r.status).toBe(403);
+      expect(await r.text()).toContain('não está designado na matriz');
+      const ctrl = await env.DB.prepare("SELECT ciso_approved_by, ceo_approved_by FROM compliance_controls WHERE id='ctrl-a51'").first<any>();
+      expect(ctrl.ciso_approved_by).toBeNull();
+      expect(ctrl.ceo_approved_by).toBeNull();
+    });
+
+    it('conta de administração da plataforma não assina política, mesmo designada', async () => {
+      const admin = { ...(await sessionFor({ id: 'usr-1', email: 'ana@exemplo.com.br', name: 'Ana Souza', role: 'platform_admin' })), 'Content-Type': 'application/json' };
+      const r = await post('/api/v1/controls/ctrl-a51/approve', { role: 'ciso', password: 'password123' }, admin);
+      expect(r.status).toBe(403);
+      expect(await r.text()).toContain('administração da plataforma');
     });
   });
 

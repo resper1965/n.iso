@@ -180,6 +180,12 @@ describe('nISO API (D1 e KV reais)', () => {
         });
         expect(edicao.status, await edicao.clone().text()).toBe(200);
 
+        // Assinar exige designação na matriz de Governança do projeto (como ROPA, DPIA e evidência).
+        await env.DB.prepare(
+          `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
+           VALUES ('gov-orgadmin', ?, 'Org Admin', 'orgadmin@cliente.com', 'cliente', 'CISO')`
+        ).bind(PROJ).run();
+
         const assinatura = await req('/api/v1/controls/ctrl-proprio/approve', {
           method: 'PUT',
           headers: { ...orgAdmin, 'Content-Type': 'application/json' },
@@ -187,9 +193,10 @@ describe('nISO API (D1 e KV reais)', () => {
         });
         expect(assinatura.status, await assinatura.clone().text()).toBe(200);
 
-        const l = await env.DB.prepare('SELECT title, status FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
+        const l = await env.DB.prepare('SELECT title, status, ciso_approved_by FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
         expect(l.title).toBe('Título novo');
-        expect(l.status).toBe('Approved');
+        expect(l.ciso_approved_by).toBe('Org Admin');
+        expect(l.status).toBe('Missing');
       }, 30_000);
     });
 
