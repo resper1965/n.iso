@@ -75,13 +75,13 @@ async function api(m, p, b, extras) {
         err.body = data;
         throw err;
     }
-    // ponytail: auto-unwrap enveloped arrays from backend (e.g. { ok: true, risks: [...] })
+    // Desembrulha só o envelope de lista pura: `{ ok: true, <uma lista> }` e mais nada.
+    // Com qualquer outro campo (ou duas listas) devolve o objeto inteiro: antes a primeira
+    // lista vinha e o resto sumia sem erro (entrevistas sem `questions`, lacunas sem
+    // `coverage_pct`, jornada recebendo `titles` no lugar de `checklists`).
     if (data && data.ok === true) {
-        for (const key in data) {
-            if (key !== 'ok' && Array.isArray(data[key])) {
-                return data[key];
-            }
-        }
+        const chaves = Object.keys(data).filter((k) => k !== 'ok');
+        if (chaves.length === 1 && Array.isArray(data[chaves[0]])) return data[chaves[0]];
     }
     return data;
 }

@@ -143,8 +143,7 @@ import { navigate } from '../router.js';
         h.textContent = 'Monitor';
         a.innerHTML = `<div class="dropdown-wrap"><button class="btn dropdown-trigger" data-action="__monToggleDropdown" data-arg-el>Exportar</button><div class="dropdown-menu"><div class="dropdown-item" data-action="exportCSV" data-args='["risks"]'>Riscos CSV</div><div class="dropdown-item" data-action="exportCSV" data-args='["vendors"]'>Fornecedores CSV</div><div class="dropdown-item" data-action="exportCSV" data-args='["training"]'>Treinamento CSV</div></div></div>`;
         let portfolio = [];
-        try { portfolio = await api('GET', '/api/v1/portfolio'); } catch(e) {}
-        if (!Array.isArray(portfolio)) portfolio = [];
+        try { portfolio = (await api('GET', '/api/v1/portfolio'))?.portfolio || []; } catch(e) {}
         c.innerHTML = `<div class="fade-in">${portfolio.length ? portfolio.map(p => {
             const pct = p.overall_progress_pct || 0;
             const semaphore = pct > 70 ? {color:'var(--success)',label:'No prazo'} : pct > 30 ? {color:'var(--warning)',label:'Atencao'} : {color:'var(--danger)',label:'Critico'};

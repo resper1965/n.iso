@@ -323,7 +323,7 @@ projectPedidosApp.post('/ciencia', async (c) => {
     await logAudit(c.env.DB, 'pedido.ciencia_lote', user.email,
       `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, ciência por link) para ${criado.links.length} destinatário(s), ${falhas.length} falha(s) de envio; hash ${criado.hash}`,
       '', c.req.header('CF-Connecting-IP') ?? '', projectId);
-    // Sem `ok: true`: com ele o api.js do frontend desembrulha o primeiro array (`falhas`) e perde o resto.
+    // Sem `ok: true` por histórico: o api.js desembrulhava a primeira lista. Hoje desembrulha só `{ ok, <uma lista> }`.
     return c.json({ id: criado.id, hash: criado.hash, enviados: criado.links.length - falhas.length, falhas }, 201);
   } catch (e: any) {
     return erro500(c, 'Erro ao criar o pedido de ciência', e);
