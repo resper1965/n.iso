@@ -104,6 +104,7 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
 
   // o da proposta só se ainda for consultor ativo (a conta pode ter mudado desde a criação)
   let consultorEmail = await consultorValido(db, e.orgId, p.consultor_email);
+  let semConsultorAvisar: { id: string }[] = [];
   if (projetoId) {
     const dados = await dadosDoProjeto(db, p, deProjeto.map((i) => i.servico));
     stmts.push(
@@ -133,6 +134,15 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
 
     // Consultor responsável: o da proposta; senão quem registrou o aceite manual, se for consultor.
     if (!consultorEmail && e.origem === 'manual') consultorEmail = await consultorValido(db, e.orgId, e.atorEmail);
+    // Sem consultor, o projeto só aparece para a administração: avisa os consultoria_admin ativos da
+    // organização; sem nenhum, a plataforma (ponytail: sem trilha própria, a notificação basta).
+    if (!consultorEmail) {
+      semConsultorAvisar = (await db.prepare(`SELECT id FROM users WHERE COALESCE(ativo, 1) <> 0 AND (
+          (role = 'consultoria_admin' AND org_id = ?1)
+          OR (role IN ('platform_admin', 'admin') AND NOT EXISTS (
+            SELECT 1 FROM users WHERE role = 'consultoria_admin' AND org_id = ?1 AND COALESCE(ativo, 1) <> 0)))`)
+        .bind(e.orgId).all<{ id: string }>()).results;
+    }
     if (consultorEmail) {
       // a linha de designacaoDoCriador, com o nome da conta quando existe e só no projeto desta chamada
       stmts.push(db.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title)
@@ -166,6 +176,12 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
     stmts.push(db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
       SELECT ?, u.id, 'contract_signed', ?, ?, 0, ?, 'proposta_aceita', ?, datetime('now') FROM users u WHERE lower(u.email) = ? AND ${G}`)
       .bind(genId(), `Proposta aceita: ${p.cliente}`, msg, link, p.id, email, ...g));
+  }
+  for (const u of semConsultorAvisar) {
+    stmts.push(db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
+      SELECT ?, ?, 'projeto_sem_consultor', ?, ?, 0, ?, 'projeto_sem_consultor', ?, datetime('now') WHERE ${G}`)
+      .bind(genId(), u.id, `Projeto sem consultor: ${p.cliente}`,
+        `O projeto da proposta ${p.numero} nasceu sem consultor. Designe um na Governança do projeto.`, link, p.id, ...g));
   }
 
   let res: D1Result[];

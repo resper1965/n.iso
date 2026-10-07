@@ -5,7 +5,7 @@ import { env } from 'cloudflare:test';
 import { applySchema } from './helpers/d1';
 import { fecharVenda, CARGO_CONTATO_ACEITE, type EntradaFechamento } from '../src/services/fechar-venda';
 import { PHASE_TITLES } from '../src/constants';
-import { idDoControle, autoridadeDeAssinatura, recusaDeAssinatura } from '../src/helpers';
+import { idDoControle, autoridadeDeAssinatura, recusaDeAssinatura, requireProjectAccess } from '../src/helpers';
 
 const db = () => env.DB as D1Database;
 
@@ -386,5 +386,36 @@ describe('fecharVenda', () => {
     await fecharVenda(db(), entrada(id, { origem: 'manual', atorEmail: 'com@ness.lat' }));
     expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'executivo'`, r.projetoId)).toBe(1);
     expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND details LIKE 'Contato do aceite%' AND project_id = ?`, r.projetoId)).toBe(1);
+  });
+
+  it('sem consultor: avisa os consultoria_admin ativos da organização; sem nenhum, o platform_admin; o admin alcança o projeto', async () => {
+    await db().batch([
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id) VALUES ('u-cadm','cadm@ness.lat','x','Adm','consultoria_admin','org_ness')`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id, ativo) VALUES ('u-cadm-off','off-adm@ness.lat','x','Adm off','consultoria_admin','org_ness',0)`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id) VALUES ('u-badm','badm@b.lat','x','Adm B','consultoria_admin','org_b')`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-plat','plat@ness.lat','x','Plataforma','platform_admin')`),
+    ]);
+    const avisados = async (propostaId: string) => (await db().prepare(
+      `SELECT user_id, link FROM notifications WHERE target_id = ? AND type = 'projeto_sem_consultor' ORDER BY user_id`).bind(propostaId).all<any>()).results;
+
+    const a = await proposta({ consultor: null });
+    const ra = await fecharVenda(db(), entrada(a.id));
+    if (!ra.ok) throw new Error('fechamento falhou');
+    expect(await avisados(a.id)).toEqual([{ user_id: 'u-cadm', link: `/projects/${ra.projetoId}` }]);
+    await expect(requireProjectAccess(db(), { role: 'consultoria_admin', org_id: 'org_ness', email: 'cadm@ness.lat' }, ra.projetoId!)).resolves.toBe(true);
+    await expect(requireProjectAccess(db(), { role: 'consultoria_admin', org_id: 'org_b', email: 'badm@b.lat' }, ra.projetoId!)).rejects.toThrow();
+
+    // organização sem consultoria_admin: o platform_admin
+    const c = await proposta({ consultor: null, org: 'org_c' });
+    const rc = await fecharVenda(db(), entrada(c.id, { orgId: 'org_c' }));
+    if (!rc.ok) throw new Error('fechamento falhou');
+    expect((await avisados(c.id)).map((n: any) => n.user_id)).toEqual(['u-plat']);
+
+    // com consultor: ninguém recebe o aviso; re-aceite não repete
+    const b = await proposta();
+    expect((await fecharVenda(db(), entrada(b.id))).ok).toBe(true);
+    expect(await avisados(b.id)).toEqual([]);
+    await fecharVenda(db(), entrada(a.id));
+    expect(await avisados(a.id)).toHaveLength(1);
   });
 });
