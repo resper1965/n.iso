@@ -32,7 +32,7 @@
   - O controle ISO fica no n.iso e o documento só aponta para ele. Não há catálogo duplicado.
   - Documento existe sem controle ISO.
   - Cliente sem n.iso tem módulos habilitados, e os documentos dele ligam a artigos da LGPD.
-  - O n.secops é projeto interno do mesmo núcleo.
+  - O n.secops é um projeto de adequação ISO 27001 dentro do n.iso (um `projects` como qualquer cliente), **não** um módulo do sistema.
 - **RoPA:**
   - Detalhado, com diagramas Mermaid.
   - Preenchido por tela, importação, API e agente externo via MCP.
@@ -225,7 +225,7 @@ Princípios:
 ### 4.1 Tenancy e módulos
 
 - **Mantém:** `organizations` (consultoria) → `projects` (cliente).
-- **Novo:** `projeto_modulos (project_id, modulo, habilitado_em, habilitado_por)`, com `modulo IN ('iso','privacy','secops')`.
+- **Novo:** `projeto_modulos (project_id, modulo, habilitado_em, habilitado_por)`, com `modulo IN ('iso','privacy')`.
 - **Teto:** a organização define quais módulos pode habilitar (`organizations.modulos_contratados`, JSON). O projeto não habilita o que a org não contratou.
 - **Decidido (06/10):** habilita por projeto, com teto na org. A gestão de organização, projeto, usuário e acesso é **a mesma do n.iso**: mesmas tabelas, mesmo `projectAccessMiddleware`, mesmos papéis e as mesmas telas de administração. O n.privacy não tem cadastro de cliente nem de usuário próprio. Habilitar um módulo é uma ação a mais nessa gestão, não um sistema novo.
 
@@ -237,9 +237,7 @@ partes
   tipo          'pessoa' | 'organizacao'
   nome
   email         (pessoa; opcional)
-  documento     (CNPJ da organização; CPF NÃO entra — ver nota)
   user_id       → users, opcional (a pessoa que também tem conta)
-  pais          (organização; para transferência internacional)
   status        'ativa' | 'inativa'
   created_at, updated_at
 
@@ -251,11 +249,11 @@ parte_vinculos
                 | 'parte_interessada'
   alvo_tipo     'projeto' | 'item' | 'departamento' | 'tratamento' | 'parte'
   alvo_id       (suboperador: alvo_tipo='parte', alvo = o operador)
-  desde, ate    (vínculo com vigência; o histórico não se apaga)
 ```
 
 - **O papel é do vínculo, não da parte.** A mesma organização pode ser operadora num tratamento e terceira noutro.
-- **CPF fica fora.** Não serve ao propósito, e cada CPF guardado é um dado a mais que o pedido do titular precisa alcançar.
+- **Corte (ponytail):** sem `documento`, `pais` nem vigência (`desde/ate`) por ora. País entra na fatia de transferência internacional; o histórico de vínculos já fica na trilha (`audit_logs`), e vigência própria só se um auditor pedir "quem era o DPO em março".
+- **CPF nunca entra.** Não serve ao propósito, e cada CPF guardado é um dado a mais que o pedido do titular precisa alcançar.
 - **`users` continua sendo a conta.** `partes.user_id` liga a pessoa à conta quando ela existe.
 - **Encarregado:** vínculo `papel='encarregado', alvo_tipo='projeto'`, com contato público (art. 41). A assinatura do DPO deixa de ser decidida por substring de cargo e separa DPO de CISO. Hoje os dois são o mesmo papel em `autoridadeDeAssinatura`.
 - **Migração das pessoas:**
@@ -268,7 +266,7 @@ parte_vinculos
 
 ```
 departamentos
-  id, project_id, nome, pai_id → departamentos (hierarquia), status
+  id, project_id, nome, status          (lista plana; hierarquia quando um cliente pedir)
 ```
 
 O responsável é vínculo (`parte_vinculos`, `alvo_tipo='departamento'`), não coluna.
@@ -295,9 +293,6 @@ item_privacidade                        -- bloco do n.privacy (1:1)
   contem_dado_pessoal, contem_dado_sensivel,
   pais_hospedagem, operador_parte_id → partes
 
-item_relacoes                           -- grafo (alimenta o Mermaid e o impacto)
-  origem_id → itens, destino_id → itens,
-  tipo 'hospeda' | 'alimenta' | 'usa' | 'faz_backup_em'
 ```
 
 - **O dono é vínculo:** `dono_sistema` e `dono_processo` em `parte_vinculos`.
@@ -305,9 +300,9 @@ item_relacoes                           -- grafo (alimenta o Mermaid e o impacto
   1. Backup (`npm run db:backup`).
   2. Copiar `assets` para `itens` com **o mesmo id**, `tipo='ativo'`; os campos de segurança vão para `item_seguranca`.
   3. `risks.asset_id` continua válido sem reescrita, porque o id é o mesmo.
-  4. Transição: a view `assets` sobre `itens` + `item_seguranca`, de leitura, para as 6 consultas de backend e as 2 telas migrarem uma de cada vez. O D1 tem `CREATE VIEW`; conferir no staging antes.
+  4. As 6 consultas de backend, as 2 telas e a ferramenta MCP passam para `itens` no mesmo PR da migração. Sem view de transição (corte ponytail): volta só se o PR ficar grande demais para revisar.
   5. Teste de migração com dado de produção anonimizado no staging: contagem igual, todo `risks.asset_id` resolvido, nenhum campo vazio que antes tinha valor.
-  6. `assets` só sai depois que nenhuma consulta a lê (`test/colunas-catraca.test.ts` serve de modelo).
+  6. `assets` sai no PR seguinte, depois de produção conferida (`test/colunas-catraca.test.ts` serve de modelo para provar que nada mais a lê).
 - **Ponto aberto:** "processo" como item e "tratamento" como entidade (4.7) podem se confundir. Proponho: processo é a atividade de negócio (item); tratamento é o registro do art. 37 que *usa* processos, sistemas e bases.
 
 ### 4.5 Catálogo de requisitos
@@ -346,7 +341,7 @@ requisito_mapeamentos
 ```
 documentos
   id, project_id
-  tipo          'politica' | 'norma' | 'procedimento' | 'registro' | 'aviso' | 'contrato'
+  tipo          'politica' | 'norma' | 'procedimento'   ('contrato' entra com o DPA, na fatia de TPRM)
   titulo
   pai_id → documentos           (política → norma → procedimento)
   dono_parte_id → partes
@@ -363,7 +358,7 @@ documento_versoes
 documento_requisitos            -- N:N; o documento existe sem nenhuma linha aqui
   documento_id, requisito_id
 
-documento_excecoes
+documento_excecoes             -- capacidade decidida; entra numa segunda etapa da fatia de documentos
   id, documento_id, escopo, motivo, vence_em,
   pedido_id → pedidos           (a aprovação da exceção tem prova)
 ```
@@ -406,7 +401,7 @@ São consultas sobre o grafo, mais uma rotina diária para validades. Não há m
 
 | Gatilho | Efeito | Como |
 |---|---|---|
-| Mudou um sistema (item) | Mostra tratamentos, terceiros e documentos afetados | Consulta por `item_relacoes`, `tratamento_itens`, `parte_vinculos` e `documento_requisitos` |
+| Mudou um sistema (item) | Mostra tratamentos, terceiros e documentos afetados | Consulta por `tratamento_itens`, `parte_vinculos` e `documento_requisitos` (sistema→sistema fica para quando houver `item_relacoes`, fora desta spec) |
 | Venceu a evidência do trust center | Avaliação do terceiro volta a pendente; tratamentos com esse operador são sinalizados | Rotina diária (cron do Worker) compara `valido_ate`; grava a mudança na trilha |
 | Nova versão vigente de documento | Ciências anteriores aparecem como "versão anterior" | Derivado de `ref_id = versao_id`; nada é reescrito |
 | Artigo da LGPD sem documento nem evidência | Lacuna na visão do encarregado | Consulta: requisitos da fonte `lgpd` aplicáveis sem `documento_requisitos` nem `evidencia_requisitos` |
