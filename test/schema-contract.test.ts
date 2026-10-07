@@ -166,7 +166,7 @@ describe('schema contract (real D1)', () => {
     ).rejects.toThrow(/NOT NULL/i);
 
     await expect(
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, token, expires_at) VALUES (?, ?, ?)`)
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, token_hash, expires_at) VALUES (?, ?, ?)`)
         .bind('at-sem-projeto', 'tok-orfao', '2099-01-01T00:00:00Z').run()
     ).rejects.toThrow(/NOT NULL/i);
   });

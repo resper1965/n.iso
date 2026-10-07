@@ -7,6 +7,7 @@ import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projet
 import { verificarCadeia } from '../trilha';
 import { assinaturaDpia } from '../services/pedidos';
 import { conferirPedidosDoDocumento } from './pedidos';
+import { tokenDoAuditor } from './auditor';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
@@ -591,8 +592,7 @@ platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, 
 });
 
 platformApp.get('/auditor/:token/project', async (c) => {
-  const token = c.req.param('token');
-  const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+  const t = await tokenDoAuditor(c.env.DB, c.req.param('token'));
   if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
 
   const [project, phases, controls, evidence] = await Promise.all([

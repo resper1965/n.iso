@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
-import { hashPassword } from '../src/helpers';
+import { hashPassword, sha256Hex } from '../src/helpers';
 import { applySchema, sessionFor, pedir } from './helpers/d1';
 
 /**
@@ -71,10 +71,10 @@ describe('Portfólio e portal do cliente', () => {
       env.DB.prepare(`INSERT INTO proposals (id, lead_id, assessment_id, status, total_price) VALUES (?,?,?,?,?)`)
         .bind('prop-1', 'lead-1', 'as-1', 'Sent', 100000),
 
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-1', A, 'tok-auditor-valido', '2099-01-01T00:00:00Z'),
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-2', A, 'tok-auditor-vencido', '2020-01-01T00:00:00Z'),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)`)
+        .bind('at-1', A, await sha256Hex('tok-auditor-valido'), '2099-01-01T00:00:00Z'),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)`)
+        .bind('at-2', A, await sha256Hex('tok-auditor-vencido'), '2020-01-01T00:00:00Z'),
     ]);
 
     admA = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A });

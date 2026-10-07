@@ -48,7 +48,7 @@ describe('Export de portabilidade', () => {
       // Credencial viva: NÃO pode sair no export.
       env.DB.prepare(`INSERT INTO api_keys (id, project_id, name, key_hash, permissions, status) VALUES (?,?,?,?,?,?)`)
         .bind('k-a', A, 'chave', 'hash-secreto-da-chave', 'read', 'Active'),
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)`)
         .bind('at-a', A, 'token-secreto-do-auditor', '2099-01-01T00:00:00Z'),
       // Segredo de integração em repouso: HMAC do webhook, segredo OIDC e hash SCIM.
       env.DB.prepare(`INSERT INTO webhooks (id, project_id, url, events, secret) VALUES (?,?,?,?,?)`)

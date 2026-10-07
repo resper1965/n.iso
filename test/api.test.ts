@@ -82,8 +82,8 @@ describe('nISO API (D1 e KV reais)', () => {
          VALUES (?,?,?,?,?,?,?,?,?)`
       ).bind('ev-alheio', OUTRO, 'b.md', 'k/b.md', 'bb', 'text/markdown', 2, 'x@y', 'pending'),
 
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-1', PROJ, 'tok123', '2099-01-01T00:00:00Z'),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)`)
+        .bind('at-1', PROJ, await sha256Hex('tok123'), '2099-01-01T00:00:00Z'),
 
       env.DB.prepare(`INSERT INTO assessments (id, client_name, status, access_token) VALUES (?,?,?,?)`)
         .bind('assess-1', 'Empresa X', 'In Progress', 'tok456'),

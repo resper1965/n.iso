@@ -1110,25 +1110,25 @@ projectsApp.get('/:id/audit-trail', async (c) => {
   return c.json(results || []);
 });
 
-// Auditor Token inside Project
+// Acesso do auditor externo. O token sai UMA vez, dentro da URL (fragmento, que o navegador não
+// manda ao servidor); o banco guarda só o SHA-256, como o scim-token acima. Prazo calculado pelo
+// SQLite, no formato que `tokenDoAuditor` compara.
 projectsApp.post('/:id/auditor-token', async (c) => {
   try {
     const projectId = c.req.param('id');
     const v = await validateBody(c, auditorTokenSchema);
     if (!v.success) return v.response;
-    const body = v.data;
-    const days = body.days_valid ?? 30;
+    const days = v.data.days_valid ?? 30;
     const token = genToken();
-    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
-
-    await c.env.DB.prepare(
-      `INSERT INTO auditor_tokens (id, token, project_id, expires_at, created_at)
-       VALUES (?, ?, ?, ?, datetime('now'))`
-    ).bind(genId(), token, projectId, expiresAt).run();
-
-    await logAudit(c.env.DB, 'auditor_token.created', c.get('user')?.email ?? 'system', `Auditor token created for project ${projectId}, valid ${days} days`, '', '', projectId);
-    return c.json({ ok: true, token, expires_at: expiresAt }, 201);
-  } catch (e: any) {
+    const ator = c.get('user')?.email ?? 'system';
+    const row = await c.env.DB.prepare(
+      `INSERT INTO auditor_tokens (id, token_hash, project_id, expires_at, created_by)
+       VALUES (?, ?, ?, datetime('now', ?), ?) RETURNING id, expires_at`
+    ).bind(genId(), await sha256Hex(token), projectId, `+${days} days`, ator).first<{ id: string; expires_at: string }>();
+    if (!row) return c.json({ error: 'Falha ao gerar o acesso do auditor' }, 500);
+    await logAudit(c.env.DB, 'auditor_token.created', ator, `Acesso de auditor externo ${row.id} criado, válido por ${days} dias`, '', '', projectId);
+    return c.json({ id: row.id, url: `${appUrl(c.env)}/auditor#${token}`, expires_at: row.expires_at }, 201);
+  } catch (e) {
     return erro500(c, 'Falha ao gerar token de auditor', e);
   }
 });

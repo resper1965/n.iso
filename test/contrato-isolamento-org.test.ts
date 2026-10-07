@@ -326,8 +326,8 @@ beforeAll(async () => {
       headers: await sessionFor({ id: `${m}-cli`, email: `cli@${m}.lat`, role: 'org_admin', client_project_id: de.proj, org_id: de.org }),
     });
     // Auditor externo: token VÁLIDO do projeto da própria organização (portal `/api/v1/auditor/:token/*`).
-    await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?, ?, ?, '2099-01-01T00:00:00Z')`)
-      .bind(`${m}-aud`, de.proj, `tok-aud-${m}`).run();
+    await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?, ?, ?, '2099-01-01T00:00:00Z')`)
+      .bind(`${m}-aud`, de.proj, await sha256Hex(`tok-aud-${m}`)).run();
     PRINCIPAIS.push({ nome: `auditor@${de.org}`, de, alheio, headers: {}, token: `tok-aud-${m}` });
   }
 }, 120_000);

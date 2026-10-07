@@ -1,14 +1,29 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, erro500, refForaDoProjeto } from '../helpers';
+import { logAudit, requireResourceAccess, erro500, refForaDoProjeto, sha256Hex } from '../helpers';
 import { validateBody, auditorNoteSchema, auditorResponseSchema } from '../schemas';
 
 export const auditorApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+export type TokenAuditor = { id: string; project_id: string; expires_at: string };
+
+/**
+ * O token do link do auditor externo, procurado pelo SHA-256 (o banco não guarda o token, migration
+ * 0045). Vencido ou revogado não vale. `datetime(expires_at)` normaliza o formato: linha gravada em
+ * ISO 8601 ('2026-11-06T12:00:00.000Z') comparada como texto com `datetime('now')`
+ * ('2026-11-06 12:00:00') valia até o fim do dia, porque 'T' > ' '.
+ */
+export async function tokenDoAuditor(db: D1Database, token: string): Promise<TokenAuditor | null> {
+  return db.prepare(
+    `SELECT id, project_id, expires_at FROM auditor_tokens
+      WHERE token_hash = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')`
+  ).bind(await sha256Hex(token)).first<TokenAuditor>();
+}
+
 auditorApp.get('/auditor/:token/notes', async (c) => {
   try {
     const token = c.req.param('token');
-    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    const t = await tokenDoAuditor(c.env.DB, token);
     if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
     
     const notes = await c.env.DB.prepare(`
@@ -27,7 +42,7 @@ auditorApp.get('/auditor/:token/notes', async (c) => {
 auditorApp.post('/auditor/:token/notes', async (c) => {
   try {
     const token = c.req.param('token');
-    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    const t = await tokenDoAuditor(c.env.DB, token);
     if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
     
     const v = await validateBody(c, auditorNoteSchema);
@@ -42,7 +57,7 @@ auditorApp.post('/auditor/:token/notes', async (c) => {
       INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
-      id, t.project_id, token, control_id || null, note_type || 'question', content
+      id, t.project_id, t.id, control_id || null, note_type || 'question', content
     ).run();
     
     await logAudit(c.env.DB, 'auditor_note.created', 'auditor', `Nota de auditor ${id} criada para o projeto ${t.project_id}`);
@@ -110,8 +125,7 @@ const PEDIDOS_POR_PAGINA = 500;
  */
 auditorApp.get('/auditor/:token/pedidos', async (c) => {
   try {
-    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")')
-      .bind(c.req.param('token')).first<{ project_id: string }>();
+    const t = await tokenDoAuditor(c.env.DB, c.req.param('token'));
     if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
     const pagina = Number(c.req.query('pagina') ?? '1');
     if (!Number.isInteger(pagina) || pagina < 1) return c.json({ error: 'pagina deve ser um inteiro a partir de 1' }, 400);
@@ -149,7 +163,7 @@ auditorApp.get('/auditor/:token/evidence/:evidenceId/download', async (c) => {
     const token = c.req.param('token');
     const evidenceId = c.req.param('evidenceId');
     
-    const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
+    const t = await tokenDoAuditor(c.env.DB, token);
     if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
     
     const ev = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ? AND project_id = ?').bind(evidenceId, t.project_id).first() as any;

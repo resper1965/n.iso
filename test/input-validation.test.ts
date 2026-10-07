@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { hashPassword } from '../src/helpers';
+import { hashPassword, sha256Hex } from '../src/helpers';
 import { applySchema, resetData, sessionFor } from './helpers/d1';
 import { MAX_JSON_BYTES } from '../src/middleware/body-guard';
 
@@ -116,7 +116,7 @@ describe('Schemas por rota', () => {
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('p1','Cliente','ISO 27001','controller','Active')`),
       env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u1','admin@ness.io',?,'Admin','platform_admin')`).bind(hash),
       env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, status, maturity) VALUES ('c1','p1','ISO 27001:2022','T','Missing',0)`),
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES ('at1','p1','tok-valido','2099-01-01T00:00:00Z')`),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES ('at1','p1',?,'2099-01-01T00:00:00Z')`).bind(await sha256Hex('tok-valido')),
     ]);
     headers = {
       ...(await sessionFor({ id: 'u1', email: 'admin@ness.io', role: 'platform_admin', iat: Date.now() })),

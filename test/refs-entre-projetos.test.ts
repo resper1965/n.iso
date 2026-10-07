@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { applySchema, resetData, sessionFor, seedTwoProjects, pedir } from './helpers/d1';
+import { sha256Hex } from '../src/helpers';
 
 /**
  * Referência a recurso de OUTRO projeto vinda no corpo.
@@ -32,7 +33,7 @@ async function seed() {
     ]),
     db.prepare(`INSERT INTO corrective_actions (id, project_id, title) VALUES ('capa-a', 'proj-a', 'CAPA A')`),
     db.prepare(`INSERT INTO dpia_assessments (id, project_id) VALUES ('dpia-a', 'proj-a')`),
-    db.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES ('at-a', 'proj-a', 'tok-a', '2099-01-01T00:00:00Z')`),
+    db.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES ('at-a', 'proj-a', ?, '2099-01-01T00:00:00Z')`).bind(await sha256Hex('tok-a')),
   ]);
 }
 

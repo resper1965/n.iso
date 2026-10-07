@@ -406,14 +406,17 @@ CREATE TABLE IF NOT EXISTS evidence (
 CREATE TABLE IF NOT EXISTS auditor_tokens (
     id TEXT PRIMARY KEY,
     -- NOT NULL (migration 0021): o token é o único fator de um caminho público
-    -- (`/api/v1/auditor/:token/*`, isento do authMiddleware). Sem projeto ele é
+    -- (`/api/v1/public/auditor/*`, isento do authMiddleware). Sem projeto ele é
     -- concessão de acesso sem escopo — não é dado válido. Ver o cabeçalho da
     -- 0021 para o critério de quais tabelas foram endurecidas e quais não.
     project_id TEXT NOT NULL REFERENCES projects(id),
-    token TEXT UNIQUE NOT NULL,
+    -- SHA-256 do token do link (migration 0045). O token em si sai uma vez, na URL.
+    token_hash TEXT UNIQUE NOT NULL,
     expires_at DATETIME NOT NULL,
     created_by TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME,
+    revoked_by TEXT
 );
 
 -- ═══════════════════════════════════════════════
@@ -438,7 +441,7 @@ CREATE INDEX IF NOT EXISTS idx_assessment_answers_block ON assessment_answers(as
 CREATE INDEX IF NOT EXISTS idx_project_phases ON project_phases(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_interviews ON project_interviews(project_id, track);
 CREATE INDEX IF NOT EXISTS idx_evidence_control ON evidence(control_id);
-CREATE INDEX IF NOT EXISTS idx_auditor_tokens ON auditor_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_auditor_tokens ON auditor_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_cnpj ON leads(cnpj);
 CREATE INDEX IF NOT EXISTS idx_proposals_lead ON proposals(lead_id);
