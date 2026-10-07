@@ -3,6 +3,24 @@ import { api } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
 
+    // O id varia por projeto (ctrl-a51, A.5.1, gerado); o código estável é o primeiro token do título.
+    function codigoDoControle(ctrl) {
+        const m = (ctrl.title || '').match(/^(A\.\d+(?:\.\d+)*)\b/);
+        return m ? m[1] : ctrl.id;
+    }
+
+    window.carregarCatalogo = async function (projectId) {
+        try {
+            const r1 = await api('POST', `/api/v1/projects/${projectId}/seed-27001-2022`);
+            const r2 = await api('POST', `/api/v1/projects/${projectId}/seed-27701-2025`);
+            await window.loadControls();
+            showToast(`Catálogo carregado: ${(r1?.seeded || 0) + (r2?.seeded || 0)} controles novos.`, 'success');
+            navigate('controls');
+        } catch (e) {
+            showToast('Falha ao carregar o catálogo: ' + (e.message || e), 'error');
+        }
+    };
+
     function renderControls(c, h, a) {
         h.textContent = 'Controles';
         // Botão do Diagnóstico de Prontidão ("gap em voo") — só com projeto ativo.
@@ -10,12 +28,14 @@ import { navigate } from '../router.js';
             ? `<button class="btn btn-secondary" data-action="runReadinessCheck" data-args='["${S.currentProject.id}"]'>Diagnóstico de prontidão</button>`
             : '';
         if (!S.controls.length) {
-            c.innerHTML = `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Os controles serão populados pelo backend.</p></div>`;
+            c.innerHTML = S.currentProject
+                ? `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Carregue o Anexo A da ISO 27001:2022 e os controles de privacidade da ISO 27701:2025 deste projeto.</p><button class="btn btn-primary" data-action="carregarCatalogo" data-args='["${escapeHTML(S.currentProject.id)}"]'>Carregar catálogo</button></div>`
+                : `<div class="empty-state fade-in"><h3>Nenhum controle carregado</h3><p>Escolha um projeto para carregar o catálogo.</p></div>`;
             return;
         }
         c.innerHTML = `<div class="fade-in card" style="padding:0;overflow:hidden">${S.controls.map(ctrl => `
             <div class="phase-item" data-action="openControlDetail" data-args='["${ctrl.id}"]' style="cursor:pointer">
-                <div class="phase-num" style="width:3.5rem;color:var(--accent)">${ctrl.id}</div>
+                <div class="phase-num" style="width:3.5rem;color:var(--accent)">${escapeHTML(codigoDoControle(ctrl))}</div>
                 <div style="flex:1">
                     <div class="phase-title">${escapeHTML(ctrl.title)}</div>
                     ${ctrl.maturity ? `<div style="font-size:0.72rem; color:var(--muted)">Maturidade: ${ctrl.maturity}/5</div>` : ''}
