@@ -70,7 +70,7 @@ Nas brasileiras (Privacy Tools, DPOnet), também são básicos:
 
 **O que o desenho não tem e o comprador vai perguntar:**
 - **Descoberta automática de dados pessoais.** OneTrust, Securiti, BigID, DataGrail e Privacy Tools fazem. O n.privacy é declarativo; isso tem de estar dito no posicionamento, senão a comparação é injusta.
-- **Gestão de consentimento e cookies (CMP).** É um produto em si; Didomi e Usercentrics vivem disso. Recomendação: **não construir**. Registrar a prova de consentimento como evidência e integrar com uma CMP depois. Decisão do dono (seção 10).
+- **Gestão de consentimento e cookies (CMP).** É um produto em si; Didomi e Usercentrics vivem disso. **Decidido (06/10): não construir.** O n.privacy registra a prova de consentimento como evidência ligada ao tratamento e integra com uma CMP depois.
 - **Portal de pedidos do titular.** Básico no mercado. Hoje não existe (seção 3.4).
 - **Incidente com prazo da ANPD.** Básico nas brasileiras. Hoje não existe.
 
@@ -474,7 +474,7 @@ Esboço. Cada item vira spec própria na ordem da seção 9.
 ## 8. Fora do escopo desta spec
 
 - Descoberta automática de dados pessoais (posicionamento: declarativo).
-- CMP / banner de cookies (recomendação: integrar, não construir).
+- CMP / banner de cookies (decidido: integrar depois, não construir).
 - GDPR além do catálogo (LGPD primeiro).
 - Leitura automática de trust center.
 - Casca visual do n.privacy (spec própria, depois do núcleo).
@@ -504,7 +504,7 @@ As fatias 2 e 3 podem trocar de lugar: documentos não dependem de requisito par
 ## 10. Perguntas para você e para o jurídico
 
 1. ~~Módulos por projeto, com teto na organização?~~ **Decidido:** sim, e a gestão de organização e projeto é a mesma do n.iso (4.1).
-2. **CMP:** confirma "não construir, integrar depois"?
+2. ~~CMP?~~ **Decidido:** não construir; integrar depois.
 3. **Portal público de pedidos do titular entra na fatia 7, ou só o registro interno?**
 4. ~~Qual catálogo 27701 vale?~~ **Decidido:** a versão mais nova, 2025. Falta só conferir, contra a norma publicada, qual dos dois catálogos do código a reproduz (4.5).
 5. **`stakeholders` (cláusula 4.2) vira parte?** Recomendo que sim, com vínculo `parte_interessada`.
