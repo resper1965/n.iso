@@ -58,3 +58,41 @@ describe('alteração de escopo (projects.ts:745-767)', () => {
         expect(S.activeProject.scope).toBe('Escopo atual');
     });
 });
+
+describe('doLogout encerra a sessão no servidor (auth.ts:418)', () => {
+    it('com token: POST /api/v1/auth/logout com o Bearer, e esquece o token', () => {
+        const f = servir({ 'POST /api/v1/auth/logout': { ok: true } });
+        S.token = 'tok-1';
+        window.doLogout();
+        expect(f).toHaveBeenCalledTimes(1);
+        const [url, opts] = f.mock.calls[0];
+        expect(url).toMatch(/\/api\/v1\/auth\/logout$/);
+        expect(opts).toMatchObject({ method: 'POST', keepalive: true, headers: { Authorization: 'Bearer tok-1' } });
+        expect(S.token).toBeNull();
+        expect(document.getElementById('login-overlay').classList.contains('hidden')).toBe(false);
+    });
+
+    it('sem token: não chama o servidor', () => {
+        const f = servir({});
+        S.token = null;
+        window.doLogout();
+        expect(f).not.toHaveBeenCalled();
+    });
+
+    it('rede caída no logout não impede sair nem vira erro solto', async () => {
+        vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('offline'))));
+        S.token = 'tok-2';
+        expect(() => window.doLogout()).not.toThrow();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(S.token).toBeNull();
+    });
+
+    it('servidor devolve 401 no logout: não entra em laço', async () => {
+        const f = vi.fn(() => Promise.resolve(new Response('{}', { status: 401 })));
+        vi.stubGlobal('fetch', f);
+        S.token = 'tok-3';
+        window.doLogout();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(f).toHaveBeenCalledTimes(1);
+    });
+});

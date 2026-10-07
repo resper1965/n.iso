@@ -462,6 +462,15 @@ window.cancelMfaLogin = function cancelMfaLogin() {
     }
 
 window.doLogout = function doLogout() {
+        // Encerra a sessão no servidor: POST /auth/logout apaga a chave no KV. Antes só o
+        // navegador esquecia o token, e quem o tivesse copiado seguia usando até expirar.
+        // `fetch` direto, não `api()`: um 401 ali chamaria doLogout de novo. Sem `await`: sair
+        // não espera a rede; `keepalive` deixa a requisição terminar se a página fechar.
+        if (S.token) {
+            fetch(API_BASE + '/api/v1/auth/logout', {
+                method: 'POST', headers: { Authorization: `Bearer ${S.token}` }, keepalive: true,
+            }).catch(() => {});
+        }
         // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
         // chamava doLogout de novo.
         clearInterval(window._notifPoll);
