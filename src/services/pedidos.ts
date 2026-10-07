@@ -100,6 +100,18 @@ export async function documentoAtual(db: D1Database, tipo: TipoPedido, refId: st
   return { titulo: d.titulo(row, refId), conteudo: Object.fromEntries(d.colunas.map((c) => [c, row[c] ?? null])) };
 }
 
+/** Texto-padrão que o catálogo grava quando a política ainda não foi escrita. */
+const DESCRICAO_PADRAO = 'Universal ISMS requirement.';
+
+/** Política sem texto (nula, em branco ou o padrão do catálogo): não há o que aprovar nem o que ler. */
+export async function politicaVazia(db: D1Database, refId: string, projectId: string): Promise<boolean> {
+  const doc = await documentoAtual(db, 'politica', refId, projectId);
+  if (!doc) return false; // inexistente é 404 de quem chama, não "vazia"
+  const d = doc.conteudo.description;
+  const t = typeof d === 'string' ? d.trim() : '';
+  return !t || t === DESCRICAO_PADRAO;
+}
+
 export interface PedidoRow {
   id: string; org_id: string; project_id: string; tipo: TipoPedido; ref_id: string; titulo: string;
   papel_exigido: PapelPedido; conteudo_json: string; hash: string; status: string;

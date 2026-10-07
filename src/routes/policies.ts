@@ -489,7 +489,7 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', as
     <div class="value">${escapeHtml(project.client_name ?? '')}</div>
     ${assinatura('Líder SGSI', k.ciso_approved_by, k.ciso_approved_at)}
     ${assinatura('Direção Executiva', k.ceo_approved_by, k.ceo_approved_at)}
-    <div class="label">Integridade do texto (SHA-256)</div><div class="value">${p.hash}</div>
+    <div class="label">Integridade do texto da política (SHA-256 do texto; não é o hash do pedido de aprovação)</div><div class="value">${p.hash}</div>
     <div class="texto">${escapeHtml(k.description ?? '')}</div>
   </div>
 </body>

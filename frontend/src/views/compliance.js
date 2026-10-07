@@ -1841,7 +1841,7 @@ import { navigate } from '../router.js';
                             <span style="font-family: 'Montserrat', sans-serif; font-size:0.72rem; font-weight: 700; color: #00ade8; background: rgba(0, 173, 232, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 173, 232, 0.2);">ISO 27001 CONFORME</span>
                         </div>
                         <div style="font-size: 0.7rem; font-family: monospace; display: flex; flex-direction: column; gap: 4px; color: rgba(229, 235, 255, 0.75);">
-                            <div><span style="color: var(--text-dim);">INTEGRIDADE (SHA-256):</span> <span style="color: #00ade8; word-break: break-all;">${escapeHTML(evidenceHash)}</span></div>
+                            <div><span style="color: var(--text-dim);">INTEGRIDADE DO TEXTO DA POLÍTICA (SHA-256 do texto, não do pedido):</span> <span style="color: #00ade8; word-break: break-all;">${escapeHTML(evidenceHash)}</span></div>
                             <div><span style="color: var(--text-dim);">MÉTODO:</span> Assinatura Eletrônica Simples (Senha & Autenticação de Sessão via HTTPS)</div>
                         </div>
                     </div>

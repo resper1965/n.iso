@@ -160,4 +160,13 @@ describe('aprovação de política por pedido', () => {
     const lista = await (await chamar(consultor, 'GET', `/api/v1/projects/${P}/pedidos`)).json() as any;
     expect(lista.pedidos.find((p: any) => p.id === id)).toMatchObject({ tipo: 'politica', papel_exigido: 'ceo', status: 'recusado' });
   });
+
+  it.each([[null], ['   '], ['Universal ISMS requirement.']])('política vazia (%j) não pode ser pedida: 400 e nenhum pedido gravado', async (texto) => {
+    await env.DB.prepare('UPDATE compliance_controls SET description = ? WHERE id = ?').bind(texto, CTRL).run();
+    const antes = (await env.DB.prepare('SELECT COUNT(*) AS n FROM pedidos').first<any>()).n;
+    const r = await criar('ciso', ['ciso@cliente.com']);
+    expect(r.status).toBe(400);
+    expect((await r.json() as any).error).toBe('A política está vazia: escreva o texto antes de pedir aprovação');
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM pedidos').first<any>()).n).toBe(antes);
+  });
 });

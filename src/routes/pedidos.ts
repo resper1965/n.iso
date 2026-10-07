@@ -8,7 +8,7 @@ import {
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import { appUrl } from '../config/url';
 import {
-  criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
+  criarPedido, politicaVazia, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
   substituirPedidosDoDocumento, type TipoPedido, type Vigencia,
 } from '../services/pedidos';
 
@@ -73,6 +73,8 @@ async function avisarSubstituicao(c: any, antigo: PedidoRow, vig: Vigencia): Pro
   }
 }
 
+const POLITICA_VAZIA = { error: 'A política está vazia: escreva o texto antes de pedir aprovação' };
+
 export const pedidosApp = new Hono<Ctx>();
 export const projectPedidosApp = new Hono<Ctx>();
 
@@ -98,6 +100,7 @@ projectPedidosApp.post('/', async (c) => {
     // O id do controle chega em qualquer formato ou como código; o pedido guarda o id da linha.
     const refId = b.tipo === 'politica' ? await idDoControle(c.env.DB, projectId, b.ref_id) : b.ref_id;
     if (!refId) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
+    if (b.tipo === 'politica' && await politicaVazia(c.env.DB, refId, projectId)) return c.json(POLITICA_VAZIA, 400);
 
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
@@ -320,6 +323,7 @@ projectPedidosApp.post('/ciencia', async (c) => {
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
+    if (b.tipo === 'politica' && await politicaVazia(c.env.DB, b.ref_id, projectId)) return c.json(POLITICA_VAZIA, 400);
     const criado = await criarPedido(c.env.DB, {
       projectId, tipo: b.tipo, refId: b.ref_id, papel: 'ciente',
       destinatarios: b.destinatarios, criadoPor: user.email, comLink: true,
