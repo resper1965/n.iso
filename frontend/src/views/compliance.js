@@ -1472,26 +1472,30 @@ import { navigate } from '../router.js';
         
         a.innerHTML = `<button class="btn btn-primary" data-action="openEvidenceUploadModal" data-args='["${proj.id}"]'>+ Upload Evidência</button>`;
 
-        let evidence = [];
-        try { evidence = await api('GET', `/api/v1/projects/${proj.id}/evidence`); } catch(e) {}
-        if (!Array.isArray(evidence)) evidence = [];
+        // As duas rotas devolvem {ok, <lista>}; o api() entrega a lista.
+        const lista = (r) => (Array.isArray(r) ? r : []);
+        const [evidence, controles] = (await Promise.all([
+            api('GET', `/api/v1/projects/${proj.id}/evidence`).catch(() => []),
+            api('GET', `/api/v1/projects/${proj.id}/controls`).catch(() => []),
+        ])).map(lista);
+        const tituloDoControle = Object.fromEntries(controles.map(ctl => [ctl.id, ctl.title || ctl.id]));
 
         const totalEvidence = evidence.length;
         const dpoSignedCount = evidence.filter(e => e.ciso_approved_by).length;
         const ceoSignedCount = evidence.filter(e => e.ceo_approved_by).length;
-        const aiEvaluatedCount = evidence.filter(e => e.ai_status).length;
+        const aiEvaluatedCount = evidence.filter(e => e.evaluation_status && e.evaluation_status !== 'pending').length;
 
         const statsHtml = window.renderStatCards([
             { label: 'Total de Evidências', value: totalEvidence, color: 'var(--accent)', subtext: 'Arquivos no repositório R2' },
             { label: 'Assinadas DPO', value: dpoSignedCount, color: '#34c759', subtext: 'Aprovação técnica' },
             { label: 'Assinadas CEO', value: ceoSignedCount, color: '#34c759', subtext: 'Aprovação executiva' },
-            { label: 'Avaliadas por IA', value: aiEvaluatedCount, color: '#ffcc00', subtext: 'Análise automática' }
+            { label: 'Avaliadas', value: aiEvaluatedCount, color: '#ffcc00', subtext: 'Revisão ou avaliação concluída' }
         ]);
 
         const isOrgUser = S.user && S.user.role === 'org_user';
 
         const tableHtml = window.renderDataTable(
-            ['Arquivo Evidência', 'Tamanho', 'Hash (SHA-256)', 'Assinatura DPO', 'Assinatura CEO', 'Avaliação IA', 'Ações'],
+            ['Arquivo Evidência', 'Controle', 'Tamanho', 'Hash (SHA-256)', 'Assinatura DPO', 'Assinatura CEO', 'Avaliação', 'Ações'],
             evidence.map(e => {
                 const fileName = e.file_name || e.filename || 'Evidência sem nome';
                 const fileHash = e.file_hash || e.sha256_hash || '';
@@ -1506,10 +1510,16 @@ import { navigate } from '../router.js';
                     ? window.renderStatusBadge(`OK (${escapeHTML(e.ceo_approved_by)})`, 'success') 
                     : window.renderStatusBadge('Pendente', 'neutral');
 
-                const aiBadgeType = e.ai_status === 'CONFORME' ? 'success' : e.ai_status === 'PARCIAL' ? 'warning' : e.ai_status === 'NAO CONFORME' ? 'danger' : 'neutral';
-                const aiBadge = e.ai_status 
-                    ? window.renderStatusBadge(e.ai_status, aiBadgeType) 
-                    : window.renderStatusBadge('Não avaliado', 'neutral');
+                const st = e.evaluation_status || 'pending';
+                const avaliacaoBadge = window.renderStatusBadge(traduzStatus(st), st === 'conforming' ? 'success' : st === 'partial' ? 'warning' : st === 'non_conforming' ? 'danger' : 'neutral');
+
+                // Cliente não troca o vínculo (PUT /evidence/:id é escrita fora do allow-list dele).
+                const controleCell = isOrgUser
+                    ? escapeHTML(e.control_id ? (tituloDoControle[e.control_id] || e.control_id) : '—')
+                    : `<select class="form-input" data-action-change="vincularEvidenciaControle" data-args='${JSON.stringify([e.id])}' data-arg-val>
+                           <option value="">Sem controle</option>
+                           ${controles.map(ctl => `<option value="${escapeHTML(ctl.id)}" ${ctl.id === e.control_id ? 'selected' : ''}>${escapeHTML(ctl.title || ctl.id)}</option>`).join('')}
+                       </select>`;
 
                 const dpoBtn = (!e.ciso_approved_by && !isOrgUser)
                     ? `<button class="btn btn-ghost btn-sm" data-action="signEvidence" data-args='["${e.id}","ciso","${escapeHTML(fileHash)}"]'>Assinar DPO</button>`
@@ -1523,11 +1533,12 @@ import { navigate } from '../router.js';
 
                 return [
                     `<strong>${escapeHTML(fileName)}</strong>`,
+                    controleCell,
                     sizeKB,
                     `<code style="font-size:0.75rem;color:var(--text-dim)">${hashShort}</code>`,
                     dpoBadge,
                     ceoBadge,
-                    aiBadge,
+                    avaliacaoBadge,
                     `<button data-action="downloadEvidenceFile" data-args='["${e.id}"]' class="btn btn-ghost btn-sm">Download</button> ${dpoBtn} ${ceoBtn} ${evalBtn}`
                 ];
             }),
@@ -2376,6 +2387,17 @@ window.openPolicyReport = function(projectId, controlId) {
 
 // A rota de avaliação trabalha sobre o TEXTO do documento (o arquivo vive no R2, não é lido
 // aqui), então o botão "IA" abre um modal para colar o trecho a avaliar.
+// Troca (ou desfaz) o controle de uma evidência. O servidor confere que o controle é do projeto
+// e volta a avaliação a pendente quando o vínculo muda.
+window.vincularEvidenciaControle = async function(evidenceId, controlId) {
+    try {
+        await api('PUT', `/api/v1/evidence/${evidenceId}`, { control_id: controlId || null });
+        showToast(controlId ? 'Evidência ligada ao controle.' : 'Evidência desligada do controle.');
+    } catch (e) {
+        showToast('Erro ao trocar o controle: ' + e.message, 'error');
+    }
+};
+
 window.evaluateEvidenceAI = function(evidenceId) {
     openModal(`
         <div class="modal-header"><span class="modal-title">Avaliar evidência por IA</span><button class="btn-ghost" data-action="forceCloseModal">×</button></div>

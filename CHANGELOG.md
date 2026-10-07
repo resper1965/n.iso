@@ -22,6 +22,12 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Alteração de escopo passa a gravar (os campos do POST não casavam com o schema e davam 400): registra uma solicitação de mudança de escopo, pendente; ainda não há fluxo que a aprove.
 - Autoatendimento do questionário chama `/assessments/public`, leva os blocos no bundle e não conclui mais sem salvar; saem o atalho do dashboard e o ramo `self-service` do roteador (fica o link `?assessment=<token>`, que a tela do levantamento entrega no botão "Copiar link do questionário").
 - Chat de IA deixa de pedir histórico a rotas que nunca existiram.
+- Evidência de documento (upload, assistente e geração por IA) entra pendente de revisão e ligada ao controle do item quando ele tem um; a assinatura do Líder SGSI é a revisão que a leva a conforme; editar o conteúdo devolve a pendente e apaga as assinaturas (a auditoria registra o que foi apagado).
+- Avaliação por IA nunca concede conforme: o veredito só vale com uma opção na linha Veredito e "NÃO CONFORME" não grava mais conforme.
+- Assinatura de evidência presa ao hash do conteúdo revisado (409 se o conteúdo mudou); quem enviou a evidência não assina como Líder SGSI; o agente não assina evidência nem controle, e a segregação reconhece evidência criada pelo agente do próprio assinante.
+- Checklist: uma lista só para a tela e a geração de documento (seis itens davam 404 e quase todos geravam documento de outro item); o upload pelo checklist volta a funcionar e marca o item; o selo lê o status real.
+- Upload de evidência aceita o código do controle (A.5.1); o certificado de treinamento é ligado a A.6.3 quando o projeto o tem; tratar risco como "Mitigar" não cria mais evidência sem arquivo.
+- Central de Evidências: escolher o controle de cada evidência e ver a avaliação (a coluna lia `ai_status`, que não existe).
 - Sair encerra a sessão no servidor (sem esperar a resposta).
 - Exportar CSV importa `API_BASE`.
 - Políticas: a assinatura grava o Líder SGSI e a Direção (nome da matriz, data, IP e user-agent) com autoridade e segregação pela matriz de Governança, como ROPA, DPIA e evidência; assinar não reescreve mais o status do controle na SoA. Restaurar versão zera as assinaturas. O modal acha o controle em qualquer formato de id, salva a edição (antes sempre falhava) e o "Imprimir" abre o relatório da política.
