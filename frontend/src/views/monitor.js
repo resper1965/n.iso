@@ -204,7 +204,7 @@ import { navigate } from '../router.js';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
         let cert = null;
-        try { cert = await api('GET', `/api/v1/projects/${proj.id}/certification`); } catch(e) {}
+        try { cert = (await api('GET', `/api/v1/projects/${proj.id}/certification`))?.certification ?? null; } catch(e) {}
         if (!cert || !cert.id) {
             a.innerHTML = `<button class="btn btn-primary" data-action="initCertification" data-args='["${proj.id}"]'>Iniciar Tracker</button>`;
             c.innerHTML = '<div class="empty-state fade-in"><h3>Nenhum tracker de certificação</h3><p>Clique em Iniciar Tracker para começar a acompanhar o processo de certificação.</p></div>';
@@ -1593,7 +1593,7 @@ import { navigate } from '../router.js';
         
         try {
             const res = await api('GET', `/api/v1/projects/${projectId}/auditor-notes`);
-            const notes = res.notes || [];
+            const notes = Array.isArray(res) ? res : [];
             
             const container = document.getElementById('auditor-notes-modal-content');
             if (notes.length === 0) {

@@ -1624,10 +1624,9 @@ window.signEvidence = async function(evidenceId, role) {
 window.openScopeChangeModal = async function(projectId, projData) {
         let history = [];
         try {
+            // A rota devolve a lista crua de scope_changes (projects.ts:746-750).
             const res = await api('GET', `/api/v1/projects/${projectId}/scope-changes`);
-            if (res.ok && Array.isArray(res.changes)) {
-                history = res.changes;
-            }
+            if (Array.isArray(res)) history = res;
         } catch(e) {}
 
         openModal(`
@@ -1660,10 +1659,10 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <div style="font-size:0.65rem; color:var(--text-dim); max-height:100px; overflow-y:auto; line-height:1.4">
                     ${history.length ? history.map((c, i) => `
                         <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
-                            <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.approved_by)}<br>
-                            <strong>Motivo:</strong> ${escapeHTML(c.change_reason)}<br>
-                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.security_impact)}<br>
-                            <strong>Novo Escopo:</strong> ${escapeHTML(c.new_scope)}
+                            <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.requested_by)}<br>
+                            <strong>Motivo:</strong> ${escapeHTML(c.reason)}<br>
+                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.impact_analysis)}<br>
+                            <strong>Novo Escopo:</strong> ${escapeHTML(c.change_description)}
                         </div>
                     `).join('') : 'Sem alterações de escopo registradas.'}
                 </div>
@@ -1683,7 +1682,18 @@ window.submitScopeChange = async function(projectId, prevScope) {
             alert('Por favor, preencha todos os campos obrigatórios.');
             return;
         }
-        await api('POST', `/api/v1/projects/${projectId}/scope-changes`, body);
+        // Nomes do scopeChangeSchema (src/schemas/domain.ts:294-301). Os da tela davam 400 sempre.
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/scope-changes`, {
+                change_description: body.new_scope,
+                reason: body.change_reason,
+                impact_analysis: body.security_impact,
+                requested_by: body.approved_by,
+            });
+        } catch (e) {
+            showToast('Erro ao registrar a alteração de escopo: ' + e.message, 'error');
+            return;
+        }
         
         if (S.activeProject && S.activeProject.id === projectId) S.activeProject.scope = body.new_scope;
         if (S.currentProject && S.currentProject.id === projectId) S.currentProject.scope = body.new_scope;

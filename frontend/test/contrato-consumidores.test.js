@@ -89,3 +89,57 @@ describe('consumidores que o desembrulho antigo quebrava', () => {
         expect(c.textContent).toContain('Acme');
     });
 });
+
+describe('consumidores que liam campo que a resposta não tem', () => {
+    it('certificação: lê `certification` do envelope (certifications.ts:61)', async () => {
+        S.activeProject = { id: 'p1' };
+        servir({ 'GET /api/v1/projects/p1/certification': { ok: true, certification: {
+            id: 'cert1', project_id: 'p1', standard: 'ISO 27001:2022', stage: 'Remediation',
+            stage1_date: null, stage1_status: null, stage2_date: null, stage2_status: null, registrar: null, target_date: null,
+        } } });
+        const [c, h, a] = tela();
+        await window.renderCertification(c, h, a);
+        expect(c.textContent).toContain('Remediação & Implementação');
+        expect(c.querySelector('[data-action="updateCertStage"]').dataset.args).toBe('["cert1"]');
+    });
+
+    it('certificação ausente: oferece iniciar (certifications.ts:60)', async () => {
+        S.activeProject = { id: 'p1' };
+        servir({ 'GET /api/v1/projects/p1/certification': { ok: true, certification: null } });
+        const [c, h, a] = tela();
+        await window.renderCertification(c, h, a);
+        expect(a.querySelector('[data-action="initCertification"]')).not.toBeNull();
+    });
+
+    it('notas do auditor: a lista vem desembrulhada (auditor.ts:91)', async () => {
+        servir({ 'GET /api/v1/projects/p1/auditor-notes': { ok: true, notes: [{
+            id: 'n1', project_id: 'p1', control_id: null, note_type: 'evidence_request',
+            content: 'Enviar a política assinada', response: null, control_standard: null, control_title: null,
+        }] } });
+        await window.openAuditorNotesModal('p1');
+        expect($('auditor-notes-modal-content').textContent).toContain('Enviar a política assinada');
+    });
+
+    it('SoA: o mapa de rastreabilidade recebe a evidência de cada controle (projects.ts:1003)', async () => {
+        S.activeProject = { id: 'p1', project_name: 'Projeto' };
+        servir({
+            'GET /api/v1/projects/p1/controls': { ok: true, controls: [{ id: 'c1', project_id: 'p1', title: 'A.5.1 — Políticas', status: 'Implemented' }] },
+            'GET /api/v1/projects/p1/traceability': { ok: true, controls: [{
+                id: 'c1', title: 'A.5.1 — Políticas', status: 'Implemented', risks: [],
+                evidence: [{ id: 'e1', file_name: 'politica.pdf', created_at: '2026-10-01' }],
+            }] },
+        });
+        await window.renderSoA(...tela());
+        expect(window.currentSoATraceMap.c1.evidence).toHaveLength(1);
+    });
+
+    it('templates de política: viram opções do seletor (policies.ts:521)', async () => {
+        servir({
+            'GET /api/v1/controls': [],
+            'GET /api/v1/policies/templates': { ok: true, templates: ['isms-policy', 'access-control-policy'] },
+        });
+        await window.openGeneratePolicyModal('p1', 'A.5.1');
+        const opcoes = [...$('policy-template-select').options].map((o) => o.value);
+        expect(opcoes).toEqual(['isms-policy', 'access-control-policy']);
+    });
+});

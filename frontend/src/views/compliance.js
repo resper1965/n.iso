@@ -666,7 +666,7 @@ import { navigate } from '../router.js';
         try {
             const [controls, traceData] = await Promise.all([
                 api('GET', `/api/v1/projects/${proj.id}/controls`) || [],
-                api('GET', `/api/v1/projects/${proj.id}/traceability`).then(r => r.controls).catch(() => [])
+                api('GET', `/api/v1/projects/${proj.id}/traceability`).then(r => (Array.isArray(r) ? r : [])).catch(() => [])
             ]);
             
             const traceMap = {};
@@ -1723,10 +1723,8 @@ import { navigate } from '../router.js';
         let options = '';
         try {
             const res = await api('GET', '/api/v1/policies/templates');
-            if (res && res.templates) {
-                templates = res.templates || [];
-                options = templates.map(t => `<option value="${t}">${t}</option>`).join('');
-            }
+            templates = Array.isArray(res) ? res : [];
+            options = templates.map(t => `<option value="${escapeHTML(t)}">${escapeHTML(t)}</option>`).join('');
         } catch(e) {
             console.error("Erro ao carregar templates:", e);
         }
