@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro } from '../helpers';
+import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, idDoControle } from '../helpers';
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
@@ -316,10 +316,11 @@ projectEvidenceApp.get('/', async (c) => {
 
 projectEvidenceApp.post('/upload', async (c) => {
   try {
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId') as string;
     const body = await c.req.parseBody();
     const file = body['file'] as File;
-    const controlId = (body['control_id'] as string) || null;
+    const pedido = typeof body['control_id'] === 'string' ? body['control_id'] : '';
+    const ref = typeof body['control_ref'] === 'string' ? body['control_ref'] : '';
 
     if (!file) {
       return c.json({ error: 'No file provided' }, 400);
@@ -333,10 +334,16 @@ projectEvidenceApp.post('/upload', async (c) => {
     // O controle precisa existir E ser deste projeto, conferido ANTES de tocar
     // no R2: sem isto a FK derrubava o INSERT depois do put (objeto órfão + 500)
     // e controle de outro projeto era aceito. Mesma resposta nos dois casos para
-    // não revelar a existência de controle alheio.
-    if (controlId) {
-      const ctrl = await c.env.DB.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
-      if (!ctrl) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
+    // não revelar a existência de controle alheio. Aceita o id da linha ou o
+    // código ("A.5.1", o que o modal pede).
+    let controlId: string | null = null;
+    if (pedido) {
+      controlId = await idDoControle(c.env.DB, projectId, pedido);
+      if (!controlId) return c.json({ error: 'Controle não encontrado neste projeto' }, 400);
+    } else if (ref) {
+      // ponytail: leniente de propósito — quem manda control_ref (o treinamento, A.6.3) é uma
+      // sugestão; projeto sem esse controle recebe o arquivo sem vínculo em vez de recusar.
+      controlId = await idDoControle(c.env.DB, projectId, ref);
     }
 
     const id = genId();
