@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { itemDoChecklist } from '../services/checklist-evidencia';
+import { itemDoChecklist, registrarDocumentoDoItem } from '../services/checklist-evidencia';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
 import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
@@ -171,34 +171,11 @@ policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
 
     const item = itemDoChecklist(itemId);
     if (!item) return c.json({ error: 'Item não encontrado' }, 404);
-    const phaseNumber = item.phaseNumber;
     const userEmail = c.get('user')?.email ?? 'system';
-    const userId = c.get('user')?.id ?? null;
 
-    // Save to R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, content, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Hash
-    const data = new TextEncoder().encode(content);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Create evidence record
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforming', 'Documento gerado e aprovado via wizard guiado.').run();
-
-    // Auto-check checklist item
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Aprovado via wizard guiado')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1, checked_by = EXCLUDED.checked_by, checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id, notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
+    // Entra pendente: quem gerou não revisa. A revisão é a assinatura do Líder SGSI.
+    const { evidenceId, fileName } = await registrarDocumentoDoItem(
+      c.env, projectId, item, content, c.get('user'), 'Documento do assistente guiado; aguarda revisão.');
 
     await logAudit(c.env.DB, 'document.approved', userEmail, `Documento "${fileName}" aprovado via wizard para item ${itemId}`);
 
@@ -220,58 +197,17 @@ policies.post('/api/v1/projects/:projectId/checklist/:itemId/generate', async (c
 
     const item = itemDoChecklist(itemId);
     if (!item) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-    const phaseNumber = item.phaseNumber;
 
     // Gerar conteúdo com o PolicyAgent
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const prompt = `Gere um documento ou política detalhada em formato markdown para atender ao item de checklist "${item.text}" do projeto "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}). O documento deve ser completo, profissional, prático e pronto para auditoria, sem placeholders e com formatação markdown limpa.`;
 
     const result = await agent.run(prompt, { organizationId: projectId });
-    let docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
+    const docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
 
-    // Salvar no R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, docContent, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Calcular hash SHA-256
-    const encoder = new TextEncoder();
-    const data = encoder.encode(docContent);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Criar registro na tabela de evidence
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    const fileSize = data.byteLength;
-
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      evidenceId,
-      projectId,
-      fileName,
-      r2Key,
-      hashHex,
-      'text/markdown',
-      fileSize,
-      userEmail,
-      'conforming',
-      'Documento gerado internamente pelo assistente de IA.'
-    ).run();
-
-    // Atualizar checklist_progress (ponytail: ensure proper random UUID / PK generated for checklist_progress)
-    const userId = c.get('user')?.id ?? null;
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1,
-         checked_by = EXCLUDED.checked_by,
-         checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id,
-         notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
+    // Rascunho de IA entra pendente de revisão, ligado ao controle do item quando ele tem um.
+    const { evidenceId, fileName, r2Key } = await registrarDocumentoDoItem(
+      c.env, projectId, item, docContent, c.get('user'), 'Rascunho gerado pelo assistente de IA; aguarda revisão.');
 
     await logAudit(c.env.DB, 'document.generated', userEmail, `Documento ${fileName} gerado internamente para o item ${itemId}`);
 

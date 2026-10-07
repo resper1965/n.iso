@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
 import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
@@ -635,6 +636,13 @@ projectsApp.post('/:id/documents/upload', async (c) => {
     const invalido = validateUpload(file);
     if (invalido) return c.json({ error: invalido }, 400);
 
+    // Upload pelo checklist: o item vem no formulário e é conferido ANTES do R2,
+    // para item desconhecido não deixar objeto órfão.
+    const itemId = typeof body['item_id'] === 'string' ? body['item_id'] : '';
+    const item = itemId ? itemDoChecklist(itemId) : null;
+    if (itemId && !item) return c.json({ error: 'Item de checklist não encontrado' }, 400);
+    const controlId = item ? await controleDoItem(c.env.DB, projectId, item) : null;
+
     const docId = genId();
     const r2Key = `docs/${projectId}/${docId}-${file.name}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -647,11 +655,14 @@ projectsApp.post('/:id/documents/upload', async (c) => {
       httpMetadata: { contentType: file.type || 'application/octet-stream' }
     });
 
+    // Entra pendente: quem envia não revisa (a rota é liberada ao cliente, org_user).
     const user = c.get('user');
     await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'conforming', 'Documento Interno do SGSI Controlado', ?, datetime('now'))`
-    ).bind(docId, projectId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'Documento enviado; aguarda revisão.', ?, datetime('now'))`
+    ).bind(docId, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+
+    if (item) await marcarItemComEvidencia(c.env.DB, projectId, item, docId, user);
 
     await logAudit(c.env.DB, 'document.uploaded', user?.email || 'system', `Documento ${file.name} carregado para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: docId, sha256: realSha256 }, 201);

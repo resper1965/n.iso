@@ -61,7 +61,8 @@ describe('Geração e persistência de documento (D1 + R2 reais)', () => {
     // A linha existe mesmo — não é um `{success:true}` de mock.
     const ev = await env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(body.evidence_id).first<any>();
     expect(ev.project_id).toBe('proj-123');
-    expect(ev.r2_key).toBe('projects/proj-123/evidence/p3_1.md');
+    // Chave por evidência: gerar de novo não sobrescreve o arquivo da evidência anterior.
+    expect(ev.r2_key).toBe(`projects/proj-123/evidence/p3_1-${body.evidence_id}.md`);
     expect(ev.file_hash).toMatch(/^[0-9a-f]{64}$/); // SHA-256 real do conteúdo
     expect(ev.file_size).toBeGreaterThan(0);
 
