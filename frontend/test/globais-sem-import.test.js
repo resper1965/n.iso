@@ -12,9 +12,6 @@ const DEFINIDORES = ['src/api.js', 'src/state.js', 'src/ui.js', 'src/router.js']
 
 /** Temporários: o P4 corrige estes arquivos no fluxo dele e apaga a linha. */
 const TOLERADOS = [
-    { arquivo: 'src/views/project.js', nome: 'API_BASE', motivo: 'corrigido no P4' },
-    { arquivo: 'src/views/grc.js', nome: 'API_BASE', motivo: 'corrigido no P4' },
-    { arquivo: 'src/views/compliance.js', nome: 'API_BASE', motivo: 'corrigido no P4' },
 ];
 
 const tudo = Object.values(FONTES).join('\n');
