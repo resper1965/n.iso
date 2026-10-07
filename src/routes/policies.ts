@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
+import { itemDoChecklist } from '../services/checklist-evidencia';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
 import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
@@ -89,17 +89,6 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
   }
 });
 
-// Helper para encontrar item de checklist
-function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: number } | null {
-  for (const phaseStr in PHASE_POLICY_DOCS) {
-    const phaseNumber = parseInt(phaseStr);
-    const item = PHASE_POLICY_DOCS[phaseNumber].find(i => i.id === itemId);
-    if (item) return { item, phaseNumber };
-  }
-  return null;
-}
-
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DOCUMENT WIZARD — Guided Document Generation with Field Context
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -115,9 +104,8 @@ policies.post('/api/v1/projects/:projectId/generate-document', async (c) => {
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-    const { item } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item de checklist não encontrado' }, 404);
 
     // Build context from fields
     const fieldsSummary = Object.entries(fields)
@@ -181,9 +169,9 @@ policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item não encontrado' }, 404);
-    const { item, phaseNumber } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item não encontrado' }, 404);
+    const phaseNumber = item.phaseNumber;
     const userEmail = c.get('user')?.email ?? 'system';
     const userId = c.get('user')?.id ?? null;
 
@@ -230,10 +218,9 @@ policies.post('/api/v1/projects/:projectId/checklist/:itemId/generate', async (c
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-
-    const { item, phaseNumber } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item de checklist não encontrado' }, 404);
+    const phaseNumber = item.phaseNumber;
 
     // Gerar conteúdo com o PolicyAgent
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);

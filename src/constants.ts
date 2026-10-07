@@ -184,10 +184,9 @@ export const PHASE_TITLES: string[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// PHASE_CHECKLISTS — Checklist por fase SERVIDA À UI (endpoint /api/v1/phases/config,
-// platform.ts) e usada por projects.ts. É ESTA a checklist que o usuário vê e completa.
-// NÃO confundir com a `PHASE_CHECKLISTS` de src/checklists.ts, que é um mapa
-// item→documento usado só por policies.ts. Itens visíveis ao usuário entram AQUI.
+// PHASE_CHECKLISTS — o checklist por fase, ÚNICA lista: servida à UI (/api/v1/phases/config,
+// platform.ts) e usada pela geração de documento (services/checklist-evidencia.ts). O controle
+// de um item é a referência "(A.x.y)" no texto dele.
 // ═══════════════════════════════════════════════════════════════
 export const PHASE_CHECKLISTS: Record<number, { id: string; text: string; category: string }[]> = {
   0: [
