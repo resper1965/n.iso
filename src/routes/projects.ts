@@ -5,7 +5,7 @@ import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
-import { seedPhases } from '../services/project-setup';
+import { seedPhases, semearControles } from '../services/project-setup';
 import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
@@ -880,26 +880,6 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
     return erro500(c, 'Falha na migração 27701:2025', e);
   }
 });
-
-// Cria, como 'Missing', os controles da lista que o projeto ainda não tem. Idempotente: o código
-// vive como primeiro token do título ("A.5.1 — ..."), e o que já existe é pulado em qualquer
-// formato de id (ctrl-a51, A.5.1, genId).
-async function semearControles(
-  db: D1Database, projectId: string, standard: string, lista: readonly { code: string; title: string }[],
-): Promise<{ created: number; total: number }> {
-  const { results: existing } = await db.prepare(
-    'SELECT title FROM compliance_controls WHERE project_id = ? AND standard = ?'
-  ).bind(projectId, standard).all<{ title: string }>();
-  const existentes = new Set((existing || []).map((r) => (r.title || '').split(' ')[0]));
-  const novos = lista.filter((ctrl) => !existentes.has(ctrl.code));
-  if (novos.length) {
-    await db.batch(novos.map((ctrl) => db.prepare(
-      `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
-       VALUES (?, ?, ?, ?, '', 'Missing', 0, datetime('now'))`
-    ).bind(genId(), projectId, standard, `${ctrl.code} — ${ctrl.title}`)));
-  }
-  return { created: novos.length, total: lista.length };
-}
 
 // Semeia o control-set 27701:2025 (Anexo A) DO ZERO, por papel do projeto.
 //

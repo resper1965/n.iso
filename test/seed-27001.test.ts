@@ -3,6 +3,8 @@ import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
 import { idDoControle } from '../src/helpers';
+import { stmtControles } from '../src/services/project-setup';
+import { ISO_27001_2022 } from '../src/data/iso27001-2022';
 
 describe('Seed 27001:2022 (Anexo A)', () => {
   let headers: Record<string, string>;
@@ -39,5 +41,18 @@ describe('Seed 27001:2022 (Anexo A)', () => {
     await seed('p3'); await seed('p4');
     expect(await conta('p3')).toBe(93);
     expect(await conta('p4')).toBe(93);
+  });
+
+  it('stmtControles num batch: projeto inexistente não ganha controle nem estoura a FK', async () => {
+    await env.DB.batch([stmtControles(env.DB, 'nao-existe', 'ISO 27001:2022', ISO_27001_2022)]);
+    expect(await conta('nao-existe')).toBe(0);
+  });
+
+  it('stmtControles num batch com o projeto: os 93, e de novo não duplica', async () => {
+    await projeto('p5');
+    await env.DB.batch([stmtControles(env.DB, 'p5', 'ISO 27001:2022', ISO_27001_2022)]);
+    await env.DB.batch([stmtControles(env.DB, 'p5', 'ISO 27001:2022', ISO_27001_2022)]);
+    expect(await conta('p5')).toBe(93);
+    expect(await idDoControle(env.DB, 'p5', 'A.5.1')).not.toBeNull();
   });
 });
