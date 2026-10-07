@@ -25,6 +25,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Sair encerra a sessão no servidor (sem esperar a resposta).
 - Exportar CSV importa `API_BASE`.
 - Políticas: a assinatura grava o Líder SGSI e a Direção (nome da matriz, data, IP e user-agent) com autoridade e segregação pela matriz de Governança, como ROPA, DPIA e evidência; assinar não reescreve mais o status do controle na SoA. Restaurar versão zera as assinaturas. O modal acha o controle em qualquer formato de id, salva a edição (antes sempre falhava) e o "Imprimir" abre o relatório da política.
+- Projeto criado pelo aceite da proposta já nasce com os controles da norma vendida (93 da ISO 27001:2022 e os da ISO 27701:2025 pelo papel, quando vendida), com o escopo aceito no lugar do tipo de escopo do levantamento e com o nome "cliente — norma". O contato de quem aceitou entra na governança sem autoridade de assinatura (a promoção é do consultor). Sem consultor, a administração da consultoria é avisada.
 
 ### Adicionado
 - Teste de contrato: toda chamada do frontend a `/api/v1/*` precisa casar com uma rota do backend (`test/contrato-tela-api.test.ts`), e um teste reprova global usado sem import no frontend.
