@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
@@ -1113,8 +1113,14 @@ projectsApp.get('/:id/audit-trail', async (c) => {
 // Acesso do auditor externo. O token sai UMA vez, dentro da URL (fragmento, que o navegador não
 // manda ao servidor); o banco guarda só o SHA-256, como o scim-token acima. Prazo calculado pelo
 // SQLite, no formato que `tokenDoAuditor` compara.
+// O link do auditor é credencial de leitura de toda a evidência do projeto: só a equipe da
+// consultoria (consultor designado, consultoria_admin, platform_admin) o gera, lista e revoga.
+// O agente MCP também não (FORA_DO_AGENTE, src/middleware/agente.ts).
+const SO_CONSULTORIA = { error: 'Somente a consultoria gere o acesso do auditor externo' };
+
 projectsApp.post('/:id/auditor-token', async (c) => {
   try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
     const projectId = c.req.param('id');
     const v = await validateBody(c, auditorTokenSchema);
     if (!v.success) return v.response;
@@ -1130,5 +1136,39 @@ projectsApp.post('/:id/auditor-token', async (c) => {
     return c.json({ id: row.id, url: `${appUrl(c.env)}/auditor#${token}`, expires_at: row.expires_at }, 201);
   } catch (e) {
     return erro500(c, 'Falha ao gerar token de auditor', e);
+  }
+});
+
+/** Links válidos do projeto (não revogados, no prazo). Nunca o token nem o hash: o link saiu uma vez. */
+projectsApp.get('/:id/auditor-token', async (c) => {
+  try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, created_by, created_at, expires_at FROM auditor_tokens
+        WHERE project_id = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')
+        ORDER BY created_at DESC`
+    ).bind(c.req.param('id')).all<{ id: string; created_by: string | null; created_at: string; expires_at: string }>();
+    return c.json({ tokens: results });
+  } catch (e) {
+    return erro500(c, 'Falha ao listar os acessos do auditor', e);
+  }
+});
+
+/** Revoga na hora. A linha fica (revoked_at/revoked_by) para a trilha; a purga de 90 dias a leva depois. */
+projectsApp.post('/:id/auditor-token/:tokenId/revogar', async (c) => {
+  try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
+    const projectId = c.req.param('id');
+    const tokenId = c.req.param('tokenId');
+    const ator = c.get('user')?.email ?? 'system';
+    const r = await c.env.DB.prepare(
+      `UPDATE auditor_tokens SET revoked_at = datetime('now'), revoked_by = ?
+        WHERE id = ? AND project_id = ? AND revoked_at IS NULL`
+    ).bind(ator, tokenId, projectId).run();
+    if (!r.meta.changes) return c.json({ error: 'Acesso não encontrado' }, 404);
+    await logAudit(c.env.DB, 'auditor_token.revoked', ator, `Acesso de auditor externo ${tokenId} revogado`, '', '', projectId);
+    return c.json({ revogado: true });
+  } catch (e) {
+    return erro500(c, 'Falha ao revogar o acesso do auditor', e);
   }
 });

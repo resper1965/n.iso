@@ -85,6 +85,8 @@ describe('Agente com paridade de consultor, preso ao projeto', () => {
       ['GET', '/api/v1/notifications'],
       ['POST', '/api/v1/auth/mfa/verify'],
       ['POST', '/api/v1/projects/p-a/auditor-token'],
+      ['GET', '/api/v1/projects/p-a/auditor-token'],
+      ['POST', '/api/v1/projects/p-a/auditor-token/x/revogar'],
     ] as const) {
       const r = await comoAgente(caminho, { method: metodo, headers: { ...confirmado, ...json }, body: metodo === 'GET' ? undefined : '{}' });
       expect(r.status, `${metodo} ${caminho}`).toBe(403);
