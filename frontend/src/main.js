@@ -1,7 +1,7 @@
 import './style.css';
 import { S } from './state.js';
-import { api, API_BASE } from './api.js';
-import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
+import { api } from './api.js';
+import './ui.js';
 import { navigate } from './router.js';
 import { initDelegation } from './delegation.js';
 import './data/wizards.js';

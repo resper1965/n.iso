@@ -1,7 +1,7 @@
 import { S } from './state.js';
 import { api, API_BASE } from './api.js';
 import { render, navigate } from './router.js';
-import { showToast, openModal, closeModal, escapeHTML } from './ui.js';
+import { showToast, openModal, escapeHTML } from './ui.js';
 
 // ponytail: o toggle de tema foi removido — o design system da ness. é OLED Dark
 // nativo (design.md §2) e não havia CSS [data-theme], então o controle não fazia
@@ -1494,7 +1494,7 @@ window.openDoDDrawer = function(projectId, phaseNum, selectEl, pendingItens) {
 
 window.refreshDoDDrawer = function() {
         if (!S.activeDoD) return;
-        const { projectId, phaseNum, selectEl } = S.activeDoD;
+        const { projectId, phaseNum } = S.activeDoD;
         
         // Re-evaluate pending items based on current S.phaseChecks
         const phChecklist = S.checklistsConfig[phaseNum] || [];

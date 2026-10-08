@@ -1,7 +1,7 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
-import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
-import { navigate, render } from '../router.js';
+import { showToast, openModal, forceCloseModal, escapeHTML } from '../ui.js';
+import { render } from '../router.js';
 
     async function renderROPA(c, h, a) {
         h.textContent = 'ROPA — Registro de Atividades de Tratamento';
