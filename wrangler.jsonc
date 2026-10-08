@@ -16,7 +16,6 @@
 	// declarados porque o Worker precisa recebê-los para devolver 308 ao canônico
 	// (HOSTS_LEGADOS em src/config/url.ts) — integrações e e-mails antigos ainda
 	// apontam para eles. Tirá-los daqui derruba o redirecionamento.
-	// `routes` não é herdado por `env.staging` — staging fica só no workers.dev.
 	"workers_dev": true,
 	"routes": [
 		{ "pattern": "niso.ness.com.br", "custom_domain": true },
@@ -99,87 +98,6 @@
 		}
 	],
 
-	/**
-	 * Ambiente de STAGING (item 2.1 do enterprise-grade-plan.md).
-	 *
-	 * Existe por um motivo específico: migration em produção é o caminho sem
-	 * volta deste sistema — D1 não tem rollback, e a recuperação é restaurar
-	 * backup. Staging é onde a migration é ENSAIADA antes de tocar dado de
-	 * cliente.
-	 *
-	 * O que ele NÃO tem, e por quê:
-	 *
-	 *   - `triggers`: DESLIGADO explicitamente com uma lista vazia. Este
-	 *     comentário afirmava antes que o cron "não é herdado pelo env" — errado,
-	 *     e o primeiro deploy de staging mostrou: ele subiu com
-	 *     `schedule: 10 4 * * *`. Dois workers apagando linha em bancos
-	 *     diferentes é ruído, e a rotina tem teste próprio.
-	 *   - `assets`: herda o de cima (mesmo build do frontend).
-	 *
-	 * `ENVIRONMENT` = "staging" muda o comportamento de código que já lê essa
-	 * var — é o mesmo mecanismo do ambiente de teste.
-	 */
-	"env": {
-		"staging": {
-			"vars": {
-				"ENVIRONMENT": "staging",
-				// Links, callback de SSO e base do SCIM de staging apontam para staging.
-				"APP_URL": "https://niso-staging.ness.workers.dev"
-			},
-			"triggers": {
-				"crons": []
-			},
-			"d1_databases": [
-				{
-					"binding": "DB",
-					"database_name": "niso-db-staging",
-					"database_id": "59298065-af65-40b5-8e17-c67859974ed4",
-					"migrations_dir": "migrations"
-				}
-			],
-			"kv_namespaces": [
-				{
-					"binding": "SESSIONS",
-					"id": "65176c8eef4140f7a64cb366a66311b4"
-				},
-				{
-					// OAuth do MCP remoto em staging (namespace separado do de produção).
-					"binding": "OAUTH_KV",
-					"id": "9d9d24c053484ee8bd996b9476172a44"
-				}
-			],
-			"r2_buckets": [
-				{
-					"binding": "STORAGE",
-					"bucket_name": "niso-evidence-staging"
-				},
-				{
-					// Em staging aponta para o MESMO bucket de produção? Não: para o
-					// de staging. Trilha de teste encadeada na trilha real quebraria a
-					// cadeia de produção — que é justamente o que ela existe para
-					// detectar.
-					"binding": "TRILHA",
-					"bucket_name": "niso-trilha-staging"
-				}
-			],
-			"ai": {
-				"binding": "AI",
-				"gateway": {
-					"id": "n-iso"
-				}
-			},
-			"analytics_engine_datasets": [
-				{
-					"binding": "ANALYTICS",
-					"dataset": "niso_metrics_staging"
-				}
-			],
-			"observability": {
-				"enabled": true
-			},
-			"upload_source_maps": true
-		}
-	},
 
 	// SETUP_KEY é um segredo: configure com `npx wrangler secret put SETUP_KEY`.
 	// Sem ele, o endpoint POST /api/v1/auth/setup fica desabilitado (falha fechada).

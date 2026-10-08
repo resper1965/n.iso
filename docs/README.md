@@ -13,7 +13,6 @@ entrada é o [`README.md`](../README.md) da raiz.
 | Documento | Responde |
 |---|---|
 | [`runbook-incidente.md`](runbook-incidente.md) | Produção não responde, deploy ruim, banco corrompido, alguém perdeu o segundo fator, suspeita de acesso indevido. Começa pelo "primeiro minuto" e vai até a comunicação. |
-| [`staging.md`](staging.md) | O que existe de staging, e por quê: ensaiar migration. D1 não tem rollback, e uma migration que falha no meio só volta por restauração de backup. |
 
 ## Vou mexer no banco
 

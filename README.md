@@ -112,7 +112,7 @@ curl -s https://niso.ness.com.br/health
 | **CI** | push e pull request | tsc, as três suítes, build do frontend, `npm audit` |
 | **CodeQL** | push, PR e toda segunda | SAST sobre o JS/TS do Worker e do frontend |
 | **Deploy** | push na `main` e manual | Recusa com migration pendente; injeta o SHA em `/health` |
-| **Apply DB migrations** | só manual, com confirmação | Backup antes de aplicar; ensaia em staging quando ativo |
+| **Apply DB migrations** | só manual, com confirmação | Backup antes de aplicar |
 | **Backup do D1** | diário, 03h40 UTC | Exporta e **verifica o dump** antes de guardar; abre issue se falhar |
 | **Sonda externa** | a cada 15 min | `/health` responde e o login recusa corpo vazio com o envelope certo |
 | **SLO de produção** | a cada 6h | Latência e taxa de erro dentro do alvo |
