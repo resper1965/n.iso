@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { semRastros, genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
@@ -533,7 +533,7 @@ projectsApp.get('/:id/controls', async (c) => {
     }
   }
   const result = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(projectId).all();
-  return c.json({ ok: true, controls: result.results });
+  return c.json({ ok: true, controls: semRastros(result.results) });
 });
 
 // Phases inside Project
@@ -621,7 +621,7 @@ projectsApp.post('/:id/interviews', async (c) => {
 projectsApp.get('/:id/documents', async (c) => {
   const projectId = c.req.param('id');
   const { results } = await c.env.DB.prepare('SELECT * FROM evidence WHERE project_id = ? AND r2_key LIKE "docs/%" ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, documents: results });
+  return c.json({ ok: true, documents: semRastros(results) });
 });
 
 projectsApp.post('/:id/documents/upload', async (c) => {
@@ -1045,7 +1045,7 @@ projectsApp.get('/:id/coherence', async (c) => {
 projectsApp.get('/:id/dpia', async (c) => {
   const projectId = c.req.param('id');
   const result = await c.env.DB.prepare('SELECT * FROM dpia_assessments WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, assessments: result.results });
+  return c.json({ ok: true, assessments: semRastros(result.results) });
 });
 
 projectsApp.post('/:id/dpia', async (c) => {
@@ -1091,8 +1091,8 @@ projectsApp.get('/:id/audit-pack', async (c) => {
       pack: {
         project,
         phases: phases.results || [],
-        controls: controls.results || [],
-        evidence: evidence.results || [],
+        controls: semRastros(controls.results),
+        evidence: semRastros(evidence.results),
         audit_trail: logs.results || [],
         generated_at: new Date().toISOString()
       }

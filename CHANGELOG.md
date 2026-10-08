@@ -13,6 +13,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não publicado]
 
 ### Corrigido
+- Minimização: IP e user-agent de quem assina (`*_approved_ip/ua`, `*_signed_ip`) não saem mais nas leituras JSON de controles, evidências, ROPA, DPIA, análise crítica, política e pacote de auditoria; seguem no banco, na trilha e nos relatórios de política e ROPA. O modal da política deixa de mostrar "Origem".
 - DPIA: a rota `DELETE /api/v1/dpia/:id` passa a existir (a tela chamava uma rota inexistente); DPIA aprovado recusa a exclusão com 409.
 - Ativos: a criação grava localização, classificação e notas CID (ausentes valem 3, o default da coluna); a edição parcial não apaga mais o campo ausente (antes dava 500 ou zerava); criar sem `type` não dá mais erro; o CSV não traz removidos; o modal de risco volta a listar os ativos.
 - Fornecedores: trilha com o projeto na criação e registro da edição.

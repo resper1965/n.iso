@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, idDoControle } from '../helpers';
+import { semRastroDeAssinatura, semRastros, genId, logAudit, requireResourceAccess, verifyPassword, validateUpload, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, idDoControle } from '../helpers';
 import type { PapelAssinatura } from '../helpers';
 import { EvidenceAgent } from '../agents/evidence';
 import { listPaged } from '../helpers';
@@ -18,7 +18,7 @@ evidenceApp.get('/:id/detail', async (c) => {
     await requireResourceAccess(c.env.DB, 'evidence', id, c.get('user'));
     const evidence = await c.env.DB.prepare('SELECT * FROM evidence WHERE id = ?').bind(id).first<any>();
     if (!evidence) return c.json({ error: 'Evidência não encontrada' }, 404);
-    return c.json(evidence);
+    return c.json(semRastroDeAssinatura(evidence));
   } catch (e: any) {
     return erro500(c, 'Falha ao buscar detalhe da evidência', e);
   }
@@ -347,7 +347,7 @@ evidenceApp.put('/:id/signatures/approve', handleApprove);
 projectEvidenceApp.get('/', async (c) => {
   const projectId = c.req.param('projectId');
   const p = await listPaged(c, 'SELECT * FROM evidence WHERE project_id = ? ORDER BY created_at DESC', [projectId]);
-  return c.json({ ok: true, evidence: p.results }, 200, { 'X-Has-More': String(p.hasMore) });
+  return c.json({ ok: true, evidence: semRastros(p.results) }, 200, { 'X-Has-More': String(p.hasMore) });
 });
 
 projectEvidenceApp.post('/upload', async (c) => {

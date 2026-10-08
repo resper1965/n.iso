@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
@@ -53,7 +53,7 @@ ropaApp.delete('/:id', async (c) => {
 projectRopaApp.get('/', async (c) => {
   const projectId = c.req.param('projectId');
   const result = await c.env.DB.prepare('SELECT * FROM ropa_records WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, records: result.results });
+  return c.json({ ok: true, records: semRastros(result.results) });
 });
 
 projectRopaApp.post('/', async (c) => {
@@ -177,8 +177,9 @@ projectRopaApp.get('/report', async (c) => {
 
     let rowsHtml = '';
     for (const r of (records || [])) {
-      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
-      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
+      const origem = (ip: string | null) => ip ? ` <span style="color:#64748b">(IP ${escapeHtml(ip)})</span>` : '';
+      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>${origem(r.ciso_approved_ip)}` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
+      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>${origem(r.ceo_approved_ip)}` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
       
       rowsHtml += `
         <div class="ropa-card">

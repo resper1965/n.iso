@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis, autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis, autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura } from '../helpers';
 import { assinaturaPolitica } from '../services/pedidos';
 import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema, revogarAprovacaoSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
@@ -45,14 +45,14 @@ controlsApp.get('/', async (c) => {
       return c.json([]);
     }
     const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(user.client_project_id).all();
-    return c.json(results || []);
+    return c.json(semRastros(results));
   }
   // Os controles dos projetos que o usuário enxerga (D5 e organização); só o platform_admin vê todos.
   const v = projetosVisiveis(user);
   const { results } = await (v
     ? c.env.DB.prepare(`SELECT * FROM compliance_controls WHERE project_id IN (${v.sql}) ORDER BY id ASC`).bind(v.bind)
     : c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC')).all();
-  return c.json(results || []);
+  return c.json(semRastros(results));
 });
 
 controlsApp.put('/:id', async (c) => {

@@ -1794,7 +1794,6 @@ import { navigate } from '../router.js';
                             <strong>Líder SGSI:</strong> 
                             <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ciso_approved_by)} em ${new Date(ctrl.ciso_approved_at).toLocaleString()}</span>
                         </div>
-                        ${ctrl.ciso_approved_ip ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ciso_approved_ip)} | UA: ${escapeHTML(ctrl.ciso_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -1819,7 +1818,6 @@ import { navigate } from '../router.js';
                             <strong>Direção Executiva:</strong> 
                             <span style="color:var(--success)">Aprovado por ${escapeHTML(ctrl.ceo_approved_by)} em ${new Date(ctrl.ceo_approved_at).toLocaleString()}</span>
                         </div>
-                        ${ctrl.ceo_approved_ip ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; font-family:monospace; word-break:break-all">Origem: IP ${escapeHTML(ctrl.ceo_approved_ip)} | UA: ${escapeHTML(ctrl.ceo_approved_ua)}</div>` : ''}
                     </div>
                 `;
             } else {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
@@ -418,7 +418,7 @@ platformApp.get('/client/dashboard', async (c) => {
     ]);
 
     const phaseList = (phases.results || []) as any[];
-    const controlList = (controls.results || []) as any[];
+    const controlList = semRastros(controls.results) as any[];
     const totalPhases = phaseList.length || 41;
     const completedPhases = phaseList.filter(p => p.status === 'completed').length;
     const progressPercent = totalPhases ? Math.round((completedPhases / totalPhases) * 100) : 0;

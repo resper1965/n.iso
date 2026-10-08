@@ -556,6 +556,18 @@ export async function somenteComercial(
 }
 
 /** Escape HTML entities para prevenir XSS em templates HTML */
+/**
+ * Minimização de dado pessoal de quem assina: IP e user-agent (`*_approved_ip/ua`, `*_signed_ip`)
+ * ficam no banco, na trilha e nos relatórios de prova (exigem login), mas não saem nas leituras
+ * JSON comuns. Aplique em todo `SELECT *` de controle, evidência, ROPA, DPIA e análise crítica.
+ */
+const RASTRO_DE_ASSINATURA = /_(approved|signed)_(ip|ua)$/;
+export function semRastroDeAssinatura<T>(row: T): T {
+  if (!row || typeof row !== 'object') return row;
+  return Object.fromEntries(Object.entries(row).filter(([k]) => !RASTRO_DE_ASSINATURA.test(k))) as T;
+}
+export const semRastros = <T>(rows: T[] | undefined | null): T[] => (rows ?? []).map(semRastroDeAssinatura);
+
 export function escapeHtml(s: string): string {
   if (!s) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

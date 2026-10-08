@@ -77,8 +77,8 @@ window.viewEvidence = async function viewEvidence(id) {
             
             let sealHtml = '';
             if (ev.ciso_approved_by || ev.ceo_approved_by) {
-                const cisoText = ev.ciso_approved_by ? `Assinado por ${escapeHTML(ev.ciso_approved_by)} em ${new Date(ev.ciso_approved_at).toLocaleString()} ${ev.ciso_approved_ip ? `(IP: ${escapeHTML(ev.ciso_approved_ip)})` : ''}` : 'Pendente';
-                const ceoText = ev.ceo_approved_by ? `Assinado por ${escapeHTML(ev.ceo_approved_by)} em ${new Date(ev.ceo_approved_at).toLocaleString()} ${ev.ceo_approved_ip ? `(IP: ${escapeHTML(ev.ceo_approved_ip)})` : ''}` : 'Pendente';
+                const cisoText = ev.ciso_approved_by ? `Assinado por ${escapeHTML(ev.ciso_approved_by)} em ${new Date(ev.ciso_approved_at).toLocaleString()}` : 'Pendente';
+                const ceoText = ev.ceo_approved_by ? `Assinado por ${escapeHTML(ev.ceo_approved_by)} em ${new Date(ev.ceo_approved_at).toLocaleString()}` : 'Pendente';
                 
                 sealHtml = `
                     <div style="background: rgba(0, 173, 232, 0.02); border: 1px solid rgba(0, 173, 232, 0.15); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
