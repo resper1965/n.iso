@@ -2,7 +2,7 @@ name: Drift de schema do D1 (semanal)
 
 # O QUE ESTE WORKFLOW EXISTE PARA PEGAR, e como o problema apareceu.
 #
-# Ao construir o banco de staging a partir do `schema.sql` canônico e comparar
+# Ao reconstruir um banco a partir do `schema.sql` canônico e comparar
 # os dois `sqlite_master`, produção tinha 20 objetos a mais: 12 tabelas e 8
 # índices que não estão no schema versionado nem em migration nenhuma, e que o
 # código de `src/` não referencia. Três guardam dado de cliente que ninguém lê.
