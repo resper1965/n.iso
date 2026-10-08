@@ -43,7 +43,7 @@ A revisão de política vale só para controles com texto de política e com as 
 
 - `D-7`: o vencimento é daqui a 7 dias.
 - `D0`: o vencimento é hoje.
-- `atraso-<AAAA-Www>`: o prazo está vencido. Um aviso por semana ISO até resolver. O primeiro sai na semana do vencimento, se ainda não houve `D0` naquela semana. Caso contrário, sai na semana seguinte.
+- `atraso-<AAAA-Www>`: o prazo está vencido. Não há sino por item: por semana ISO, cada pessoa e projeto recebe um único aviso com a contagem dos prazos que venceram naquela semana, e o e-mail-resumo lista os itens. O primeiro sai na semana do vencimento, se ainda não houve `D0` naquela semana. Caso contrário, sai na semana seguinte.
 
 A rotina roda uma vez por dia, mas cada marco só gera aviso uma vez (seção 5). Se a rotina não rodar num dia, o marco perdido não é reenviado: `D-7` só vale no dia exato. Já `D0` e o atraso aparecem na execução seguinte enquanto estiverem vencidos.
 
@@ -63,15 +63,17 @@ A migration é a 0046. Ela entra no `schema.sql` e na migration, com o índice c
 avisos_prazo
   id, project_id, fonte, item_id, marco, user_id,
   vence_em (data), criado_em, email_enviado_em (nulo até o e-mail sair)
-  UNIQUE(fonte, item_id, marco, user_id)
+  UNIQUE(fonte, item_id, marco, user_id, vence_em)
 ```
 
 Ordem da rotina:
 1. Calcula os pares (item, marco, destinatário) do dia.
 2. `INSERT OR IGNORE` em `avisos_prazo`.
-3. Para as linhas que entraram agora, cria a notificação no sino, com link para o item.
+3. Para as linhas que entraram agora, cria a notificação no sino, com link para o item. Atraso não entra aqui: ver a regra abaixo.
 4. Agrupa por usuário as linhas com `email_enviado_em` nulo e manda **um** e-mail-resumo por pessoa.
 5. Marca `email_enviado_em` só depois do envio confirmado.
+
+Atraso novo (linha que entrou nesta execução) gera uma notificação `prazo_atraso` por pessoa e projeto, com a contagem. Na primeira execução (tabela `avisos_prazo` vazia) o atraso que já existia é gravado com `email_enviado_em` preenchido: não vira sino nem e-mail. Assim a estreia da rotina não dispara uma enxurrada de avisos sobre prazos antigos.
 
 Se o e-mail falhar, a notificação no sino continua valendo e o resumo é tentado de novo no dia seguinte, sem notificação nova. Sem `RESEND_API_KEY`, só o sino funciona.
 
@@ -79,7 +81,7 @@ Limpeza: `manutencaoDiaria` apaga as linhas de `avisos_prazo` com mais de 400 di
 
 ## 6. Entrega
 
-- **Sino.** A notificação usa `type` `prazo_<fonte>`. O título é curto ("CAPA vence em 7 dias", "Política A.5.1 precisa de revisão", "Auditoria interna hoje"). O link leva à tela do item.
+- **Sino.** A notificação usa `type` `prazo_<fonte>` nos marcos `D-7` e `D0`; no atraso, `prazo_atraso` com a contagem (seção 5). O título é curto ("CAPA vence em 7 dias", "Política A.5.1 precisa de revisão", "Auditoria interna hoje"). O link leva à tela do item.
 - **E-mail.**
   - Assunto: "n.iso: N prazos para acompanhar".
   - Corpo em HTML simples, com todo dado escapado e a lista agrupada por projeto: item, marco, data e link.

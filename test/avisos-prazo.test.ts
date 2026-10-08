@@ -348,6 +348,37 @@ describe('rotina avisosDePrazo', () => {
     expect(r.avisos_criados).toBe(3);
     expect(r.falhas).toEqual([expect.stringMatching(/^certificado: /)]);
   });
+
+  it('atraso que já existe na primeira execução fica registrado, sem sino nem e-mail', async () => {
+    await db().batch([
+      db().prepare(`DELETE FROM corrective_actions`),
+      db().prepare(`DELETE FROM audit_schedule`),
+      ...['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23'].map((vence, i) =>
+        db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date, status) VALUES (?, 'p1', ?, ?, 'Open')`)
+          .bind(`antiga-${i}`, `Antiga ${i}`, vence)),
+    ]);
+    const r = await avisosDePrazo(COM_CHAVE(), HOJE);
+    expect(r).toMatchObject({ avisos_criados: 4, emails_enviados: 0, falhas: [] });
+    expect(await notificacoes()).toEqual([]);
+    expect(emails).toHaveLength(0);
+    expect((await avisos()).every((a) => a.email_enviado_em)).toBe(true);
+  });
+
+  it('atraso novo depois da primeira execução vira um aviso só por pessoa e projeto, com a contagem', async () => {
+    await avisosDePrazo(COM_CHAVE(), HOJE);
+    emails = [];
+    await db().batch([
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date, status) VALUES ('cap-a', 'p1', 'Antiga A', '2026-10-01', 'Open')`),
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date, status) VALUES ('cap-b', 'p1', 'Antiga B', '2026-10-02', 'Open')`),
+    ]);
+    const r = await avisosDePrazo(COM_CHAVE(), HOJE);
+    expect(r).toMatchObject({ avisos_criados: 2, emails_enviados: 1, falhas: [] });
+    expect((await notificacoes()).filter((n) => n.type === 'prazo_atraso')).toEqual([
+      { user_id: 'u-cons', type: 'prazo_atraso', title: '2 prazos vencidos', message: 'Cliente p1. Veja a lista no projeto.', link: '/projects/p1' },
+    ]);
+    expect(emails.map((e) => e.to[0])).toEqual(['cons@ness.lat']);
+    expect(emails[0].subject).toBe('n.iso: 2 prazos para acompanhar');
+  });
 });
 
 describe('scheduled despacha pelo cron', () => {

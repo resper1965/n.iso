@@ -172,22 +172,26 @@ const quando = (marco: string) => (marco === 'D-7' ? 'vence em 7 dias' : marco =
 export function tituloDoAviso(item: Pick<ItemDoDia, 'fonte' | 'marco' | 'titulo'>): string {
   const d7 = item.marco === 'D-7';
   if (item.fonte === 'politica') return `Política ${item.titulo.split(' ')[0]} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
-  if (item.fonte === 'auditoria') return `Auditoria ${d7 ? 'em 7 dias' : item.marco === 'D0' ? 'hoje' : 'atrasada'}`;
+  if (item.fonte === 'auditoria') return `Auditoria ${d7 ? 'em 7 dias' : 'hoje'}`;
   return `${ROTULO[item.fonte]} ${quando(item.marco)}`;
 }
 
 /**
  * A rotina do cron das 08:00. Ordem da spec (seção 5): pares (item, marco, pessoa) do dia → INSERT OR
- * IGNORE em avisos_prazo → notificação só para a linha que entrou agora (no MESMO batch, então não há
- * registro sem sino nem sino repetido) → um e-mail-resumo por pessoa com o que está pendente → marca
+ * IGNORE em avisos_prazo → sino só para a linha que entrou agora (no MESMO batch, então não há registro
+ * sem sino nem sino repetido) → um e-mail-resumo por pessoa com o que está pendente → marca
  * email_enviado_em só depois do envio confirmado. Falha de fonte, de item ou de e-mail vai para
  * `falhas` e a rotina segue.
+ * Atraso não tem sino por item: sai um por pessoa e projeto, com a contagem dos prazos novos. Na primeira
+ * execução (tabela vazia) o atraso que já existe é registrado como enviado, sem sino nem e-mail.
  */
 export async function avisosDePrazo(env: EnvAvisos, hoje: string): Promise<ResultadoAvisos> {
   const db = env.DB;
+  const primeira = !(await db.prepare('SELECT 1 FROM avisos_prazo LIMIT 1').first());
   const { itens, falhas } = await itensDoDia(db, hoje);
   const r: ResultadoAvisos = { avisos_criados: 0, emails_enviados: 0, sem_destinatario: 0, falhas };
   const pessoasPorProjeto = new Map<string, Pessoa[]>();
+  const atrasoNovo = new Map<string, { project_id: string; user_id: string; n: number }>();
 
   for (const item of itens) {
     try {
@@ -195,29 +199,50 @@ export async function avisosDePrazo(env: EnvAvisos, hoje: string): Promise<Resul
       if (!pessoas) pessoasPorProjeto.set(item.project_id, (pessoas = await pessoasDoProjeto(db, item.project_id)));
       const destinos = escolherDestinatarios(pessoas, item.responsavel);
       if (!destinos.length) { r.sem_destinatario++; continue; }
+      const atraso = item.marco.startsWith('atraso-');
       // Atraso na mesma semana do vencimento só sai se o D0 não saiu (a rotina não rodou no dia).
-      const guardaD0 = item.marco.startsWith('atraso-') && semanaIso(item.vence_em) === semanaIso(hoje) ? 1 : 0;
+      const guardaD0 = atraso && semanaIso(item.vence_em) === semanaIso(hoje) ? 1 : 0;
       for (const p of destinos) {
         try {
           const id = genId();
-          const [aviso] = await db.batch([
-            db.prepare(`INSERT OR IGNORE INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo)
-              SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+          const inserir = db.prepare(`INSERT OR IGNORE INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo, email_enviado_em)
+              SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CASE WHEN ?10 THEN datetime('now') END
                WHERE NOT (?9 AND EXISTS (SELECT 1 FROM avisos_prazo
                  WHERE fonte = ?3 AND item_id = ?4 AND user_id = ?6 AND vence_em = ?7 AND marco = 'D0'))`)
-              .bind(id, item.project_id, item.fonte, item.item_id, item.marco, p.id, item.vence_em, item.titulo, guardaD0),
-            db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
-              SELECT ?, ?, ?, ?, ?, 0, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM avisos_prazo WHERE id = ?)`)
-              .bind(genId(), p.id, `prazo_${item.fonte}`, tituloDoAviso(item), `${item.titulo} (prazo ${dataBr(item.vence_em)})`,
-                `/projects/${item.project_id}${TELA[item.fonte]}`, id),
-          ]);
-          r.avisos_criados += aviso.meta.changes ?? 0;
+            .bind(id, item.project_id, item.fonte, item.item_id, item.marco, p.id, item.vence_em, item.titulo, guardaD0,
+              primeira && atraso ? 1 : 0);
+          const sino = db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
+            SELECT ?, ?, ?, ?, ?, 0, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM avisos_prazo WHERE id = ?)`)
+            .bind(genId(), p.id, `prazo_${item.fonte}`, tituloDoAviso(item), `${item.titulo} (prazo ${dataBr(item.vence_em)})`,
+              `/projects/${item.project_id}${TELA[item.fonte]}`, id);
+          const [aviso] = await db.batch(atraso ? [inserir] : [inserir, sino]);
+          const novos = aviso.meta.changes ?? 0;
+          r.avisos_criados += novos;
+          if (atraso && novos && !primeira) {
+            const chave = `${item.project_id}|${p.id}`;
+            const a = atrasoNovo.get(chave) ?? { project_id: item.project_id, user_id: p.id, n: 0 };
+            a.n++;
+            atrasoNovo.set(chave, a);
+          }
         } catch (e) {
           r.falhas.push(`${item.fonte} ${item.item_id} ${p.id}: ${mensagem(e)}`);
         }
       }
     } catch (e) {
       r.falhas.push(`${item.fonte} ${item.item_id}: ${mensagem(e)}`);
+    }
+  }
+
+  for (const a of atrasoNovo.values()) {
+    try {
+      const nome = await db.prepare('SELECT COALESCE(project_name, client_name) AS nome FROM projects WHERE id = ?')
+        .bind(a.project_id).first<string>('nome');
+      await db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
+          VALUES (?, ?, 'prazo_atraso', ?, ?, 0, ?, datetime('now'))`)
+        .bind(genId(), a.user_id, `${a.n} ${a.n === 1 ? 'prazo vencido' : 'prazos vencidos'}`,
+          `${nome ?? 'Projeto'}. Veja a lista no projeto.`, `/projects/${a.project_id}`).run();
+    } catch (e) {
+      r.falhas.push(`atraso ${a.project_id} ${a.user_id}: ${mensagem(e)}`);
     }
   }
 

@@ -137,7 +137,8 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
 - **Rotinas agendadas** (`grep -A2 '"triggers"' wrangler.jsonc`): `10 4 * * *` roda a manutencao
   (`src/manutencao.ts`, purga e retencao) e `0 11 * * *` (08:00 em Brasilia) os avisos de prazo
-  (`src/services/avisos-prazo.ts`: sino + e-mail-resumo, idempotencia em `avisos_prazo`). O
+  (`src/services/avisos-prazo.ts`: sino em D-7 e D0, aviso agregado por pessoa e projeto no atraso,
+  e-mail-resumo; idempotencia em `avisos_prazo`). O
   `scheduled` de `src/index.ts` despacha por `event.cron`; staging tem `crons: []`.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
