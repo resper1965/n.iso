@@ -94,6 +94,19 @@ describe('manutenção diária', () => {
   });
 
   describe('política de retenção', () => {
+    it('apaga registro de aviso de prazo com mais de 400 dias, e NÃO o recente', async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES ('proj-av','C','ISO 27001:2022','Controller','Active')`),
+        env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-av','av@x.com','x','Av','consultor')`),
+        env.DB.prepare(`INSERT INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo, criado_em) VALUES ('av-velho','proj-av','capa','c1','D0','u-av','2025-08-01','CAPA', datetime('now','-401 days'))`),
+        env.DB.prepare(`INSERT INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo, criado_em) VALUES ('av-ano','proj-av','capa','c2','D0','u-av','2025-10-01','CAPA', datetime('now','-370 days'))`),
+      ]);
+      const r = await manutencaoDiaria(env as any);
+      expect(r.retencao.avisos_prazo).toBe(1);
+      const { results } = await env.DB.prepare('SELECT id FROM avisos_prazo').all<{ id: string }>();
+      expect(results.map((x) => x.id)).toEqual(['av-ano']);
+    });
+
     it('apaga notificação e chat velhos, e NÃO toca nos recentes', async () => {
       await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
         .bind('proj-r', 'Cliente R', 'ISO 27001', 'controller', 'Active').run();

@@ -655,13 +655,16 @@ export async function rateLimitD1(db: D1Database, key: string, max: number, wind
 }
 
 /**
- * Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log
- * (dev) só com destinatário e assunto: o corpo leva link de convite, código e token de proposta.
+ * Envia e-mail pelo Resend com a chave do `env`: o cron não tem contexto de requisição, só `env`.
+ * Sem RESEND_API_KEY, simula em log (dev) só com o domínio do destinatário e o assunto: o corpo leva link de convite,
+ * código e token de proposta. A simulação devolve `true`; quem precisa saber se o e-mail saiu de
+ * verdade confere a chave antes (propostas, avisos de prazo).
  */
-export async function sendEmail(c: any, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
-  const apiKey = c.env.RESEND_API_KEY;
+export async function enviarEmail(env: { RESEND_API_KEY?: string }, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
+  const apiKey = env.RESEND_API_KEY;
   if (!apiKey) {
-    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}`);
+    console.log(`[EMAIL SIMULATION] Envio para o domínio: ${to.split('@')[1] ?? '?'}
+Assunto: ${subject}`);
     return true;
   }
   try {
@@ -680,8 +683,9 @@ export async function sendEmail(c: any, to: string, subject: string, html: strin
       })
     });
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[EMAIL ERROR] Falha no Resend API: ${res.status} - ${errText}`);
+      // O corpo do erro pode ecoar o endereço: só o status e, se houver, o campo `name`.
+      const nome = await res.json<{ name?: unknown }>().then((j) => (typeof j.name === 'string' ? j.name : ''), () => '');
+      console.error(`[EMAIL ERROR] Falha no Resend API: ${res.status}${nome ? ` - ${nome.slice(0, 60)}` : ''}`);
       return false;
     }
     return true;
@@ -689,6 +693,11 @@ export async function sendEmail(c: any, to: string, subject: string, html: strin
     console.error(`[EMAIL ERROR] Erro no envio de e-mail: ${e}`);
     return false;
   }
+}
+
+/** O mesmo envio a partir do contexto da requisição (as rotas). */
+export function sendEmail(c: { env: { RESEND_API_KEY?: string } }, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
+  return enviarEmail(c.env, to, subject, html, opcoes);
 }
 
 export async function hashPassword(password: string, salt?: string): Promise<string> {

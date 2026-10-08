@@ -24,6 +24,15 @@ describe('appUrl', () => {
     expect(appUrl({})).toBe(CANONICO);
     expect(appUrl({ APP_URL: `${ALTERNATIVO}/` })).toBe(ALTERNATIVO);
   });
+
+  it('tira todas as barras finais, e entrada com milhares de barras no meio não trava', () => {
+    expect(appUrl({ APP_URL: `${ALTERNATIVO}///` })).toBe(ALTERNATIVO);
+    // `/\/+$/` é quadrática aqui (CodeQL js/polynomial-redos): 100 mil barras e um caractere no fim.
+    const hostil = `${'/'.repeat(100_000)}x`;
+    const t0 = performance.now();
+    expect(appUrl({ APP_URL: hostil })).toBe(hostil);
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
 });
 
 describe('URLs geradas usam o canônico, não o host da requisição', () => {

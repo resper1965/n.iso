@@ -41,7 +41,7 @@
 	// da Cloudflare é mais disputada. É a PRIMEIRA execução periódica do
 	// sistema; até aqui nada rodava sozinho.
 	"triggers": {
-		"crons": ["10 4 * * *"]
+		"crons": ["10 4 * * *", "0 11 * * *"]
 	},
 	"upload_source_maps": true,
 

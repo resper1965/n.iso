@@ -53,6 +53,7 @@ import risks from './routes/risks';
 import policies from './routes/policies';
 import integrations from './routes/integrations';
 import { manutencaoDiaria } from './manutencao';
+import { avisosDePrazo, hojeEmSaoPaulo } from './services/avisos-prazo';
 import { oauthAutorizacao } from './routes/oauth-autorizacao';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { handlerMcp } from './mcp/servidor';
@@ -496,10 +497,15 @@ app.onError((err, c) => {
  * `.request()` do Hono, que um objeto novo não teria. Trocar o formato do export
  * custaria editar testes que esta mudança não tem motivo para tocar.
  *
- * `scheduled` é o cron de manutenção (ver `src/manutencao.ts` e o bloco
- * `triggers` do `wrangler.jsonc`). O `waitUntil` mantém a invocação viva até a
+ * `scheduled` atende os dois crons do bloco `triggers` do `wrangler.jsonc`:
+ * 04:10 UTC, a manutenção (`src/manutencao.ts`); 11:00 UTC, os avisos de prazo
+ * (`src/services/avisos-prazo.ts`). O `waitUntil` mantém a invocação viva até a
  * rotina terminar — sem ele o runtime pode encerrá-la no meio do DELETE.
  */
+
+/** 11:00 UTC = 08:00 em Brasília (UTC-3, sem horário de verão). O mesmo texto vai em `triggers.crons`. */
+export const CRON_AVISOS = '0 11 * * *';
+
 const fetchHono = app.fetch.bind(app);
 
 /*
@@ -558,7 +564,8 @@ export default Object.assign(app, {
     }
     return ROTAS_OAUTH(url.pathname) ? provider.fetch(req, env as any, ctx) : fetchHono(req, env, ctx);
   },
-  scheduled: (_evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
-    ctx.waitUntil(manutencaoDiaria(env));
+  scheduled: (evento: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
+    // ponytail: cron que não é o dos avisos cai na manutenção, o comportamento de antes desta rotina.
+    ctx.waitUntil(evento.cron === CRON_AVISOS ? avisosDePrazo(env, hojeEmSaoPaulo()) : manutencaoDiaria(env));
   },
 });

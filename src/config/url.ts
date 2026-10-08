@@ -6,7 +6,11 @@
 export const APP_URL_PADRAO = 'https://niso.ness.com.br';
 
 export function appUrl(env?: { APP_URL?: string }): string {
-  return (env?.APP_URL || APP_URL_PADRAO).replace(/\/+$/, '');
+  const url = env?.APP_URL || APP_URL_PADRAO;
+  // Sem regex: `/\/+$/` é quadrática com muitas barras seguidas de outro caractere (js/polynomial-redos).
+  let fim = url.length;
+  while (fim > 0 && url.charCodeAt(fim - 1) === 47) fim--;
+  return url.slice(0, fim);
 }
 
 /** Hosts antigos que o Worker ainda recebe só para redirecionar (308) ao `appUrl` (src/index.ts). */

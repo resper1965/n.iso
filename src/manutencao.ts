@@ -78,6 +78,12 @@ const RETENCAO: { tabela: string; dias: number; coluna: string; motivo: string }
     coluna: 'created_at',
     motivo: 'pode conter texto que o consultor colou do cliente — minimização (LGPD art. 6º, III)',
   },
+  {
+    tabela: 'avisos_prazo',
+    dias: 400,
+    coluna: 'criado_em',
+    motivo: 'registro de idempotência dos avisos de prazo; 400 dias cobrem o ciclo anual de revisão de política com folga',
+  },
 ];
 
 export type ResultadoManutencao = {

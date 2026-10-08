@@ -231,11 +231,12 @@ describe('envio, link e aceite manual', () => {
     expect(corposResend).toHaveLength(0);
   }, 60_000);
 
-  it('sendEmail sem chave (dev): loga destinatário e assunto, nunca o HTML', async () => {
+  it('sendEmail sem chave (dev): loga domínio e assunto, nunca o endereço nem o HTML', async () => {
     preparar();
     const ok = await sendEmail({ env: {} }, 'x@y.com', 'Assunto X', '<a href="https://niso.ness.com.br/proposta#SEGREDO123">link</a>');
     expect(ok).toBe(true);
-    expect(logs()).toContain('x@y.com');
+    expect(logs()).toContain('y.com');
+    expect(logs()).not.toContain('x@y.com');
     expect(logs()).toContain('Assunto X');
     expect(logs()).not.toContain('SEGREDO123');
   });
