@@ -2,6 +2,7 @@ import { S } from '../state.js';
 import { api, API_BASE } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
+import { renderAcessoAuditor } from './auditor-acesso.js';
 
 // S2: wrappers para handlers COMPOSTOS/inline (a delegação chama uma função só).
 window.__grcDeleteRisk = function (riskId) {
@@ -1456,7 +1457,9 @@ window.__grcCloseExecAudit = function (id) {
         c.innerHTML = `
             ${statsHtml}
             ${tableHtml}
+            <div id="acesso-auditor"></div>
         `;
+        await renderAcessoAuditor(c.querySelector('#acesso-auditor'), proj.id, S.user?.role);
     }
 
     window.openAuditDetailsModal = function(id) {
