@@ -16,7 +16,7 @@ describe('CSS das classes org-*', () => {
     const usadas = new Set(Object.values(fontes).flatMap((src) =>
       [...src.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].match(/\borg-[a-z0-9-]+/g) || [])));
     expect(usadas.size).toBeGreaterThan(20);
-    const sem = [...usadas].filter((cl) => !new RegExp('\.' + cl + '(?![a-z0-9-])').test(css));
+    const sem = [...usadas].filter((cl) => !new RegExp('\\.' + cl + '(?![a-z0-9-])').test(css));
     expect(sem, 'classes sem regra no CSS').toEqual([]);
   });
 

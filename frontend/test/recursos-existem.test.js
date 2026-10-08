@@ -16,7 +16,7 @@ const HTMLS = import.meta.glob(['../login.html', '../public/*.html'], { query: '
 const EM_PUBLIC = new Set(Object.keys(import.meta.glob('../public/*', { query: '?url', import: 'default' })).map((c) => c.replace('../public', '')));
 
 /** HTML de origem: o da aplicação mais os das páginas públicas. */
-const PAGINAS = Object.keys(HTMLS).map((c) => c.replace('../', ''));
+const PAGINAS = Object.keys(HTMLS).map((c) => c.replaceAll('../', ''));
 
 /**
  * `/src/...` é código que o Vite empacota e reescreve no build — o caminho do

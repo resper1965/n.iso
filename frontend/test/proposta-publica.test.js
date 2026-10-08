@@ -51,7 +51,7 @@ afterEach(() => {
 describe('HTML da página', () => {
   it('sem script nem handler inline; script e CSS são arquivos próprios', () => {
     expect(HTML).not.toMatch(/\son[a-z]+\s*=/i);
-    const scripts = [...HTML.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+    const scripts = [...HTML.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)];
     expect(scripts).toHaveLength(1);
     expect(scripts[0][1]).toContain('src="/proposta.js"');
     expect(scripts[0][2].trim()).toBe('');
