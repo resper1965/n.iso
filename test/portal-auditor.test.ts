@@ -120,6 +120,17 @@ describe('POST /evidencia', () => {
   });
 });
 
+describe('POST /evidencia: Content-Type', () => {
+  it('file_type que não é tipo MIME cai para application/octet-stream', async () => {
+    await env.STORAGE.put('pa/ct.bin', 'x');
+    for (const [id, tipo, esperado] of [['pa-ct1', 'text/html; charset=x', 'application/octet-stream'], ['pa-ct2', 'lixo', 'application/octet-stream'], ['pa-ct3', 'application/pdf', 'application/pdf']]) {
+      await env.DB.prepare(`INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by) VALUES (?, ?, 'a.bin', 'pa/ct.bin', 'h', ?, 1, 'x@y.z')`).bind(id, A, tipo).run();
+      const r = await portal('evidencia', { token: 'tok-a', evidence_id: id });
+      expect([id, r.status, r.headers.get('Content-Type')]).toEqual([id, 200, esperado]);
+    }
+  });
+});
+
 describe('notas', () => {
   it('a nota grava o id do token, nunca o token, e a lista é só do projeto', async () => {
     const r = await portal('notas/criar', { token: 'tok-a', control_id: 'pa-c1', content: 'Onde está a ata da análise crítica?' });
@@ -129,6 +140,13 @@ describe('notas', () => {
     await portal('notas/criar', { token: 'tok-b', content: 'Pergunta do B' });
     const lista = await (await portal('notas', { token: 'tok-a' })).json<{ notas: { id: string; control_title: string | null }[] }>();
     expect(lista.notas.map((n) => [n.id, n.control_title])).toEqual([[id, 'A.5.1 — Políticas']]);
+  });
+
+  it('a criação da nota registra o IP na trilha', async () => {
+    const r = await portal('notas/criar', { token: 'tok-a', content: 'Pergunta com IP' }, '10.55.9.9');
+    const { id } = await r.json<{ id: string }>();
+    const ip = await env.DB.prepare(`SELECT ip_address FROM audit_logs WHERE action = 'auditor_note.created' AND details LIKE ?`).bind(`%${id}%`).first('ip_address');
+    expect(ip).toBe('10.55.9.9');
   });
 });
 

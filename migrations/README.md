@@ -72,7 +72,9 @@ não nulo, e `schema.sql` e migration precisam do mesmo DDL.
 
 Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote`
 → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to
-apply") → merge, porque `deploy.yml` recusa migration pendente.
+apply") → merge, porque `deploy.yml` recusa migration pendente. Entre aplicar a 0045 e publicar o código novo,
+as rotas do auditor do código antigo respondem 500 (a coluna `token` não existe mais); sem efeito com 0
+tokens em produção, mas aplique e publique em seguida.
 
 ---
 

@@ -65,6 +65,7 @@ export async function renderAcessoAuditor(el, projectId, role) {
 window.gerarAcessoAuditor = async function (projectId) {
     const erro = document.getElementById('aud-ext-erro');
     const dias = Number(document.getElementById('aud-ext-dias')?.value);
+    if (!erro) return;
     erro.textContent = '';
     if (!Number.isInteger(dias) || dias < 1 || dias > 365) {
         erro.textContent = 'Informe a validade em dias, de 1 a 365.';
@@ -92,6 +93,8 @@ window.revogarAcessoAuditor = async function (projectId, tokenId) {
     try {
         await api('POST', `/api/v1/projects/${projectId}/auditor-token/${tokenId}/revogar`);
         showToast('Link revogado');
+        const novo = document.getElementById('aud-ext-novo');
+        if (novo) novo.innerHTML = '';
         await listar(document.getElementById('aud-ext-lista'), projectId);
     } catch (e) {
         showToast(e.message || 'Não foi possível revogar o link', 'error');

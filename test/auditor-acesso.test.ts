@@ -103,3 +103,17 @@ describe('gestão do link pela consultoria', () => {
     }
   });
 });
+
+describe('GET /projects/:id/auditor-notes', () => {
+  it('nota apontando controle de outro projeto não expõe o título dele', async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, status, maturity) VALUES ('ac-c-outro', ?, 'ISO 27001:2022', 'A.9.9 — Segredo do outro', 'Implemented', 1)`).bind(OUTRO),
+      env.DB.prepare(`INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content) VALUES ('ac-n1', ?, 'ac-t-outro', 'ac-c-outro', 'question', 'x')`).bind(P),
+    ]);
+    const r = await chamar(consultor, 'GET', `/api/v1/projects/${P}/auditor-notes`);
+    const d = await r.json<{ notes: { id: string; control_title: string | null }[] }>();
+    expect(r.status).toBe(200);
+    expect(d.notes.find((n) => n.id === 'ac-n1')?.control_title).toBeNull();
+    expect(JSON.stringify(d)).not.toContain('Segredo do outro');
+  });
+});

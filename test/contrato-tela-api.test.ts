@@ -27,6 +27,8 @@ export function chamadasDoFonte(arquivo: string, src: string): Chamada[] {
     const inicio = m.index ?? 0;
     const antes = src.slice(Math.max(0, inicio - 40), inicio);
     let metodo = /api\(\s*'([A-Z]+)'\s*,\s*$/.exec(antes)?.[1] ?? null;
+    // public/auditor.js: chamar(caminho) faz sempre POST (conferido em teste próprio abaixo).
+    if (!metodo && arquivo.endsWith('frontend/public/auditor.js') && /\bchamar\(\s*$/.test(antes)) metodo = 'POST';
     if (!metodo && /fetch\(\s*(?:API_BASE\s*\+\s*)?$/.test(antes)) {
       // fetch sem `method:` é GET (padrão do fetch); o init vem logo depois do literal.
       const depois = src.slice(inicio + m[0].length, inicio + m[0].length + 200).split('fetch(')[0];
@@ -139,13 +141,20 @@ describe('contrato tela↔API', () => {
     expect(achadas).toEqual(PERMITIDAS);
   });
 
-  it('public/auditor.js: chamar() recebe o caminho literal, e as quatro chamadas são vistas', () => {
+  it('public/auditor.js: chamar() recebe o caminho literal, e as cinco chamadas são vistas, todas POST', () => {
     expect(CHAMADAS.filter((c) => c.onde.startsWith('frontend/public/auditor.js:')).map(chave)).toEqual([
-      '* /api/v1/public/auditor/ver',
-      '* /api/v1/public/auditor/evidencia',
-      '* /api/v1/public/auditor/pedidos',
-      '* /api/v1/public/auditor/notas/criar',
+      'POST /api/v1/public/auditor/ver',
+      'POST /api/v1/public/auditor/evidencia',
+      'POST /api/v1/public/auditor/pedidos',
+      'POST /api/v1/public/auditor/notas',
+      'POST /api/v1/public/auditor/notas/criar',
     ]);
+    const src = FONTES['../frontend/public/auditor.js'];
+    // toda chamada (fora a definição) começa pelo literal do prefixo, e chamar() faz POST
+    const usos = [...src.matchAll(/(?<!function )\bchamar\(\s*(.{0,40})/g)].map((m) => m[1]);
+    expect(usos.length).toBe(5);
+    for (const u of usos) expect(u.startsWith("'/api/v1/public/auditor/"), u).toBe(true);
+    expect(/async function chamar[\s\S]*?method:\s*'POST'/.test(src)).toBe(true);
   });
 
   it('toda chamada do frontend tem rota (ou tolerância com motivo)', () => {

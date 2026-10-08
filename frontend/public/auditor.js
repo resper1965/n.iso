@@ -136,6 +136,7 @@
         const r = await chamar('/api/v1/public/auditor/ver');
         if (!r || r.status !== 200) return falhou(r);
         mostrar(await lerJson(r));
+        await listarNotas();
     }
 
     function salvar(blob, nome) {
@@ -190,7 +191,20 @@
         }
     }
 
-    // Pergunta do auditor (auditor_notes): a consultoria responde na tela de Auditorias (monitor.js).
+    // Perguntas do auditor (auditor_notes) com a resposta da consultoria, que a vê no modal "Notas do
+    // Auditor" do projeto. Falha aqui não derruba a página: a lista só fica como estava.
+    async function listarNotas() {
+        const r = await chamar('/api/v1/public/auditor/notas');
+        if (!r || r.status !== 200) return;
+        const notas = (await lerJson(r)).notas || [];
+        $('pa-nota-lista').innerHTML = notas.map((n) => `<li class="pa-nota-item">
+            <p class="pa-nota-meta">${esc(data(n.created_at))}${n.control_title ? ' · ' + esc(n.control_title) : ''}</p>
+            <p class="pa-nota-perg">${esc(n.content)}</p>
+            <p class="pa-nota-resp">${n.response ? esc(n.response) + ' <span class="pa-nota-meta">(' + esc(data(n.responded_at)) + ')</span>' : '<span class="pa-nota-meta">Aguardando resposta</span>'}</p>
+        </li>`).join('');
+    }
+
+    // Pergunta do auditor: grava em auditor_notes; a resposta volta pela lista acima.
     async function nota(botao) {
         const campo = $('pa-nota-texto');
         const content = campo.value.trim();
@@ -204,6 +218,7 @@
             }
             campo.value = '';
             $('pa-nota-msg').textContent = 'Pergunta registrada.';
+            await listarNotas();
         } finally {
             botao.disabled = false;
         }

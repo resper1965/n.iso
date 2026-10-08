@@ -52,7 +52,7 @@ auditorApp.get('/projects/:id/auditor-notes', async (c) => {
     const notes = await c.env.DB.prepare(`
       SELECT n.*, cc.standard as control_standard, cc.title as control_title 
       FROM auditor_notes n
-      LEFT JOIN compliance_controls cc ON n.control_id = cc.id
+      LEFT JOIN compliance_controls cc ON n.control_id = cc.id AND cc.project_id = n.project_id
       WHERE n.project_id = ? 
       ORDER BY n.created_at DESC
     `).bind(projectId).all();

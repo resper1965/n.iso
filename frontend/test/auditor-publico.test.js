@@ -173,8 +173,42 @@ describe('baixar', () => {
 });
 
 describe('nota do auditor', () => {
+    const NOTAS = { notas: [
+        { id: 'n2', control_title: 'A.5.2 — Papéis', note_type: 'question', content: 'Pergunta <b>respondida</b>', response: 'Segue em <i>anexo</i>', responded_at: '2026-10-03 10:00:00', created_at: '2026-10-02 10:00:00' },
+        { id: 'n3', control_title: null, note_type: 'question', content: 'Pergunta aberta', response: null, responded_at: null, created_at: '2026-10-04 10:00:00' },
+    ] };
+
+    it('lista as perguntas com a resposta (ou "Aguardando resposta"), tudo como texto', async () => {
+        servidor({ '/api/v1/public/auditor/ver': json(VER), '/api/v1/public/auditor/notas': json(NOTAS) });
+        await abre();
+        expect(corpos('/notas')).toEqual([{ token: TOKEN }]);
+        const itens = [...document.querySelectorAll('#pa-nota-lista li')];
+        expect(itens).toHaveLength(2);
+        expect(itens[0].textContent).toContain('Pergunta <b>respondida</b>');
+        expect(itens[0].textContent).toContain('Segue em <i>anexo</i>');
+        expect(itens[0].textContent).toContain('02/10/2026');
+        expect(itens[1].textContent).toContain('Aguardando resposta');
+        expect(document.querySelector('#pa-nota-lista b, #pa-nota-lista i')).toBeNull();
+    });
+
+    it('depois de enviar, a lista é recarregada', async () => {
+        let n = 0;
+        servidor({
+            '/api/v1/public/auditor/ver': json(VER),
+            '/api/v1/public/auditor/notas': () => json(n++ ? NOTAS : { notas: [] }),
+            '/api/v1/public/auditor/notas/criar': json({ ok: true, id: 'n9' }),
+        });
+        await abre();
+        expect(document.querySelectorAll('#pa-nota-lista li')).toHaveLength(0);
+        $('pa-nota-texto').value = 'Outra pergunta';
+        $('pa-nota-enviar').click();
+        await espera();
+        expect(corpos('/notas')).toHaveLength(2);
+        expect(document.querySelectorAll('#pa-nota-lista li')).toHaveLength(2);
+    });
+
     it('pergunta vai com o token no corpo e o campo limpa; vazio não chama', async () => {
-        servidor({ '/api/v1/public/auditor/ver': json(VER), '/api/v1/public/auditor/notas/criar': json({ ok: true, id: 'n1' }) });
+        servidor({ '/api/v1/public/auditor/ver': json(VER), '/api/v1/public/auditor/notas': json({ notas: [] }), '/api/v1/public/auditor/notas/criar': json({ ok: true, id: 'n1' }) });
         await abre();
         $('pa-nota-enviar').click();
         await espera();

@@ -98,6 +98,19 @@ describe('acesso do auditor externo', () => {
         expect(f).not.toHaveBeenCalled();
     });
 
+    it('revogar limpa o link recém-gerado; gerar sem #aud-ext-erro não quebra', async () => {
+        servir({ [GET]: LISTA, [POST]: { id: 't2', url: LINK, expires_at: '2026-10-14 12:00:00' }, [REVOGAR]: { revogado: true } });
+        await renderAcessoAuditor(el, 'p1', 'consultor');
+        await window.gerarAcessoAuditor('p1');
+        expect(document.getElementById('aud-ext-link')).not.toBeNull();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        await window.revogarAcessoAuditor('p1', 't1');
+        expect(document.getElementById('aud-ext-link')).toBeNull();
+        expect(document.getElementById('aud-ext-novo').innerHTML).toBe('');
+        document.body.innerHTML = '';
+        await expect(window.gerarAcessoAuditor('p1')).resolves.toBeUndefined();
+    });
+
     it('copiar usa a área de transferência e, sem ela, seleciona o campo', async () => {
         servir({ [GET]: LISTA, [POST]: { id: 't2', url: LINK, expires_at: '2026-10-14 12:00:00' } });
         await renderAcessoAuditor(el, 'p1', 'consultor');

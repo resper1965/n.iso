@@ -77,6 +77,8 @@ publicAuditorApp.post('/ver', async (c) => {
   }
 });
 
+const TIPO_MIME = /^[\w.+-]+\/[\w.+-]+$/;
+
 /** Nome para `Content-Disposition` (RFC 5987): só ASCII; aspas e não-Latin-1 iam cortar ou derrubar o cabeçalho. */
 function nomeCodificado(nome: string): string {
   return encodeURIComponent(nome).replace(/['()*!]/g, (ch) => '%' + ch.charCodeAt(0).toString(16).toUpperCase());
@@ -97,7 +99,7 @@ publicAuditorApp.post('/evidencia', async (c) => {
     const nome = nomeCodificado(ev.file_name || 'evidencia');
     return new Response(obj.body, {
       headers: {
-        'Content-Type': ev.file_type || 'application/octet-stream',
+        'Content-Type': ev.file_type && TIPO_MIME.test(ev.file_type) ? ev.file_type : 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${nome}"; filename*=UTF-8''${nome}`,
         'Cache-Control': 'no-store',
       },
@@ -204,7 +206,7 @@ publicAuditorApp.post('/notas/criar', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO auditor_notes (id, project_id, auditor_token, control_id, note_type, content) VALUES (?, ?, ?, ?, ?, ?)`
     ).bind(id, t.project_id, t.id, control_id || null, note_type || 'question', content).run();
-    await logAudit(c.env.DB, 'auditor_note.created', `auditor:${t.id}`, `Nota de auditor ${id} criada`, '', '', t.project_id);
+    await logAudit(c.env.DB, 'auditor_note.created', `auditor:${t.id}`, `Nota de auditor ${id} criada`, '', c.req.header('CF-Connecting-IP') ?? '', t.project_id);
     return c.json({ ok: true, id });
   } catch (e) {
     return erro500(c, 'Falha ao criar nota de auditor', e);
