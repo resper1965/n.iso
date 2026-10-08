@@ -134,7 +134,7 @@ describe('allow-list do papel stakeholder', () => {
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method) || r.path === '/*') continue;
       if (!r.path.startsWith('/api/v1/') || livre.some((re) => re.test(r.path))) continue;
       // rotas públicas e de token são montadas antes do authMiddleware
-      if (r.path.startsWith('/api/v1/public/') || r.path.startsWith('/api/v1/assessments/public/') || r.path.startsWith('/api/v1/auditor/')
+      if (r.path.startsWith('/api/v1/public/') || r.path.startsWith('/api/v1/assessments/public/')
         || /^\/api\/v1\/auth\/(setup|login|forgot-password|reset-password)$/.test(r.path)) continue;
       const chave = `${r.method} ${r.path}`;
       if (vistas.has(chave)) continue;

@@ -157,7 +157,7 @@ npx wrangler d1 execute niso-db --remote --command \
 2. **Revogar chaves de API do projeto** — `PUT status = 'Revoked'` em `api_keys`,
    ou pela interface (Platform Admin).
 3. **Revogar token de auditor** — apagar de `auditor_tokens`; o caminho
-   `/api/v1/auditor/:token/*` é público e o token é o único fator.
+   `/api/v1/public/auditor/*` é público e o token (no corpo) é o único fator.
 4. **Ler a trilha**:
    ```bash
    npx wrangler d1 execute niso-db --remote --command \

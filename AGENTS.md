@@ -76,8 +76,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   destinatario; unico prefixo de dado do papel `stakeholder`),
   `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
   painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
-  token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
-  auditor externo, paginada). **A prova e imutavel**: o trigger
+  token so no corpo) e `POST /api/v1/public/auditor/pedidos` (a prova, para o
+  auditor externo, token no corpo, paginada; o portal inteiro esta em
+  `src/routes/public-auditor.ts`). **A prova e imutavel**: o trigger
   `pedido_dest_prova_imutavel` recusa UPDATE em linha decidida, e
   `pedido_prova_imutavel` (0043) recusa mudar hash, conteudo e documento de
   qualquer pedido e status/substituto de pedido fechado (`org_id` fica livre:

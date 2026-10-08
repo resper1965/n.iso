@@ -534,8 +534,9 @@ describe('nISO API (D1 e KV reais)', () => {
     });
 
     it('rotas públicas por token dispensam sessão', async () => {
-      // O token no caminho é a credencial; não há header de autenticação.
-      expect((await req('/api/v1/auditor/tok123/notes')).status).toBe(200);
+      // O token é a credencial; não há header de autenticação. O do auditor vai no corpo.
+      const portal = await req('/api/v1/public/auditor/ver', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'tok123' }) });
+      expect(portal.status).toBe(200);
       expect((await req('/api/v1/assessments/public/tok456')).status).toBe(200);
     });
 

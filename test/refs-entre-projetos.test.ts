@@ -145,14 +145,14 @@ describe('achado de auditoria: control_id do corpo', () => {
   });
 });
 
-describe('nota do auditor externo (token): control_id do corpo', () => {
+describe('nota do auditor externo (token no corpo): control_id do corpo', () => {
   it('recusa controle de outro projeto, sem gravar', async () => {
-    await recusa('/api/v1/auditor/tok-a/notes', 'POST', { content: 'Pergunta' }, 'control_id', 'ctl-b');
+    await recusa('/api/v1/public/auditor/notas/criar', 'POST', { token: 'tok-a', content: 'Pergunta' }, 'control_id', 'ctl-b');
     expect(await conta(`SELECT COUNT(*) n FROM auditor_notes`)).toBe(0);
   });
 
   it('legítimo: controle do próprio projeto', async () => {
-    expect((await req('/api/v1/auditor/tok-a/notes', 'POST', { content: 'Pergunta', control_id: 'ctl-a' }, {})).status).toBe(200);
+    expect((await req('/api/v1/public/auditor/notas/criar', 'POST', { token: 'tok-a', content: 'Pergunta', control_id: 'ctl-a' }, {})).status).toBe(200);
   });
 });
 

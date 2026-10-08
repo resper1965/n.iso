@@ -116,10 +116,10 @@ function atorDaChave(id: string, name: string | null): string {
 }
 
 // Rotas públicas validadas por token NO PRÓPRIO handler (não exigem sessão nISO):
-// - portal do auditor externo (/api/v1/auditor/:token/...) valida contra auditor_tokens;
 // - links públicos de assessment (/api/v1/assessments/public/:token...) validam access_token.
-// Obs.: '/api/v1/auditor/' NÃO casa com '/api/v1/auditor-notes/...' (rota interna autenticada).
-const PUBLIC_TOKEN_PREFIXES = ['/api/v1/assessments/public/', '/api/v1/auditor/'];
+// O portal do auditor externo (/api/v1/public/auditor/*) é montado antes deste middleware, com o
+// token no corpo. '/api/v1/auditor-notes/...' é rota interna autenticada.
+const PUBLIC_TOKEN_PREFIXES = ['/api/v1/assessments/public/'];
 
 // Único conjunto que uma sessão AINDA pendente de segundo fator pode alcançar.
 // Lista fechada, não prefixo: `/setup`, `/activate` e sobretudo `/disable` não

@@ -117,7 +117,7 @@ const VINCULO_ALHEIO: [string, (p: Ctx) => string, (p: Ctx) => unknown][] = [
   ['POST', (p) => `/api/v1/projects/${p.de.proj}/capa`, (p) => ({ title: 'C', description: 'd', severity: 'Low', assigned_to: 'x', due_date: '2099-01-01', risk_id: p.alheio.rec })],
   ['PUT', (p) => `/api/v1/capa/${p.de.rec}`, (p) => ({ title: 'C', description: 'd', severity: 'Low', assigned_to: 'x', due_date: '2099-01-01', status: 'Open', audit_id: p.alheio.rec })],
   ['POST', (p) => `/api/v1/audits/${p.de.rec}/findings`, (p) => ({ project_id: p.de.proj, finding_type: 'observation', description: 'd', control_id: p.alheio.rec })],
-  ['POST', (p) => `/api/v1/auditor/${p.token ?? 'token-forjado-inexistente'}/notes`, (p) => ({ content: 'n', control_id: p.alheio.rec })],
+  ['POST', () => '/api/v1/public/auditor/notas/criar', (p) => ({ token: p.token ?? 'token-forjado-inexistente', content: 'n', control_id: p.alheio.rec })],
   ['POST', (p) => `/api/v1/projects/${p.de.proj}/dpia`, (p) => ({ processing_name: 'P', data_category_risk: 'r', necessity_proportionality: 'n', technical_measures: 't', ropa_id: p.alheio.rec })],
 ];
 
@@ -145,6 +145,11 @@ const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/public/pedidos/ver': 'ciência por link: o token pessoal do link é a autorização',
   'POST /api/v1/public/pedidos/codigo': 'ciência por link: o token pessoal do link é a autorização; o código vai ao e-mail do destinatário',
   'POST /api/v1/public/pedidos/ciencia': 'ciência por link: token pessoal do link + código do e-mail do destinatário',
+  'POST /api/v1/public/auditor/ver': 'portal do auditor: o token do link (no corpo) é a autorização, preso a um projeto; isolamento em test/portal-auditor.test.ts',
+  'POST /api/v1/public/auditor/evidencia': 'portal do auditor: token no corpo; evidência alheia por id é 404 (test/portal-auditor.test.ts)',
+  'POST /api/v1/public/auditor/pedidos': 'portal do auditor: token no corpo, prova só do projeto do token',
+  'POST /api/v1/public/auditor/notas': 'portal do auditor: token no corpo, notas só do projeto do token',
+  'POST /api/v1/public/auditor/notas/criar': 'portal do auditor: token no corpo; control_id alheio coberto em VINCULO_ALHEIO',
   'POST /scim/v2/Users': 'SCIM: token próprio do projeto, cria usuário só naquele projeto',
   'POST /oauth/authorize/entrar': 'login do agente: credencial do próprio consultor',
   'POST /oauth/authorize/confirmar': 'login do agente: projetos oferecidos já cortados por organização (tarefa 2)',
@@ -325,7 +330,7 @@ beforeAll(async () => {
       nome: `org_admin@${de.org}`, de, alheio,
       headers: await sessionFor({ id: `${m}-cli`, email: `cli@${m}.lat`, role: 'org_admin', client_project_id: de.proj, org_id: de.org }),
     });
-    // Auditor externo: token VÁLIDO do projeto da própria organização (portal `/api/v1/auditor/:token/*`).
+    // Auditor externo: token VÁLIDO do projeto da própria organização (portal `/api/v1/public/auditor/*`, token no corpo).
     await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?, ?, ?, '2099-01-01T00:00:00Z')`)
       .bind(`${m}-aud`, de.proj, await sha256Hex(`tok-aud-${m}`)).run();
     PRINCIPAIS.push({ nome: `auditor@${de.org}`, de, alheio, headers: {}, token: `tok-aud-${m}` });
@@ -354,12 +359,22 @@ describe('contrato de isolamento entre organizações', () => {
       agente: ['/api/v1/projects/:p/risks'],
       'chave-api': ['/api/v1/projects/:p/risks'],
       org_admin: ['/api/v1/projects/:p/risks', '/api/v1/projects/:p/pedidos'],
-      auditor: ['/api/v1/auditor/:t/pedidos', '/api/v1/auditor/:t/project', '/api/v1/auditor/:t/notes'],
+      auditor: [],
     };
     for (const p of PRINCIPAIS) {
       for (const molde of proprio[p.nome.split('@')[0]]) {
         const res = await chamar(p, 'GET', molde.replace(':p', p.de.proj).replace(':r', p.de.rec).replace(':t', p.token ?? ''));
         expect(res.status, `${p.nome} ${molde}: ${await res.clone().text()}`).toBe(200);
+      }
+    }
+    // Auditor externo: o token vai no CORPO das rotas do portal (src/routes/public-auditor.ts), e a
+    // resposta não traz nada da organização alheia.
+    for (const p of PRINCIPAIS.filter((x) => x.token)) {
+      for (const acao of ['ver', 'pedidos', 'notas']) {
+        const res = await chamar(p, 'POST', `/api/v1/public/auditor/${acao}`, { token: p.token });
+        const texto = await res.text();
+        expect(res.status, `${p.nome} ${acao}: ${texto}`).toBe(200);
+        expect(texto.toLowerCase(), `${p.nome} ${acao}`).not.toContain(p.alheio.m);
       }
     }
   });

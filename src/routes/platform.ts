@@ -7,7 +7,6 @@ import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projet
 import { verificarCadeia } from '../trilha';
 import { assinaturaDpia } from '../services/pedidos';
 import { conferirPedidosDoDocumento } from './pedidos';
-import { tokenDoAuditor } from './auditor';
 import { PHASE_TITLES, PHASE_CHECKLISTS } from '../constants';
 import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
 import { exigirOrg, somenteOrgNess, resolverOrg, orgDoUsuario, ORG_NESS } from '../services/organizacao';
@@ -555,7 +554,7 @@ platformApp.get('/phases/config', (c) => {
   return c.json({ ok: true, titles: PHASE_TITLES, checklists: PHASE_CHECKLISTS });
 });
 
-// Phase config & Auditor token
+// Phase config
 // Tabela de preços da ness. (custo interno, tributos, margem): comercial apenas.
 // Estava sem trava nenhuma — qualquer sessão, inclusive de cliente, lia com 200.
 platformApp.get('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
@@ -589,24 +588,4 @@ platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, 
   } catch (e: any) {
     return erro500(c, 'Falha ao salvar config', e);
   }
-});
-
-platformApp.get('/auditor/:token/project', async (c) => {
-  const t = await tokenDoAuditor(c.env.DB, c.req.param('token'));
-  if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
-
-  const [project, phases, controls, evidence] = await Promise.all([
-    c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(t.project_id).first(),
-    c.env.DB.prepare('SELECT * FROM project_phases WHERE project_id = ? ORDER BY phase_number ASC').bind(t.project_id).all(),
-    c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ?').bind(t.project_id).all(),
-    c.env.DB.prepare('SELECT id, file_name, file_size, evaluation_status, evaluation_notes, created_at FROM evidence WHERE project_id = ?').bind(t.project_id).all()
-  ]);
-
-  return c.json({
-    ok: true,
-    project,
-    phases: phases.results || [],
-    controls: controls.results || [],
-    evidence: evidence.results || []
-  });
 });

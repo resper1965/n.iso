@@ -261,10 +261,10 @@ describe('Schemas por rota', () => {
 
   it('nota de auditor externo vazia é recusada', async () => {
     const res = await app.fetch(
-      new Request('http://localhost/api/v1/auditor/tok-valido/notes', {
+      new Request('http://localhost/api/v1/public/auditor/notas/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '   ' }),
+        body: JSON.stringify({ token: 'tok-valido', content: '   ' }),
       }),
       env as any
     );

@@ -250,6 +250,13 @@ export const auditorResponseSchema = z.object({
   response: z.string().trim().min(1).max(20_000),
 }).passthrough();
 
+// Portal do auditor externo (src/routes/public-auditor.ts): o token do link vai no corpo, nunca na URL.
+const tokenAuditor = z.string().min(1).max(200);
+export const auditorPortalSchema = z.object({ token: tokenAuditor }).strict();
+export const auditorEvidenciaSchema = z.object({ token: tokenAuditor, evidence_id: z.string().min(1).max(200) }).strict();
+export const auditorPedidosSchema = z.object({ token: tokenAuditor, pagina: z.number().int().min(1).max(100_000).optional() }).strict();
+export const auditorNotaPortalSchema = auditorNoteSchema.extend({ token: tokenAuditor });
+
 // ─── Certificação ────────────────────────────────────────────────────────────
 export const certificationSchema = z.object({
   stage: curtoOpcional,

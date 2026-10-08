@@ -4,7 +4,7 @@
 //
 // Superfície relevante no nível da API key (rotas autenticadas):
 //  - Escrita de AUDITOR: POST /api/v1/audits/:auditId/findings (registro de achado).
-//    As notas de auditoria (`/auditor/:token/notes`) são portal PÚBLICO por token —
+//    As notas de auditoria (`/public/auditor/notas*`) são portal PÚBLICO por token —
 //    não passam por api-key, logo ficam fora deste gating de propósito.
 //  - Escrita de CONSULTOR: todo o resto (gerar política, SoA, migração, evidência,
 //    ativo, treinamento, responder nota de auditor).
