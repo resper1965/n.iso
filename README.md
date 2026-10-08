@@ -41,30 +41,30 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 | Caminho | O que vive aqui |
 |---|---|
 | `src/` | O Worker. `index.ts` monta tudo: cabeçalhos de segurança, CORS, autenticação, rate limit, e os sub-routers. |
-| `src/routes/` | 41 arquivos de rota, um por domínio (controles, riscos, evidências, auditoria, privacidade, SSO, SCIM, propostas, pedidos, agentes…). |
+| `src/routes/` | 42 arquivos de rota, um por domínio (controles, riscos, evidências, auditoria, privacidade, SSO, SCIM, propostas, pedidos, agentes…). |
 | `src/schemas/` | Schemas Zod. Todo corpo de write passa por aqui — é a fonte de verdade do contrato da API. |
 | `src/middleware/` | Autenticação, acesso por projeto (isolamento de tenant), rate limit. |
 | `src/services/`, `src/agents/` | Regra de negócio (motor da SoA, precificação) e os agentes de IA. |
 | `frontend/` | Vite + JavaScript sem framework. `login.html` é a casca; `src/views/` tem uma tela por arquivo. |
 | `frontend/public/_headers` | Cabeçalhos de segurança dos **arquivos estáticos** — ver "Duas fontes de cabeçalho", abaixo. |
 | `mcp-server-niso/` | Servidor MCP **local** (stdio, chave de API) que expõe o n.iso a clientes como Claude Desktop, com filtro de ferramenta por papel. O MCP **remoto**, com login, vive no próprio Worker (`src/mcp/`). |
-| `migrations/` | 41 arquivos de migration do D1 (última: 0043), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
-| `test/` | 153 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
-| `frontend/test/` | 46 arquivos de teste da UI, em jsdom. |
+| `migrations/` | 44 arquivos de migration do D1 (última: 0046), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
+| `test/` | 178 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
+| `frontend/test/` | 60 arquivos de teste da UI, em jsdom. |
 | `frontend/e2e/` | 5 specs em Chromium real, sobre o build servido. Pega o que o jsdom não pega. |
 | `docs/` | Runbook, specs, planos e decisões — com [índice próprio](docs/README.md). |
 | `scripts/` | Geradores. `gerar-openapi.mjs` e `gerar-contrato-mcp.mjs` produzem o contrato a partir dos schemas. |
 
 ## Testes
 
-Contagens de 2026-10-06: `ls test/*.test.ts | wc -l` (153), `ls frontend/test/*.test.js | wc -l`
-(46), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (41),
-`ls migrations/*.sql | wc -l` (41).
+Contagens de 2026-10-08: `ls test/*.test.ts | wc -l` (178), `ls frontend/test/*.test.js | wc -l`
+(60), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (42),
+`ls migrations/*.sql | wc -l` (44).
 
 Três suítes, e cada uma existe porque a anterior não alcança o caso:
 
 ```bash
-npm test                              # backend: 153 arquivos, D1 e KV reais
+npm test                              # backend: 178 arquivos, D1 e KV reais
 npm run test:coverage                 # idem, com a catraca de cobertura que gateia o deploy
 npm test --prefix frontend            # UI em jsdom
 npm run test:e2e --prefix frontend    # Chromium real sobre o build

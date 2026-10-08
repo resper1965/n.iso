@@ -44,12 +44,19 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Governança: aviso quando nenhum membro tem cargo de Direção ou de Líder SGSI (a autoridade de assinatura vem do cargo), ajuda no campo Cargo, e o contato do aceite da proposta aparece marcado como e-mail não verificado; `consultoria_admin` gerencia a matriz e designa consultor na tela, como já podia no servidor.
 - Portal do auditor externo: a consultoria gera, lista e revoga pela tela de Auditorias um link com prazo (`GET|POST /api/v1/projects/:id/auditor-token`, `.../:tokenId/revogar`; o cliente não gera); o auditor abre `/auditor#<token>` e vê o projeto, a SoA (27001 e 27701) com a evidência de cada controle, baixa os arquivos e a prova dos pedidos, registra pergunta à consultoria e vê a resposta dela. Cada download entra na trilha.
 
+### Alterado
+- Conectar agente (#299): a tela e o `docs/agente/README.md` dizem onde entrar e como conferir a conexão em Cursor, Codex e Antigravity (os comandos já estavam certos na documentação de cada um). O Antigravity cita o caminho anterior à 2.0. O selo "Verificado" segue só no Claude Code até haver login real nos outros. O OpenClaw conecta, mas fica documentado como possível e não suportado: recebe mensagem de canais abertos e age com o alcance do consultor sobre dado de cliente.
+
 ### Removido
 - `SoALogicEngine`, `OLD_RULES` e `PIMS_RULES`: motor de SoA sem uso e o segundo catálogo 27701 (fica o da edição 2025).
+- Ambiente de staging (#296): o bloco `env.staging` do `wrangler.jsonc`, o job de staging do deploy, o ensaio de migration em staging e `docs/staging.md`. Nunca foi ligado (`STAGING_ATIVO` não existia), e as `routes` do ambiente raiz são herdadas por `env.staging`, o que apontaria os domínios de produção para ele.
 
 ### Segurança
 - Token do auditor guardado só em SHA-256, com revogação (migration 0045; os tokens anteriores deixam de valer) e prazo comparado até o minuto (antes valia até o fim do dia do vencimento). As rotas `/api/v1/auditor/:token/*`, que punham o token no log de requisição, saem: o portal usa `POST /api/v1/public/auditor/{ver,evidencia,pedidos,notas,notas/criar}` com o token no corpo e limite por IP. O portal não leva mais a linha inteira do projeto (`repository_token`, CNPJ) e o nome do arquivo baixado é codificado no cabeçalho.
-- **Operação:** a 0045 precisa ser APLICADA em produção (não só registrada na `d1_migrations`) antes do deploy, com `npm run db:backup` antes. Sem a coluna `token_hash` e a revogação no banco, o portal do auditor e a geração do link quebram.
+- **Operação:** a 0045 e a 0046 foram APLICADAS em produção em 08/10/2026 pelo workflow `db-migrate` (com backup do D1 como artifact), antes do deploy do #294 e do #295. Conferido por `PRAGMA table_info`: `auditor_tokens` tem `token_hash`, `revoked_at` e `revoked_by`; `avisos_prazo` existe com o índice `idx_avisos_prazo_email`. Sem a coluna `token_hash` o portal do auditor e a geração do link quebram, então migration e código andam juntos.
+- Papéis (#298): a consultoria (`consultor`, `consultant` e `consultoria_admin`) não registra, altera nem apaga achado de auditoria em sessão humana (ISO 27001, 9.2: quem implementa não audita). A chave de API `consultant` e o agente já eram barrados; a sessão humana não era. A tela de execução da auditoria esconde os botões de registrar e apagar para esses papéis.
+- `appUrl` tira as barras finais do `APP_URL` sem regex quadrática (CodeQL `js/polynomial-redos`, alerta aberto desde 06/10) (#295).
+- Dependências (#297): `overrides` fixam `undici`, `sharp` e os pacotes MCP em versões sem alerta; `npm audit` fica em 0 na raiz, no `frontend` e no `mcp-server-niso`.
 
 ## [11.0.0] - 2026-10-06
 

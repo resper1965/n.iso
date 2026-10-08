@@ -13,6 +13,46 @@ ao lado de cada um). Onde o `AGENTS.md` dizia outra coisa, o `AGENTS.md` estava 
 
 ---
 
+## Estado em 2026-10-08
+
+Conferido contra `git log origin/main`, `/health` e consultas ao banco. Substitui, onde divergir, a
+tabela de 2026-10-06 abaixo.
+
+**Em produção.** `GET https://niso.ness.com.br/health` devolve `445f06357c9c…` (deploy de 08/10/2026,
+21:38 UTC), o merge do #295. Entraram, nesta ordem: #296 (remove o staging), #297 (dependências),
+#298 (papéis, 9.2), #299 (receita dos conectores), #294 (fatia de jornada) e #295 (avisos de prazo).
+Nenhum PR está aberto.
+
+**Banco.** As migrations 0045 e 0046 foram aplicadas pelo workflow `db-migrate`, com backup do D1 como
+artifact, antes do deploy de cada uma. Conferido por `PRAGMA` em produção: `auditor_tokens` tem
+`token_hash`, `revoked_at` e `revoked_by`; `avisos_prazo` existe com `idx_avisos_prazo_email`; a última
+linha de `d1_migrations` é `0046_avisos_prazo.sql`.
+
+| ID | Estado | Evidência |
+|----|--------|-----------|
+| Papéis na auditoria | feito | #298: `consultor`, `consultant` e `consultoria_admin` não registram, alteram nem apagam achado em sessão humana; `comercial` já não alcançava projeto (teste fixa) |
+| "Gerar SoA (IA)" | feito | #286; `frontend/test/soa-sem-gerar.test.js` impede a volta |
+| F2 | receita pronta, login pendente | #299: onde entrar e como conferir em Cursor, Codex e Antigravity. O selo "Verificado" só muda com login real, **do dono** |
+| OpenClaw | decidido | conecta, mas fica "possível, não suportado" (`docs/agente/README.md`): recebe mensagem de canais abertos e age com o alcance do consultor |
+| T1 | feito (catraca) | `TETO` hoje 543 em `test/any-catraca.test.ts` |
+| Dependabot | zerado | 0 alertas abertos; #297 fixou `undici`, `sharp` e os pacotes MCP por `overrides`; `npm audit` em 0 nos três pacotes |
+| Staging | removido | #296; nunca foi ligado |
+| CodeQL | 8 altos antigos | todos em arquivos de teste (`test/colunas-catraca.test.ts` e sete testes do frontend); o da `src/config/url.ts` foi corrigido no #295. Não bloqueiam PR que não os toque |
+| Cron `0 11 * * *` | declarado, não lido | está no `wrangler.jsonc` publicado e o deploy passou; **não li a agenda ativa no Cloudflare** (o conector devolve só nome e id) |
+
+**n.privacy** (estudo, `specs/2026-10-06-nucleo-comum-nprivacy-design.md`). Respondidas em 08/10: a
+pergunta 3 (opção C: registro do pedido do titular na fatia 7, portal público depois, na 7b), a 5
+(`stakeholders` viram parte com vínculo `parte_interessada`) e a 6 (processo é item; tratamento é entidade
+separada). Segue com o jurídico a pergunta 7. A fatia 1 (núcleo) já pode ser planejada; antes dela falta
+decidir como testar a migração dos ativos sem staging (D1 local com cópia anonimizada).
+
+**Continua do dono:** H2 (MFA do `platform_admin`), H3 e H4 (checkout principal e stashes), F2 (logins reais),
+D2/F4 (PDF), T5 (PII em texto livre), repositório privado (quebra o CodeQL sem Advanced Security),
+cobrança do Actions, reescrita do histórico para apagar o material de cliente que ainda sobra nos commits antigos (destrutiva, por último),
+TypeScript 7 (#277) e a `policy_version` órfã em produção.
+
+---
+
 ## Estado em 2026-10-06
 
 Conferido contra `git log --oneline origin/main` (o número do PR está no título de cada

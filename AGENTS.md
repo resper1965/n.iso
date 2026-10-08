@@ -68,7 +68,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
   dominio: **42 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
-  2026-10-07). A lista nominal envelhecia a cada PR; leia o diretorio.
+  2026-10-08). A lista nominal envelhecia a cada PR; leia o diretorio.
 - **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
   (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
   Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
@@ -139,7 +139,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   (`src/manutencao.ts`, purga e retencao) e `0 11 * * *` (08:00 em Brasilia) os avisos de prazo
   (`src/services/avisos-prazo.ts`: sino em D-7 e D0, aviso agregado por pessoa e projeto no atraso,
   e-mail-resumo; idempotencia em `avisos_prazo`). O
-  `scheduled` de `src/index.ts` despacha por `event.cron`; staging tem `crons: []`.
+  `scheduled` de `src/index.ts` despacha por `event.cron`.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
 - **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
@@ -197,13 +197,13 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **543 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
+- **543 `any` em `src/`** (medido em 2026-10-08, fora `*.test.ts`:
   `git grep -ahoE ': any\b|as any\b|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
   `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 177 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
+- **Nenhum dos 178 arquivos de teste do backend mocka o D1 inteiro** (2026-10-08;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
@@ -213,8 +213,8 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   cada ocorrencia. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com pouco teste por linha.** ~14,9 mil linhas de JS (2026-10-07)
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 59 arquivos de teste em jsdom
+- **Frontend com pouco teste por linha.** ~14,9 mil linhas de JS (2026-10-08)
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 60 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.
@@ -230,11 +230,10 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   reabrem o buraco.
 - **Direitos do titular nao cobrem PII em texto livre.** A busca e por igualdade
   em colunas conhecidas (`FONTES_PII` em `src/services/data-subject.ts`).
-- **`npm audit` nao esta em zero na raiz** (2026-10-06, `npm audit` em cada pacote): raiz com 4
-  (3 moderadas, **1 alta**), todas do `undici` puxado por `miniflare`/`wrangler`/
-  `@cloudflare/vitest-pool-workers` (cadeia de teste e build, nao do Worker publicado); a
-  correcao sugerida rebaixa o pool de testes (breaking). `frontend` e `mcp-server-niso`: 0. O
-  job `audit` do CI e informativo (`continue-on-error`). Rode `npm audit` antes de repetir
+- **`npm audit` esta em zero nos tres pacotes** (2026-10-08, `npm audit` em cada um: raiz, `frontend` e
+  `mcp-server-niso`). Em 06/10 a raiz tinha 4 (o `undici` puxado por `miniflare`/`wrangler`); o #297
+  fixou `undici`, `sharp` e os pacotes MCP por `overrides` no `package.json`, sem rebaixar o pool de
+  testes. O job `audit` do CI segue informativo (`continue-on-error`). Rode `npm audit` antes de repetir
   qualquer afirmacao sobre ele.
 
 ## Segundo fator (MFA) — e como destravar alguem
