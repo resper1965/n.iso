@@ -135,6 +135,25 @@ describe('Conectar agente — o que a tela afirma', () => {
     expect(painel(c).textContent).toMatch(/exercitado em produção/i);
   });
 
+  it('cada cliente "A confirmar" diz onde entrar e como conferir a conexão', () => {
+    const { c } = monta();
+    const esperado = {
+      cursor: /Settings > MCP[\s\S]*ferramentas/i,
+      codex: /codex mcp list/,
+      antigravity: /Authenticate[\s\S]*Sign out/,
+    };
+    for (const [id, re] of Object.entries(esperado)) {
+      window.__selecionarCliente(id);
+      expect(painel(c).textContent, id).toMatch(re);
+    }
+  });
+
+  it('o Antigravity cita o caminho das versões anteriores à 2.0', () => {
+    const { c } = monta();
+    window.__selecionarCliente('antigravity');
+    expect(painel(c).textContent).toContain('~/.gemini/antigravity/mcp_config.json');
+  });
+
   it('diz que o LOGIN define quem é o agente e em qual cliente ele atua', () => {
     const { c } = monta();
     expect(c.textContent).toMatch(/o login define/i);

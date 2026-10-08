@@ -11,12 +11,15 @@ const CLIENTES = [
       trecho: `claude mcp add --transport http --scope user niso ${URL_MCP}`,
       precisa: 'Precisa do comando claude no terminal. Se o seu terminal disser que ele não existe (comum com o app desktop), instale no PowerShell com: irm https://claude.ai/install.ps1 | iex, e abra um terminal novo.',
       depois: 'Depois do comando o servidor aparece como "Needs authentication": é o esperado. Abra o claude, rode /mcp, escolha niso e entre no navegador. Confira com: claude mcp list (deve mostrar conectado). Para refazer: claude mcp remove niso -s user.' },
-    { id: 'cursor', nome: 'Cursor', onde: 'Arquivo .cursor/mcp.json', aConfirmar: true,
-      trecho: `{ "mcpServers": { "niso": { "url": "${URL_MCP}" } } }` },
+    { id: 'cursor', nome: 'Cursor', onde: 'Arquivo .cursor/mcp.json (este projeto) ou ~/.cursor/mcp.json (todos)', aConfirmar: true,
+      trecho: `{ "mcpServers": { "niso": { "url": "${URL_MCP}" } } }`,
+      depois: 'Salve o arquivo e abra Cursor Settings > MCP: o niso aparece pedindo login. Clique, entre no n.iso pelo navegador e volte. Conectado, ele lista as ferramentas do niso. Se o navegador não abrir, atualize o Cursor: algumas versões têm esse defeito.' },
     { id: 'codex', nome: 'Codex', onde: 'Terminal', aConfirmar: true,
-      trecho: `codex mcp add niso --url ${URL_MCP}\ncodex mcp login niso` },
+      trecho: `codex mcp add niso --url ${URL_MCP}\ncodex mcp login niso`,
+      depois: 'O segundo comando abre o navegador para você entrar no n.iso. Confira com: codex mcp list (deve mostrar o niso), ou /mcp dentro do Codex.' },
     { id: 'antigravity', nome: 'Antigravity', onde: 'Arquivo ~/.gemini/config/mcp_config.json', aConfirmar: true,
-      trecho: `{ "mcpServers": { "niso": { "serverUrl": "${URL_MCP}" } } }` },
+      trecho: `{ "mcpServers": { "niso": { "serverUrl": "${URL_MCP}" } } }`,
+      depois: 'No painel MCP do Antigravity, o niso aparece com o botão Authenticate: clique e entre no n.iso pelo navegador. Conectado, o botão vira Sign out. O editor e a linha de comando guardam o login separado: entre em cada um. Antes da versão 2.0 o arquivo ficava em ~/.gemini/antigravity/mcp_config.json. A tela de login do n.iso avisa que o acesso vai para outro endereço: confira que é do Google antes de autorizar.' },
 ];
 
 const PASSOS = [
