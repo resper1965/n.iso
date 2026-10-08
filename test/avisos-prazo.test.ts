@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { applySchema, resetData } from './helpers/d1';
-import { hojeEmSaoPaulo, semanaIso, marcoDoDia, itensDoDia } from '../src/services/avisos-prazo';
+import { hojeEmSaoPaulo, semanaIso, marcoDoDia, itensDoDia, pessoasDoProjeto, escolherDestinatarios } from '../src/services/avisos-prazo';
+import { requireProjectAccess } from '../src/helpers';
 
 /**
  * Avisos de prazo (spec 2026-10-07-avisos-de-prazo-design). D1 real; a data é simulada pelo
@@ -119,5 +120,73 @@ describe('fontes do dia', () => {
     expect(itens.map((i) => i.item_id)).toEqual(['c-ok']);
     expect(falhas).toHaveLength(1);
     expect(falhas[0]).toMatch(/^certificado: /);
+  });
+});
+
+describe('destinatários', () => {
+  const usuario = (id: string, email: string, name: string, role: string, extra: { proj?: string; org?: string; ativo?: number } = {}) =>
+    db().prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id, ativo) VALUES (?, ?, 'x', ?, ?, ?, ?, ?)`)
+      .bind(id, email, name, role, extra.proj ?? null, extra.org ?? 'org_ness', extra.ativo ?? 1);
+  const consultorNoP1 = (email: string) =>
+    db().prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p1', 'Consultor', ?, 'consultor', 'Consultor')`).bind(email);
+
+  beforeEach(async () => {
+    await applySchema();
+    await resetData();
+    await projeto('p1', 'org_ness');
+    await projeto('pB', 'org_b');
+    await db().batch([
+      usuario('u-cons', 'cons@ness.lat', 'Carla Consultora', 'consultor'),
+      usuario('u-ana', 'ana@cliente.com', 'Ana Souza', 'org_user', { proj: 'p1' }),
+      usuario('u-adm', 'adm@ness.lat', 'Admin Ness', 'consultoria_admin'),
+      usuario('u-bia', 'bia@cliente.com', 'Bia', 'org_user', { proj: 'p1', ativo: 0 }),
+      usuario('u-anab', 'ana@outra.com', 'Ana Souza', 'org_user', { proj: 'pB', org: 'org_b' }),
+      usuario('u-plat', 'plat@ness.lat', 'Ana Souza', 'platform_admin'),
+      usuario('u-consb', 'cons@b.com', 'Consultor B', 'consultor', { org: 'org_b' }),
+      usuario('u-admb', 'adm@b.com', 'Admin B', 'consultoria_admin', { org: 'org_b' }),
+      consultorNoP1('cons@ness.lat'),
+      consultorNoP1('cons@b.com'), // e-mail de outra consultoria digitado na governança: não alcança
+    ]);
+  });
+
+  const destinos = async (resp: string | null) =>
+    escolherDestinatarios(await pessoasDoProjeto(db(), 'p1'), resp).map((p) => p.id).sort();
+
+  it('responsável por e-mail, sem caixa nem espaço, mais o consultor', async () => {
+    expect(await destinos('  ANA@Cliente.com ')).toEqual(['u-ana', 'u-cons']);
+  });
+
+  it('responsável por nome ignorando caixa e espaços; homônimo de outra organização e da plataforma não recebe', async () => {
+    expect(await destinos('ana   SOUZA')).toEqual(['u-ana', 'u-cons']);
+  });
+
+  it('responsável inativo ou desconhecido: só o consultor', async () => {
+    expect(await destinos('Bia')).toEqual(['u-cons']);
+    expect(await destinos('Fulano')).toEqual(['u-cons']);
+    expect(await destinos(null)).toEqual(['u-cons']);
+  });
+
+  it('nome que casa com duas pessoas do projeto não resolve', async () => {
+    await usuario('u-ana2', 'ana2@cliente.com', 'Ana Souza', 'org_admin', { proj: 'p1' }).run();
+    expect(await destinos('Ana Souza')).toEqual(['u-cons']);
+  });
+
+  it('sem responsável resolvido e sem consultor: os consultoria_admin ativos da organização do projeto', async () => {
+    await db().prepare(`DELETE FROM project_governance`).run();
+    expect(await destinos('Fulano')).toEqual(['u-adm']);
+    expect(await destinos('ana@cliente.com')).toEqual(['u-ana']);
+  });
+
+  it('paridade com requireProjectAccess: quem entra é exatamente quem alcança o projeto (fora a plataforma)', async () => {
+    const pessoas = (await pessoasDoProjeto(db(), 'p1')).map((p) => p.id).sort();
+    const { results: todos } = await db().prepare(`SELECT id, email, role, client_project_id, org_id, ativo FROM users WHERE role <> 'platform_admin'`)
+      .all<{ id: string; email: string; role: string; client_project_id: string | null; org_id: string; ativo: number }>();
+    const alcancam: string[] = [];
+    for (const u of todos) {
+      const ok = await requireProjectAccess(db(), { role: u.role, email: u.email, client_project_id: u.client_project_id, org_id: u.org_id }, 'p1').then(() => true, () => false);
+      if (ok && u.ativo) alcancam.push(u.id);
+    }
+    expect(pessoas).toEqual(alcancam.sort());
+    expect(pessoas).toEqual(['u-adm', 'u-ana', 'u-cons']);
   });
 });

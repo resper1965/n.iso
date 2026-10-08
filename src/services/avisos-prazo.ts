@@ -102,3 +102,44 @@ export async function itensDoDia(db: D1Database, hoje: string): Promise<{ itens:
   }
   return { itens, falhas };
 }
+
+export type Pessoa = { id: string; email: string; name: string | null; role: string };
+
+/*
+ * Quem alcança o projeto, pela MESMA regra de requireProjectAccess (src/helpers.ts), escrita em SQL para
+ * um projeto só: cliente pelo client_project_id; consultor designado na governança, com a conta na
+ * organização do projeto (PROJETOS_DO_CONSULTOR_SQL); consultoria_admin da organização do projeto.
+ * Fora de propósito: platform_admin (alcança todas as organizações; aviso nunca atravessa organização) e
+ * comercial (não trabalha em projeto). Conta desativada não recebe. O teste de paridade em
+ * test/avisos-prazo.test.ts reprova se as duas regras divergirem.
+ */
+const PESSOAS_DO_PROJETO = `SELECT u.id, u.email, u.name, u.role FROM users u JOIN projects p ON p.id = ?1
+  WHERE COALESCE(u.ativo, 1) <> 0 AND (
+    (u.role IN ('org_admin', 'org_user', 'client') AND u.client_project_id = p.id)
+    OR (u.role = 'consultoria_admin' AND u.org_id = p.org_id)
+    OR (u.role IN ('consultor', 'consultant') AND u.org_id = p.org_id AND EXISTS (
+      SELECT 1 FROM project_governance g
+       WHERE g.project_id = p.id AND g.role_category = 'consultor' AND lower(g.email) = lower(u.email))))
+  ORDER BY u.id`;
+
+export async function pessoasDoProjeto(db: D1Database, projectId: string): Promise<Pessoa[]> {
+  return (await db.prepare(PESSOAS_DO_PROJETO).bind(projectId).all<Pessoa>()).results;
+}
+
+const normalizar = (s: string | null | undefined) => (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+const ehConsultorDoProjeto = (p: Pessoa) => p.role === 'consultor' || p.role === 'consultant';
+
+/**
+ * Responsável (quando o texto bate com o e-mail, ou com o nome de UMA só pessoa do projeto) mais os
+ * consultores designados. Sem nenhum dos dois, os consultoria_admin da organização. `pessoas` já vem
+ * de pessoasDoProjeto: ninguém de fora do projeto chega aqui.
+ */
+export function escolherDestinatarios(pessoas: Pessoa[], responsavel: string | null): Pessoa[] {
+  const alvo = normalizar(responsavel);
+  const porEmail = alvo ? pessoas.filter((p) => normalizar(p.email) === alvo) : [];
+  const porNome = alvo && !porEmail.length ? pessoas.filter((p) => normalizar(p.name) === alvo) : [];
+  const resp = porEmail.length ? porEmail : porNome.length === 1 ? porNome : [];
+  const escolhidos = [...resp, ...pessoas.filter(ehConsultorDoProjeto)];
+  const lista = escolhidos.length ? escolhidos : pessoas.filter((p) => p.role === 'consultoria_admin');
+  return [...new Map(lista.map((p) => [p.id, p])).values()];
+}
