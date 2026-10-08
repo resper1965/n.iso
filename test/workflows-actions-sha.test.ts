@@ -32,7 +32,7 @@ describe('actions dos workflows', () => {
         if (!m || m[1].startsWith('./')) return; // action local do repositório
         const ref = m[1].split('@')[1] ?? '';
         const comVersao = /#\s*v\d/.test(linha);
-        if (!SHA.test(ref) || !comVersao) soltas.push(`${caminho.replace('../', '')}:${i + 1}  ${linha.trim()}`);
+        if (!SHA.test(ref) || !comVersao) soltas.push(`${caminho.replaceAll('../', '')}:${i + 1}  ${linha.trim()}`);
       });
     }
     expect(soltas, 'fixe por SHA e deixe "# vN" no fim da linha').toEqual([]);
