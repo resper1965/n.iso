@@ -154,3 +154,31 @@ describe('notificação de proposta (fatia 4)', () => {
     await vi.waitFor(() => expect(document.querySelector('[data-action="__prpEnviar"]')).toBeTruthy());
   });
 });
+
+describe('notificação de prazo (avisos de prazo)', () => {
+  it.each([
+    ['/projects/p9/capa', 'capa', 'renderCAPA'],
+    ['/projects/p9/audits', 'audits', 'renderAudits'],
+    ['/projects/p9/certification', 'certification', 'renderCertification'],
+    ['/projects/p9/policies', 'policies-dashboard', 'renderPoliciesDashboard'],
+  ])('%s abre %s no projeto do aviso, não no projeto ativo', async (link, view, tela) => {
+    const { api } = await import('../src/api.js');
+    api.mockImplementation(async () => []);
+    document.body.innerHTML += '<div id="notif-dropdown"></div><h1 id="header-title"></h1><div id="header-actions"></div><div id="content"></div>';
+    const desenhar = vi.fn();
+    globalThis[tela] = desenhar;
+    S.projects = [{ id: 'p1', client_name: 'Outro' }, { id: 'p9', client_name: 'Acme' }];
+    S.activeProject = S.projects[0];
+    S.currentProject = S.projects[0];
+    S.notifications = [{ id: 'n9', read: 0, type: 'prazo_capa', title: 'CAPA vence hoje', link }];
+    try {
+      await window.handleNotificationClick('n9');
+      expect(S.view).toBe(view);
+      expect(S.activeProject.id).toBe('p9');
+      expect(S.currentProject.id).toBe('p9');
+      expect(desenhar).toHaveBeenCalled();
+    } finally {
+      delete globalThis[tela];
+    }
+  });
+});
