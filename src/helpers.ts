@@ -655,13 +655,16 @@ export async function rateLimitD1(db: D1Database, key: string, max: number, wind
 }
 
 /**
- * Envia e-mail usando a API do Resend se RESEND_API_KEY estiver presente. Caso contrário, simula em log
- * (dev) só com destinatário e assunto: o corpo leva link de convite, código e token de proposta.
+ * Envia e-mail pelo Resend com a chave do `env`: o cron não tem contexto de requisição, só `env`.
+ * Sem RESEND_API_KEY, simula em log (dev) só com destinatário e assunto: o corpo leva link de convite,
+ * código e token de proposta. A simulação devolve `true`; quem precisa saber se o e-mail saiu de
+ * verdade confere a chave antes (propostas, avisos de prazo).
  */
-export async function sendEmail(c: any, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
-  const apiKey = c.env.RESEND_API_KEY;
+export async function enviarEmail(env: { RESEND_API_KEY?: string }, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
+  const apiKey = env.RESEND_API_KEY;
   if (!apiKey) {
-    console.log(`[EMAIL SIMULATION] Envio para: ${to}\nAssunto: ${subject}`);
+    console.log(`[EMAIL SIMULATION] Envio para: ${to}
+Assunto: ${subject}`);
     return true;
   }
   try {
@@ -689,6 +692,11 @@ export async function sendEmail(c: any, to: string, subject: string, html: strin
     console.error(`[EMAIL ERROR] Erro no envio de e-mail: ${e}`);
     return false;
   }
+}
+
+/** O mesmo envio a partir do contexto da requisição (as rotas). */
+export function sendEmail(c: { env: { RESEND_API_KEY?: string } }, to: string, subject: string, html: string, opcoes?: { from?: string; replyTo?: string }): Promise<boolean> {
+  return enviarEmail(c.env, to, subject, html, opcoes);
 }
 
 export async function hashPassword(password: string, salt?: string): Promise<string> {
