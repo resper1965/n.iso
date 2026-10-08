@@ -24,7 +24,7 @@ const ehComercial = () => !!(S.user && ['platform_admin', 'comercial', 'consulto
             if (assessmentStatus === 'Completed') {
                 assessmentActionHtml = '<span class="status-badge" style="background:rgba(0,173,232,0.1); color:var(--accent); border:1px solid rgba(0,173,232,0.2)">Concluído</span>';
             } else if (S.clientAssessmentId) {
-                assessmentActionHtml = `<button class="btn btn-primary" data-action="navigate" data-args='["self-service",{"assessmentId":"${S.clientAssessmentId}"}]'>Responder Questionário</button>`;
+                assessmentActionHtml = '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Em andamento</span>';
             } else {
                 assessmentActionHtml = '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-dim)">Aguardando Liberação</span>';
             }

@@ -172,9 +172,9 @@ beforeAll(async () => {
       ('pv-d4', 'pv-ab', 'Rui', 'rui@cliente.com', NULL, 'hash-do-token-do-rui', datetime('now','+30 days'), 'pendente', NULL, NULL, NULL, NULL, NULL, NULL),
       ('pq-d1', 'pq-1', 'Fulano Outro', 'fulano@outro.com', NULL, 'hash-token-outro', datetime('now','+30 days'), 'ciente', '2026-10-01T10:00:00.000Z', 'link', '10.3.3.3', 'Navegador C', 'hash-outro', 0)`)
       .bind(hashPol, await sha256Hex(TOKEN_CLARO), hashPol),
-    env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES
-      ('pv-at', ?, 'tok-aud-p', '2099-01-01T00:00:00Z'), ('pv-at-venc', ?, 'tok-aud-venc', '2020-01-01T00:00:00Z'), ('pv-at-q', ?, 'tok-aud-q', '2099-01-01T00:00:00Z')`)
-      .bind(P, P, Q),
+    env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES
+      ('pv-at', ?, ?, '2099-01-01T00:00:00Z'), ('pv-at-venc', ?, ?, '2020-01-01T00:00:00Z'), ('pv-at-q', ?, ?, '2099-01-01T00:00:00Z')`)
+      .bind(P, await sha256Hex('tok-aud-p'), P, await sha256Hex('tok-aud-venc'), Q, await sha256Hex('tok-aud-q')),
   ]);
   cadm = await sessionFor(U.cadm);
 });
@@ -232,6 +232,7 @@ describe('prova imutável', () => {
       'POST /api/v1/public/pedidos/ver': { corpo: { token: TOKEN_CLARO }, esperado: () => 200 }, // só lê: "já deu ciência"
       'POST /api/v1/public/pedidos/codigo': { corpo: { token: TOKEN_CLARO }, esperado: () => 404 },
       'POST /api/v1/public/pedidos/ciencia': { corpo: { token: TOKEN_CLARO, codigo: '123456', nome: 'Lia' }, esperado: () => 409 },
+      'POST /api/v1/public/auditor/pedidos': { corpo: { token: 'tok-aud-p' }, esperado: () => 200 }, // só lê
       'POST /api/v1/projects/:projectId/pedidos/:id/reenviar': {
         esperado: (q, id) => (q === 'stk' || q === 'adm' ? 403 : id === 'pv-ap' ? 409 : id === 'pv-ab' ? 200 : 404),
       },
@@ -295,7 +296,7 @@ describe('prova imutável', () => {
 });
 
 describe('auditor lê a prova do projeto dele', () => {
-  const ler = (token: string) => chamar({}, 'GET', `/api/v1/auditor/${token}/pedidos`);
+  const ler = (token: string) => chamar({}, 'POST', '/api/v1/public/auditor/pedidos', { token });
 
   it('quem, quando, ip, user-agent, hash lido, canal, MFA, versão e substituição', async () => {
     const r = await ler('tok-aud-p');
@@ -325,15 +326,15 @@ describe('auditor lê a prova do projeto dele', () => {
     expect(q.pedidos.map((p: any) => p.id)).toEqual(['pq-1']);
   });
 
-  it('token inexistente ou vencido: 401', async () => {
-    expect((await ler('tok-aud-venc')).status).toBe(401);
-    expect((await ler('nao-existe')).status).toBe(401);
+  it('token inexistente ou vencido: 404', async () => {
+    expect((await ler('tok-aud-venc')).status).toBe(404);
+    expect((await ler('nao-existe')).status).toBe(404);
   });
 
   it('pagina: 500 por página, com total e aviso de corte; destinatários só dos pedidos devolvidos', async () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES ('pv-muitos', 'Muitos', 'ISO 27001', 'controller', 'Active', 'org_ness')`),
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES ('pv-at-m', 'pv-muitos', 'tok-aud-m', '2099-01-01T00:00:00Z')`),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES ('pv-at-m', 'pv-muitos', ?, '2099-01-01T00:00:00Z')`).bind(await sha256Hex('tok-aud-m')),
       env.DB.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 502)
         INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, criado_por, criado_em)
         SELECT printf('pm-%03d', i), 'org_ness', 'pv-muitos', 'politica', 'x', 't', 'ciente', '{}', 'h', 'u', datetime('2026-01-01', '+' || i || ' minutes') FROM n`),
@@ -343,13 +344,13 @@ describe('auditor lê a prova do projeto dele', () => {
     expect([p1.total, p1.pagina, p1.por_pagina, p1.truncado, p1.pedidos.length]).toEqual([502, 1, 500, true, 500]);
     expect(p1.pedidos[0].id).toBe('pm-502');
     expect(p1.pedidos.every((p: any) => p.destinatarios.length === 1 && p.destinatarios[0].email === `${p.id}@x.io`)).toBe(true);
-    const p2 = await (await chamar({}, 'GET', '/api/v1/auditor/tok-aud-m/pedidos?pagina=2')).json<any>();
+    const p2 = await (await chamar({}, 'POST', '/api/v1/public/auditor/pedidos', { token: 'tok-aud-m', pagina: 2 })).json<any>();
     expect([p2.total, p2.pagina, p2.truncado, p2.pedidos.map((p: any) => p.id)]).toEqual([502, 2, false, ['pm-002', 'pm-001']]);
-    expect((await chamar({}, 'GET', '/api/v1/auditor/tok-aud-m/pedidos?pagina=0')).status).toBe(400);
+    expect((await chamar({}, 'POST', '/api/v1/public/auditor/pedidos', { token: 'tok-aud-m', pagina: 0 })).status).toBe(400);
   });
 
-  it('somente leitura: a rota só existe em GET', () => {
-    const metodos = app.routes.filter((r) => r.path.startsWith('/api/v1/auditor/:token/pedidos')).map((r) => r.method);
-    expect([...new Set(metodos)]).toEqual(['GET']);
+  it('a prova sai só por POST com o token no corpo; a rota com token no caminho não existe mais', () => {
+    expect([...new Set(app.routes.filter((r) => r.path === '/api/v1/public/auditor/pedidos').map((r) => r.method))]).toEqual(['POST']);
+    expect(app.routes.some((r) => r.path.startsWith('/api/v1/auditor/'))).toBe(false);
   });
 });

@@ -44,17 +44,15 @@ describe('renderDashboard — onboarding do cliente', () => {
     expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('mostra o CTA "Responder Questionário" quando há assessment liberado', async () => {
+  // O atalho mandava o id do assessment numa chave que o roteador não lia, e a rota pública exige
+  // o token (e devolve 410 depois da venda). O questionário fica só no link público ?assessment=.
+  it('assessment liberado: mostra "Em andamento", sem atalho para a tela self-service', async () => {
     const { c, h, a } = montaDom();
     S.user = { role: 'org_admin' };
     S.clientAssessmentId = 'as-1';
     await window.renderDashboard(c, h, a);
-    expect(c.innerHTML).toContain('Responder Questionário');
-    // S2: o CTA agora usa delegação (data-action) em vez de onclick inline.
-    // Ler o atributo decodificado (innerHTML re-serializa as aspas como &quot;).
-    const btn = c.querySelector('[data-action="navigate"]');
-    expect(btn).not.toBeNull();
-    expect(JSON.parse(btn.getAttribute('data-args'))).toEqual(['self-service', { assessmentId: 'as-1' }]);
+    expect(c.textContent).toContain('Em andamento');
+    expect(c.innerHTML).not.toContain('self-service');
   });
 
   it('marca a fase de assessment como Concluído quando já existe proposta', async () => {

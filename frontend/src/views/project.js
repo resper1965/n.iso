@@ -1,7 +1,17 @@
 import { S } from '../state.js';
-import { api } from '../api.js';
+import { api, API_BASE } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { navigate } from '../router.js';
+
+// Domínio canônico de evidence.evaluation_status (src/constants.ts, EVALUATION_STATUSES).
+// O selo comparava com a grafia antiga ('conforme', 'parcial', 'nao conforme'), que o banco
+// não usa mais: todo item aparecia pendente com borda vermelha.
+const SELO_AVALIACAO = {
+    conforming: { rotulo: 'Conforme', cor: '#00ade8', problema: false },
+    partial: { rotulo: 'Parcial', cor: '#ffc107', problema: true },
+    non_conforming: { rotulo: 'Não conforme', cor: '#ff4d4d', problema: true },
+};
+window.seloDaAvaliacao = (status) => SELO_AVALIACAO[status] || { rotulo: 'Aguarda revisão', cor: 'var(--text-dim)', problema: false };
 
 const ISO_GUIDELINES = {
     'p0_1': { control: 'Cl 5.1', tip: 'Definir sponsor executivo', advice: 'O auditor vai buscar atas de reuniões ou nomeações formais assinadas pela diretoria definindo a liderança do SGSI.', evidence: 'Termo de Compromisso assinado ou Ata de Reunião Executiva.' },
@@ -344,28 +354,14 @@ const ISO_GUIDELINES = {
                                                         const tipInfo = ISO_GUIDELINES[item.id];
 
                                                         let badgeHtml = '';
+                                                        const selo = window.seloDaAvaliacao(itemStatus);
                                                         if (isChecked && itemEvidenceId) {
-                                                            let statusColor = 'var(--text-dim)';
-                                                            let statusLabel = 'Pendente [AI]';
-                                                            if (itemStatus === 'conforme') {
-                                                                statusColor = '#00ade8';
-                                                                statusLabel = 'Conforme [AI]';
-                                                            } else if (itemStatus === 'parcial') {
-                                                                statusColor = '#ffc107';
-                                                                statusLabel = 'Aviso [AI]';
-                                                            } else if (itemStatus === 'nao conforme') {
-                                                                statusColor = '#ff4d4d';
-                                                                statusLabel = 'Falha [AI]';
-                                                            }
-                                                            badgeHtml = `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; border:1px solid ${statusColor}; color:${statusColor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${statusLabel}</span>`;
+                                                            badgeHtml = `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; border:1px solid ${selo.cor}; color:${selo.cor}; margin-left:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">${selo.rotulo}</span>`;
                                                         }
 
                                                         let borderLeftColor = 'rgba(255, 255, 255, 0.06)';
                                                         if (isChecked) {
-                                                            borderLeftColor = 'var(--success)';
-                                                            if (itemStatus && itemStatus !== 'conforme') {
-                                                                borderLeftColor = 'var(--danger)';
-                                                            }
+                                                            borderLeftColor = selo.problema ? 'var(--danger)' : 'var(--success)';
                                                         }
 
                                                         return `
@@ -406,9 +402,9 @@ const ISO_GUIDELINES = {
                                                                         <div style="color:var(--text-dim);"><strong style="color:var(--text-dim);">Evidência Recomendada:</strong> ${escapeHTML(tipInfo.evidence)}</div>
                                                                     </div>
                                                                 ` : ''}
-                                                                ${(isChecked && itemStatus && itemStatus !== 'conforme' && itemEvalNotes) ? `
+                                                                ${(isChecked && selo.problema && itemEvalNotes) ? `
                                                                     <div style="margin-top:0.6rem; background:rgba(255,77,77,0.03); border:1px solid rgba(255,77,77,0.15); border-radius:8px; padding:10px; font-size:0.75rem; text-align: left;">
-                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.72rem; letter-spacing:0.5px;">Gaps Identificados [AI]</div>
+                                                                        <div style="color:#ff4d4d; font-weight:700; margin-bottom:4px; text-transform:uppercase; font-size:0.72rem; letter-spacing:0.5px;">Lacunas apontadas na avaliação</div>
                                                                         <div style="color:var(--text);">${escapeHTML(itemEvalNotes)}</div>
                                                                     </div>
                                                                 ` : ''}
@@ -1316,7 +1312,8 @@ const ISO_GUIDELINES = {
         try {
             const fd = new FormData();
             fd.append('file', file);
-            fd.append('document_type', docType);
+            // O servidor liga a evidência ao controle do item e marca o item no checklist.
+            fd.append('item_id', docType);
             const res = await fetch(`${API_BASE}/api/v1/projects/${S.activeProject.id}/documents/upload`, {
                 method: 'POST', headers: { 'Authorization': 'Bearer ' + S.token }, body: fd
             });

@@ -371,6 +371,7 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
                         ${sidebarHtml}
                         <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-dim)">
                             ${as.status === 'converted' ? '<div class="ctx-tag ctx-tag-green" style="text-align:center">Projeto Ativo</div>' : ''}
+                            ${as.access_token && as.status !== 'converted' ? `<button class="btn" style="width:100%" data-action="copyAssessmentLink" data-args="${escapeHTML(JSON.stringify([as.access_token]))}">Copiar link do questionário</button><div id="assessment-link-slot"></div>` : ''}
                         </div>
                     </div>
                     <div class="wizard-content">
@@ -400,6 +401,20 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
 
         } catch(e) {
             c.innerHTML = '<div class="error">Erro ao carregar detalhes: ' + e.message + '</div>';
+        }
+    }
+
+    // O token só aparece nesta tela; a rota pública (?assessment=) devolve 410 depois da venda.
+    async function copyAssessmentLink(token) {
+        const url = `${location.origin}/?assessment=${encodeURIComponent(token)}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showToast('Link do questionário copiado');
+        } catch {
+            const slot = document.getElementById('assessment-link-slot');
+            if (slot) slot.innerHTML = `<input class="form-input" id="assessment-link-url" type="text" readonly value="${escapeHTML(url)}" style="margin-top:0.5rem">`;
+            const el = document.getElementById('assessment-link-url');
+            if (el) { el.focus(); el.select(); }
         }
     }
 
@@ -500,135 +515,6 @@ window.__cmToggleChip = function (key) { window.toggleWizardChip(this, key); };
         } catch(e) { showToast('Erro ao salvar ajustes: ' + e.message, 'error'); }
     }
 
-    async function renderSelfServiceAssessment(token) {
-        const c = document.getElementById('content');
-        const sidebar = document.querySelector('.sidebar');
-        const header = document.querySelector('.header');
-        if (sidebar) sidebar.style.display = 'none';
-        if (header) header.style.display = 'none';
-        document.querySelector('.main').style.marginLeft = '0';
-
-        c.innerHTML = '<div style="max-width:700px;margin:2rem auto;padding:0 1rem"><div style="text-align:center;color:var(--muted)">Carregando assessment...</div></div>';
-
-        try {
-            const r = await fetch(API_BASE + '/api/v1/public/assessment/' + encodeURIComponent(token));
-            if (!r.ok) throw new Error('Link invalido ou expirado');
-            const data = await r.json();
-            if (data.error) throw new Error(data.error);
-
-            // Group existing answers by block
-            const existingByBlock = {};
-            (data.answers || []).forEach(a => {
-                if (!existingByBlock[a.block]) existingByBlock[a.block] = {};
-                existingByBlock[a.block][a.question_key] = a.answer;
-            });
-
-            // ponytail: reuse ASSESSMENT_BLOCKS from the main app
-            const blocks = typeof ASSESSMENT_BLOCKS !== 'undefined' ? ASSESSMENT_BLOCKS : [];
-            if (!blocks.length) {
-                c.innerHTML = '<div style="max-width:700px;margin:2rem auto;text-align:center;color:var(--danger)">Erro: Assessment blocks not loaded.</div>';
-                return;
-            }
-
-            window._ssToken = token;
-            window._ssData = data;
-            window._ssBlock = 0;
-            window._ssAnswers = existingByBlock;
-
-            renderSelfServiceBlock(c, blocks);
-        } catch(e) {
-            c.innerHTML = `<div style="max-width:700px;margin:2rem auto;text-align:center">
-                <div class="logo" style="font-size:2rem;margin-bottom:1rem">n<span style="color:var(--accent)">.</span>ISO</div>
-                <div style="color:var(--danger)">${escapeHTML(e.message)}</div>
-            </div>`;
-        }
-    }
-
-    function renderSelfServiceBlock(c, blocks) {
-        const idx = window._ssBlock;
-        const block = blocks[idx];
-        if (!idx && idx !== 0 || !block) return;
-
-        const existing = window._ssAnswers[block.block] || {};
-        const total = blocks.length;
-
-        c.innerHTML = `<div style="max-width:700px;margin:2rem auto;padding:0 1rem" class="fade-in">
-            <div style="text-align:center;margin-bottom:2rem">
-                <div class="logo" style="font-size:1.5rem;margin-bottom:0.5rem">n<span style="color:var(--accent)">.</span>ISO</div>
-                <div style="font-size:0.75rem;color:var(--muted)">Assessment Self-Service para ${escapeHTML(window._ssData.client_name)}</div>
-                <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--muted)">Bloco ${idx + 1} de ${total}</div>
-                <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:0.75rem">
-                    <div style="width:${Math.round(((idx + 1) / total) * 100)}%;height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s"></div>
-                </div>
-            </div>
-            <div class="card" style="padding:1.5rem">
-                <div style="font-family:'Montserrat',sans-serif;font-weight:500;font-size:0.85rem;margin-bottom:1.25rem">${escapeHTML(block.title)}</div>
-                ${block.questions.map((q, qi) => {
-                    const val = existing[q.key] || '';
-                    if (q.type === 'yesno') {
-                        return `<div class="form-group"><label class="form-label">${escapeHTML(q.text)}</label>
-                            <select class="form-input ss-answer" data-key="${q.key}">
-                                <option value="">Selecione</option>
-                                <option value="yes" ${val === 'yes' ? 'selected' : ''}>Sim</option>
-                                <option value="no" ${val === 'no' ? 'selected' : ''}>Nao</option>
-                            </select></div>`;
-                    } else if (q.type === 'select' && q.options) {
-                        return `<div class="form-group"><label class="form-label">${escapeHTML(q.text)}</label>
-                            <select class="form-input ss-answer" data-key="${q.key}">
-                                <option value="">Selecione</option>
-                                ${q.options.map(o => `<option value="${escapeHTML(o)}" ${val === o ? 'selected' : ''}>${escapeHTML(o)}</option>`).join('')}
-                            </select></div>`;
-                    } else {
-                        return `<div class="form-group"><label class="form-label">${escapeHTML(q.text)}</label>
-                            <input class="form-input ss-answer" data-key="${q.key}" value="${escapeHTML(val)}" placeholder="Sua resposta"></div>`;
-                    }
-                }).join('')}
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-top:1rem">
-                ${idx > 0 ? '<button class="btn" data-action="ssPrev">Anterior</button>' : '<div></div>'}
-                <button class="btn btn-primary" data-action="ssNext">${idx < total - 1 ? 'Próximo' : 'Concluir Assessment'}</button>
-            </div>
-        </div>`;
-    }
-
-    window.ssPrev = function() {
-        const blocks = typeof ASSESSMENT_BLOCKS !== 'undefined' ? ASSESSMENT_BLOCKS : [];
-        if (window._ssBlock > 0) { window._ssBlock--; renderSelfServiceBlock(document.getElementById('content'), blocks); }
-    };
-
-    window.ssNext = async function() {
-        const blocks = typeof ASSESSMENT_BLOCKS !== 'undefined' ? ASSESSMENT_BLOCKS : [];
-        const block = blocks[window._ssBlock];
-        const els = document.querySelectorAll('.ss-answer');
-        const answers = [];
-        els.forEach(el => {
-            answers.push({ question_key: el.dataset.key, question: '', answer: el.value || '', notes: '' });
-        });
-
-        // Save to existing answers map
-        if (!window._ssAnswers[block.block]) window._ssAnswers[block.block] = {};
-        answers.forEach(a => { window._ssAnswers[block.block][a.question_key] = a.answer; });
-
-        // Save to API
-        try {
-            await fetch(API_BASE + '/api/v1/public/assessment/' + window._ssToken + '/answers', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ block: block.block, answers })
-            });
-        } catch(e) {}
-
-        if (window._ssBlock < blocks.length - 1) {
-            window._ssBlock++;
-            renderSelfServiceBlock(document.getElementById('content'), blocks);
-        } else {
-            document.getElementById('content').innerHTML = `<div style="max-width:700px;margin:3rem auto;text-align:center" class="fade-in">
-                <div class="logo" style="font-size:2rem;margin-bottom:1rem">n<span style="color:var(--accent)">.</span>ISO</div>
-                <div style="font-size:1.2rem;font-weight:500;color:var(--success);margin-bottom:0.5rem">Assessment Concluido!</div>
-                <div style="color:var(--muted);font-size:0.75rem">Obrigado por completar o assessment. Seu consultor entrara em contato com os proximos passos.</div>
-            </div>`;
-        }
-    };
-
 window.renderLeads = renderLeads;
 window.deleteLead = deleteLead;
 window.openCreateLeadModal = openCreateLeadModal;
@@ -641,11 +527,10 @@ window.renderAssessments = renderAssessments;
 window.createAssessmentFromLead = createAssessmentFromLead;
 window.openAssessmentDetail = openAssessmentDetail;
 window.renderAssessmentDetail = renderAssessmentDetail;
+window.copyAssessmentLink = copyAssessmentLink;
 window.toggleNessSelect = toggleNessSelect;
 window.selectNessOption = selectNessOption;
 window.goToBlock = goToBlock;
 window.setWizardAnswer = setWizardAnswer;
 window.toggleWizardChip = toggleWizardChip;
 window.savePricingOverride = savePricingOverride;
-window.renderSelfServiceAssessment = renderSelfServiceAssessment;
-window.renderSelfServiceBlock = renderSelfServiceBlock;

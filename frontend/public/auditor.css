@@ -1,0 +1,83 @@
+/* Portal do auditor externo (auditor.html).
+ *
+ * Folha própria, sem o style.css do app: os tokens abaixo são cópia do :root de src/style.css (a
+ * fonte única), e frontend/test/auditor-publico.test.js compara os valores. Mudou lá, muda aqui.
+ *
+ * Uso esperado em computador: a tabela rola na horizontal em tela estreita, sem layout próprio de
+ * celular (responsividade fora de escopo, AGENTS.md).
+ */
+:root {
+    --accent: #00ade8;
+    --bg: #0b1326;
+    --surface: #162244;
+    --surface-2: #1e2d52;
+    --border: rgba(255, 255, 255, 0.10);
+    --text: #f1f5f9;
+    --text-2: #cbd5e1;
+    --text-dim: #94a3b8;
+    --danger: #ef4444;
+    --font-head: 'Montserrat', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 400 14px/1.55 var(--font-body); }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pa-topo { border-bottom: 1px solid var(--border); }
+.pa-topo-int { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; max-width: 1200px; margin: 0 auto; padding: 16px 24px; }
+.pa-org { font: 500 17px/1.3 var(--font-head); }
+.pa-meta { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+.pa-main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px; }
+.pa-estado { max-width: 560px; margin: 48px auto; padding: 32px; background: var(--surface); border: 1px solid var(--border); }
+.pa-estado-titulo { margin: 0 0 8px; font: 600 20px/1.35 var(--font-head); }
+.pa-estado-texto { margin: 0; color: var(--text-2); }
+
+.pa-titulo { margin: 0 0 16px; font: 600 22px/1.3 var(--font-head); }
+.pa-projeto { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 24px; }
+.pa-projeto dt { color: var(--text-dim); }
+.pa-projeto dd { margin: 0; white-space: pre-line; }
+.pa-secao { margin: 32px 0 12px; font: 600 17px/1.3 var(--font-head); }
+.pa-acoes { margin: 0 0 8px; }
+.pa-aviso { min-height: 1.5em; margin: 0 0 8px; color: var(--danger); }
+
+.pa-norma { margin: 0 0 24px; }
+.pa-norma-titulo { margin: 0 0 8px; font: 600 15px/1.3 var(--font-head); }
+.pa-conta { font: 400 13px var(--font-body); color: var(--text-dim); }
+.pa-tabela-wrap { overflow-x: auto; border: 1px solid var(--border); }
+.pa-tabela { width: 100%; border-collapse: collapse; }
+.pa-tabela th, .pa-tabela td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.pa-tabela thead th { background: var(--surface); color: var(--text-2); font-weight: 500; font-size: 13px; }
+.pa-cod { white-space: nowrap; font-weight: 500; }
+.pa-num { font-variant-numeric: tabular-nums; }
+.pa-just { margin: 4px 0 0; color: var(--text-2); font-size: 13px; }
+.pa-vazio { margin: 0; color: var(--text-dim); }
+
+.pa-evs { list-style: none; margin: 0; padding: 0; }
+.pa-ev { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 6px 0; }
+.pa-ev + .pa-ev { border-top: 1px solid var(--border); }
+.pa-ev-nome { overflow-wrap: anywhere; }
+.pa-ev-meta { grid-column: 1; font-size: 13px; color: var(--text-dim); }
+.pa-hash { grid-column: 1; font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+.pa-ev .pa-btn { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+
+.pa-btn { min-height: 36px; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 10px; background: transparent; color: var(--accent); font: 500 13px var(--font-body); cursor: pointer; }
+.pa-btn:hover { background: var(--surface-2); }
+.pa-btn:disabled { opacity: .6; cursor: wait; }
+
+.pa-nota { margin: 32px 0 0; max-width: 720px; }
+.pa-nota-rotulo { display: block; margin: 0 0 8px; color: var(--text-2); }
+.pa-nota-texto { display: block; width: 100%; margin: 0 0 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 400 14px/1.5 var(--font-body); resize: vertical; }
+.pa-nota-msg { margin-left: 12px; color: var(--text-2); }
+.pa-nota-lista { list-style: none; margin: 16px 0 0; padding: 0; }
+.pa-nota-item { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.pa-nota-item p { margin: 0 0 4px; }
+.pa-nota-meta { color: var(--text-2); font-size: 13px; }
+.pa-nota-perg { color: var(--text); }
+.pa-nota-resp { color: var(--text); }
+
+.pa-rodape-pagina { border-top: 1px solid var(--border); padding: 16px 24px; color: var(--text-dim); font-size: 13px; text-align: center; }
+.pa-rodape-pagina p { margin: 0; }

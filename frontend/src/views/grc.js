@@ -1,7 +1,8 @@
 import { S } from '../state.js';
-import { api } from '../api.js';
+import { api, API_BASE } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
+import { renderAcessoAuditor } from './auditor-acesso.js';
 
 // S2: wrappers para handlers COMPOSTOS/inline (a delegação chama uma função só).
 window.__grcDeleteRisk = function (riskId) {
@@ -939,6 +940,9 @@ window.__grcCloseExecAudit = function (id) {
         const file = input.files[0];
         const formData = new FormData();
         formData.append('file', file);
+        // Certificado de treinamento é evidência de conscientização (A.6.3). Leniente no servidor:
+        // projeto sem esse controle recebe o arquivo sem vínculo.
+        formData.append('control_ref', 'A.6.3');
         
         try {
             const headers = {};
@@ -951,9 +955,9 @@ window.__grcCloseExecAudit = function (id) {
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || 'Erro no upload');
             
-            evidenceInput.value = `${data.id}|${data.file_name}`;
+            evidenceInput.value = `${data.id}|${file.name}`;
             statusDiv.style.color = 'var(--success)';
-            statusDiv.textContent = `Upload concluído: ${data.file_name}`;
+            statusDiv.textContent = `Upload concluído: ${file.name}`;
         } catch(e) {
             statusDiv.style.color = 'var(--danger)';
             statusDiv.textContent = `Erro no upload: ${e.message}`;
@@ -1453,7 +1457,9 @@ window.__grcCloseExecAudit = function (id) {
         c.innerHTML = `
             ${statsHtml}
             ${tableHtml}
+            <div id="acesso-auditor"></div>
         `;
+        await renderAcessoAuditor(c.querySelector('#acesso-auditor'), proj.id, S.user?.role);
     }
 
     window.openAuditDetailsModal = function(id) {

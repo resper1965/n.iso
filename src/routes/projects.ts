@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { genId, genToken, logAudit, validateUpload, erro500, somenteNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { semRastros, genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
-import { seedPhases } from '../services/project-setup';
+import { seedPhases, semearControles } from '../services/project-setup';
 import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
 import { controlsForRole, ISO_27701_2025_STANDARD } from '../data/iso27701-2025';
 import { checkCoherence } from '../services/coherence';
@@ -532,7 +533,7 @@ projectsApp.get('/:id/controls', async (c) => {
     }
   }
   const result = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(projectId).all();
-  return c.json({ ok: true, controls: result.results });
+  return c.json({ ok: true, controls: semRastros(result.results) });
 });
 
 // Phases inside Project
@@ -620,7 +621,7 @@ projectsApp.post('/:id/interviews', async (c) => {
 projectsApp.get('/:id/documents', async (c) => {
   const projectId = c.req.param('id');
   const { results } = await c.env.DB.prepare('SELECT * FROM evidence WHERE project_id = ? AND r2_key LIKE "docs/%" ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, documents: results });
+  return c.json({ ok: true, documents: semRastros(results) });
 });
 
 projectsApp.post('/:id/documents/upload', async (c) => {
@@ -635,6 +636,13 @@ projectsApp.post('/:id/documents/upload', async (c) => {
     const invalido = validateUpload(file);
     if (invalido) return c.json({ error: invalido }, 400);
 
+    // Upload pelo checklist: o item vem no formulário e é conferido ANTES do R2,
+    // para item desconhecido não deixar objeto órfão.
+    const itemId = typeof body['item_id'] === 'string' ? body['item_id'] : '';
+    const item = itemId ? itemDoChecklist(itemId) : null;
+    if (itemId && !item) return c.json({ error: 'Item de checklist não encontrado' }, 400);
+    const controlId = item ? await controleDoItem(c.env.DB, projectId, item) : null;
+
     const docId = genId();
     const r2Key = `docs/${projectId}/${docId}-${file.name}`;
     const arrayBuffer = await file.arrayBuffer();
@@ -647,11 +655,14 @@ projectsApp.post('/:id/documents/upload', async (c) => {
       httpMetadata: { contentType: file.type || 'application/octet-stream' }
     });
 
+    // Entra pendente: quem envia não revisa (a rota é liberada ao cliente, org_user).
     const user = c.get('user');
     await c.env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'conforming', 'Documento Interno do SGSI Controlado', ?, datetime('now'))`
-    ).bind(docId, projectId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+      `INSERT INTO evidence (id, project_id, control_id, file_name, file_size, file_type, r2_key, file_hash, evaluation_status, evaluation_notes, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'Documento enviado; aguarda revisão.', ?, datetime('now'))`
+    ).bind(docId, projectId, controlId, file.name, file.size, file.type || 'application/octet-stream', r2Key, realSha256, user?.email || 'system').run();
+
+    if (item) await marcarItemComEvidencia(c.env.DB, projectId, item, docId, user);
 
     await logAudit(c.env.DB, 'document.uploaded', user?.email || 'system', `Documento ${file.name} carregado para projeto ${projectId}`, '', '', projectId);
     return c.json({ ok: true, id: docId, sha256: realSha256 }, 201);
@@ -881,26 +892,6 @@ projectsApp.post('/:id/migrate-27701-2025', async (c) => {
   }
 });
 
-// Cria, como 'Missing', os controles da lista que o projeto ainda não tem. Idempotente: o código
-// vive como primeiro token do título ("A.5.1 — ..."), e o que já existe é pulado em qualquer
-// formato de id (ctrl-a51, A.5.1, genId).
-async function semearControles(
-  db: D1Database, projectId: string, standard: string, lista: readonly { code: string; title: string }[],
-): Promise<{ created: number; total: number }> {
-  const { results: existing } = await db.prepare(
-    'SELECT title FROM compliance_controls WHERE project_id = ? AND standard = ?'
-  ).bind(projectId, standard).all<{ title: string }>();
-  const existentes = new Set((existing || []).map((r) => (r.title || '').split(' ')[0]));
-  const novos = lista.filter((ctrl) => !existentes.has(ctrl.code));
-  if (novos.length) {
-    await db.batch(novos.map((ctrl) => db.prepare(
-      `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
-       VALUES (?, ?, ?, ?, '', 'Missing', 0, datetime('now'))`
-    ).bind(genId(), projectId, standard, `${ctrl.code} — ${ctrl.title}`)));
-  }
-  return { created: novos.length, total: lista.length };
-}
-
 // Semeia o control-set 27701:2025 (Anexo A) DO ZERO, por papel do projeto.
 //
 // O migrate-27701-2025 acima só TRANSFORMA um SoA 27701:2019 existente — inútil
@@ -979,7 +970,7 @@ projectsApp.get('/:id/traceability', async (c) => {
   ).bind(projectId).all();
 
   const evidenceResult = await db.prepare(
-    `SELECT id, file_name, created_at, control_id FROM evidence
+    `SELECT id, file_name, created_at, control_id, evaluation_status FROM evidence
       WHERE control_id IN (SELECT id FROM compliance_controls WHERE project_id = ?)`
   ).bind(projectId).all();
 
@@ -989,7 +980,7 @@ projectsApp.get('/:id/traceability', async (c) => {
   }
   const evidenceMap: Record<string, any[]> = {};
   for (const e of (evidenceResult.results || []) as any[]) {
-    (evidenceMap[e.control_id] ||= []).push({ id: e.id, file_name: e.file_name, created_at: e.created_at });
+    (evidenceMap[e.control_id] ||= []).push({ id: e.id, file_name: e.file_name, created_at: e.created_at, evaluation_status: e.evaluation_status });
   }
 
   const linked = rows.map((ctrl: any) => ({
@@ -1054,7 +1045,7 @@ projectsApp.get('/:id/coherence', async (c) => {
 projectsApp.get('/:id/dpia', async (c) => {
   const projectId = c.req.param('id');
   const result = await c.env.DB.prepare('SELECT * FROM dpia_assessments WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
-  return c.json({ ok: true, assessments: result.results });
+  return c.json({ ok: true, assessments: semRastros(result.results) });
 });
 
 projectsApp.post('/:id/dpia', async (c) => {
@@ -1100,8 +1091,8 @@ projectsApp.get('/:id/audit-pack', async (c) => {
       pack: {
         project,
         phases: phases.results || [],
-        controls: controls.results || [],
-        evidence: evidence.results || [],
+        controls: semRastros(controls.results),
+        evidence: semRastros(evidence.results),
         audit_trail: logs.results || [],
         generated_at: new Date().toISOString()
       }
@@ -1119,25 +1110,65 @@ projectsApp.get('/:id/audit-trail', async (c) => {
   return c.json(results || []);
 });
 
-// Auditor Token inside Project
+// Acesso do auditor externo. O token sai UMA vez, dentro da URL (fragmento, que o navegador não
+// manda ao servidor); o banco guarda só o SHA-256, como o scim-token acima. Prazo calculado pelo
+// SQLite, no formato que `tokenDoAuditor` compara.
+// O link do auditor é credencial de leitura de toda a evidência do projeto: só a equipe da
+// consultoria (consultor designado, consultoria_admin, platform_admin) o gera, lista e revoga.
+// O agente MCP também não (FORA_DO_AGENTE, src/middleware/agente.ts).
+const SO_CONSULTORIA = { error: 'Somente a consultoria gere o acesso do auditor externo' };
+
 projectsApp.post('/:id/auditor-token', async (c) => {
   try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
     const projectId = c.req.param('id');
     const v = await validateBody(c, auditorTokenSchema);
     if (!v.success) return v.response;
-    const body = v.data;
-    const days = body.days_valid ?? 30;
+    const days = v.data.days_valid ?? 30;
     const token = genToken();
-    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
-
-    await c.env.DB.prepare(
-      `INSERT INTO auditor_tokens (id, token, project_id, expires_at, created_at)
-       VALUES (?, ?, ?, ?, datetime('now'))`
-    ).bind(genId(), token, projectId, expiresAt).run();
-
-    await logAudit(c.env.DB, 'auditor_token.created', c.get('user')?.email ?? 'system', `Auditor token created for project ${projectId}, valid ${days} days`, '', '', projectId);
-    return c.json({ ok: true, token, expires_at: expiresAt }, 201);
-  } catch (e: any) {
+    const ator = c.get('user')?.email ?? 'system';
+    const row = await c.env.DB.prepare(
+      `INSERT INTO auditor_tokens (id, token_hash, project_id, expires_at, created_by)
+       VALUES (?, ?, ?, datetime('now', ?), ?) RETURNING id, expires_at`
+    ).bind(genId(), await sha256Hex(token), projectId, `+${days} days`, ator).first<{ id: string; expires_at: string }>();
+    if (!row) return c.json({ error: 'Falha ao gerar o acesso do auditor' }, 500);
+    await logAudit(c.env.DB, 'auditor_token.created', ator, `Acesso de auditor externo ${row.id} criado, válido por ${days} dias`, '', '', projectId);
+    return c.json({ id: row.id, url: `${appUrl(c.env)}/auditor#${token}`, expires_at: row.expires_at }, 201);
+  } catch (e) {
     return erro500(c, 'Falha ao gerar token de auditor', e);
+  }
+});
+
+/** Links válidos do projeto (não revogados, no prazo). Nunca o token nem o hash: o link saiu uma vez. */
+projectsApp.get('/:id/auditor-token', async (c) => {
+  try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, created_by, created_at, expires_at FROM auditor_tokens
+        WHERE project_id = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')
+        ORDER BY created_at DESC`
+    ).bind(c.req.param('id')).all<{ id: string; created_by: string | null; created_at: string; expires_at: string }>();
+    return c.json({ tokens: results });
+  } catch (e) {
+    return erro500(c, 'Falha ao listar os acessos do auditor', e);
+  }
+});
+
+/** Revoga na hora. A linha fica (revoked_at/revoked_by) para a trilha; a purga de 90 dias a leva depois. */
+projectsApp.post('/:id/auditor-token/:tokenId/revogar', async (c) => {
+  try {
+    if (!ehEquipeNess(c.get('user'))) return c.json(SO_CONSULTORIA, 403);
+    const projectId = c.req.param('id');
+    const tokenId = c.req.param('tokenId');
+    const ator = c.get('user')?.email ?? 'system';
+    const r = await c.env.DB.prepare(
+      `UPDATE auditor_tokens SET revoked_at = datetime('now'), revoked_by = ?
+        WHERE id = ? AND project_id = ? AND revoked_at IS NULL`
+    ).bind(ator, tokenId, projectId).run();
+    if (!r.meta.changes) return c.json({ error: 'Acesso não encontrado' }, 404);
+    await logAudit(c.env.DB, 'auditor_token.revoked', ator, `Acesso de auditor externo ${tokenId} revogado`, '', '', projectId);
+    return c.json({ revogado: true });
+  } catch (e) {
+    return erro500(c, 'Falha ao revogar o acesso do auditor', e);
   }
 });

@@ -67,8 +67,8 @@ Cloudflare Workers (Hono) + D1 + KV + R2 + Workers AI. Frontend SPA
 Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
-  dominio: **41 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
-  2026-10-06). A lista nominal envelhecia a cada PR; leia o diretorio.
+  dominio: **42 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
+  2026-10-07). A lista nominal envelhecia a cada PR; leia o diretorio.
 - **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
   (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
   Regras em `src/services/pedidos.ts` (`podePedir`, `autoridadeNoPedido`,
@@ -76,8 +76,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   destinatario; unico prefixo de dado do papel `stakeholder`),
   `/api/v1/projects/:projectId/pedidos*` (quem pede: criar, ciencia em lote,
   painel, reenvio), `/api/v1/public/pedidos/ver|codigo|ciencia` (link com codigo,
-  token so no corpo) e `GET /api/v1/auditor/:token/pedidos` (a prova, para o
-  auditor externo, paginada). **A prova e imutavel**: o trigger
+  token so no corpo) e `POST /api/v1/public/auditor/pedidos` (a prova, para o
+  auditor externo, token no corpo, paginada; o portal inteiro esta em
+  `src/routes/public-auditor.ts`). **A prova e imutavel**: o trigger
   `pedido_dest_prova_imutavel` recusa UPDATE em linha decidida, e
   `pedido_prova_imutavel` (0043) recusa mudar hash, conteudo e documento de
   qualquer pedido e status/substituto de pedido fechado (`org_id` fica livre:
@@ -93,7 +94,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services** (`src/services/`, 18 arquivos: `ls src/services/*.ts | wc -l`): entre eles
+- **Services** (`src/services/`, 19 arquivos: `ls src/services/*.ts | wc -l`): entre eles
   `soa-logic.ts` (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
   `policy-generator.ts`, `pedidos.ts`, `organizacao.ts`, `fechar-venda.ts`,
   `preco-proposta.ts`, `transferencia-projeto.ts`, `totp.ts`, `data-subject.ts`.
@@ -121,11 +122,15 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     para ele caía silenciosamente na tela de login. Confira antes de mexer:
     `curl -sL <domínio>/politicas.html` deve devolver o título "Portal de
     Ciência de Políticas", não o do app.
+  - `frontend/public/auditor.html` (+ `auditor.js`, `auditor.css`) — portal do auditor externo,
+    somente leitura. Serve `/auditor`; o link sai de `POST /api/v1/projects/:id/auditor-token` (cartão
+    em Auditorias) com o token no fragmento, e a página fala só com `/api/v1/public/auditor/*`
+    (`src/routes/public-auditor.ts`), token no corpo, só o hash no banco.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **58 tabelas** (2026-10-06: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
   em 2026-10-05 o mesmo 58 saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
-  numeradas em `migrations/`, ultima a **0044** (`ls migrations/*.sql | tail -1`). Procedimento
+  numeradas em `migrations/`, ultima a **0045** (`ls migrations/*.sql | tail -1`). Procedimento
   de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
   `migrations/README.md` — leia antes de tocar em migration.
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
@@ -187,13 +192,13 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **557 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
+- **544 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
   `git grep -ahoE ': any\b|as any\b|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
   `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 158 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
+- **Nenhum dos 172 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
@@ -203,8 +208,8 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   cada ocorrencia. Teste mockado nao pega deriva de schema — foi exatamente
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
-- **Frontend com pouco teste por linha.** ~14,8 mil linhas de JS
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 48 arquivos de teste em jsdom
+- **Frontend com pouco teste por linha.** ~14,9 mil linhas de JS (2026-10-07)
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 59 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.

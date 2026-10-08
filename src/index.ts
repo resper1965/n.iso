@@ -32,6 +32,7 @@ import { certificationsApp, projectCertificationsApp } from './routes/certificat
 import { publicApp } from './routes/public';
 import { publicPropostasApp } from './routes/public-propostas';
 import { publicPedidosApp } from './routes/public-pedidos';
+import { publicAuditorApp } from './routes/public-auditor';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
@@ -316,6 +317,8 @@ app.route('/api/v1/public', publicApp);
 app.route('/api/v1/public/propostas', publicPropostasApp);
 // Link pessoal de ciência (pedidos, fatia 3), sem sessão: mesmo desenho, limite por IP e por token.
 app.route('/api/v1/public/pedidos', publicPedidosApp);
+// Portal do auditor externo, sem sessão: token do link no corpo, só o hash no banco, limite por IP.
+app.route('/api/v1/public/auditor', publicAuditorApp);
 
 /*
  * SCIM 2.0 (item 4.2). Montado em `/scim/v2/*` — o caminho que a RFC 7644

@@ -555,6 +555,16 @@ export async function somenteComercial(
   await next();
 }
 
+/**
+ * Minimização de dado pessoal de quem assina: IP e user-agent (`*_approved_ip/ua`, `*_signed_ip`)
+ * ficam só no banco e na trilha: não saem nas leituras JSON nem nos relatórios HTML. Aplique em todo `SELECT *` de controle, evidência, ROPA, DPIA e análise crítica.
+ */
+const RASTRO_DE_ASSINATURA = /_(approved|signed)_(ip|ua)$/;
+export function semRastroDeAssinatura(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row).filter(([k]) => !RASTRO_DE_ASSINATURA.test(k)));
+}
+export const semRastros = (rows: Record<string, unknown>[] | undefined | null): Record<string, unknown>[] => (rows ?? []).map(semRastroDeAssinatura);
+
 /** Escape HTML entities para prevenir XSS em templates HTML */
 export function escapeHtml(s: string): string {
   if (!s) return '';

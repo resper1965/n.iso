@@ -98,17 +98,22 @@ describe('api()', () => {
             expect(await api('GET', '/api/v1/projects/p1/controls')).toEqual([]);
         });
 
-        // ARESTA AFIADA, nao bug novo: `src/views/security.js` ja convive com
-        // isto no fluxo de MFA (ver o comentario em doMfaActivate). O teste
-        // existe para que a perda das chaves irmas seja uma decisao visivel e
-        // nao uma surpresa em um endpoint novo.
-        it('perde as chaves irmas quando o envelope tem array E outros dados', async () => {
+        // Antes a lista era devolvida e o resto sumia sem erro: a tela de entrevistas lia
+        // `questions` e recebia `interviews`; a análise de lacunas recebia `gaps` e mostrava 0%.
+        it('devolve o envelope inteiro quando ha lista E outros campos (mfa.ts:90)', async () => {
             fetchMock.mockResolvedValue(
                 resposta({ ok: true, recovery_codes: ['a', 'b'], aviso: 'Guarde agora' })
             );
             const r = await api('POST', '/api/v1/auth/mfa/activate', { codigo: '123456' });
-            expect(r).toEqual(['a', 'b']);
-            expect(r.aviso).toBeUndefined();
+            expect(r).toEqual({ ok: true, recovery_codes: ['a', 'b'], aviso: 'Guarde agora' });
+        });
+
+        it('devolve o envelope inteiro quando ha duas listas (platform.ts:547)', async () => {
+            const p = { id: 'p1' };
+            fetchMock.mockResolvedValue(resposta({ ok: true, portfolio: [p], projects: [p] }));
+            const r = await api('GET', '/api/v1/portfolio');
+            expect(r.portfolio).toEqual([p]);
+            expect(r.projects).toEqual([p]);
         });
 
         it('nao desembrulha quando `ok` nao e exatamente true', async () => {

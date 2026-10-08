@@ -167,9 +167,23 @@ describe('renderSelfServiceBlock / ssPrev / ssNext', () => {
     expect(window._ssAnswers[1].qX).toBe('42');
     // POST enviado ao endpoint público com o token.
     expect(fetchMock).toHaveBeenCalled();
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/public/assessment/tok123/answers');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/api/v1/assessments/public/tok123/answers');
     // Avançou para o bloco seguinte (índice 1).
     expect(window._ssBlock).toBe(1);
+    delete window.ASSESSMENT_BLOCKS;
+    vi.unstubAllGlobals();
+  });
+
+  it('ssNext com falha ao salvar: não avança, não conclui e mostra o motivo do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 410, json: async () => ({ error: 'Assessment ja foi convertido' }) })));
+    window.ASSESSMENT_BLOCKS = BLOCKS;
+    document.body.innerHTML = '<div id="content"><input class="ss-answer" data-key="q2" value="ok"></div>';
+    window._ssBlock = BLOCKS.length - 1;
+    window._ssAnswers = {};
+    await window.ssNext();
+    expect(window._ssBlock).toBe(BLOCKS.length - 1);
+    expect(document.getElementById('content').textContent).not.toContain('Assessment Concluido');
+    expect(document.querySelector('.toast-error')?.textContent).toContain('Assessment ja foi convertido');
     delete window.ASSESSMENT_BLOCKS;
     vi.unstubAllGlobals();
   });
@@ -182,6 +196,33 @@ describe('renderSelfServiceBlock / ssPrev / ssNext', () => {
     window._ssAnswers = {};
     await window.ssNext();
     expect(document.getElementById('content').textContent).toContain('Assessment Concluido');
+    delete window.ASSESSMENT_BLOCKS;
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('renderSelfServiceAssessment', () => {
+  const BLOCOS = [{ block: 1, title: 'Bloco Um', questions: [{ key: 'q1', type: 'text', text: 'Setor?' }] }];
+
+  beforeEach(() => {
+    document.body.innerHTML = '<div class="main"></div><div id="content"></div>';
+    window.ASSESSMENT_BLOCKS = BLOCOS;
+  });
+
+  it('lê o questionário da rota real /api/v1/assessments/public/:token (assessments.ts:185)', async () => {
+    const f = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'as1', client_name: 'Acme', status: 'in_progress', answers: [] }) }));
+    vi.stubGlobal('fetch', f);
+    await window.renderSelfServiceAssessment('tok 1');
+    expect(f.mock.calls[0][0]).toBe('http://api.test/api/v1/assessments/public/tok%201');
+    expect(document.getElementById('content').textContent).toContain('Acme');
+    delete window.ASSESSMENT_BLOCKS;
+    vi.unstubAllGlobals();
+  });
+
+  it('410 (já virou projeto): mostra a mensagem do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 410, json: async () => ({ error: 'Assessment ja foi convertido' }) })));
+    await window.renderSelfServiceAssessment('tok123');
+    expect(document.getElementById('content').textContent).toContain('Assessment ja foi convertido');
     delete window.ASSESSMENT_BLOCKS;
     vi.unstubAllGlobals();
   });

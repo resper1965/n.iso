@@ -3,8 +3,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { applySchema } from './helpers/d1';
-import { fecharVenda, type EntradaFechamento } from '../src/services/fechar-venda';
+import { fecharVenda, CARGO_CONTATO_ACEITE, type EntradaFechamento } from '../src/services/fechar-venda';
 import { PHASE_TITLES } from '../src/constants';
+import { idDoControle, autoridadeDeAssinatura, recusaDeAssinatura, requireProjectAccess } from '../src/helpers';
 
 const db = () => env.DB as D1Database;
 
@@ -21,16 +22,17 @@ const DPO = { nome: 'DPO as a service', norma: 'LGPD', tipo: 'recorrente', descr
 
 let seq = 0;
 /** Proposta nova com itens; devolve o id. Cada teste usa a sua (o storage é por arquivo). */
-async function proposta(o: { status?: string; org?: string; itens?: { servico: any; valor: number; meses?: number }[]; consultor?: string | null; total?: number; mensal?: number } = {}) {
+async function proposta(o: { status?: string; org?: string; itens?: { servico: any; valor: number; meses?: number }[]; consultor?: string | null; total?: number; mensal?: number;
+  assessment?: string | null; escopo?: string; secoes?: string | null } = {}) {
   const id = `prop-${String(++seq).padStart(3, '0')}`;
   const leadId = `lead-${seq}`;
   const itens = o.itens ?? [{ servico: PROJETO, valor: 180000 }, { servico: MSSP, valor: 60000, meses: 12 }];
   await db().batch([
     db().prepare(`INSERT INTO leads (id, company_name, cnpj, status, org_id) VALUES (?, 'Cliente', ?, 'Proposal', ?)`).bind(leadId, `1122233300${String(1000 + seq)}`, o.org ?? 'org_ness'),
     db().prepare(`INSERT INTO propostas (id, org_id, lead_id, assessment_id, numero, status, cliente, consultor_email, total_projeto, mensalidade,
-      documento_html, documento_hash, criada_por) VALUES (?, ?, ?, 'as-1', ?, ?, 'Cliente Ltda.', ?, ?, ?, '<p>doc</p>', 'hash-abc', 'com@ness.lat')`)
-      .bind(id, o.org ?? 'org_ness', leadId, `NESS-2026-${seq}`, o.status ?? 'enviada', o.consultor === undefined ? 'cons@ness.lat' : o.consultor,
-        o.total ?? 180000, o.mensal ?? 5000),
+      documento_html, documento_hash, criada_por, escopo, secoes_editadas) VALUES (?, ?, ?, ?, ?, ?, 'Cliente Ltda.', ?, ?, ?, '<p>doc</p>', 'hash-abc', 'com@ness.lat', ?, ?)`)
+      .bind(id, o.org ?? 'org_ness', leadId, o.assessment === undefined ? 'as-1' : o.assessment, `NESS-2026-${seq}`, o.status ?? 'enviada',
+        o.consultor === undefined ? 'cons@ness.lat' : o.consultor, o.total ?? 180000, o.mensal ?? 5000, o.escopo ?? '', o.secoes ?? null),
     ...itens.map((i, k) => db().prepare(`INSERT INTO proposta_itens (id, proposta_id, ordem, servico_id, servico, meses, valor) VALUES (?, ?, ?, NULL, ?, ?, ?)`)
       .bind(`${id}-i${k}`, id, k, JSON.stringify(i.servico), i.meses ?? null, i.valor)),
   ]);
@@ -44,6 +46,11 @@ const entrada = (propostaId: string, o: Partial<EntradaFechamento> = {}): Entrad
 });
 
 const conta = async (sql: string, ...b: unknown[]) => (await db().prepare(sql).bind(...b).first<{ n: number }>())!.n;
+
+/** Controles do projeto por norma: { 'ISO 27001:2022': 93, ... }. */
+const porNorma = async (projeto: string | null) => Object.fromEntries((await db().prepare(
+  'SELECT standard, COUNT(*) n FROM compliance_controls WHERE project_id = ? GROUP BY standard').bind(projeto).all<{ standard: string; n: number }>())
+  .results.map((r) => [r.standard, r.n]));
 
 describe('fecharVenda', () => {
   beforeAll(async () => {
@@ -79,7 +86,7 @@ describe('fecharVenda', () => {
     expect(servicos[0].fases.map((f: any) => f.nome)).toEqual(['Diagnóstico', 'Implementação']);
 
     const pj = await db().prepare('SELECT * FROM projects WHERE id = ?').bind(r.projetoId).first<any>();
-    expect(pj).toMatchObject({ client_name: 'Cliente Ltda.', project_name: 'Implementação ISO 27001', sector: 'Saúde', org_role: 'Controlador',
+    expect(pj).toMatchObject({ client_name: 'Cliente Ltda.', project_name: 'Cliente Ltda. — ISO/IEC 27001', sector: 'Saúde', org_role: 'Controlador',
       standards: 'ISO 27001 + 27701', scope: 'Toda a empresa', employee_count: 120, assessment_id: 'as-1', proposta_id: id, status: 'active' });
     expect(pj.cnpj).toMatch(/^1122233300/);
     expect(await conta('SELECT COUNT(*) n FROM project_phases WHERE project_id = ?', r.projetoId)).toBe(PHASE_TITLES.length);
@@ -93,7 +100,7 @@ describe('fecharVenda', () => {
     const notas = await db().prepare(`SELECT user_id FROM notifications WHERE target_id = ? ORDER BY user_id`).bind(id).all<any>();
     expect(notas.results.map((n: any) => n.user_id)).toEqual(['u-com', 'u-cons']);
     const trilha = await db().prepare(`SELECT action FROM audit_logs WHERE details LIKE ? ORDER BY action`).bind(`%${id}%`).all<any>();
-    expect(trilha.results.map((t: any) => t.action)).toEqual(['contrato.criado', 'governance.created', 'project.created', 'proposta.aceita']);
+    expect(trilha.results.map((t: any) => t.action)).toEqual(['contrato.criado', 'governance.created', 'governance.created', 'project.created', 'proposta.aceita']);
   });
 
   it('só recorrente: contrato registra a mensalidade, sem projeto', async () => {
@@ -215,8 +222,8 @@ describe('fecharVenda', () => {
     const ra = await fecharVenda(db(), entrada(a.id, { origem: 'manual', atorEmail: 'cons2@ness.lat' }));
     const rb = await fecharVenda(db(), entrada((await proposta({ consultor: null })).id, { origem: 'manual', atorEmail: 'com@ness.lat' }));
     if (!ra.ok || !rb.ok) throw new Error('fechamento falhou');
-    expect((await db().prepare(`SELECT email FROM project_governance WHERE project_id = ?`).bind(ra.projetoId).all<any>()).results).toEqual([{ email: 'cons2@ness.lat' }]);
-    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, rb.projetoId)).toBe(0);
+    expect((await db().prepare(`SELECT email FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`).bind(ra.projetoId).all<any>()).results).toEqual([{ email: 'cons2@ness.lat' }]);
+    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`, rb.projetoId)).toBe(0);
   });
 
   // ——— revisão final da fatia 4 ———
@@ -277,7 +284,138 @@ describe('fecharVenda', () => {
     for (const p of [a, b]) {
       const r = await fecharVenda(db(), entrada(p.id));
       if (!r.ok) throw new Error('fechamento falhou');
-      expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ?`, r.projetoId)).toBe(0);
+      expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'consultor'`, r.projetoId)).toBe(0);
     }
+  });
+  // ——— P3: projeto nasce completo ———
+  it('controles: 27001 quando vendido; 27701 pelo rótulo ou pelo serviço; re-aceite não duplica', async () => {
+    // as-1: target_standard 'ISO 27001 + 27701', papel Controlador
+    const a = await proposta();
+    const ra = await fecharVenda(db(), entrada(a.id));
+    if (!ra.ok) throw new Error('fechamento falhou');
+    expect(await porNorma(ra.projetoId)).toEqual({ 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 });
+    expect(await idDoControle(db(), ra.projetoId!, 'A.8.34')).not.toBeNull();
+    expect(await fecharVenda(db(), entrada(a.id))).toMatchObject({ ok: false, motivo: 'ja_fechada' });
+    expect(await porNorma(ra.projetoId)).toEqual({ 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 });
+
+    // sem levantamento: o serviço decide
+    const casos: [any, Record<string, number>][] = [
+      [PROJETO, { 'ISO 27001:2022': 93 }],
+      [{ ...PROJETO, nome: 'Implementação integrada', norma: 'ISO/IEC 27001:2022 + 27701:2025' }, { 'ISO 27001:2022': 93, 'ISO 27701:2025': 31 }],
+      [{ ...PROJETO, nome: 'Adequação LGPD', norma: 'LGPD' }, {}],
+    ];
+    for (const [servico, esperado] of casos) {
+      const { id } = await proposta({ assessment: null, itens: [{ servico, valor: 1 }] });
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect(await porNorma(r.projetoId), servico.nome).toEqual(esperado);
+    }
+  });
+
+  it('papel do levantamento decide a tabela 27701; "Ainda não mapeado" cai no Controlador', async () => {
+    const papeis: [string, number][] = [['Controlador + Operador', 49], ['Operador', 18], ['Ainda não mapeado', 31]];
+    for (const [k, [papel, n]] of papeis.entries()) {
+      const as = `as-papel-${k}`;
+      await db().batch([
+        db().prepare(`INSERT INTO assessments (id, client_name) VALUES (?, 'Cliente')`).bind(as),
+        db().prepare(`INSERT INTO assessment_answers (id, assessment_id, block, question_key, question, answer) VALUES (?, ?, 1, 'data_role', 'data_role', ?)`).bind(`${as}-r`, as, papel),
+        db().prepare(`INSERT INTO assessment_answers (id, assessment_id, block, question_key, question, answer) VALUES (?, ?, 1, 'target_standard', 'target_standard', 'ISO 27001 + ISO 27701 (integrada)')`).bind(`${as}-t`, as),
+      ]);
+      const { id } = await proposta({ assessment: as });
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect((await porNorma(r.projetoId))['ISO 27701:2025'], papel).toBe(n);
+      expect((await porNorma(r.projetoId))['ISO 27001:2022'], papel).toBe(93);
+    }
+  });
+
+  it('escopo vendido vai para o projeto: a seção reescrita vence o campo; sem os dois, o do levantamento', async () => {
+    const casos: [{ escopo?: string; secoes?: string | null }, string][] = [
+      [{ escopo: '  Sede em São Paulo e o sistema de pagamentos  ' }, 'Sede em São Paulo e o sistema de pagamentos'],
+      [{ escopo: 'campo antigo', secoes: JSON.stringify({ objeto: 'Escopo reescrito no documento aceito' }) }, 'Escopo reescrito no documento aceito'],
+      [{ escopo: 'campo', secoes: JSON.stringify({ objeto: null, plano: 'x' }) }, 'campo'],
+      [{ escopo: 'campo', secoes: 'nao-e-json' }, 'campo'],
+      [{ secoes: JSON.stringify({ objeto: '   ' }) }, 'Toda a empresa'],
+    ];
+    for (const [o, esperado] of casos) {
+      const { id } = await proposta(o);
+      const r = await fecharVenda(db(), entrada(id));
+      if (!r.ok) throw new Error('fechamento falhou');
+      expect((await db().prepare('SELECT scope FROM projects WHERE id = ?').bind(r.projetoId).first<any>()).scope, JSON.stringify(o)).toBe(esperado);
+    }
+  });
+
+  it('nome do projeto: cliente e normas vendidas; sem norma, o nome do serviço', async () => {
+    const a = await fecharVenda(db(), entrada((await proposta({ itens: [{ servico: { ...PROJETO, norma: 'ISO/IEC 27001:2022 + 27701:2025' }, valor: 1 }] })).id));
+    const b = await fecharVenda(db(), entrada((await proposta({ itens: [{ servico: { ...PROJETO, norma: '' }, valor: 1 }] })).id));
+    if (!a.ok || !b.ok) throw new Error('fechamento falhou');
+    const nome = async (pid: string | null) => (await db().prepare('SELECT project_name FROM projects WHERE id = ?').bind(pid).first<any>()).project_name;
+    expect(await nome(a.projetoId)).toBe('Cliente Ltda. — ISO/IEC 27001:2022 + 27701:2025');
+    expect(await nome(b.projetoId)).toBe('Cliente Ltda. — Implementação ISO 27001');
+  });
+
+  it('contato do aceite entra na governança como executivo, sem autoridade de assinatura (cargo digitado não conta)', async () => {
+    for (const cargo of ['CEO', 'Diretora Executiva', 'CISO', 'DPO e Líder SGSI']) {
+      const { id } = await proposta();
+      const r = await fecharVenda(db(), entrada(id, { aceite: { nome: 'Maria\nCliente', cargo, email: 'Maria@Cliente.com', ip: '1.1.1.1' } }));
+      if (!r.ok) throw new Error('fechamento falhou');
+      const gov = await db().prepare(`SELECT name, email, role_category, job_title FROM project_governance WHERE project_id = ? AND role_category <> 'consultor'`)
+        .bind(r.projetoId).all<any>();
+      expect(gov.results, cargo).toEqual([{ name: 'Maria Cliente', email: 'Maria@Cliente.com', role_category: 'executivo', job_title: CARGO_CONTATO_ACEITE }]);
+      const a = await autoridadeDeAssinatura(db(), r.projetoId!, { email: 'maria@cliente.com', role: 'org_admin' });
+      expect(a.designado).toBe(true);
+      expect(recusaDeAssinatura(a, 'ceo'), cargo).not.toBeNull();
+      expect(recusaDeAssinatura(a, 'ciso'), cargo).not.toBeNull();
+    }
+  });
+
+  it('e-mail do aceite igual ao do consultor: só a linha do consultor, e sem trilha do contato', async () => {
+    const { id } = await proposta();
+    const r = await fecharVenda(db(), entrada(id, { aceite: { nome: 'Ana', cargo: 'CEO', email: 'CONS@ness.lat', ip: '' } }));
+    if (!r.ok) throw new Error('fechamento falhou');
+    const gov = await db().prepare('SELECT email, role_category FROM project_governance WHERE project_id = ?').bind(r.projetoId).all<any>();
+    expect(gov.results).toEqual([{ email: 'cons@ness.lat', role_category: 'consultor' }]);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND details LIKE 'Contato do aceite%' AND project_id = ?`, r.projetoId)).toBe(0);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND project_id = ?`, r.projetoId)).toBe(1);
+  });
+
+  it('re-aceite não duplica o contato', async () => {
+    const { id } = await proposta();
+    const r = await fecharVenda(db(), entrada(id));
+    if (!r.ok) throw new Error('fechamento falhou');
+    await fecharVenda(db(), entrada(id, { origem: 'manual', atorEmail: 'com@ness.lat' }));
+    expect(await conta(`SELECT COUNT(*) n FROM project_governance WHERE project_id = ? AND role_category = 'executivo'`, r.projetoId)).toBe(1);
+    expect(await conta(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'governance.created' AND details LIKE 'Contato do aceite%' AND project_id = ?`, r.projetoId)).toBe(1);
+  });
+
+  it('sem consultor: avisa os consultoria_admin ativos da organização; sem nenhum, o platform_admin; o admin alcança o projeto', async () => {
+    await db().batch([
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id) VALUES ('u-cadm','cadm@ness.lat','x','Adm','consultoria_admin','org_ness')`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id, ativo) VALUES ('u-cadm-off','off-adm@ness.lat','x','Adm off','consultoria_admin','org_ness',0)`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, org_id) VALUES ('u-badm','badm@b.lat','x','Adm B','consultoria_admin','org_b')`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-plat','plat@ness.lat','x','Plataforma','platform_admin')`),
+    ]);
+    const avisados = async (propostaId: string) => (await db().prepare(
+      `SELECT user_id, link FROM notifications WHERE target_id = ? AND type = 'projeto_sem_consultor' ORDER BY user_id`).bind(propostaId).all<any>()).results;
+
+    const a = await proposta({ consultor: null });
+    const ra = await fecharVenda(db(), entrada(a.id));
+    if (!ra.ok) throw new Error('fechamento falhou');
+    expect(await avisados(a.id)).toEqual([{ user_id: 'u-cadm', link: `/projects/${ra.projetoId}` }]);
+    await expect(requireProjectAccess(db(), { role: 'consultoria_admin', org_id: 'org_ness', email: 'cadm@ness.lat' }, ra.projetoId!)).resolves.toBe(true);
+    await expect(requireProjectAccess(db(), { role: 'consultoria_admin', org_id: 'org_b', email: 'badm@b.lat' }, ra.projetoId!)).rejects.toThrow();
+
+    // organização sem consultoria_admin: o platform_admin
+    const c = await proposta({ consultor: null, org: 'org_c' });
+    const rc = await fecharVenda(db(), entrada(c.id, { orgId: 'org_c' }));
+    if (!rc.ok) throw new Error('fechamento falhou');
+    expect((await avisados(c.id)).map((n: any) => n.user_id)).toEqual(['u-plat']);
+
+    // com consultor: ninguém recebe o aviso; re-aceite não repete
+    const b = await proposta();
+    expect((await fecharVenda(db(), entrada(b.id))).ok).toBe(true);
+    expect(await avisados(b.id)).toEqual([]);
+    await fecharVenda(db(), entrada(a.id));
+    expect(await avisados(a.id)).toHaveLength(1);
   });
 });

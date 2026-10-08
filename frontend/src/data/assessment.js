@@ -5,7 +5,7 @@ export     const ASSESSMENT_BLOCKS = [
             questions: [
                 { key: 'sector', type: 'select', text: 'Setor ou tipo de negócio?', options: ['Fintech', 'Healthtech', 'Edtech', 'Legaltech', 'Insurtech', 'Govtech', 'Agritech', 'Logistics/Supply Chain', 'E-commerce/Marketplace', 'Indústria/Manufatura', 'Serviços Financeiros', 'Telecomunicações', 'Energia', 'Varejo', 'Outro'] },
                 { key: 'company_type', type: 'select', text: 'Estágio da empresa?', options: ['Startup (< 3 anos)', 'Scale-up (crescimento acelerado)', 'Empresa madura', 'Grupo econômico / Holding', 'Software house / Fábrica de software', 'Consultoria de tecnologia'] },
-                { key: 'countries', type: 'multi', text: 'Países de operação?', options: ['Brasil', 'EUA', 'União Europeia', 'América Latina', 'Ãsia', 'Global'] },
+                { key: 'countries', type: 'multi', text: 'Países de operação?', options: ['Brasil', 'EUA', 'União Europeia', 'América Latina', 'Ásia', 'Global'] },
                 { key: 'headcount', type: 'select', text: 'Quantidade de colaboradores?', options: ['1–25', '26–50', '51–100', '101–250', '251–500', '501–1000', '1000+'] },
                 { key: 'tech_people', type: 'select', text: 'Pessoas em tecnologia/engenharia/produto/DevOps?', options: ['1–10', '11–25', '26–50', '51–100', '101–200', '200+'] },
                 { key: 'security_people', type: 'select', text: 'Pessoas em segurança/compliance/jurídico/privacidade?', options: ['Nenhuma dedicada', '1–3', '4–10', '11–20', '20+'] },
@@ -153,3 +153,7 @@ export     const ASSESSMENT_BLOCKS = [
             ]
         }
     ];
+
+// globals.js (autoatendimento) e commercial.js (levantamento do consultor) leem como global.
+// Sem isto o Vite descarta o modulo, que so exporta, e a constante some do bundle.
+window.ASSESSMENT_BLOCKS = ASSESSMENT_BLOCKS;

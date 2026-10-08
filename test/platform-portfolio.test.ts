@@ -70,11 +70,6 @@ describe('Portfólio e portal do cliente', () => {
         .bind('as-1', 'lead-1', 'Empresa Lead', 'In Progress'),
       env.DB.prepare(`INSERT INTO proposals (id, lead_id, assessment_id, status, total_price) VALUES (?,?,?,?,?)`)
         .bind('prop-1', 'lead-1', 'as-1', 'Sent', 100000),
-
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-1', A, 'tok-auditor-valido', '2099-01-01T00:00:00Z'),
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-2', A, 'tok-auditor-vencido', '2020-01-01T00:00:00Z'),
     ]);
 
     admA = await sessionFor({ id: 'u-adm-a', email: 'adm@a.com', role: 'org_admin', client_project_id: A });
@@ -238,25 +233,6 @@ describe('Portfólio e portal do cliente', () => {
       const cols = await env.DB.prepare('PRAGMA table_info(users)').all();
       const nomes = (cols.results as any[]).map(c => c.name);
       expect(nomes, 'client_lead_id foi criada — duplica um vínculo que projects.assessment_id já guarda').not.toContain('client_lead_id');
-    });
-  });
-
-  describe('GET /auditor/:token/project', () => {
-    it('token válido devolve o projeto e suas fases', async () => {
-      const res = await req('/api/v1/auditor/tok-auditor-valido/project');
-      expect(res.status, await res.clone().text()).toBe(200);
-      const body = await res.json() as any;
-      expect(body.project.id).toBe(A);
-      expect(body.phases).toHaveLength(2);
-    });
-
-    it('token vencido é 401 — a expiração vale, não só a existência', async () => {
-      const res = await req('/api/v1/auditor/tok-auditor-vencido/project');
-      expect(res.status).toBe(401);
-    });
-
-    it('token inexistente é 401', async () => {
-      expect((await req('/api/v1/auditor/nao-existe/project')).status).toBe(401);
     });
   });
 

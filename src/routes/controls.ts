@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, verifyPassword, erro500, projetosVisiveis, autoridadeDeAssinatura, recusaDeAssinatura, type PapelAssinatura } from '../helpers';
+import { assinaturaPolitica } from '../services/pedidos';
 import { validateBody, controlUpdateSchema, maturitySchema, statusSchema, assinaturaSchema, trilhaDesfazerSchema, revogarAprovacaoSchema } from '../schemas';
 import { registrarAlteracoes, registrarDesfazer, lerTrilha } from '../trilha-campo';
 import { NA_STATUS, hasValidApplicability } from '../services/soa-logic';
@@ -44,14 +45,14 @@ controlsApp.get('/', async (c) => {
       return c.json([]);
     }
     const { results } = await c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ? ORDER BY id ASC').bind(user.client_project_id).all();
-    return c.json(results || []);
+    return c.json(semRastros(results));
   }
   // Os controles dos projetos que o usuário enxerga (D5 e organização); só o platform_admin vê todos.
   const v = projetosVisiveis(user);
   const { results } = await (v
     ? c.env.DB.prepare(`SELECT * FROM compliance_controls WHERE project_id IN (${v.sql}) ORDER BY id ASC`).bind(v.bind)
     : c.env.DB.prepare('SELECT * FROM compliance_controls ORDER BY id ASC')).all();
-  return c.json(results || []);
+  return c.json(semRastros(results));
 });
 
 controlsApp.put('/:id', async (c) => {
@@ -252,6 +253,7 @@ controlsApp.put('/:id/status', async (c) => {
 const handleControlApprove = async (c: any) => {
   try {
     const controlId = c.req.param('id');
+    // openapi: controlsApp POST /:id/approve
     const v = await validateBody(c, assinaturaSchema);
     if (!v.success) return v.response;
     const { password } = v.data as any;
@@ -284,19 +286,28 @@ const handleControlApprove = async (c: any) => {
       return c.json({ error: 'Senha incorreta' }, 401);
     }
 
-    await c.env.DB.prepare(
-      `UPDATE compliance_controls SET status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-    ).bind(controlId).run();
-
-
+    // A autoridade sai da matriz de governança DESTE projeto, como em ROPA, DPIA e evidência. Antes
+    // esta rota só gravava status='Approved': qualquer editor do projeto "aprovava" a política, sem
+    // CISO/CEO registrado e sem segregação. Sem `role` no corpo, o papel sai do cargo (como evidência).
+    const autoridade = await autoridadeDeAssinatura(c.env.DB, targetProjectId, user);
+    const role: PapelAssinatura = v.data.role ?? (autoridade.ehDirecao && !autoridade.ehLiderSgsi ? 'ceo' : 'ciso');
+    const recusa = recusaDeAssinatura(autoridade, role);
+    if (recusa) return c.json({ error: recusa }, 403);
 
     const now = new Date().toISOString();
     const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '127.0.0.1';
     const ua = c.req.header('User-Agent') || 'Unknown';
-    const approvedBy = dbUser.name || user.email;
+    // O nome da matriz vem primeiro: é sob aquela designação que a pessoa assina.
+    const approvedBy = autoridade.nome || dbUser.name || user.email;
 
-    await logAudit(c.env.DB, 'control.approved', user.email, `Controle ${controlId} aprovado com assinatura por ${approvedBy} (IP: ${ip})`, '', '', targetProjectId);
-    return c.json({ ok: true, approved_by: approvedBy, approved_at: now });
+    // A mesma assinatura que o pedido de aprovação de política aciona (services/pedidos.ts).
+    const assinatura = await assinaturaPolitica(c.env.DB, targetProjectId, controlId, role, { por: approvedBy, em: now, ip, ua });
+    if (!assinatura) return c.json({ error: 'Controle não encontrado' }, 404);
+    await assinatura.run();
+
+    const quem = role === 'ciso' ? 'pelo Líder SGSI' : 'pela Direção Executiva';
+    await logAudit(c.env.DB, 'control.approved', user.email, `Política do controle ${controlId} assinada ${quem} (${approvedBy}; IP: ${ip})`, '', '', targetProjectId);
+    return c.json({ ok: true, role, approved_by: approvedBy, approved_at: now });
   } catch (e: any) {
     return erro500(c, 'Falha ao assinar controle', e);
   }

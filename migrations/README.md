@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0044** (`ls migrations/*.sql | tail -1`). São 42 arquivos
+- Última migration no repositório: **0045** (`ls migrations/*.sql | tail -1`). São 43 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -72,7 +72,9 @@ não nulo, e `schema.sql` e migration precisam do mesmo DDL.
 
 Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote`
 → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to
-apply") → merge, porque `deploy.yml` recusa migration pendente.
+apply") → merge, porque `deploy.yml` recusa migration pendente. Entre aplicar a 0045 e publicar o código novo,
+as rotas do auditor do código antigo respondem 500 (a coluna `token` não existe mais); sem efeito com 0
+tokens em produção, mas aplique e publique em seguida.
 
 ---
 
@@ -208,3 +210,17 @@ do merge:
     npx wrangler d1 execute niso-db --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0044_aprovacao_ip_ua.sql');"
     npx wrangler d1 migrations list niso-db --remote   # esperado: "No migrations to apply"
 
+## 0045 — token do auditor em hash e revogável (fatia de jornada, P5, 2026-10)
+
+`auditor_tokens.token` vira `token_hash` (SHA-256 do token do link; o índice `idx_auditor_tokens`
+acompanha o RENAME) e ganha `revoked_at` e `revoked_by`. As notas (`auditor_notes.auditor_token`)
+passam a guardar o id do token, não o token. Os tokens existentes são apagados: SQLite não calcula
+SHA-256, então token em claro não migra. Em 2026-10-07 a tabela tinha 0 linhas em produção.
+
+Conferência antes de aplicar: `SELECT COUNT(*) FROM auditor_tokens` (se não for 0, avise a
+consultoria: esses links deixam de abrir). Depois: `PRAGMA table_info(auditor_tokens)` mostra
+`token_hash`, `revoked_at` e `revoked_by`, e não mostra `token`.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
+--remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to apply")
+→ merge, porque `deploy.yml` recusa migration pendente.

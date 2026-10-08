@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial } from '../helpers';
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
@@ -418,7 +418,7 @@ platformApp.get('/client/dashboard', async (c) => {
     ]);
 
     const phaseList = (phases.results || []) as any[];
-    const controlList = (controls.results || []) as any[];
+    const controlList = semRastros(controls.results) as any[];
     const totalPhases = phaseList.length || 41;
     const completedPhases = phaseList.filter(p => p.status === 'completed').length;
     const progressPercent = totalPhases ? Math.round((completedPhases / totalPhases) * 100) : 0;
@@ -554,7 +554,7 @@ platformApp.get('/phases/config', (c) => {
   return c.json({ ok: true, titles: PHASE_TITLES, checklists: PHASE_CHECKLISTS });
 });
 
-// Phase config & Auditor token
+// Phase config
 // Tabela de preços da ness. (custo interno, tributos, margem): comercial apenas.
 // Estava sem trava nenhuma — qualquer sessão, inclusive de cliente, lia com 200.
 platformApp.get('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, async (c) => {
@@ -588,25 +588,4 @@ platformApp.put('/pricing-config', somenteComercial, exigirOrg, somenteOrgNess, 
   } catch (e: any) {
     return erro500(c, 'Falha ao salvar config', e);
   }
-});
-
-platformApp.get('/auditor/:token/project', async (c) => {
-  const token = c.req.param('token');
-  const t = await c.env.DB.prepare('SELECT project_id FROM auditor_tokens WHERE token = ? AND expires_at > datetime("now")').bind(token).first() as any;
-  if (!t) return c.json({ error: 'Invalid or expired token' }, 401);
-
-  const [project, phases, controls, evidence] = await Promise.all([
-    c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(t.project_id).first(),
-    c.env.DB.prepare('SELECT * FROM project_phases WHERE project_id = ? ORDER BY phase_number ASC').bind(t.project_id).all(),
-    c.env.DB.prepare('SELECT * FROM compliance_controls WHERE project_id = ?').bind(t.project_id).all(),
-    c.env.DB.prepare('SELECT id, file_name, file_size, evaluation_status, evaluation_notes, created_at FROM evidence WHERE project_id = ?').bind(t.project_id).all()
-  ]);
-
-  return c.json({
-    ok: true,
-    project,
-    phases: phases.results || [],
-    controls: controls.results || [],
-    evidence: evidence.results || []
-  });
 });

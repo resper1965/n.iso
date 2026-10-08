@@ -65,6 +65,32 @@ describe('upload de evidência com control_id', () => {
     expect((await objetosDe(P)).some((k) => k.includes(id))).toBe(true);
   });
 
+  // Review Focus 5: o modal pede "Ex: A.5.1"; o servidor só aceitava o id da linha.
+  it('aceita o código do controle e liga à linha deste projeto', async () => {
+    const res = await upload('A.5.1');
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    const ev = await env.DB.prepare('SELECT control_id FROM evidence WHERE id = ?').bind(id).first<{ control_id: string }>();
+    expect(ev!.control_id).toBe('ctrl-meu');
+  });
+
+  it('control_ref é leniente: código ausente sobe sem controle; presente, liga', async () => {
+    const enviar = (ref: string) => {
+      const form = new FormData();
+      form.append('file', new File(['certificado'], 'certificado.pdf', { type: 'application/pdf' }));
+      form.append('control_ref', ref);
+      return worker.fetch(new Request(`http://localhost/api/v1/projects/${P}/evidence/upload`, { method: 'POST', headers: admin, body: form }), workerEnv());
+    };
+    const sem = await enviar('A.6.3');
+    expect(sem.status).toBe(201);
+    const idSem = ((await sem.json()) as { id: string }).id;
+    expect((await env.DB.prepare('SELECT control_id FROM evidence WHERE id = ?').bind(idSem).first<{ control_id: string | null }>())!.control_id).toBeNull();
+
+    const com = await enviar('A.5.1');
+    const idCom = ((await com.json()) as { id: string }).id;
+    expect((await env.DB.prepare('SELECT control_id FROM evidence WHERE id = ?').bind(idCom).first<{ control_id: string }>())!.control_id).toBe('ctrl-meu');
+  });
+
   // Dublê pontual: só o INSERT em evidence falha; o resto vai ao D1 real.
   const dbInsertFalha = () => new Proxy(env.DB, {
     get(alvo, prop) {

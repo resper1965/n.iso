@@ -53,6 +53,14 @@ function rotasValidadasNoFonte(): { metodo: string; caminho: string; nome: strin
           : null;
         return;
       }
+      // Mesma marca do gerador: handler nomeado, registrado em várias rotas.
+      const marca = linha.match(/\/\/\s*openapi:\s*(\w+)\s+(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/);
+      if (marca) {
+        atual = marca[1] === routerVar
+          ? { metodo: marca[2], caminho: (mount[routerVar] + marca[3]).replace(/\/$/, '') || '/' }
+          : null;
+        return;
+      }
       const vb = linha.match(/validateBody\(c,\s*(\w+)\)/);
       if (vb && atual) {
         achadas.push({ ...atual, nome: vb[1], origem: `src/routes/${modulo}.ts:${i + 1}` });

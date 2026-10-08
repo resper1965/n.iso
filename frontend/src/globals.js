@@ -77,8 +77,8 @@ window.viewEvidence = async function viewEvidence(id) {
             
             let sealHtml = '';
             if (ev.ciso_approved_by || ev.ceo_approved_by) {
-                const cisoText = ev.ciso_approved_by ? `Assinado por ${escapeHTML(ev.ciso_approved_by)} em ${new Date(ev.ciso_approved_at).toLocaleString()} ${ev.ciso_approved_ip ? `(IP: ${escapeHTML(ev.ciso_approved_ip)})` : ''}` : 'Pendente';
-                const ceoText = ev.ceo_approved_by ? `Assinado por ${escapeHTML(ev.ceo_approved_by)} em ${new Date(ev.ceo_approved_at).toLocaleString()} ${ev.ceo_approved_ip ? `(IP: ${escapeHTML(ev.ceo_approved_ip)})` : ''}` : 'Pendente';
+                const cisoText = ev.ciso_approved_by ? `Assinado por ${escapeHTML(ev.ciso_approved_by)} em ${new Date(ev.ciso_approved_at).toLocaleString()}` : 'Pendente';
+                const ceoText = ev.ceo_approved_by ? `Assinado por ${escapeHTML(ev.ceo_approved_by)} em ${new Date(ev.ceo_approved_at).toLocaleString()}` : 'Pendente';
                 
                 sealHtml = `
                     <div style="background: rgba(0, 173, 232, 0.02); border: 1px solid rgba(0, 173, 232, 0.15); border-radius: 10px; padding: 1rem; margin-top: 1rem;">
@@ -462,6 +462,15 @@ window.cancelMfaLogin = function cancelMfaLogin() {
     }
 
 window.doLogout = function doLogout() {
+        // Encerra a sessão no servidor: POST /auth/logout apaga a chave no KV. Antes só o
+        // navegador esquecia o token, e quem o tivesse copiado seguia usando até expirar.
+        // `fetch` direto, não `api()`: um 401 ali chamaria doLogout de novo. Sem `await`: sair
+        // não espera a rede; `keepalive` deixa a requisição terminar se a página fechar.
+        if (S.token) {
+            fetch(API_BASE + '/api/v1/auth/logout', {
+                method: 'POST', headers: { Authorization: `Bearer ${S.token}` }, keepalive: true,
+            }).catch(() => {});
+        }
         // Sem isto o poll seguia rodando apos o logout: cada ciclo tomava 401 e
         // chamava doLogout de novo.
         clearInterval(window._notifPoll);
@@ -1597,7 +1606,7 @@ window.closeDoDDrawerEl = function(e) {
         window.cancelDoDCompletion();
     }
 
-window.signEvidence = async function(evidenceId, role) {
+window.signEvidence = async function(evidenceId, role, fileHash) {
         if (!evidenceId) {
             alert('Não é possível assinar: ID da evidência inválido.');
             return;
@@ -1608,7 +1617,7 @@ window.signEvidence = async function(evidenceId, role) {
         if (!password) return;
         
         try {
-            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name, password });
+            await api('PUT', `/api/v1/evidence/${evidenceId}/approve`, { role, approved_by: name, password, file_hash: fileHash });
             showToast(`Assinatura registrada com sucesso como ${role.toUpperCase()}!`);
             const c = document.getElementById('main-content');
             const h = document.getElementById('header-title');
@@ -1621,13 +1630,15 @@ window.signEvidence = async function(evidenceId, role) {
         }
     }
 
+// scope_changes.status nasce 'Pending' (schema.sql); ainda não há fluxo que aprove.
+const STATUS_ESCOPO = { Pending: 'Pendente', Approved: 'Aprovada', Rejected: 'Rejeitada' };
+
 window.openScopeChangeModal = async function(projectId, projData) {
         let history = [];
         try {
+            // A rota devolve a lista crua de scope_changes (projects.ts:746-750).
             const res = await api('GET', `/api/v1/projects/${projectId}/scope-changes`);
-            if (res.ok && Array.isArray(res.changes)) {
-                history = res.changes;
-            }
+            if (Array.isArray(res)) history = res;
         } catch(e) {}
 
         openModal(`
@@ -1649,7 +1660,7 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <textarea class="form-input" id="scope-impact" rows="2" placeholder="Quais novos riscos ou mudanças de ativos essa alteração traz?"></textarea>
             </div>
             <div class="form-group">
-                <label class="form-label">Aprovador ness. / Cliente</label>
+                <label class="form-label">Solicitado por</label>
                 <input class="form-input" id="scope-approved-by" placeholder="Ex: João (ness.) / CISO Cliente">
             </div>
             
@@ -1660,10 +1671,10 @@ window.openScopeChangeModal = async function(projectId, projData) {
                 <div style="font-size:0.65rem; color:var(--text-dim); max-height:100px; overflow-y:auto; line-height:1.4">
                     ${history.length ? history.map((c, i) => `
                         <div style="padding:0.3rem 0; border-bottom:1px dashed rgba(255,255,255,0.03)">
-                            <strong>Versão ${history.length - i}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Por: ${escapeHTML(c.approved_by)}<br>
-                            <strong>Motivo:</strong> ${escapeHTML(c.change_reason)}<br>
-                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.security_impact)}<br>
-                            <strong>Novo Escopo:</strong> ${escapeHTML(c.new_scope)}
+                            <strong>${escapeHTML(STATUS_ESCOPO[c.status] || c.status || 'Pendente')}</strong> (${new Date(c.created_at).toLocaleDateString()}) - Solicitado por: ${escapeHTML(c.requested_by)}<br>
+                            <strong>Motivo:</strong> ${escapeHTML(c.reason)}<br>
+                            <strong>Impacto de Seg.:</strong> ${escapeHTML(c.impact_analysis)}<br>
+                            <strong>Novo Escopo:</strong> ${escapeHTML(c.change_description)}
                         </div>
                     `).join('') : 'Sem alterações de escopo registradas.'}
                 </div>
@@ -1683,11 +1694,21 @@ window.submitScopeChange = async function(projectId, prevScope) {
             alert('Por favor, preencha todos os campos obrigatórios.');
             return;
         }
-        await api('POST', `/api/v1/projects/${projectId}/scope-changes`, body);
-        
-        if (S.activeProject && S.activeProject.id === projectId) S.activeProject.scope = body.new_scope;
-        if (S.currentProject && S.currentProject.id === projectId) S.currentProject.scope = body.new_scope;
+        // Nomes do scopeChangeSchema (src/schemas/domain.ts:294-301). Os da tela davam 400 sempre.
+        try {
+            await api('POST', `/api/v1/projects/${projectId}/scope-changes`, {
+                change_description: body.new_scope,
+                reason: body.change_reason,
+                impact_analysis: body.security_impact,
+                requested_by: body.approved_by,
+            });
+        } catch (e) {
+            showToast('Erro ao registrar a alteração de escopo: ' + e.message, 'error');
+            return;
+        }
 
+        // A solicitação fica pendente: o escopo vigente do projeto não muda aqui.
+        showToast('Solicitação de mudança de escopo registrada (pendente)');
         forceCloseModal(); render();
     }
 
@@ -1702,10 +1723,9 @@ window.renderSelfServiceAssessment = async function renderSelfServiceAssessment(
         c.innerHTML = '<div style="max-width:700px;margin:2rem auto;padding:0 1rem"><div style="text-align:center;color:var(--muted)">Carregando assessment...</div></div>';
 
         try {
-            const r = await fetch(API_BASE + '/api/v1/public/assessment/' + encodeURIComponent(token));
-            if (!r.ok) throw new Error('Link invalido ou expirado');
-            const data = await r.json();
-            if (data.error) throw new Error(data.error);
+            const r = await fetch(API_BASE + '/api/v1/assessments/public/' + encodeURIComponent(token));
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || 'Link invalido ou expirado');
 
             // Group existing answers by block
             const existingByBlock = {};
@@ -1800,13 +1820,17 @@ window.ssNext = async function() {
         if (!window._ssAnswers[block.block]) window._ssAnswers[block.block] = {};
         answers.forEach(a => { window._ssAnswers[block.block][a.question_key] = a.answer; });
 
-        // Save to API
+        // Save to API. Falhou: fica no bloco e diz o motivo (antes concluia sem ter salvo).
         try {
-            await fetch(API_BASE + '/api/v1/public/assessment/' + window._ssToken + '/answers', {
+            const r = await fetch(API_BASE + '/api/v1/assessments/public/' + encodeURIComponent(window._ssToken) + '/answers', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ block: block.block, answers })
             });
-        } catch(e) {}
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+        } catch (e) {
+            showToast('Não foi possível salvar as respostas: ' + e.message, 'error');
+            return;
+        }
 
         if (window._ssBlock < blocks.length - 1) {
             window._ssBlock++;

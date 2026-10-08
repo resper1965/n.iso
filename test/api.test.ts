@@ -82,8 +82,8 @@ describe('nISO API (D1 e KV reais)', () => {
          VALUES (?,?,?,?,?,?,?,?,?)`
       ).bind('ev-alheio', OUTRO, 'b.md', 'k/b.md', 'bb', 'text/markdown', 2, 'x@y', 'pending'),
 
-      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)`)
-        .bind('at-1', PROJ, 'tok123', '2099-01-01T00:00:00Z'),
+      env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)`)
+        .bind('at-1', PROJ, await sha256Hex('tok123'), '2099-01-01T00:00:00Z'),
 
       env.DB.prepare(`INSERT INTO assessments (id, client_name, status, access_token) VALUES (?,?,?,?)`)
         .bind('assess-1', 'Empresa X', 'In Progress', 'tok456'),
@@ -180,6 +180,12 @@ describe('nISO API (D1 e KV reais)', () => {
         });
         expect(edicao.status, await edicao.clone().text()).toBe(200);
 
+        // Assinar exige designação na matriz de Governança do projeto (como ROPA, DPIA e evidência).
+        await env.DB.prepare(
+          `INSERT INTO project_governance (id, project_id, name, email, role_category, job_title)
+           VALUES ('gov-orgadmin', ?, 'Org Admin', 'orgadmin@cliente.com', 'cliente', 'CISO')`
+        ).bind(PROJ).run();
+
         const assinatura = await req('/api/v1/controls/ctrl-proprio/approve', {
           method: 'PUT',
           headers: { ...orgAdmin, 'Content-Type': 'application/json' },
@@ -187,9 +193,10 @@ describe('nISO API (D1 e KV reais)', () => {
         });
         expect(assinatura.status, await assinatura.clone().text()).toBe(200);
 
-        const l = await env.DB.prepare('SELECT title, status FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
+        const l = await env.DB.prepare('SELECT title, status, ciso_approved_by FROM compliance_controls WHERE id = ?').bind('ctrl-proprio').first<any>();
         expect(l.title).toBe('Título novo');
-        expect(l.status).toBe('Approved');
+        expect(l.ciso_approved_by).toBe('Org Admin');
+        expect(l.status).toBe('Missing');
       }, 30_000);
     });
 
@@ -527,8 +534,9 @@ describe('nISO API (D1 e KV reais)', () => {
     });
 
     it('rotas públicas por token dispensam sessão', async () => {
-      // O token no caminho é a credencial; não há header de autenticação.
-      expect((await req('/api/v1/auditor/tok123/notes')).status).toBe(200);
+      // O token é a credencial; não há header de autenticação. O do auditor vai no corpo.
+      const portal = await req('/api/v1/public/auditor/ver', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'tok123' }) });
+      expect(portal.status).toBe(200);
       expect((await req('/api/v1/assessments/public/tok456')).status).toBe(200);
     });
 

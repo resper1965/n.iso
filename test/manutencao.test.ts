@@ -71,9 +71,9 @@ describe('manutenção diária', () => {
       // A carência é de propósito: num produto de GRC, investigar um acesso de
       // auditor do mês passado exige que a linha ainda exista.
       await env.DB.batch([
-        env.DB.prepare('INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?,?)')
+        env.DB.prepare('INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?,?)')
           .bind('at-vivo', 'proj-a', 'tok-vivo', '2099-01-01T00:00:00Z'),
-        env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?, datetime('now','-10 days'))`)
+        env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?, datetime('now','-10 days'))`)
           .bind('at-recente', 'proj-a', 'tok-recente'),
       ]);
 
@@ -84,7 +84,7 @@ describe('manutenção diária', () => {
     });
 
     it('apaga token vencido há mais de 90 dias — credencial morta não se guarda para sempre', async () => {
-      await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?, datetime('now','-200 days'))`)
+      await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?, datetime('now','-200 days'))`)
         .bind('at-antigo', 'proj-a', 'tok-antigo').run();
 
       const r = await manutencaoDiaria(env as any);
@@ -174,7 +174,7 @@ describe('manutenção diária', () => {
       await env.DB.prepare('DROP TABLE rate_limits').run();
       await env.DB.prepare(`INSERT INTO projects (id, client_name, standards, org_role, status) VALUES (?,?,?,?,?)`)
         .bind('proj-b', 'Cliente B', 'ISO 27001', 'controller', 'Active').run();
-      await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token, expires_at) VALUES (?,?,?, datetime('now','-200 days'))`)
+      await env.DB.prepare(`INSERT INTO auditor_tokens (id, project_id, token_hash, expires_at) VALUES (?,?,?, datetime('now','-200 days'))`)
         .bind('at-x', 'proj-b', 'tok-x').run();
 
       const r = await manutencaoDiaria(env as any);

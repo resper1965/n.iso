@@ -8,7 +8,8 @@
  * documento (PUT do DPIA) E de novo na hora de decidir, porque o documento pode mudar por outro
  * caminho (agente, ferramenta genérica, banco).
  *
- * Tipos: `dpia` e `politica` (texto da política no controle, `compliance_controls`). Tipo novo =
+ * Tipos: `dpia` e `politica` (texto da política no controle, `compliance_controls`); ambos assinam
+ * (`assinaturaDpia`, `assinaturaPolitica`). Tipo novo =
  * uma entrada em `DOCUMENTOS`, o CHECK da tabela (migration) e, se assina, a ação em
  * `routes/pedidos.ts`.
  */
@@ -58,6 +59,23 @@ export async function autoridadeNoPedido(
   return { recusa: recusaDeAssinatura(a, pedido.papel_exigido), nome: a.nome };
 }
 
+/**
+ * Pedido de aprovação (`ciso`/`ceo`) só vai a quem teria a autoridade do papel na matriz do projeto
+ * (a regra das assinaturas, aplicada ao e-mail do destinatário). Devolve a recusa, ou `null`.
+ * Ciência não passa por aqui. A conta de plataforma não é checada: ela é recusada na decisão.
+ */
+export async function recusaDeDestinatarios(
+  db: D1Database, projectId: string, papel: PapelPedido, destinatarios: { email: string }[],
+): Promise<string | null> {
+  if (papel === 'ciente') return null;
+  const quem = papel === 'ceo' ? 'Direção (CEO)' : 'Líder SGSI';
+  const sem: string[] = [];
+  for (const email of new Set(destinatarios.map((d) => d.email.trim().toLowerCase()))) {
+    if (recusaDeAssinatura(await autoridadeDeAssinatura(db, projectId, { email }), papel)) sem.push(email);
+  }
+  return sem.length ? sem.map((e) => `${e} não tem autoridade de ${quem} neste projeto`).join('; ') : null;
+}
+
 /** JSON com chaves ordenadas, em qualquer profundidade: a mesma informação dá sempre o mesmo texto. */
 function canonico(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(canonico);
@@ -97,6 +115,18 @@ export async function documentoAtual(db: D1Database, tipo: TipoPedido, refId: st
     .bind(refId, projectId).first<Record<string, unknown>>();
   if (!row) return null;
   return { titulo: d.titulo(row, refId), conteudo: Object.fromEntries(d.colunas.map((c) => [c, row[c] ?? null])) };
+}
+
+/** Texto-padrão que o catálogo grava quando a política ainda não foi escrita. */
+const DESCRICAO_PADRAO = 'Universal ISMS requirement.';
+
+/** Política sem texto (nula, em branco ou o padrão do catálogo): não há o que aprovar nem o que ler. */
+export async function politicaVazia(db: D1Database, refId: string, projectId: string): Promise<boolean> {
+  const doc = await documentoAtual(db, 'politica', refId, projectId);
+  if (!doc) return false; // inexistente é 404 de quem chama, não "vazia"
+  const d = doc.conteudo.description;
+  const t = typeof d === 'string' ? d.trim() : '';
+  return !t || t === DESCRICAO_PADRAO;
 }
 
 export interface PedidoRow {
@@ -255,6 +285,37 @@ export async function assinaturaDpia(db: D1Database, projectId: string, assessme
   return db.prepare(`UPDATE dpia_assessments SET ${set.sql} WHERE ${onde}`).bind(...set.binds, ...bindsOnde);
 }
 
+// SET literal por papel: a catraca de colunas (test/colunas-catraca.test.ts) não enxerga nome de
+// coluna montado por interpolação. Mesmo formato de COLUNAS_REVOGACAO (routes/controls.ts).
+const SET_ASSINATURA_POLITICA: Record<PapelAssinatura, string> = {
+  ciso: 'ciso_approved_by = ?, ciso_approved_at = ?, ciso_approved_ip = ?, ciso_approved_ua = ?',
+  ceo: 'ceo_approved_by = ?, ceo_approved_at = ?, ceo_approved_ip = ?, ceo_approved_ua = ?',
+};
+
+/**
+ * Assinatura da política (o texto vive em `compliance_controls.description`) por papel. É a MESMA
+ * usada por `POST /api/v1/controls/:id/approve` e pelo pedido de aprovação de política. Devolve o
+ * UPDATE (para `run()` ou `batch`), ou `null` se o controle não existe no projeto. Não toca `status`:
+ * ele é o da SoA. Com `guarda`, só pega se a prova do destinatário foi gravada no mesmo `batch` e o
+ * título/texto são os congelados no pedido.
+ */
+export async function assinaturaPolitica(
+  db: D1Database, projectId: string, controlId: string, role: PapelAssinatura,
+  carimbo: { por: string; em: string; ip: string | null; ua: string | null }, guarda?: GuardaAssinatura,
+): Promise<D1PreparedStatement | null> {
+  const existe = await db.prepare('SELECT 1 FROM compliance_controls WHERE id = ? AND project_id = ?').bind(controlId, projectId).first();
+  if (!existe) return null;
+  let onde = 'id = ? AND project_id = ?';
+  const bindsOnde: unknown[] = [controlId, projectId];
+  if (guarda) {
+    const ok = intacto('politica', '', guarda.conteudoJson);
+    onde += ` AND EXISTS (SELECT 1 FROM pedido_destinatarios WHERE id = ? AND status = ? AND decidido_em = ?) AND ${ok.sql}`;
+    bindsOnde.push(guarda.destId, guarda.status, guarda.decididoEm, ...ok.binds);
+  }
+  return db.prepare(`UPDATE compliance_controls SET ${SET_ASSINATURA_POLITICA[role]}, updated_at = CURRENT_TIMESTAMP WHERE ${onde}`)
+    .bind(carimbo.por, carimbo.em, carimbo.ip, carimbo.ua, ...bindsOnde);
+}
+
 /**
  * Grava a decisão do destinatário, a assinatura (se houver) e o novo status do pedido num `batch`
  * só, com toda condição conferida no SQL: o destinatário ainda pendente, o pedido ainda `aberto` com
@@ -282,8 +343,11 @@ export async function registrarDecisao(db: D1Database, a: {
         ...(link ? [a.tokenHash ?? ''] : []), p.id, p.hash, p.ref_id, p.project_id, ...ok.binds),
   ];
   if (a.assinar) {
-    const st = await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome,
-      { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json });
+    const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
+    // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
+    const st = p.tipo === 'politica'
+      ? await assinaturaPolitica(db, p.project_id, p.ref_id, a.assinar.papel, { por: a.nome, em: decididoEm, ip: a.ip, ua: a.ua }, guarda)
+      : await assinaturaDpia(db, p.project_id, p.ref_id, a.assinar.papel, a.nome, guarda);
     if (!st) return false;
     stmts.push(st);
   }

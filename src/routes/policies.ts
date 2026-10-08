@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
-import { PHASE_POLICY_DOCS, ChecklistItem } from '../checklists';
+import { itemDoChecklist, registrarDocumentoDoItem } from '../services/checklist-evidencia';
 import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprovarSchema, politicasLoteSchema, versaoRestaurarSchema, politicaTextoSchema, politicaDeTemplateSchema } from '../schemas';
-import { genId, idDoControle, logAudit, escapeHtml, erro500, registraErro } from '../helpers';
+import { semRastroDeAssinatura, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
 import { conferirPedidosDoDocumento } from './pedidos';
+import { COLUNAS_REVOGACAO } from './controls';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -88,17 +89,6 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
   }
 });
 
-// Helper para encontrar item de checklist
-function findChecklistItem(itemId: string): { item: ChecklistItem; phaseNumber: number } | null {
-  for (const phaseStr in PHASE_POLICY_DOCS) {
-    const phaseNumber = parseInt(phaseStr);
-    const item = PHASE_POLICY_DOCS[phaseNumber].find(i => i.id === itemId);
-    if (item) return { item, phaseNumber };
-  }
-  return null;
-}
-
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DOCUMENT WIZARD — Guided Document Generation with Field Context
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -114,9 +104,8 @@ policies.post('/api/v1/projects/:projectId/generate-document', async (c) => {
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-    const { item } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item de checklist não encontrado' }, 404);
 
     // Build context from fields
     const fieldsSummary = Object.entries(fields)
@@ -180,36 +169,13 @@ policies.post('/api/v1/projects/:projectId/approve-document', async (c) => {
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item não encontrado' }, 404);
-    const { item, phaseNumber } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item não encontrado' }, 404);
     const userEmail = c.get('user')?.email ?? 'system';
-    const userId = c.get('user')?.id ?? null;
 
-    // Save to R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, content, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Hash
-    const data = new TextEncoder().encode(content);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Create evidence record
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(evidenceId, projectId, fileName, r2Key, hashHex, 'text/markdown', data.byteLength, userEmail, 'conforming', 'Documento gerado e aprovado via wizard guiado.').run();
-
-    // Auto-check checklist item
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Aprovado via wizard guiado')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1, checked_by = EXCLUDED.checked_by, checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id, notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
+    // Entra pendente: quem gerou não revisa. A revisão é a assinatura do Líder SGSI.
+    const { evidenceId, fileName } = await registrarDocumentoDoItem(
+      c.env, projectId, item, content, c.get('user'), 'Documento do assistente guiado; aguarda revisão.');
 
     await logAudit(c.env.DB, 'document.approved', userEmail, `Documento "${fileName}" aprovado via wizard para item ${itemId}`);
 
@@ -229,61 +195,19 @@ policies.post('/api/v1/projects/:projectId/checklist/:itemId/generate', async (c
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const found = findChecklistItem(itemId);
-    if (!found) return c.json({ error: 'Item de checklist não encontrado' }, 404);
-
-    const { item, phaseNumber } = found;
+    const item = itemDoChecklist(itemId);
+    if (!item) return c.json({ error: 'Item de checklist não encontrado' }, 404);
 
     // Gerar conteúdo com o PolicyAgent
     const agent = new PolicyAgent(c.env.AI, c.env.DB, c.env);
     const prompt = `Gere um documento ou política detalhada em formato markdown para atender ao item de checklist "${item.text}" do projeto "${project.client_name}" (setor: ${project.sector || 'não especificado'}, escopo: ${project.scope || 'ISO 27001:2022'}). O documento deve ser completo, profissional, prático e pronto para auditoria, sem placeholders e com formatação markdown limpa.`;
 
     const result = await agent.run(prompt, { organizationId: projectId });
-    let docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
+    const docContent = result.success ? result.content : `# ${item.text}\n\nEste documento foi criado automaticamente para fins de conformidade.\n\nOrganização: ${project.client_name}`;
 
-    // Salvar no R2
-    const r2Key = `projects/${projectId}/evidence/${itemId}.md`;
-    await c.env.STORAGE.put(r2Key, docContent, { httpMetadata: { contentType: 'text/markdown' } });
-
-    // Calcular hash SHA-256
-    const encoder = new TextEncoder();
-    const data = encoder.encode(docContent);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Criar registro na tabela de evidence
-    const evidenceId = crypto.randomUUID();
-    const fileName = `${item.text}.md`;
-    const fileSize = data.byteLength;
-
-    await c.env.DB.prepare(
-      'INSERT INTO evidence (id, project_id, file_name, r2_key, file_hash, file_type, file_size, uploaded_by, evaluation_status, evaluation_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      evidenceId,
-      projectId,
-      fileName,
-      r2Key,
-      hashHex,
-      'text/markdown',
-      fileSize,
-      userEmail,
-      'conforming',
-      'Documento gerado internamente pelo assistente de IA.'
-    ).run();
-
-    // Atualizar checklist_progress (ponytail: ensure proper random UUID / PK generated for checklist_progress)
-    const userId = c.get('user')?.id ?? null;
-    await c.env.DB.prepare(
-      `INSERT INTO checklist_progress (id, project_id, phase_number, item_id, is_checked, checked_by, checked_at, evidence_id, notes)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, ?, 'Gerado automaticamente pelo sistema')
-       ON CONFLICT(project_id, phase_number, item_id) DO UPDATE SET
-         is_checked = 1,
-         checked_by = EXCLUDED.checked_by,
-         checked_at = CURRENT_TIMESTAMP,
-         evidence_id = EXCLUDED.evidence_id,
-         notes = EXCLUDED.notes`
-    ).bind(projectId, phaseNumber, itemId, userId, evidenceId).run();
+    // Rascunho de IA entra pendente de revisão, ligado ao controle do item quando ele tem um.
+    const { evidenceId, fileName, r2Key } = await registrarDocumentoDoItem(
+      c.env, projectId, item, docContent, c.get('user'), 'Rascunho gerado pelo assistente de IA; aguarda revisão.');
 
     await logAudit(c.env.DB, 'document.generated', userEmail, `Documento ${fileName} gerado internamente para o item ${itemId}`);
 
@@ -421,6 +345,83 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/versions/:versionI
   return c.json(row);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LEITURA DA POLÍTICA — o modal e o relatório. O id do controle chega em qualquer formato
+//  ('ctrl-a51', 'A.5.1', 'ctrl_b_a51', genId) ou como código; idDoControle resolve preso ao projeto.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type ControleComPolitica = {
+  id: string; project_id: string; title: string; description: string | null; status: string | null;
+  ciso_approved_by: string | null; ciso_approved_at: string | null; ciso_approved_ip: string | null; ciso_approved_ua: string | null;
+  ceo_approved_by: string | null; ceo_approved_at: string | null; ceo_approved_ip: string | null; ceo_approved_ua: string | null;
+};
+
+/** O controle do projeto com o texto da política e o SHA-256 desse texto (o que as assinaturas cobrem). */
+async function politicaDoControle(db: D1Database, projectId: string, ref: string): Promise<{ control: ControleComPolitica; hash: string } | null> {
+  const id = await idDoControle(db, projectId, ref);
+  const control = id ? await db.prepare('SELECT * FROM compliance_controls WHERE id = ? AND project_id = ?')
+    .bind(id, projectId).first<ControleComPolitica>() : null;
+  if (!control) return null;
+  return { control, hash: await sha256Hex(control.description ?? '') };
+}
+
+policies.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c) => {
+  try {
+    const projectId = c.req.param('projectId');
+    const ref = c.req.param('controlId');
+    const p = await politicaDoControle(c.env.DB, projectId, ref);
+    if (!p) return c.json({ error: 'Controle não encontrado' }, 404);
+    // `control_id = ref` cobre versões antigas gravadas com o código em vez do id (como em /versions).
+    const { results: versions } = await c.env.DB.prepare(
+      'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
+    ).bind(projectId, p.control.id, ref).all();
+    return c.json({ ok: true, control: semRastroDeAssinatura(p.control), content: p.control.description ?? '', hash: p.hash, versions });
+  } catch (e) {
+    return erro500(c, 'Falha ao ler a política', e);
+  }
+});
+
+// Relatório para imprimir pelo navegador, no padrão dos de ROPA e DPIA. Tudo que vem do banco passa
+// por escapeHtml: título e texto da política são digitados ou gerados por IA.
+policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', async (c) => {
+  try {
+    const projectId = c.req.param('projectId');
+    const project = await c.env.DB.prepare('SELECT client_name FROM projects WHERE id = ?').bind(projectId).first<{ client_name: string | null }>();
+    const p = project ? await politicaDoControle(c.env.DB, projectId, c.req.param('controlId')) : null;
+    if (!project || !p) return c.html('<h3>Política não encontrada</h3>', 404);
+    const k = p.control;
+    const assinatura = (rotulo: string, por: string | null, em: string | null) =>
+      `<div class="label">${rotulo}</div><div class="value">${por ? `Assinado por ${escapeHtml(por)} em ${escapeHtml(em ?? '')}` : 'Aguardando assinatura'}</div>`;
+    return c.html(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Política — ${escapeHtml(k.title)}</title>
+  <style>
+    body { background: #ffffff; color: #0f172a; font-family: Inter, system-ui, sans-serif; margin: 0; padding: 2rem; line-height: 1.6; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-family: Montserrat, Inter, sans-serif; font-weight: 600; font-size: 1.4rem; margin: 0 0 0.25rem; }
+    .label { font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600; margin-top: 1rem; }
+    .value { font-size: 0.95rem; margin-top: 4px; word-break: break-all; }
+    .texto { white-space: pre-wrap; border-top: 1px solid #e2e8f0; margin-top: 1.5rem; padding-top: 1rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${escapeHtml(k.title)}</h1>
+    <div class="value">${escapeHtml(project.client_name ?? '')}</div>
+    ${assinatura('Líder SGSI', k.ciso_approved_by, k.ciso_approved_at)}
+    ${assinatura('Direção Executiva', k.ceo_approved_by, k.ceo_approved_at)}
+    <div class="label">Integridade do texto da política (SHA-256 do texto; não é o hash do pedido de aprovação)</div><div class="value">${p.hash}</div>
+    <div class="texto">${escapeHtml(k.description ?? '')}</div>
+  </div>
+</body>
+</html>`);
+  } catch (e) {
+    return c.html(`<h3>Erro ao gerar o relatório da política</h3><p>Informe o identificador ao suporte: ${escapeHtml(registraErro(c, e))}</p>`, 500);
+  }
+});
+
 policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version', async (c) => {
   const projectId = c.req.param('projectId');
   const controlIdRaw = c.req.param('controlId');
@@ -436,9 +437,9 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version',
 
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
 
-  // Update compliance_controls description
+  // Texto restaurado é texto diferente do assinado: zera as duas aprovações, como a edição e a geração.
   await c.env.DB.prepare(
-    'UPDATE compliance_controls SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
+    `UPDATE compliance_controls SET description = ?, ${COLUNAS_REVOGACAO.ciso}, ${COLUNAS_REVOGACAO.ceo}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
   ).bind(row.policy_text, controlId, projectId).run();
   await conferirPedidosDoDocumento(c, 'politica', controlId, projectId);
 

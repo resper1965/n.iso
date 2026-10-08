@@ -81,3 +81,12 @@ describe('ASSESSMENT_BLOCKS — contrato das questões', () => {
     expect(infratores).toEqual([]);
   });
 });
+
+describe('ASSESSMENT_BLOCKS no bundle', () => {
+  // globals.js e commercial.js leem `ASSESSMENT_BLOCKS` como global, sem import. Só com o export,
+  // o Vite descartava o módulo: em produção (b8c9ff1) o autoatendimento caía em "Assessment
+  // blocks not loaded" e o levantamento do consultor lançava ReferenceError.
+  it('fica em window', () => {
+    expect(window.ASSESSMENT_BLOCKS).toBe(ASSESSMENT_BLOCKS);
+  });
+});

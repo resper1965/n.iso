@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import {
-  logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis,
+  logAudit, verifyPassword, erro500, requireProjectAccess, projetosVisiveis, idDoControle,
   type PapelAssinatura,
   sendEmail, escapeHtml, genToken, sha256Hex, registraErro,
 } from '../helpers';
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import { appUrl } from '../config/url';
 import {
-  criarPedido, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
+  criarPedido, recusaDeDestinatarios, politicaVazia, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
   substituirPedidosDoDocumento, type TipoPedido, type Vigencia,
 } from '../services/pedidos';
 
@@ -73,6 +73,8 @@ async function avisarSubstituicao(c: any, antigo: PedidoRow, vig: Vigencia): Pro
   }
 }
 
+const POLITICA_VAZIA = { error: 'A política está vazia: escreva o texto antes de pedir aprovação' };
+
 export const pedidosApp = new Hono<Ctx>();
 export const projectPedidosApp = new Hono<Ctx>();
 
@@ -91,17 +93,28 @@ projectPedidosApp.post('/', async (c) => {
     const valid = await validateBody(c, pedidoCriarSchema);
     if (!valid.success) return valid.response;
     const b = valid.data;
+    // Política: só aprovação. A ciência de política é pelo lote por link (POST /ciencia).
+    if (b.tipo === 'politica' && b.papel_exigido === 'ciente') {
+      return c.json({ error: 'Ciência de política é pelo envio por link ("Nova ciência por link"). Este pedido é de aprovação: escolha Líder SGSI ou Direção.' }, 400);
+    }
+    // O id do controle chega em qualquer formato ou como código; o pedido guarda o id da linha.
+    const refId = b.tipo === 'politica' ? await idDoControle(c.env.DB, projectId, b.ref_id) : b.ref_id;
+    if (!refId) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
+    if (b.tipo === 'politica' && await politicaVazia(c.env.DB, refId, projectId)) return c.json(POLITICA_VAZIA, 400);
 
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
+    const semAutoridade = await recusaDeDestinatarios(c.env.DB, projectId, b.papel_exigido, b.destinatarios);
+    if (semAutoridade) return c.json({ error: semAutoridade }, 400);
+
     const criado = await criarPedido(c.env.DB, {
-      projectId, tipo: b.tipo, refId: b.ref_id, papel: b.papel_exigido,
+      projectId, tipo: b.tipo, refId, papel: b.papel_exigido,
       destinatarios: b.destinatarios, criadoPor: user.email,
     });
     if (!criado) return c.json({ error: 'Documento não encontrado neste projeto' }, 404);
     await logAudit(c.env.DB, 'pedido.criado', user.email,
-      `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, papel ${b.papel_exigido}) para ${b.destinatarios.length} destinatário(s); hash ${criado.hash}`,
+      `Pedido ${criado.id} (${b.tipo} ${refId}, papel ${b.papel_exigido}) para ${b.destinatarios.length} destinatário(s); hash ${criado.hash}`,
       '', c.req.header('CF-Connecting-IP') ?? '', projectId);
     return c.json({ ok: true, ...criado }, 201);
   } catch (e: any) {
@@ -313,6 +326,7 @@ projectPedidosApp.post('/ciencia', async (c) => {
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
 
+    if (b.tipo === 'politica' && await politicaVazia(c.env.DB, b.ref_id, projectId)) return c.json(POLITICA_VAZIA, 400);
     const criado = await criarPedido(c.env.DB, {
       projectId, tipo: b.tipo, refId: b.ref_id, papel: 'ciente',
       destinatarios: b.destinatarios, criadoPor: user.email, comLink: true,
@@ -323,7 +337,7 @@ projectPedidosApp.post('/ciencia', async (c) => {
     await logAudit(c.env.DB, 'pedido.ciencia_lote', user.email,
       `Pedido ${criado.id} (${b.tipo} ${b.ref_id}, ciência por link) para ${criado.links.length} destinatário(s), ${falhas.length} falha(s) de envio; hash ${criado.hash}`,
       '', c.req.header('CF-Connecting-IP') ?? '', projectId);
-    // Sem `ok: true`: com ele o api.js do frontend desembrulha o primeiro array (`falhas`) e perde o resto.
+    // Sem `ok: true` por histórico: o api.js desembrulhava a primeira lista. Hoje desembrulha só `{ ok, <uma lista> }`.
     return c.json({ id: criado.id, hash: criado.hash, enviados: criado.links.length - falhas.length, falhas }, 201);
   } catch (e: any) {
     return erro500(c, 'Erro ao criar o pedido de ciência', e);
@@ -370,7 +384,7 @@ projectPedidosApp.get('/:id', async (c) => {
     if (!vig.vigente) p = { ...p, status: vig.status, substituido_por: vig.substituido_por ?? p.substituido_por };
 
     const { results: dests } = await db.prepare(
-      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
+      `SELECT email, nome, status, decidido_em, aberto_em, canal, hash_lido, motivo FROM pedido_destinatarios WHERE pedido_id = ? ORDER BY email`
     ).bind(p.id).all<any>();
     const { results: anteriores } = await db.prepare(
       `SELECT d.email, d.decidido_em, d.hash_lido FROM pedido_destinatarios d JOIN pedidos q ON q.id = d.pedido_id

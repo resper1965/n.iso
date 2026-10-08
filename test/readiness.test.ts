@@ -68,12 +68,12 @@ describe('Diagnóstico de prontidão (D1 real)', () => {
     expect(a.severidade).toBe('medio');
   });
 
-  it('evidência rejeitada → achado ALTO', async () => {
+  it('evidência não conforme → achado ALTO', async () => {
     await env.DB.prepare(
       `INSERT INTO compliance_controls (id, project_id, standard, title, status) VALUES ('c4','p1','ISO 27001:2022','Log','Compliant')`
     ).run();
     await env.DB.prepare(
-      `INSERT INTO evidence (id, project_id, control_id, file_name, r2_key, file_hash, uploaded_by, evaluation_status) VALUES ('e4','p1','c4','log.pdf','k/e4','h4','u1','rejected')`
+      `INSERT INTO evidence (id, project_id, control_id, file_name, r2_key, file_hash, uploaded_by, evaluation_status) VALUES ('e4','p1','c4','log.pdf','k/e4','h4','u1','non_conforming')`
     ).run();
     const { body } = await check();
     const a = body.achados.find((x: any) => x.referencia === 'c4' && x.requisito.includes('válida'));

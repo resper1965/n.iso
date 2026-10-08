@@ -95,6 +95,15 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('criar o lote', () => {
+  it('ciência de política vazia: 400 e nenhum pedido gravado', async () => {
+    await env.DB.prepare(`UPDATE compliance_controls SET description = '  ' WHERE id = ?`).bind(POL).run();
+    const antes = (await env.DB.prepare('SELECT COUNT(*) AS n FROM pedidos').first<any>()).n;
+    const r = await chamar(consultor, 'POST', `/api/v1/projects/${P}/pedidos/ciencia`, { tipo: 'politica', ref_id: POL, destinatarios: [{ email: 'v@cliente.com' }] });
+    expect(r.status).toBe(400);
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM pedidos').first<any>()).n).toBe(antes);
+    await resetPolitica();
+  });
+
   it('um token por e-mail, só o SHA-256 no banco, e-mail repetido ignorado, link só no fragmento', async () => {
     await resetPolitica();
     const r = await lote(['Ana@Cliente.com', 'ana@cliente.com ', 'bia@cliente.com']);

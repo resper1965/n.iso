@@ -11,8 +11,10 @@
 import { genId } from '../helpers';
 import { orgDoUsuario, limiteDoPlanoAtingido } from './organizacao';
 import type { Servico } from '../schemas';
-import { stmtsFases } from './project-setup';
+import { stmtsFases, stmtControles } from './project-setup';
 import { diagnosticoDe } from './diagnostico';
+import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
+import { ISO_27701_2025_STANDARD, controlsForRole } from '../data/iso27701-2025';
 
 /** tokenHash: com origem 'link', o hash do token que a rota usou; rotação ou revogação no meio e nada grava. */
 export interface EntradaFechamento { propostaId: string; orgId: string; origem: 'link' | 'manual'; aceite: { nome: string; cargo: string; email: string; ip: string; comprovante?: string }; atorEmail: string; tokenHash?: string }
@@ -26,6 +28,13 @@ const ACEITA_DE = { link: ['enviada', 'visualizada'], manual: ['gerada', 'enviad
 const ABERTAS = ['rascunho', 'gerada', 'enviada', 'visualizada', 'aguardando_aprovacao'];
 /** Ator da trilha do aceite pelo link: o e-mail é digitado pelo cliente, não é identidade. */
 export const ATOR_LINK = 'cliente (link)';
+/**
+ * Cargo do contato do aceite na matriz de governança. Fixo de propósito: autoridadeDeAssinatura
+ * decide pelo job_title ('ceo', 'diret', 'execut', 'sgsi', 'dpo', 'ciso'), e o cargo DIGITADO pelo
+ * cliente ("Diretora") daria assinatura sem ninguém decidir. Promover a Direção ou Líder SGSI é ato
+ * do consultor na tela de governança. O cargo digitado fica em propostas.aceite_cargo.
+ */
+export const CARGO_CONTATO_ACEITE = 'Contato do cliente (aceite da proposta)';
 
 const NAO_ACHADA: ResultadoFechamento = { ok: false, motivo: 'nao_encontrada', mensagem: 'Proposta não encontrada' };
 const JA_FECHADA: ResultadoFechamento = { ok: false, motivo: 'ja_fechada', mensagem: 'A proposta já foi aceita' };
@@ -95,22 +104,28 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
 
   // o da proposta só se ainda for consultor ativo (a conta pode ter mudado desde a criação)
   let consultorEmail = await consultorValido(db, e.orgId, p.consultor_email);
+  let semConsultorAvisar: { id: string }[] = [];
   if (projetoId) {
     const dados = await dadosDoProjeto(db, p, deProjeto.map((i) => i.servico));
     stmts.push(
       db.prepare(`INSERT INTO projects (id, project_name, client_name, sector, scope, standards, org_role, status, assessment_id, cnpj,
         employee_count, proposta_id, org_id, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, datetime('now') WHERE ${G}`)
-        .bind(projetoId, deProjeto[0].servico.nome, p.cliente, dados.sector, dados.scope, dados.standards, dados.orgRole, p.assessment_id,
+        .bind(projetoId, `${p.cliente} — ${dados.normas || deProjeto[0].servico.nome}`, p.cliente, dados.sector, dados.scope, dados.standards, dados.orgRole, p.assessment_id,
           dados.cnpj, dados.pessoas, p.id, p.org_id, ...g),
       // cada fase só entra se o projeto acima existe, isto é, se foi criado por esta chamada
       ...stmtsFases(db, projetoId),
     );
+    // controles da norma vendida, com a mesma guarda das fases (o projeto desta chamada)
+    const catalogos = catalogosDoProjeto(
+      `${dados.standards} ${deProjeto.map((i) => `${i.servico.norma ?? ''} ${i.servico.nome}`).join(' ')}`, dados.orgRole);
+    stmts.push(...catalogos.map((k) => stmtControles(db, projetoId, k.standard, k.lista)));
     if (p.assessment_id) {
       // levantamento já convertido pelo fluxo antigo mantém o vínculo que tinha
       stmts.push(db.prepare(`UPDATE assessments SET status = 'converted', converted_project_id = COALESCE(converted_project_id, ?),
         completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND ${G}`).bind(projetoId, p.assessment_id, ...g));
     }
-    trilha.push(['project.created', `Projeto ${projetoId} criado com a trilha de fases pelo aceite da proposta ${p.id}`, projetoId]);
+    const resumo = catalogos.map((k) => `${k.lista.length} ${k.standard}`).join(', ');
+    trilha.push(['project.created', `Projeto ${projetoId} criado com a trilha de fases${resumo ? ` e os controles (${resumo})` : ''} pelo aceite da proposta ${p.id}`, projetoId]);
     // Limite do plano: o aceite NÃO falha por ele (o cliente já aceitou; recusar aqui quebraria a venda
     // fechada). O limite barra a criação MANUAL (`POST /projects`); aqui o estouro fica na trilha.
     if (await limiteDoPlanoAtingido(db, p.org_id, 'projetos')) {
@@ -119,6 +134,15 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
 
     // Consultor responsável: o da proposta; senão quem registrou o aceite manual, se for consultor.
     if (!consultorEmail && e.origem === 'manual') consultorEmail = await consultorValido(db, e.orgId, e.atorEmail);
+    // Sem consultor, o projeto só aparece para a administração: avisa os consultoria_admin ativos da
+    // organização; sem nenhum, a plataforma (ponytail: sem trilha própria, a notificação basta).
+    if (!consultorEmail) {
+      semConsultorAvisar = (await db.prepare(`SELECT id FROM users WHERE COALESCE(ativo, 1) <> 0 AND (
+          (role = 'consultoria_admin' AND org_id = ?1)
+          OR (role IN ('platform_admin', 'admin') AND NOT EXISTS (
+            SELECT 1 FROM users WHERE role = 'consultoria_admin' AND org_id = ?1 AND COALESCE(ativo, 1) <> 0)))`)
+        .bind(e.orgId).all<{ id: string }>()).results;
+    }
     if (consultorEmail) {
       // a linha de designacaoDoCriador, com o nome da conta quando existe e só no projeto desta chamada
       stmts.push(db.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title)
@@ -127,6 +151,17 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
           AND NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?) AND role_category = 'consultor')`)
         .bind(projetoId, consultorEmail, consultorEmail, consultorEmail, projetoId, projetoId, consultorEmail));
       trilha.push(['governance.created', `Consultor ${consultorEmail} designado no projeto ${projetoId} pelo aceite da proposta ${p.id}`, projetoId]);
+    }
+
+    // Contato de quem aceitou, depois do consultor. Projeto novo: o único e-mail que pode já estar lá é o do consultor,
+    // e só nesse caso o INSERT é pulado, e a trilha também (ela registra o que foi gravado).
+    const contatoEmail = e.aceite.email;
+    stmts.push(db.prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title)
+      SELECT ?, ?, ?, 'executivo', ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?)
+        AND NOT EXISTS (SELECT 1 FROM project_governance WHERE project_id = ? AND lower(email) = lower(?))`)
+      .bind(projetoId, linha(e.aceite.nome, 120), contatoEmail, CARGO_CONTATO_ACEITE, projetoId, projetoId, contatoEmail));
+    if (contatoEmail.toLowerCase() !== consultorEmail?.toLowerCase()) {
+      trilha.push(['governance.created', `Contato do aceite ${linha(e.aceite.nome)} registrado sem autoridade de assinatura no projeto ${projetoId} pelo aceite da proposta ${p.id}`, projetoId]);
     }
   }
 
@@ -141,6 +176,12 @@ export async function fecharVenda(db: D1Database, e: EntradaFechamento): Promise
     stmts.push(db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
       SELECT ?, u.id, 'contract_signed', ?, ?, 0, ?, 'proposta_aceita', ?, datetime('now') FROM users u WHERE lower(u.email) = ? AND ${G}`)
       .bind(genId(), `Proposta aceita: ${p.cliente}`, msg, link, p.id, email, ...g));
+  }
+  for (const u of semConsultorAvisar) {
+    stmts.push(db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, action_type, target_id, created_at)
+      SELECT ?, ?, 'projeto_sem_consultor', ?, ?, 0, ?, 'projeto_sem_consultor', ?, datetime('now') WHERE ${G}`)
+      .bind(genId(), u.id, `Projeto sem consultor: ${p.cliente}`,
+        `O projeto da proposta ${p.numero} nasceu sem consultor. Designe um na Governança do projeto.`, link, p.id, ...g));
   }
 
   let res: D1Result[];
@@ -170,10 +211,40 @@ async function dadosDoProjeto(db: D1Database, p: any, servicos: Servico[]) {
   const normas = [...new Set(servicos.map((s) => s.norma).filter(Boolean))].join(' + ');
   return {
     sector: respostas.sector ?? '',
-    scope: respostas.scope_type ?? '',
+    scope: escopoVendido(p) || respostas.scope_type || '',
     orgRole: respostas.data_role ?? '',
     standards: respostas.target_standard || normas || 'ISO 27001',
+    normas,
     cnpj: lead?.cnpj ?? null,
     pessoas: Object.keys(respostas).length ? diagnosticoDe(respostas).pessoas : null,
   };
+}
+
+/**
+ * O escopo que o cliente aceitou: a seção "Objeto e escopo" reescrita no documento, se houve
+ * (documento-proposta.ts usa ela no lugar do campo), senão o campo escopo da proposta.
+ * É texto puro; a tela do projeto escapa na saída (escapeHTML).
+ */
+function escopoVendido(p: { escopo?: string | null; secoes_editadas?: string | null }): string {
+  let editado: unknown;
+  try { editado = (JSON.parse(p.secoes_editadas || '{}') as Record<string, unknown>)?.objeto; } catch { editado = undefined; }
+  return (typeof editado === 'string' && editado.trim() ? editado : p.escopo ?? '').trim();
+}
+
+type Catalogo = { standard: string; lista: readonly { code: string; title: string }[] };
+
+/**
+ * Catálogos que o projeto vendido ganha, pelo rótulo de normas do projeto e pela norma e nome dos
+ * serviços de projeto. O 27701 estende o SGSI e traz o 27001 junto. Texto sem nenhuma das duas
+ * ("Adequação LGPD") não semeia nada. Papel 27701 não mapeado cai no Controlador, como o papel vazio.
+ */
+function catalogosDoProjeto(texto: string, orgRole: string): Catalogo[] {
+  const com27701 = /27701/.test(texto);
+  const out: Catalogo[] = [];
+  if (com27701 || /27001/.test(texto)) out.push({ standard: ISO_27001_2022_STANDARD, lista: ISO_27001_2022 });
+  if (com27701) {
+    const porPapel = controlsForRole(orgRole);
+    out.push({ standard: ISO_27701_2025_STANDARD, lista: porPapel.length ? porPapel : controlsForRole('') });
+  }
+  return out;
 }

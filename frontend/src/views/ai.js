@@ -1,21 +1,18 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
 import { escapeHTML } from '../ui.js';
-import { render } from '../router.js';
 
     async function renderAIChat(c, h, a) {
         h.textContent = 'AI Compliance Assistant';
         const proj = S.activeProject || S.projects[0];
         if (!proj) { c.innerHTML = '<div class="empty-state fade-in"><h3>Sem projeto ativo</h3><p>Selecione um projeto para continuar.</p><button class="btn btn-primary" data-action="openActiveProjectModal" style="margin-top:1rem">Selecionar Projeto</button></div>'; return; }
-        a.innerHTML = `<button class="btn" data-action="clearChatHistory" data-args='["${proj.id}"]'>Limpar Histórico</button>`;
-        let history = [];
-        try { history = await api('GET', `/api/v1/projects/${proj.id}/chat/history`); } catch(e) {}
-        if (!Array.isArray(history)) history = [];
+        // ponytail: a conversa vive só nesta tela. O servidor não guarda histórico (nada grava
+        // ai_chat_history; GET/DELETE /chat/history nunca existiram). Guardar conversa é decisão
+        // de produto, com retenção LGPD, não correção.
+        a.innerHTML = '';
         c.innerHTML = `<div class="fade-in" style="display:flex;flex-direction:column;height:calc(100vh - 180px)">
             <div id="chat-messages" style="flex:1;overflow-y:auto;padding:1rem 0;display:flex;flex-direction:column;gap:0.75rem">
-                ${history.length ? history.map(m => `
-                    <div style="align-self:${m.role==='user'?'flex-end':'flex-start'};max-width:80%;padding:0.75rem 1rem;border-radius:12px;background:${m.role==='user'?'var(--accent-dim)':'var(--surface)'};border:1px solid ${m.role==='user'?'var(--accent)':'var(--border)'};color:var(--text);font-size:0.8rem;line-height:1.6;white-space:pre-wrap">${escapeHTML(m.content)}</div>
-                `).join('') : '<div style="text-align:center;color:var(--muted);padding:3rem 0;font-size:0.8rem">Faca uma pergunta sobre ISO 27001, controles, audit preparation ou compliance.</div>'}
+                <div style="text-align:center;color:var(--muted);padding:3rem 0;font-size:0.8rem">Faca uma pergunta sobre ISO 27001, controles, audit preparation ou compliance.</div>
             </div>
             <div style="display:flex;gap:0.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)">
                 <input class="form-input" id="chat-input" placeholder="Pergunte sobre compliance, controles ISO, audit..." style="flex:1" data-action-keydown="sendChatMessage" data-args='["${proj.id}"]' data-key="Enter">
@@ -47,13 +44,6 @@ import { render } from '../router.js';
         }
     }
 
-    async function clearChatHistory(projectId) {
-        if (!confirm('Limpar todo o historico de chat?')) return;
-        await api('DELETE', `/api/v1/projects/${projectId}/chat/history`);
-        render();
-    }
-
 export { renderAIChat };
 window.renderAIChat = renderAIChat;
 window.sendChatMessage = sendChatMessage;
-window.clearChatHistory = clearChatHistory;

@@ -133,11 +133,9 @@ window.doMfaActivate = async function doMfaActivate() {
   mostraErro('mfa-erro', '');
   try {
     const r = await api('POST', '/api/v1/auth/mfa/activate', { codigo });
-    // `api()` desembrulha respostas `{ ok:true, X:[...] }` e devolve o ARRAY
-    // direto — então aqui `r` já é a lista, e `r.recovery_codes` seria
-    // undefined. Aceitar as duas formas evita depender desse detalhe: exibir
-    // uma lista vazia aqui perderia os códigos para sempre, porque o servidor
-    // guarda só o SHA-256 e nunca os mostra de novo.
+    // `{ ok, recovery_codes, aviso }` vem inteiro do `api()` (envelope com mais de um campo).
+    // Aceitar também a lista crua é defesa barata: exibir uma lista vazia aqui perderia os
+    // códigos para sempre, porque o servidor guarda só o SHA-256 e nunca os mostra de novo.
     const codigos = Array.isArray(r) ? r : (r && r.recovery_codes) || [];
     if (!codigos.length) return telaSemCodigos();
     telaCodigosRecuperacao(codigos);

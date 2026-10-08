@@ -727,9 +727,10 @@ export async function executarFerramenta(
         });
         const validated = schema.parse(args);
         return await t.contrato(
-          "POST /api/v1/auditor/{token}/notes",
-          { token: validated.token },
+          "POST /api/v1/public/auditor/notas/criar",
+          {},
           {
+            token: validated.token,
             control_id: validated.controlId,
             note_type: validated.noteType || "question",
             content: validated.content,

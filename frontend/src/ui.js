@@ -138,6 +138,8 @@ const STATUS_DICT = {
     'compliant': 'Conforme',
     'missing': 'Pendente',
     'partial': 'Parcial',
+    'conforming': 'Conforme',
+    'non_conforming': 'Não Conforme',
     'draft': 'Rascunho',
     'under review': 'Em Revisão',
     'active': 'Ativo',
