@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { Bindings, Variables } from '../index';
 import { sha256Hex, sessionRevoked, SESSION_TTL_SEC, ehPapelCliente } from '../helpers';
-import { apiKeyRoleViolation, expirouPorInatividade, isAuditWrite } from '../auth-policy';
+import { apiKeyRoleViolation, expirouPorInatividade, isAuditWrite, PAPEIS_IMPLEMENTACAO } from '../auth-policy';
 import { situacaoLegal, rotaLiberadaComBloqueio } from '../legal-policy';
 import { politicaDoProjeto, avaliarPolitica } from '../politica-tenant';
 import { resolverAgente, acaoDestrutiva } from './agente';
@@ -323,8 +323,8 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
   const method = c.req.method.toUpperCase();
 
   // Independência 9.2 na sessão humana: a chave 'consultant' já é barrada em apiKeyRoleViolation.
-  if (!apiKey && !agente && user.role === 'consultor' && isAuditWrite(method, path)) {
-    return c.json({ error: 'Forbidden: consultor não registra achado de auditoria' }, 403);
+  if (!apiKey && !agente && PAPEIS_IMPLEMENTACAO.has(user.role) && isAuditWrite(method, path)) {
+    return c.json({ error: 'Forbidden: consultoria não registra achado de auditoria' }, 403);
   }
 
   // Chave de API com permissão de escrita já foi autorizada por `permissions` acima;
