@@ -390,9 +390,8 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', as
     const p = project ? await politicaDoControle(c.env.DB, projectId, c.req.param('controlId')) : null;
     if (!project || !p) return c.html('<h3>Política não encontrada</h3>', 404);
     const k = p.control;
-    const assinatura = (rotulo: string, por: string | null, em: string | null, ip: string | null, ua: string | null) =>
-      `<div class="label">${rotulo}</div><div class="value">${por ? `Assinado por ${escapeHtml(por)} em ${escapeHtml(em ?? '')}` : 'Aguardando assinatura'}</div>`
-      + (por && ip ? `<div class="value">Origem: IP ${escapeHtml(ip)} | UA: ${escapeHtml(ua ?? '')}</div>` : '');
+    const assinatura = (rotulo: string, por: string | null, em: string | null) =>
+      `<div class="label">${rotulo}</div><div class="value">${por ? `Assinado por ${escapeHtml(por)} em ${escapeHtml(em ?? '')}` : 'Aguardando assinatura'}</div>`;
     return c.html(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -411,8 +410,8 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/policy/report', as
   <div class="container">
     <h1>${escapeHtml(k.title)}</h1>
     <div class="value">${escapeHtml(project.client_name ?? '')}</div>
-    ${assinatura('Líder SGSI', k.ciso_approved_by, k.ciso_approved_at, k.ciso_approved_ip, k.ciso_approved_ua)}
-    ${assinatura('Direção Executiva', k.ceo_approved_by, k.ceo_approved_at, k.ceo_approved_ip, k.ceo_approved_ua)}
+    ${assinatura('Líder SGSI', k.ciso_approved_by, k.ciso_approved_at)}
+    ${assinatura('Direção Executiva', k.ceo_approved_by, k.ceo_approved_at)}
     <div class="label">Integridade do texto da política (SHA-256 do texto; não é o hash do pedido de aprovação)</div><div class="value">${p.hash}</div>
     <div class="texto">${escapeHtml(k.description ?? '')}</div>
   </div>

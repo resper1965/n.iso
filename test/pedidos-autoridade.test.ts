@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword, autoridadeDeAssinatura } from '../src/helpers';
-import { podePedir, autoridadeNoPedido, criarPedido } from '../src/services/pedidos';
+import { podePedir, autoridadeNoPedido, criarPedido, type PapelPedido } from '../src/services/pedidos';
 import { applySchema, sessionFor, workerEnv } from './helpers/d1';
 
 /**
@@ -79,9 +79,9 @@ const pedir = (h: Record<string, string>, papel: string, emails: string[], proje
   chamar(h, 'POST', `/api/v1/projects/${projeto}/pedidos`, { tipo: 'dpia', ref_id: DPIA, papel_exigido: papel, destinatarios: emails.map((email) => ({ email })) });
 
 /** Cria (pelo consultor) um pedido só para `quem` e tenta aprovar com a sessão dele. */
-async function aprovarComo(quem: string, papel: string) {
+async function aprovarComo(quem: string, papel: PapelPedido) {
   // Direto pelo serviço: a rota já recusa destinatário sem a autoridade; aqui se prova a conferência na decisão.
-  const criado = await criarPedido(env.DB, { projectId: P, tipo: 'dpia', refId: DPIA, papel: papel as 'ciso' | 'ceo', destinatarios: [{ email: U[quem].email }], criadoPor: 'cons@ness.lat' });
+  const criado = await criarPedido(env.DB, { projectId: P, tipo: 'dpia', refId: DPIA, papel, destinatarios: [{ email: U[quem].email }], criadoPor: 'cons@ness.lat' });
   const id = criado!.id;
   await env.DB.prepare(`UPDATE dpia_assessments SET dpo_signature = NULL, ceo_signature = NULL WHERE id = ?`).bind(DPIA).run();
   const res = await chamar(S[quem], 'POST', `/api/v1/pedidos/${id}/aprovar`, { senha: SENHA });

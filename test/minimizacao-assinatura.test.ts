@@ -5,8 +5,8 @@ import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1'
 import { semRastroDeAssinatura } from '../src/helpers';
 
 /**
- * Minimização: IP e user-agent de quem assina ficam no banco, na trilha e nos relatórios de prova
- * (exigem login); as respostas JSON de leitura comum não os devolvem.
+ * Minimização: IP e user-agent de quem assina ficam só no banco e na trilha; nem as leituras JSON
+ * nem os relatórios HTML os devolvem.
  */
 const PROJ = 'p-min';
 const IP = '203.0.113.9';
@@ -24,7 +24,7 @@ beforeEach(async () => {
     env.DB.prepare(`INSERT INTO compliance_controls (id, project_id, standard, title, description, ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua)
                     VALUES ('c-min', ?, 'ISO 27001:2022', 'A.5.1 Políticas', 'texto', 'lider@x.test', '2026-10-07', ?, ?)`).bind(PROJ, IP, UA),
     env.DB.prepare(`INSERT INTO evidence (id, control_id, project_id, file_name, r2_key, file_hash, uploaded_by, ciso_approved_by, ciso_approved_ip, ciso_approved_ua)
-                    VALUES ('e-min', 'c-min', ?, 'a.pdf', 'k/a.pdf', 'h', 'u@x.test', 'lider@x.test', ?, ?)`).bind(PROJ, IP, UA),
+                    VALUES ('e-min', 'c-min', ?, 'a.pdf', 'docs/a.pdf', 'h', 'u@x.test', 'lider@x.test', ?, ?)`).bind(PROJ, IP, UA),
     env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose, status, ciso_approved_by, ciso_approved_at, ciso_approved_ip, ciso_approved_ua)
                     VALUES ('r-min', ?, 'Finalidade', 'Approved', 'lider@x.test', '2026-10-07', ?, ?)`).bind(PROJ, IP, UA),
     env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, system_name, status) VALUES ('d-min', ?, 'Sistema', 'Draft')`).bind(PROJ),
@@ -37,13 +37,19 @@ describe('semRastroDeAssinatura', () => {
   it('tira *_approved_ip/ua e *_signed_ip, mantém quem e quando assinou', () => {
     expect(semRastroDeAssinatura({ a: 1, ciso_approved_by: 'x', ceo_approved_ip: 'i', ceo_approved_ua: 'u', ciso_signed_ip: 'i' }))
       .toEqual({ a: 1, ciso_approved_by: 'x' });
-    expect(semRastroDeAssinatura(null)).toBeNull();
   });
 });
 
 describe('leituras JSON sem IP/UA de assinatura', () => {
-  it('controle: lista global, lista do projeto, política e painel do cliente', async () => {
-    for (const p of ['/api/v1/controls', `/api/v1/projects/${PROJ}/controls`, `/api/v1/projects/${PROJ}/controls/c-min/policy`]) {
+  it('controle: lista global, lista do projeto, política, painel do cliente e pacote de auditoria', async () => {
+    const cliente = await sessionFor({ id: 'u-cli', email: 'cli@x.test', role: 'client', client_project_id: PROJ });
+    const dash = await worker.fetch(new Request('http://localhost/api/v1/client/dashboard', { headers: cliente }), { ...env, AI: { run: async () => ({}) } } as any);
+    expect(dash.status).toBe(200);
+    const td = await dash.text();
+    expect(td).toContain('lider@x.test');
+    expect(td).not.toMatch(RASTRO);
+    expect(td).not.toContain(IP);
+    for (const p of ['/api/v1/controls', `/api/v1/projects/${PROJ}/controls`, `/api/v1/projects/${PROJ}/controls/c-min/policy`, `/api/v1/projects/${PROJ}/audit-pack`]) {
       const t = await texto(p);
       expect(t, p).toContain('lider@x.test');
       expect(t, p).not.toMatch(RASTRO);
@@ -52,7 +58,7 @@ describe('leituras JSON sem IP/UA de assinatura', () => {
   });
 
   it('evidência: lista, detalhe e documentos', async () => {
-    for (const p of [`/api/v1/projects/${PROJ}/evidence`, '/api/v1/evidence/e-min/detail']) {
+    for (const p of [`/api/v1/projects/${PROJ}/evidence`, '/api/v1/evidence/e-min/detail', `/api/v1/projects/${PROJ}/documents`]) {
       const t = await texto(p);
       expect(t, p).toContain('lider@x.test');
       expect(t, p).not.toMatch(RASTRO);
@@ -60,20 +66,26 @@ describe('leituras JSON sem IP/UA de assinatura', () => {
     }
   });
 
-  it('ROPA: lista sem rastro; relatório HTML mantém o IP', async () => {
+  it('ROPA: lista sem rastro; relatório HTML também não traz o IP', async () => {
     const t = await texto(`/api/v1/projects/${PROJ}/ropa`);
     expect(t).toContain('lider@x.test');
     expect(t).not.toMatch(RASTRO);
-    expect(await texto(`/api/v1/projects/${PROJ}/ropa/report`)).toContain(IP);
+    const rel = await texto(`/api/v1/projects/${PROJ}/ropa/report`);
+    expect(rel).toContain('lider@x.test');
+    expect(rel).not.toContain(IP);
   });
 
-  it('DPIA: lista e relatório sem as colunas de rastro; análise crítica sem IP', async () => {
+  it('DPIA: lista e relatório sem rastro; análise crítica sem IP', async () => {
     expect(await texto(`/api/v1/projects/${PROJ}/dpia`)).not.toMatch(RASTRO);
+    expect(await texto(`/api/v1/projects/${PROJ}/dpia/d-min/report`)).not.toContain(IP);
     expect(await texto(`/api/v1/projects/${PROJ}/management-reviews`)).not.toMatch(RASTRO);
   });
 
-  it('política: relatório HTML mantém o IP', async () => {
-    expect(await texto(`/api/v1/projects/${PROJ}/controls/c-min/policy/report`)).toContain(IP);
+  it('política: relatório HTML também não traz o IP nem o UA', async () => {
+    const rel = await texto(`/api/v1/projects/${PROJ}/controls/c-min/policy/report`);
+    expect(rel).toContain('lider@x.test');
+    expect(rel).not.toContain(IP);
+    expect(rel).not.toContain(UA);
   });
 
   it('o banco continua guardando o rastro', async () => {

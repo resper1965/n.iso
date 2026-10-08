@@ -177,9 +177,8 @@ projectRopaApp.get('/report', async (c) => {
 
     let rowsHtml = '';
     for (const r of (records || [])) {
-      const origem = (ip: string | null) => ip ? ` <span style="color:#64748b">(IP ${escapeHtml(ip)})</span>` : '';
-      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>${origem(r.ciso_approved_ip)}` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
-      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>${origem(r.ceo_approved_ip)}` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
+      const cisoSig = r.ciso_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ciso_approved_by)} em ${new Date(r.ciso_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Líder SGSI</span>';
+      const ceoSig = r.ceo_approved_by ? `<span style="color:#10b981; font-weight:600">✓ Assinado por ${escapeHtml(r.ceo_approved_by)} em ${new Date(r.ceo_approved_at).toLocaleDateString()}</span>` : '<span style="color:#d97706">Aguardando Direção Executiva</span>';
       
       rowsHtml += `
         <div class="ropa-card">
