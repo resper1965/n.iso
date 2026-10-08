@@ -13,6 +13,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não publicado]
 
 ### Corrigido
+- SoA: `api(...) || []` nunca caía no `[]` (a chamada devolve uma Promise, sempre verdadeira); com resposta nula de controles a tela mostrava o erro em vez de uma lista vazia.
 - Pedidos: pedido de aprovação (Líder SGSI ou Direção) só é criado se todo destinatário tem a autoridade do papel na matriz de Governança do projeto; senão 400 dizendo quem não tem. A ciência não muda, e a decisão continua conferindo a autoridade.
 - Minimização: IP e user-agent de quem assina (`*_approved_ip/ua`, `*_signed_ip`) não saem mais nas leituras JSON de controles, evidências, ROPA, DPIA, análise crítica, política e pacote de auditoria; seguem só no banco e na trilha. O modal da política deixa de mostrar "Origem".
 - DPIA: a rota `DELETE /api/v1/dpia/:id` passa a existir (a tela chamava uma rota inexistente); DPIA aprovado recusa a exclusão com 409.
@@ -45,6 +46,8 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Portal do auditor externo: a consultoria gera, lista e revoga pela tela de Auditorias um link com prazo (`GET|POST /api/v1/projects/:id/auditor-token`, `.../:tokenId/revogar`; o cliente não gera); o auditor abre `/auditor#<token>` e vê o projeto, a SoA (27001 e 27701) com a evidência de cada controle, baixa os arquivos e a prova dos pedidos, registra pergunta à consultoria e vê a resposta dela. Cada download entra na trilha.
 
 ### Alterado
+- `compatibility_date` do Worker de `2024-03-20` para `2026-10-01` (#304). A suíte do backend passa inteira com a data nova; o `assets` não define `not_found_handling`, então a preferência por asset em navegação não se aplica, e `src/` não usa `process.env`. Conferido em produção com uma sonda de 13 rotas, igual antes e depois. Reversão: `git revert` do #304 ou `wrangler rollback`.
+- Limpeza de imports, variáveis e uma função sem uso no `src/` e no frontend (alertas `unused-local-variable` do CodeQL), sem mudança de comportamento.
 - Conectar agente (#299): a tela e o `docs/agente/README.md` dizem onde entrar e como conferir a conexão em Cursor, Codex e Antigravity (os comandos já estavam certos na documentação de cada um). O Antigravity cita o caminho anterior à 2.0. O selo "Verificado" segue só no Claude Code até haver login real nos outros. O OpenClaw conecta, mas fica documentado como possível e não suportado: recebe mensagem de canais abertos e age com o alcance do consultor sobre dado de cliente.
 
 ### Removido
@@ -52,6 +55,10 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Ambiente de staging (#296): o bloco `env.staging` do `wrangler.jsonc`, o job de staging do deploy, o ensaio de migration em staging e `docs/staging.md`. Nunca foi ligado (`STAGING_ATIVO` não existia), e as `routes` do ambiente raiz são herdadas por `env.staging`, o que apontaria os domínios de produção para ele.
 
 ### Segurança
+- Actions dos workflows presas por SHA de commit, com a versão no comentário (#302): a `cloudflare/wrangler-action`, que recebe o `CLOUDFLARE_API_TOKEN`, estava só por tag. `test/workflows-actions-sha.test.ts` impede a volta.
+- Ambiente `production` do GitHub aceita deploy só da `main` (08/10/2026). O `db-migrate.yml` por `--ref <branch>` deixou de funcionar; ver `migrations/README.md`.
+- Relato privado de vulnerabilidade ligado no GitHub (08/10/2026): o `SECURITY.md` já indicava "Security → Report a vulnerability" como canal preferencial, que não existia com o recurso desligado.
+- CodeQL: 8 alertas altos antigos fechados em testes (#301) e `docs/design/` fora da análise (#302), que respondia por 66 dos 100 alertas abertos.
 - Token do auditor guardado só em SHA-256, com revogação (migration 0045; os tokens anteriores deixam de valer) e prazo comparado até o minuto (antes valia até o fim do dia do vencimento). As rotas `/api/v1/auditor/:token/*`, que punham o token no log de requisição, saem: o portal usa `POST /api/v1/public/auditor/{ver,evidencia,pedidos,notas,notas/criar}` com o token no corpo e limite por IP. O portal não leva mais a linha inteira do projeto (`repository_token`, CNPJ) e o nome do arquivo baixado é codificado no cabeçalho.
 - **Operação:** a 0045 e a 0046 foram APLICADAS em produção em 08/10/2026 pelo workflow `db-migrate` (com backup do D1 como artifact), antes do deploy do #294 e do #295. Conferido por `PRAGMA table_info`: `auditor_tokens` tem `token_hash`, `revoked_at` e `revoked_by`; `avisos_prazo` existe com o índice `idx_avisos_prazo_email`. Sem a coluna `token_hash` o portal do auditor e a geração do link quebram, então migration e código andam juntos.
 - Papéis (#298): a consultoria (`consultor`, `consultant` e `consultoria_admin`) não registra, altera nem apaga achado de auditoria em sessão humana (ISO 27001, 9.2: quem implementa não audita). A chave de API `consultant` e o agente já eram barrados; a sessão humana não era. A tela de execução da auditoria esconde os botões de registrar e apagar para esses papéis.

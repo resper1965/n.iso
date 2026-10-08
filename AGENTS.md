@@ -203,7 +203,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 178 arquivos de teste do backend mocka o D1 inteiro** (2026-10-08;
+- **Nenhum dos 179 arquivos de teste do backend mocka o D1 inteiro** (2026-10-08;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
@@ -214,7 +214,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
 - **Frontend com pouco teste por linha.** ~14,9 mil linhas de JS (2026-10-08)
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 60 arquivos de teste em jsdom
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 61 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.
@@ -383,5 +383,14 @@ passaria a falhar no upload (já aconteceu em 2026-08, quando o repo foi privado
   `environment: production` o enxergam (conferido em 2026-10-06:
   `gh api repos/resper1965/n.iso/environments/production/secrets` lista o token e
   `gh api repos/resper1965/n.iso/actions/secrets` volta vazio).
+- **O ambiente `production` aceita deploy só da `main`** (2026-10-08,
+  `gh api repos/resper1965/n.iso/environments/production/deployment-branch-policies`): uma branch
+  qualquer não consegue rodar job com o token de deploy. Consequência para migration: o workflow
+  `db-migrate.yml` só roda na `main`, onde a migration nova ainda não existe antes do merge. Ordem
+  possível: (a) aplicar pelo terminal (`npx wrangler d1 migrations apply niso-db --remote`, depois do
+  `npm run db:backup`) e só então mergear; ou (b) mergear (o deploy recusa, de propósito, e abre
+  issue), rodar *Apply DB migrations* e depois *Deploy*.
+- **Actions presas por SHA** (`test/workflows-actions-sha.test.ts` reprova action solta); o
+  Dependabot `github-actions` abre o PR de atualização com o SHA novo.
 - `wrangler secret put` grava no **Worker**, nao no Actions. Sao lugares
   diferentes; o Worker nao precisa do token de deploy e nao deve carrega-lo.
