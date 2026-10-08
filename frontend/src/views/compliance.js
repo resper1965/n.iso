@@ -665,7 +665,7 @@ import { navigate } from '../router.js';
 
         try {
             const [controls, traceData] = await Promise.all([
-                api('GET', `/api/v1/projects/${proj.id}/controls`) || [],
+                api('GET', `/api/v1/projects/${proj.id}/controls`).then(r => r || []),
                 api('GET', `/api/v1/projects/${proj.id}/traceability`).then(r => (Array.isArray(r) ? r : [])).catch(() => [])
             ]);
             

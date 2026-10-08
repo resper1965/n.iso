@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit, sha256Hex, verifyPassword, invalidateUserSessions, SESSION_TTL_SEC } from '../helpers';
 import { validateBody, codigoSchema, senhaConfirmacaoSchema } from '../schemas';
-import { z } from 'zod';
 import {
   gerarSegredoTotp, verificarCodigoTotp, uriProvisionamento, gerarCodigosRecuperacao,
 } from '../services/totp';

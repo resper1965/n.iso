@@ -4,7 +4,7 @@ import { genId, logAudit, somenteNess, somenteComercial, ehComercial, erro500 } 
 import { validateBody, assessmentCriarSchema, assessmentAtualizarSchema, assessmentPrecoSchema, assessmentRespostasPublicasSchema, assessmentBlocoSchema } from '../schemas';
 import { calculatePricing } from '../services/pricing';
 import { exigirOrg, ORG_NESS } from '../services/organizacao';
-import { BLOCK_QUESTIONS, PHASE_TITLES } from '../constants';
+import { BLOCK_QUESTIONS } from '../constants';
 
 export const assessmentsApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -44,104 +44,6 @@ assessmentsApp.use('/:id/*', daOrganizacao);
 function semPreco<T extends Record<string, unknown>>(row: T, user: { role?: string | null } | null | undefined): T {
   if (ehComercial(user)) return row;
   return Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('pricing_'))) as T;
-}
-
-/** Traduz respostas do assessment para as chaves esperadas pelo SCORE_MAP */
-function mapAnswerToScore(field: string, value: string): string {
-  if (!value) return value;
-  const maps: Record<string, Record<string, string>> = {
-    infraestrutura: {
-      'AWS': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Azure': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Google Cloud': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Multi-cloud': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Oracle Cloud': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Cloudflare': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'DigitalOcean': 'Nuvem Pública 100% (AWS/Azure/GCP)',
-      'Híbrido': 'Híbrido (Nuvem + On-premise/Legacy)',
-      'Híbrido (cloud + on-premise)': 'Híbrido (Nuvem + On-premise/Legacy)',
-      'Data center próprio': 'Data Center Local (On-Premise)',
-      'On-premises': 'Data Center Local (On-Premise)',
-    },
-    arquitetura: {
-      '1 (produção)': 'Monolitos (VMs/Containers grandes)',
-      'Apenas produção': 'Monolitos (VMs/Containers grandes)',
-      '2 (staging + prod)': 'Monolitos (VMs/Containers grandes)',
-      'Dev + Prod': 'Monolitos (VMs/Containers grandes)',
-      '3 (dev + staging + prod)': 'Microsserviços / Cloud Native',
-      'Dev + Staging + Prod': 'Microsserviços / Cloud Native',
-      '4+ ambientes': 'Microsserviços / Cloud Native',
-      'Dev + QA + Staging + Prod': 'Microsserviços / Cloud Native',
-    },
-    repositorio: {
-      'GitHub': 'Git Moderno (GitHub/GitLab)',
-      'GitLab': 'Git Moderno (GitHub/GitLab)',
-      'Bitbucket': 'Git Moderno (GitHub/GitLab)',
-      'Azure DevOps': 'Git Moderno (GitHub/GitLab)',
-      'Sem versionamento': 'Sem versionamento formal',
-      'Outro': 'Repositórios Legados (SVN/Subversion)',
-    },
-    deploy: {
-      'GitHub Actions': 'CI/CD Automatizado',
-      'GitLab CI': 'CI/CD Automatizado',
-      'Jenkins': 'CI/CD Automatizado',
-      'Pipeline básico (build + test)': 'CI/CD Automatizado',
-      'Pipeline completo (build + test + scan + deploy)': 'CI/CD Automatizado',
-      'GitOps / deploy automatizado': 'CI/CD Automatizado',
-      'Sem CI/CD': 'Deploy Misto ou Manual (FTP/SSH)',
-      'Manual (FTP/SSH/SCP)': 'Deploy Misto ou Manual (FTP/SSH)',
-      'Inexistente': 'Deploy Misto ou Manual (FTP/SSH)',
-      'Manual / ad-hoc': 'Deploy Misto ou Manual (FTP/SSH)',
-    },
-    seguranca_codigo: {
-      'Sim, SAST (Semgrep, SonarQube)': 'Review Rigoroso + Automação (SAST)',
-      'SAST (análise estática)': 'Review Rigoroso + Automação (SAST)',
-      'Sim, SCA (Snyk, Dependabot)': 'Review Rigoroso + Automação (SAST)',
-      'SCA (dependências)': 'Review Rigoroso + Automação (SAST)',
-      'DAST (dinâmico)': 'Review Rigoroso + Automação (SAST)',
-      'Secret scanning': 'Review Rigoroso + Automação (SAST)',
-      'Container scanning': 'Review Rigoroso + Automação (SAST)',
-      'IaC scanning': 'Review Rigoroso + Automação (SAST)',
-      'Não': 'Sem validação formal',
-      'Nenhuma': 'Sem validação formal',
-    },
-    gestao_identidade: {
-      'SSO corporativo (Azure AD, Okta, Google)': 'SSO e MFA Centralizado',
-      'SSO implementado': 'SSO e MFA Centralizado',
-      'SSO + MFA obrigatório': 'SSO e MFA Centralizado',
-      'IdP dedicado (Okta, Auth0, Azure AD)': 'SSO e MFA Centralizado',
-      'MFA sem SSO': 'MFA ativo sem SSO',
-      'IAM do cloud provider': 'MFA ativo sem SSO',
-      'Senhas individuais sem política': 'Senhas isoladas / Sem política estrita',
-      'Sem IAM centralizado': 'Senhas isoladas / Sem política estrita',
-    },
-    continuidade: {
-      'Backups automatizados e testados': 'Backups Imutáveis Testados + Vendor Risk',
-      'Backup automático com teste de restore': 'Backups Imutáveis Testados + Vendor Risk',
-      'Backup + DR documentado e testado': 'Backups Imutáveis Testados + Vendor Risk',
-      'Backups automáticos sem teste formal': 'Backups regulares sem testes formais',
-      'Backup automático sem teste de restore': 'Backups regulares sem testes formais',
-      'Backups manuais': 'Processos de Backup/Terceiros Informais',
-      'Backup manual / ocasional': 'Processos de Backup/Terceiros Informais',
-      'Sem backup formal': 'Processos de Backup/Terceiros Informais',
-      'Sem backup': 'Processos de Backup/Terceiros Informais',
-    },
-    motivador: {
-      'Certificação completa': 'Exigência Contratual/B2B',
-      'Gap assessment apenas': 'Auditoria e Segurança Interna',
-      'Implementação e certificação': 'Exigência Contratual/B2B',
-      'Auditoria interna': 'Auditoria e Segurança Interna',
-    },
-  };
-  const fieldMap = maps[field];
-  if (!fieldMap) return value;
-  if (value.includes(',')) {
-    const parts = value.split(',').map(p => p.trim());
-    for (const part of parts) {
-      if (fieldMap[part]) return fieldMap[part];
-    }
-  }
-  return fieldMap[value] || value;
 }
 
 function buildPricingAnswers(ansMap: Record<string, any>) {

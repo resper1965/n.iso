@@ -1,7 +1,7 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
 import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
-import { navigate, render } from '../router.js';
+import { render } from '../router.js';
 
 // S2: wrappers para os handlers COMPOSTOS (a delegação chama uma função só).
 window.__adminFecharConcluir = () => { window.forceCloseModal(); window.render(); };

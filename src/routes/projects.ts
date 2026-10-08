@@ -4,7 +4,7 @@ import { Bindings, Variables } from '../index';
 import { semRastros, genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
-import { PHASE_TITLES, PHASE_CHECKLISTS, INTERVIEW_TRACKS } from '../constants';
+import { INTERVIEW_TRACKS } from '../constants';
 import { MigrationService } from '../services/migration-service';
 import { seedPhases, semearControles } from '../services/project-setup';
 import { ISO_27001_2022, ISO_27001_2022_STANDARD } from '../data/iso27001-2022';
