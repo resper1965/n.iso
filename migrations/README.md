@@ -22,8 +22,10 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 1. Schema muda em **dois** lugares: `schema.sql` (índice depois da tabela) e a migration
    numerada. `*.sql` é sempre LF (`.gitattributes`).
 2. Backup: `npm run db:backup` (ver `backups/README.md`).
-3. Aplicar: workflow manual `db-migrate.yml` ou
-   `npx wrangler d1 migrations apply niso-db --remote`.
+3. Aplicar: `npx wrangler d1 migrations apply niso-db --remote` (antes do merge) ou, depois do
+   merge, o workflow manual `db-migrate.yml`. O workflow só roda na `main` (o ambiente `production`
+   não aceita outra branch), onde a migration nova só existe depois do merge; o deploy do merge
+   recusa de propósito, então rode *Deploy* em seguida.
 4. Conferir: `npx wrangler d1 migrations list niso-db --remote` responde "No migrations to
    apply" e `PRAGMA table_info(<tabela>)` mostra a coluna.
 5. Só então o merge: o deploy recusa migration pendente.

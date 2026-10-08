@@ -49,22 +49,22 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 | `frontend/public/_headers` | Cabeçalhos de segurança dos **arquivos estáticos** — ver "Duas fontes de cabeçalho", abaixo. |
 | `mcp-server-niso/` | Servidor MCP **local** (stdio, chave de API) que expõe o n.iso a clientes como Claude Desktop, com filtro de ferramenta por papel. O MCP **remoto**, com login, vive no próprio Worker (`src/mcp/`). |
 | `migrations/` | 44 arquivos de migration do D1 (última: 0046), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
-| `test/` | 178 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
-| `frontend/test/` | 60 arquivos de teste da UI, em jsdom. |
+| `test/` | 179 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
+| `frontend/test/` | 61 arquivos de teste da UI, em jsdom. |
 | `frontend/e2e/` | 5 specs em Chromium real, sobre o build servido. Pega o que o jsdom não pega. |
 | `docs/` | Runbook, specs, planos e decisões — com [índice próprio](docs/README.md). |
 | `scripts/` | Geradores. `gerar-openapi.mjs` e `gerar-contrato-mcp.mjs` produzem o contrato a partir dos schemas. |
 
 ## Testes
 
-Contagens de 2026-10-08: `ls test/*.test.ts | wc -l` (178), `ls frontend/test/*.test.js | wc -l`
-(60), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (42),
+Contagens de 2026-10-08: `ls test/*.test.ts | wc -l` (179), `ls frontend/test/*.test.js | wc -l`
+(61), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (42),
 `ls migrations/*.sql | wc -l` (44).
 
 Três suítes, e cada uma existe porque a anterior não alcança o caso:
 
 ```bash
-npm test                              # backend: 178 arquivos, D1 e KV reais
+npm test                              # backend: 179 arquivos, D1 e KV reais
 npm run test:coverage                 # idem, com a catraca de cobertura que gateia o deploy
 npm test --prefix frontend            # UI em jsdom
 npm run test:e2e --prefix frontend    # Chromium real sobre o build
@@ -89,6 +89,10 @@ inexistente já custou caro aqui.
 1. **Apply DB migrations (manual)** → *Run workflow* → digite `APLICAR`.
    Faz backup do D1 como artifact e aplica as migrations pendentes.
 2. **Deploy** → *Run workflow* na `main`. Com as migrations aplicadas, publica.
+
+O ambiente `production` do GitHub só aceita a `main`, então o *Apply DB migrations* roda na `main`. Migration
+nova só existe lá depois do merge, e o deploy que o merge dispara recusa de propósito (migration
+pendente): aplique e rode *Deploy*. Para aplicar **antes** do merge, use o terminal, abaixo.
 
 **Pelo terminal:**
 

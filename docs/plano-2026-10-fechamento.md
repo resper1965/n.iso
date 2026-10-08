@@ -37,7 +37,12 @@ linha de `d1_migrations` é `0046_avisos_prazo.sql`.
 | T1 | feito (catraca) | `TETO` hoje 543 em `test/any-catraca.test.ts` |
 | Dependabot | zerado | 0 alertas abertos; #297 fixou `undici`, `sharp` e os pacotes MCP por `overrides`; `npm audit` em 0 nos três pacotes |
 | Staging | removido | #296; nunca foi ligado |
-| CodeQL | 8 altos antigos | todos em arquivos de teste (`test/colunas-catraca.test.ts` e sete testes do frontend); o da `src/config/url.ts` foi corrigido no #295. Não bloqueiam PR que não os toque |
+| CodeQL | altos zerados | #301 fechou os 8 altos antigos (todos em testes) e #302 tirou `docs/design/` da análise (66 dos 100 alertas abertos eram protótipos que o Worker não serve) |
+| Hardening do CI | feito | #302: as 33 `uses:` presas por SHA, com `test/workflows-actions-sha.test.ts`; o `CodeQL` já acusava `actions/unpinned-tag` na `wrangler-action`, que recebe o token de deploy |
+| Ambiente `production` | restrito | aceita deploy só da `main` (`deployment-branch-policies`); `db-migrate` por `--ref <branch>` deixou de funcionar, ver `migrations/README.md` |
+| Relato privado de vulnerabilidade | ligado | o `SECURITY.md` já o indicava como canal preferencial, mas o recurso estava desligado |
+| Polimento | feito | #303: SoA com controles nulos (defeito real, com teste) e limpeza de imports e variáveis sem uso |
+| `compatibility_date` | feito | #304: `2024-03-20` para `2026-10-01`, em produção (`/health` = `90e7aa8`). Suíte inteira passou com a data nova; a preferência por asset em navegação não se aplica porque o `assets` não define `not_found_handling`; `src/` não usa `process.env`. Uma sonda de 13 rotas (páginas, `/api`, `.well-known`, `/oauth`, `/mcp`, login e o 308 do host legado) deu o mesmo resultado antes e depois do deploy |
 | Cron `0 11 * * *` | declarado, não lido | está no `wrangler.jsonc` publicado e o deploy passou; **não li a agenda ativa no Cloudflare** (o conector devolve só nome e id) |
 
 **n.privacy** (estudo, `specs/2026-10-06-nucleo-comum-nprivacy-design.md`). Respondidas em 08/10: a
