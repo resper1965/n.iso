@@ -6,6 +6,11 @@
  * estiver vencido. O dia é o de São Paulo; item resolvido não gera aviso.
  */
 
+import { genId, escapeHtml, enviarEmail } from '../helpers';
+import { appUrl } from '../config/url';
+import { log } from '../observability';
+import type { Bindings } from '../index';
+
 export type Fonte = 'capa' | 'checklist' | 'auditoria' | 'certificado' | 'link_auditor' | 'politica';
 
 export type ItemPrazo = {
@@ -142,4 +147,122 @@ export function escolherDestinatarios(pessoas: Pessoa[], responsavel: string | n
   const escolhidos = [...resp, ...pessoas.filter(ehConsultorDoProjeto)];
   const lista = escolhidos.length ? escolhidos : pessoas.filter((p) => p.role === 'consultoria_admin');
   return [...new Map(lista.map((p) => [p.id, p])).values()];
+}
+
+type EnvAvisos = Pick<Bindings, 'DB' | 'RESEND_API_KEY' | 'APP_URL'>;
+
+export type ResultadoAvisos = { avisos_criados: number; emails_enviados: number; sem_destinatario: number; falhas: string[] };
+
+const ROTULO: Record<Fonte, string> = {
+  capa: 'CAPA', checklist: 'Item do checklist', auditoria: 'Auditoria', certificado: 'Certificado',
+  link_auditor: 'Link do auditor', politica: 'Política',
+};
+
+/** Tela de cada fonte no clique do sino (frontend/src/globals.js, handleNotificationClick). */
+const TELA: Record<Fonte, string> = {
+  capa: '/capa', checklist: '', auditoria: '/audits', certificado: '/certification', link_auditor: '/audits', politica: '/policies',
+};
+
+const dataBr = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}`;
+const quando = (marco: string) => (marco === 'D-7' ? 'vence em 7 dias' : marco === 'D0' ? 'vence hoje' : 'com prazo vencido');
+
+/** Título curto do sino: "CAPA vence em 7 dias", "Política A.5.1 precisa de revisão", "Auditoria hoje". */
+export function tituloDoAviso(item: Pick<ItemDoDia, 'fonte' | 'marco' | 'titulo'>): string {
+  const d7 = item.marco === 'D-7';
+  if (item.fonte === 'politica') return `Política ${item.titulo.split(' ')[0]} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
+  if (item.fonte === 'auditoria') return `Auditoria ${d7 ? 'em 7 dias' : item.marco === 'D0' ? 'hoje' : 'atrasada'}`;
+  return `${ROTULO[item.fonte]} ${quando(item.marco)}`;
+}
+
+/**
+ * A rotina do cron das 08:00. Ordem da spec (seção 5): pares (item, marco, pessoa) do dia → INSERT OR
+ * IGNORE em avisos_prazo → notificação só para a linha que entrou agora (no MESMO batch, então não há
+ * registro sem sino nem sino repetido) → um e-mail-resumo por pessoa com o que está pendente → marca
+ * email_enviado_em só depois do envio confirmado. Falha de fonte, de item ou de e-mail vai para
+ * `falhas` e a rotina segue.
+ */
+export async function avisosDePrazo(env: EnvAvisos, hoje: string): Promise<ResultadoAvisos> {
+  const db = env.DB;
+  const { itens, falhas } = await itensDoDia(db, hoje);
+  const r: ResultadoAvisos = { avisos_criados: 0, emails_enviados: 0, sem_destinatario: 0, falhas };
+  const pessoasPorProjeto = new Map<string, Pessoa[]>();
+
+  for (const item of itens) {
+    try {
+      let pessoas = pessoasPorProjeto.get(item.project_id);
+      if (!pessoas) pessoasPorProjeto.set(item.project_id, (pessoas = await pessoasDoProjeto(db, item.project_id)));
+      const destinos = escolherDestinatarios(pessoas, item.responsavel);
+      if (!destinos.length) { r.sem_destinatario++; continue; }
+      // Atraso na mesma semana do vencimento só sai se o D0 não saiu (a rotina não rodou no dia).
+      const guardaD0 = item.marco.startsWith('atraso-') && semanaIso(item.vence_em) === semanaIso(hoje) ? 1 : 0;
+      for (const p of destinos) {
+        const id = genId();
+        const [aviso] = await db.batch([
+          db.prepare(`INSERT OR IGNORE INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo)
+            SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+             WHERE NOT (?9 AND EXISTS (SELECT 1 FROM avisos_prazo
+               WHERE fonte = ?3 AND item_id = ?4 AND user_id = ?6 AND vence_em = ?7 AND marco = 'D0'))`)
+            .bind(id, item.project_id, item.fonte, item.item_id, item.marco, p.id, item.vence_em, item.titulo, guardaD0),
+          db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
+            SELECT ?, ?, ?, ?, ?, 0, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM avisos_prazo WHERE id = ?)`)
+            .bind(genId(), p.id, `prazo_${item.fonte}`, tituloDoAviso(item), `${item.titulo} (prazo ${dataBr(item.vence_em)})`,
+              `/projects/${item.project_id}${TELA[item.fonte]}`, id),
+        ]);
+        r.avisos_criados += aviso.meta.changes ?? 0;
+      }
+    } catch (e) {
+      r.falhas.push(`${item.fonte} ${item.item_id}: ${mensagem(e)}`);
+    }
+  }
+
+  // Sem a chave, enviarEmail só simula e devolve true: marcar enviado seria mentir (Decisão 3 do plano).
+  if (env.RESEND_API_KEY) {
+    try {
+      await enviarResumos(env, r);
+    } catch (e) {
+      r.falhas.push(`email: ${mensagem(e)}`);
+    }
+  }
+
+  log(r.falhas.length ? 'error' : 'info', { msg: 'avisos_prazo', hoje, ...r });
+  return r;
+}
+
+type LinhaEmail = { id: string; user_id: string; email: string; projeto: string; fonte: Fonte; marco: string; vence_em: string; titulo: string };
+
+/** Um e-mail por pessoa com tudo o que está pendente dos últimos 7 dias; marca só o que saiu. */
+async function enviarResumos(env: EnvAvisos, r: ResultadoAvisos): Promise<void> {
+  const { results } = await env.DB.prepare(
+    `SELECT a.id, a.user_id, u.email, COALESCE(p.project_name, p.client_name) AS projeto, a.fonte, a.marco, a.vence_em, a.titulo
+       FROM avisos_prazo a JOIN users u ON u.id = a.user_id JOIN projects p ON p.id = a.project_id
+      WHERE a.email_enviado_em IS NULL AND a.criado_em >= datetime('now', '-7 days') AND COALESCE(u.ativo, 1) <> 0
+      ORDER BY a.user_id, projeto, a.vence_em, a.titulo`
+  ).all<LinhaEmail>();
+  const porPessoa = new Map<string, LinhaEmail[]>();
+  for (const l of results) porPessoa.set(l.user_id, [...(porPessoa.get(l.user_id) ?? []), l]);
+
+  for (const [userId, linhas] of porPessoa) {
+    const n = linhas.length;
+    const ok = await enviarEmail(env, linhas[0].email, `n.iso: ${n} ${n === 1 ? 'prazo' : 'prazos'} para acompanhar`, emailResumo(linhas, appUrl(env)));
+    // Recusado: fica nulo e o dia seguinte tenta de novo, sem notificação nova. O log leva o id, não o e-mail.
+    if (!ok) { r.falhas.push(`email ${userId}: envio recusado`); continue; }
+    await env.DB.prepare(`UPDATE avisos_prazo SET email_enviado_em = datetime('now') WHERE email_enviado_em IS NULL AND id IN (SELECT value FROM json_each(?))`)
+      .bind(JSON.stringify(linhas.map((l) => l.id))).run();
+    r.emails_enviados++;
+  }
+}
+
+/** HTML simples, todo dado escapado, agrupado por projeto. Link único para o app: o SPA não roteia por URL. */
+function emailResumo(linhas: LinhaEmail[], base: string): string {
+  const e = escapeHtml;
+  const porProjeto = new Map<string, LinhaEmail[]>();
+  for (const l of linhas) porProjeto.set(l.projeto, [...(porProjeto.get(l.projeto) ?? []), l]);
+  const blocos = [...porProjeto].map(([projeto, ls]) =>
+    `<h3 style="font-size: 15px; margin: 20px 0 8px;">${e(projeto)}</h3><ul>${ls.map((l) =>
+      `<li>${e(ROTULO[l.fonte])}: ${e(l.titulo)} (${e(quando(l.marco))}, ${dataBr(l.vence_em)})</li>`).join('')}</ul>`).join('');
+  return `<div style="font-family: Arial, sans-serif; max-width: 560px; color: #1e293b;">
+    <p>Estes prazos precisam da sua atenção:</p>${blocos}
+    <p><a href="${e(base)}" style="background-color: #00ade8; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Abrir o n.iso</a></p>
+    <p style="font-size: 12px; color: #64748b;">Os mesmos avisos estão no sino do n.iso, com o link de cada item.</p>
+  </div>`;
 }

@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { env } from 'cloudflare:test';
-import { applySchema, resetData } from './helpers/d1';
-import { hojeEmSaoPaulo, semanaIso, marcoDoDia, itensDoDia, pessoasDoProjeto, escolherDestinatarios } from '../src/services/avisos-prazo';
+import { applySchema, resetData, workerEnv } from './helpers/d1';
+import { hojeEmSaoPaulo, semanaIso, marcoDoDia, itensDoDia, pessoasDoProjeto, escolherDestinatarios, avisosDePrazo } from '../src/services/avisos-prazo';
+import worker, { CRON_AVISOS } from '../src/index';
+import wrangler from '../wrangler.jsonc?raw';
 import { requireProjectAccess } from '../src/helpers';
 
 /**
@@ -188,5 +190,155 @@ describe('destinatários', () => {
     }
     expect(pessoas).toEqual(alcancam.sort());
     expect(pessoas).toEqual(['u-adm', 'u-ana', 'u-cons']);
+  });
+});
+
+describe('rotina avisosDePrazo', () => {
+  type Email = { to: string[]; subject: string; html: string };
+  let emails: Email[] = [];
+  let resendOk = true;
+  const COM_CHAVE = () => ({ ...workerEnv(), RESEND_API_KEY: 'chave-de-teste' });
+  const SEM_CHAVE = () => ({ ...workerEnv(), RESEND_API_KEY: undefined });
+  const notificacoes = async () => (await db().prepare(`SELECT user_id, type, title, message, link FROM notifications ORDER BY user_id, type`).all<Record<string, string>>()).results;
+  const avisos = async () => (await db().prepare(`SELECT fonte, item_id, marco, user_id, vence_em, email_enviado_em FROM avisos_prazo ORDER BY item_id, user_id, marco`).all<Record<string, string | null>>()).results;
+
+  beforeEach(async () => {
+    await applySchema();
+    await resetData();
+    await projeto('p1');
+    await db().batch([
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-cons', 'cons@ness.lat', 'x', 'Carla', 'consultor')`),
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('u-ana', 'ana@cliente.com', 'x', 'Ana Souza', 'org_user', 'p1')`),
+      db().prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p1', 'Carla', 'cons@ness.lat', 'consultor', 'Consultor')`),
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, assigned_to, due_date, status) VALUES ('cap-1', 'p1', 'Trocar <b>senhas</b>', 'Ana Souza', '2026-10-07', 'Open')`),
+      db().prepare(`INSERT INTO audit_schedule (id, project_id, audit_type, title, scheduled_date) VALUES ('au-1', 'p1', 'Internal', 'Auditoria interna anual', '2026-10-14')`),
+    ]);
+    emails = []; resendOk = true;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (_u: RequestInfo | URL, init?: RequestInit) => {
+      emails.push(JSON.parse(String(init?.body)));
+      return new Response(resendOk ? '{}' : 'falhou', { status: resendOk ? 200 : 500 });
+    }) as typeof fetch);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('cria o sino com título curto e link da tela; um e-mail-resumo por pessoa; rodar de novo no mesmo dia não duplica nada', async () => {
+    const r1 = await avisosDePrazo(COM_CHAVE(), HOJE);
+    expect(r1).toMatchObject({ avisos_criados: 3, emails_enviados: 2, falhas: [] });
+    expect(await notificacoes()).toEqual([
+      { user_id: 'u-ana', type: 'prazo_capa', title: 'CAPA vence hoje', message: 'Trocar <b>senhas</b> (prazo 07/10/2026)', link: '/projects/p1/capa' },
+      { user_id: 'u-cons', type: 'prazo_auditoria', title: 'Auditoria em 7 dias', message: 'Auditoria interna anual (prazo 14/10/2026)', link: '/projects/p1/audits' },
+      { user_id: 'u-cons', type: 'prazo_capa', title: 'CAPA vence hoje', message: 'Trocar <b>senhas</b> (prazo 07/10/2026)', link: '/projects/p1/capa' },
+    ]);
+    const paraCons = emails.find((e) => e.to[0] === 'cons@ness.lat')!;
+    expect(paraCons.subject).toBe('n.iso: 2 prazos para acompanhar');
+    expect(paraCons.html).toContain('Trocar &lt;b&gt;senhas&lt;/b&gt;');
+    expect(paraCons.html).not.toContain('<b>senhas');
+    expect(paraCons.html).toContain('Cliente p1');
+    expect(paraCons.html).toContain('14/10/2026');
+    expect(emails.find((e) => e.to[0] === 'ana@cliente.com')!.subject).toBe('n.iso: 1 prazo para acompanhar');
+    expect((await avisos()).every((a) => a.email_enviado_em)).toBe(true);
+
+    const r2 = await avisosDePrazo(COM_CHAVE(), HOJE);
+    expect(r2).toMatchObject({ avisos_criados: 0, emails_enviados: 0 });
+    expect(await notificacoes()).toHaveLength(3);
+    expect(emails).toHaveLength(2);
+  });
+
+  it('e-mail recusado: o sino vale, email_enviado_em fica nulo; o dia seguinte reenvia sem notificação nova', async () => {
+    resendOk = false;
+    const r1 = await avisosDePrazo(COM_CHAVE(), HOJE);
+    expect(r1.emails_enviados).toBe(0);
+    expect(r1.falhas.some((f) => f.startsWith('email '))).toBe(true);
+    expect(await notificacoes()).toHaveLength(3);
+    expect((await avisos()).every((a) => a.email_enviado_em === null)).toBe(true);
+
+    resendOk = true;
+    emails = [];
+    // Quinta: a CAPA vencida ontem já teve D0 nesta semana, e a auditoria está a 6 dias. Nada novo.
+    const r2 = await avisosDePrazo(COM_CHAVE(), '2026-10-08');
+    expect(r2).toMatchObject({ avisos_criados: 0, emails_enviados: 2 });
+    expect(await notificacoes()).toHaveLength(3);
+    expect(emails.find((e) => e.to[0] === 'cons@ness.lat')!.subject).toBe('n.iso: 2 prazos para acompanhar');
+    expect((await avisos()).every((a) => a.email_enviado_em)).toBe(true);
+  });
+
+  it('sem RESEND_API_KEY: só o sino, nenhum envio e nada marcado como enviado', async () => {
+    const r = await avisosDePrazo(SEM_CHAVE(), HOJE);
+    expect(r).toMatchObject({ avisos_criados: 3, emails_enviados: 0, falhas: [] });
+    expect(emails).toHaveLength(0);
+    expect(await notificacoes()).toHaveLength(3);
+    expect((await avisos()).every((a) => a.email_enviado_em === null)).toBe(true);
+  });
+
+  it('conta desativada não recebe o resumo pendente', async () => {
+    await avisosDePrazo(SEM_CHAVE(), HOJE);
+    await db().prepare(`UPDATE users SET ativo = 0 WHERE id = 'u-ana'`).run();
+    await avisosDePrazo(COM_CHAVE(), '2026-10-08');
+    expect(emails.map((e) => e.to[0])).toEqual(['cons@ness.lat']);
+  });
+
+  it('atraso: o primeiro sai na semana do vencimento se não houve D0; com D0, só na semana seguinte', async () => {
+    await db().batch([
+      db().prepare(`DELETE FROM corrective_actions`),
+      db().prepare(`DELETE FROM audit_schedule`),
+      // Venceu na segunda e a rotina não rodou: o atraso sai já nesta semana.
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date) VALUES ('cap-seg', 'p1', 'Segunda', '2026-10-05')`),
+      // Vence na terça: D0 na terça; na quarta nada; na segunda seguinte, o atraso da semana 42.
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date) VALUES ('cap-ter', 'p1', 'Terça', '2026-10-06')`),
+    ]);
+    await avisosDePrazo(SEM_CHAVE(), '2026-10-06');
+    await avisosDePrazo(SEM_CHAVE(), HOJE);
+    await avisosDePrazo(SEM_CHAVE(), '2026-10-08');
+    await avisosDePrazo(SEM_CHAVE(), '2026-10-12');
+    const marcos = (await avisos()).filter((a) => a.user_id === 'u-cons').map((a) => `${a.item_id} ${a.marco}`);
+    expect(marcos).toEqual([
+      'cap-seg atraso-2026-W41', 'cap-seg atraso-2026-W42',
+      'cap-ter D0', 'cap-ter atraso-2026-W42',
+    ]);
+  });
+
+  it('um erro numa fonte vai para falhas e as outras avisam', async () => {
+    await db().prepare('DROP TABLE certification_tracking').run();
+    const r = await avisosDePrazo(SEM_CHAVE(), HOJE);
+    expect(r.avisos_criados).toBe(3);
+    expect(r.falhas).toEqual([expect.stringMatching(/^certificado: /)]);
+  });
+});
+
+describe('scheduled despacha pelo cron', () => {
+  beforeEach(async () => {
+    await applySchema();
+    await resetData();
+  });
+
+  const disparar = async (cron: string) => {
+    const pendentes: Promise<unknown>[] = [];
+    const ctx = { waitUntil: (p: Promise<unknown>) => { pendentes.push(p); }, passThroughOnException() {} } as unknown as ExecutionContext;
+    worker.scheduled({ cron, scheduledTime: Date.now(), noRetry() {} } as ScheduledController, workerEnv(), ctx);
+    await Promise.all(pendentes);
+  };
+
+  it('o das 11:00 UTC roda os avisos com o dia de São Paulo; o das 04:10 roda a manutenção e não avisa', async () => {
+    await projeto('p1');
+    await db().batch([
+      db().prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES ('u-cons', 'cons@ness.lat', 'x', 'Carla', 'consultor')`),
+      db().prepare(`INSERT INTO project_governance (project_id, name, email, role_category, job_title) VALUES ('p1', 'Carla', 'cons@ness.lat', 'consultor', 'Consultor')`),
+      db().prepare(`INSERT INTO corrective_actions (id, project_id, title, due_date) VALUES ('cap-hoje', 'p1', 'Hoje', ?)`).bind(hojeEmSaoPaulo()),
+      db().prepare(`INSERT INTO rate_limits (key, count, window_start) VALUES ('velho', 1, ?)`).bind(Math.floor(Date.now() / 1000) - 30 * 86400),
+    ]);
+
+    await disparar('10 4 * * *');
+    expect(await db().prepare('SELECT count(*) AS n FROM avisos_prazo').first<{ n: number }>()).toEqual({ n: 0 });
+    expect(await db().prepare(`SELECT key FROM rate_limits WHERE key = 'velho'`).first()).toBeNull();
+
+    await disparar(CRON_AVISOS);
+    expect(await db().prepare(`SELECT item_id, marco FROM avisos_prazo`).all()).toMatchObject({ results: [{ item_id: 'cap-hoje', marco: 'D0' }] });
+  });
+
+  it('wrangler.jsonc agenda os dois crons', () => {
+    expect(CRON_AVISOS).toBe('0 11 * * *');
+    expect(wrangler).toContain('"crons": ["10 4 * * *", "0 11 * * *"]');
   });
 });
