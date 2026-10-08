@@ -22,6 +22,22 @@ describe('enviarEmail', () => {
     expect(await enviarEmail({ RESEND_API_KEY: 'k1' }, 'a@b.com', 'Assunto', '<p>x</p>')).toBe(false);
   });
 
+  it('recusa do provedor: o log leva o status, nunca o corpo da resposta nem o endereço', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async () => new Response('{"name":"validation_error","message":"o endereço a@b.com é inválido"}', { status: 422 })) as typeof fetch);
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await enviarEmail({ RESEND_API_KEY: 'k1' }, 'a@b.com', 'Assunto', '<p>x</p>')).toBe(false);
+    const saida = erro.mock.calls.flat().join(' ');
+    expect(saida).toContain('422');
+    expect(saida).toContain('validation_error');
+    expect(saida).not.toContain('a@b.com');
+  });
+
+  it('simulação sem chave não loga o endereço', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    expect(await enviarEmail({}, 'a@b.com', 'Assunto', '<p>x</p>')).toBe(true);
+    expect(log.mock.calls.flat().join(' ')).not.toContain('a@b.com');
+  });
+
   it('sendEmail(c) delega com c.env', async () => {
     resend(200);
     expect(await sendEmail({ env: { RESEND_API_KEY: 'k2' } }, 'c@d.com', 'S', '<p>y</p>', { replyTo: 'r@x.com' })).toBe(true);

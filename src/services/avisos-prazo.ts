@@ -64,6 +64,8 @@ export function marcoDoDia(vence: string, hoje: string): string | null {
  * ('07/10/2026'), que o filtro de fora descarta. O JOIN com projects deixa de fora linha sem projeto.
  * Resolvido: CAPA 'Closed' (routes/capa.ts), auditoria 'Completed' (routes/audits.ts), item marcado,
  * link revogado; certificado renovado e política revisada saem sozinhos, porque a data anda.
+ * Política: o filtro efetivo é "as duas assinaturas" (CISO e CEO); a descrição (texto) do catálogo quase
+ * sempre existe, então o teste de texto não vazio quase nunca descarta nada.
  * ponytail: '-3 hours' é o fuso de São Paulo fixo (sem horário de verão desde 2019); se voltar, troca
  * por conversão no TypeScript.
  */
@@ -118,14 +120,14 @@ export type Pessoa = { id: string; email: string; name: string | null; role: str
  * comercial (não trabalha em projeto). Conta desativada não recebe. O teste de paridade em
  * test/avisos-prazo.test.ts reprova se as duas regras divergirem.
  */
-const PESSOAS_DO_PROJETO = `SELECT u.id, u.email, u.name, u.role FROM users u JOIN projects p ON p.id = ?1
-  WHERE COALESCE(u.ativo, 1) <> 0 AND (
+const ALCANCA_O_PROJETO = `COALESCE(u.ativo, 1) <> 0 AND (
     (u.role IN ('org_admin', 'org_user', 'client') AND u.client_project_id = p.id)
     OR (u.role = 'consultoria_admin' AND u.org_id = p.org_id)
     OR (u.role IN ('consultor', 'consultant') AND u.org_id = p.org_id AND EXISTS (
       SELECT 1 FROM project_governance g
-       WHERE g.project_id = p.id AND g.role_category = 'consultor' AND lower(g.email) = lower(u.email))))
-  ORDER BY u.id`;
+       WHERE g.project_id = p.id AND g.role_category = 'consultor' AND lower(g.email) = lower(u.email))))`;
+const PESSOAS_DO_PROJETO = `SELECT u.id, u.email, u.name, u.role FROM users u JOIN projects p ON p.id = ?1
+  WHERE ${ALCANCA_O_PROJETO} ORDER BY u.id`;
 
 export async function pessoasDoProjeto(db: D1Database, projectId: string): Promise<Pessoa[]> {
   return (await db.prepare(PESSOAS_DO_PROJETO).bind(projectId).all<Pessoa>()).results;
@@ -196,19 +198,23 @@ export async function avisosDePrazo(env: EnvAvisos, hoje: string): Promise<Resul
       // Atraso na mesma semana do vencimento só sai se o D0 não saiu (a rotina não rodou no dia).
       const guardaD0 = item.marco.startsWith('atraso-') && semanaIso(item.vence_em) === semanaIso(hoje) ? 1 : 0;
       for (const p of destinos) {
-        const id = genId();
-        const [aviso] = await db.batch([
-          db.prepare(`INSERT OR IGNORE INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo)
-            SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
-             WHERE NOT (?9 AND EXISTS (SELECT 1 FROM avisos_prazo
-               WHERE fonte = ?3 AND item_id = ?4 AND user_id = ?6 AND vence_em = ?7 AND marco = 'D0'))`)
-            .bind(id, item.project_id, item.fonte, item.item_id, item.marco, p.id, item.vence_em, item.titulo, guardaD0),
-          db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
-            SELECT ?, ?, ?, ?, ?, 0, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM avisos_prazo WHERE id = ?)`)
-            .bind(genId(), p.id, `prazo_${item.fonte}`, tituloDoAviso(item), `${item.titulo} (prazo ${dataBr(item.vence_em)})`,
-              `/projects/${item.project_id}${TELA[item.fonte]}`, id),
-        ]);
-        r.avisos_criados += aviso.meta.changes ?? 0;
+        try {
+          const id = genId();
+          const [aviso] = await db.batch([
+            db.prepare(`INSERT OR IGNORE INTO avisos_prazo (id, project_id, fonte, item_id, marco, user_id, vence_em, titulo)
+              SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+               WHERE NOT (?9 AND EXISTS (SELECT 1 FROM avisos_prazo
+                 WHERE fonte = ?3 AND item_id = ?4 AND user_id = ?6 AND vence_em = ?7 AND marco = 'D0'))`)
+              .bind(id, item.project_id, item.fonte, item.item_id, item.marco, p.id, item.vence_em, item.titulo, guardaD0),
+            db.prepare(`INSERT INTO notifications (id, user_id, type, title, message, read, link, created_at)
+              SELECT ?, ?, ?, ?, ?, 0, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM avisos_prazo WHERE id = ?)`)
+              .bind(genId(), p.id, `prazo_${item.fonte}`, tituloDoAviso(item), `${item.titulo} (prazo ${dataBr(item.vence_em)})`,
+                `/projects/${item.project_id}${TELA[item.fonte]}`, id),
+          ]);
+          r.avisos_criados += aviso.meta.changes ?? 0;
+        } catch (e) {
+          r.falhas.push(`${item.fonte} ${item.item_id} ${p.id}: ${mensagem(e)}`);
+        }
       }
     } catch (e) {
       r.falhas.push(`${item.fonte} ${item.item_id}: ${mensagem(e)}`);
@@ -232,10 +238,11 @@ type LinhaEmail = { id: string; user_id: string; email: string; projeto: string;
 
 /** Um e-mail por pessoa com tudo o que está pendente dos últimos 7 dias; marca só o que saiu. */
 async function enviarResumos(env: EnvAvisos, r: ResultadoAvisos): Promise<void> {
+  // Refiltra o acesso: quem perdeu a designação ou foi desativado desde o aviso não recebe o resumo.
   const { results } = await env.DB.prepare(
     `SELECT a.id, a.user_id, u.email, COALESCE(p.project_name, p.client_name) AS projeto, a.fonte, a.marco, a.vence_em, a.titulo
        FROM avisos_prazo a JOIN users u ON u.id = a.user_id JOIN projects p ON p.id = a.project_id
-      WHERE a.email_enviado_em IS NULL AND a.criado_em >= datetime('now', '-7 days') AND COALESCE(u.ativo, 1) <> 0
+      WHERE a.email_enviado_em IS NULL AND a.criado_em >= datetime('now', '-7 days') AND ${ALCANCA_O_PROJETO}
       ORDER BY a.user_id, projeto, a.vence_em, a.titulo`
   ).all<LinhaEmail>();
   const porPessoa = new Map<string, LinhaEmail[]>();
@@ -243,12 +250,17 @@ async function enviarResumos(env: EnvAvisos, r: ResultadoAvisos): Promise<void> 
 
   for (const [userId, linhas] of porPessoa) {
     const n = linhas.length;
-    const ok = await enviarEmail(env, linhas[0].email, `n.iso: ${n} ${n === 1 ? 'prazo' : 'prazos'} para acompanhar`, emailResumo(linhas, appUrl(env)));
-    // Recusado: fica nulo e o dia seguinte tenta de novo, sem notificação nova. O log leva o id, não o e-mail.
-    if (!ok) { r.falhas.push(`email ${userId}: envio recusado`); continue; }
-    await env.DB.prepare(`UPDATE avisos_prazo SET email_enviado_em = datetime('now') WHERE email_enviado_em IS NULL AND id IN (SELECT value FROM json_each(?))`)
-      .bind(JSON.stringify(linhas.map((l) => l.id))).run();
-    r.emails_enviados++;
+    try {
+      const ok = await enviarEmail(env, linhas[0].email, `n.iso: ${n} ${n === 1 ? 'prazo' : 'prazos'} para acompanhar`, emailResumo(linhas, appUrl(env)));
+      // Recusado: fica nulo e o dia seguinte tenta de novo, sem notificação nova. O log leva o id, não o e-mail.
+      if (!ok) { r.falhas.push(`email ${userId}: envio recusado`); continue; }
+      await env.DB.prepare(`UPDATE avisos_prazo SET email_enviado_em = datetime('now') WHERE email_enviado_em IS NULL AND id IN (SELECT value FROM json_each(?))`)
+        .bind(JSON.stringify(linhas.map((l) => l.id))).run();
+      r.emails_enviados++;
+    } catch {
+      // Só o id: a mensagem do D1 pode citar e-mail. Sem marca, o dia seguinte reenvia.
+      r.falhas.push(`email ${userId}: falha ao marcar o envio`);
+    }
   }
 }
 

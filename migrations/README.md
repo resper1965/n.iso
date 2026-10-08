@@ -236,7 +236,8 @@ nenhuma tabela existente muda.
 Conferência depois de aplicar: `PRAGMA table_info(avisos_prazo)` mostra `id, project_id, fonte,
 item_id, marco, user_id, vence_em, titulo, criado_em, email_enviado_em`.
 
-**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
---remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to apply")
-→ merge, porque `deploy.yml` recusa migration pendente. O cron novo (`0 11 * * *`) entra com o deploy;
+**Esta RODA em produção.** Hoje a produção está na 0044: a 0045 ainda não foi aplicada, então
+`migrations apply` aplicará a 0045 e a 0046 juntas. Ordem: `npm run db:backup` (antes) → `npx wrangler
+d1 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado:
+"No migrations to apply") → merge, porque `deploy.yml` recusa migration pendente. O cron novo (`0 11 * * *`) entra com o deploy;
 sem a tabela, a rotina registraria falha em todo item.

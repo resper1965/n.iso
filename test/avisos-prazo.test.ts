@@ -146,8 +146,12 @@ describe('destinatários', () => {
       usuario('u-plat', 'plat@ness.lat', 'Ana Souza', 'platform_admin'),
       usuario('u-consb', 'cons@b.com', 'Consultor B', 'consultor', { org: 'org_b' }),
       usuario('u-admb', 'adm@b.com', 'Admin B', 'consultoria_admin', { org: 'org_b' }),
+      usuario('u-com', 'com@ness.lat', 'Comercial', 'comercial', { proj: 'p1' }), // client_project_id não dá acesso ao comercial
+      usuario('u-cons-sem', 'semdes@ness.lat', 'Sem designação', 'consultor', { proj: 'p1' }), // client_project_id não substitui a designação
+      usuario('u-cons-off', 'off@ness.lat', 'Designado inativo', 'consultor', { ativo: 0 }),
       consultorNoP1('cons@ness.lat'),
       consultorNoP1('cons@b.com'), // e-mail de outra consultoria digitado na governança: não alcança
+      consultorNoP1('off@ness.lat'),
     ]);
   });
 
@@ -190,6 +194,7 @@ describe('destinatários', () => {
     }
     expect(pessoas).toEqual(alcancam.sort());
     expect(pessoas).toEqual(['u-adm', 'u-ana', 'u-cons']);
+    expect(pessoas).not.toContain('u-com');
   });
 });
 
@@ -277,6 +282,44 @@ describe('rotina avisosDePrazo', () => {
     await db().prepare(`UPDATE users SET ativo = 0 WHERE id = 'u-ana'`).run();
     await avisosDePrazo(COM_CHAVE(), '2026-10-08');
     expect(emails.map((e) => e.to[0])).toEqual(['cons@ness.lat']);
+  });
+
+  it('falha na marcação de uma pessoa não interrompe as seguintes', async () => {
+    let falhou = false;
+    const proxy = new Proxy(env.DB, { get(alvo, prop) {
+      if (prop === 'prepare') return (sql: string) => {
+        if (!falhou && sql.includes('UPDATE avisos_prazo SET email_enviado_em')) { falhou = true; throw new Error('D1 caiu para ana@cliente.com'); }
+        return alvo.prepare(sql);
+      };
+      const v = (alvo as any)[prop]; return typeof v === 'function' ? v.bind(alvo) : v;
+    } });
+    const r = await avisosDePrazo({ ...COM_CHAVE(), DB: proxy as D1Database }, HOJE);
+    expect(r.emails_enviados).toBe(1);
+    expect(r.falhas).toEqual(['email u-ana: falha ao marcar o envio']);
+    const marcado = (await avisos()).filter((a) => a.email_enviado_em).map((a) => a.user_id);
+    expect(marcado).toEqual(['u-cons', 'u-cons']);
+  });
+
+  it('falha no batch de um destinatário não pula os demais do item', async () => {
+    let falhou = false;
+    const proxy = new Proxy(env.DB, { get(alvo, prop) {
+      if (prop === 'batch') return async (s: D1PreparedStatement[]) => {
+        if (!falhou) { falhou = true; throw new Error('batch caiu'); }
+        return alvo.batch(s);
+      };
+      const v = (alvo as any)[prop]; return typeof v === 'function' ? v.bind(alvo) : v;
+    } });
+    const r = await avisosDePrazo({ ...SEM_CHAVE(), DB: proxy as D1Database }, HOJE);
+    expect(r.avisos_criados).toBe(2); // cap-1 (só 1 dos 2 destinatários) + au-1
+    expect(r.falhas).toHaveLength(1);
+    expect(r.falhas[0]).toMatch(/^capa cap-1 /);
+  });
+
+  it('linha pendente de quem perdeu a designação não gera e-mail para ele', async () => {
+    await avisosDePrazo(SEM_CHAVE(), HOJE);
+    await db().prepare(`DELETE FROM project_governance`).run();
+    await avisosDePrazo(COM_CHAVE(), '2026-10-08');
+    expect(emails.map((e) => e.to[0])).toEqual(['ana@cliente.com']);
   });
 
   it('atraso: o primeiro sai na semana do vencimento se não houve D0; com D0, só na semana seguinte', async () => {
