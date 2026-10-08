@@ -198,7 +198,6 @@ import { navigate, render } from '../router.js';
 
     window.openEditROPAModal = function(id) {
         const r = S.ropa.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Atividade ROPA</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Finalidade</label><input class="form-input" id="ropa-e-purpose" value="${escapeHTML(r.processing_purpose||'')}"></div>
@@ -424,7 +423,6 @@ import { navigate, render } from '../router.js';
 
     window.openEditDPIAModal = function(id) {
         const dp = S.dpia.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar DPIA / RIPD</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Nome do Sistema</label><input class="form-input" id="dpia-e-system" value="${escapeHTML(dp.system_name||'')}"></div>

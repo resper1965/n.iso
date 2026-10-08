@@ -1730,7 +1730,6 @@ import { navigate } from '../router.js';
 
     window.openAssetDetailsModal = function(id) {
         const ast = S.assets.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const classColor = cl => cl === 'Confidential' ? 'var(--danger)' : cl === 'Restricted' ? 'var(--warning)' : cl === 'Internal' ? 'var(--info)' : 'var(--accent)';
         

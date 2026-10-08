@@ -182,7 +182,7 @@ aiApp.post('/projects/:id/assessment/evaluate', async (c) => {
       return c.json({ error: 'Nenhuma resposta de entrevista encontrada para este projeto. Por favor, responda o questionário no Playbook antes de rodar o diagnóstico.' }, 400);
     }
 
-    const assessmentData = (interviews ?? []).map((i: any) => 
+    const assessmentData = interviews.map((i: any) => 
       `[Trilha: ${i.track}] Questão: ${i.question}\nResposta: ${i.answer}\nEntrevistado: ${i.interviewee}\nGap Detectado: ${i.gap_detected ? 'Sim' : 'Não'}`
     ).join('\n\n');
 

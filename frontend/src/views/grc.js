@@ -1464,7 +1464,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openAuditDetailsModal = function(id) {
         const au = S.audits.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'In Progress' ? '#feca57' : 'var(--muted)';
         
@@ -1553,7 +1552,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openEditAuditModal = function(id) {
         const au = S.audits.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Auditoria</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="aud-e-title" value="${escapeHTML(au.title||'')}"></div>
