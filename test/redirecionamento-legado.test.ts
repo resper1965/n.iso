@@ -27,8 +27,7 @@ describe('redirecionamento dos hosts legados', () => {
     expect(res.headers.get('location')).toBe('https://niso.ness.com.br/oauth/token');
   });
 
-  it('o canônico e o staging NÃO redirecionam', async () => {
+  it('o canônico NÃO redireciona', async () => {
     expect((await chamar('https://niso.ness.com.br/health')).status).toBe(200);
-    expect((await chamar('https://niso-staging.ness.workers.dev/health')).status).toBe(200);
   });
 });

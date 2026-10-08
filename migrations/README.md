@@ -22,7 +22,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 1. Schema muda em **dois** lugares: `schema.sql` (índice depois da tabela) e a migration
    numerada. `*.sql` é sempre LF (`.gitattributes`).
 2. Backup: `npm run db:backup` (ver `backups/README.md`).
-3. Aplicar: workflow manual `db-migrate.yml` (ensaia em staging quando ativo) ou
+3. Aplicar: workflow manual `db-migrate.yml` ou
    `npx wrangler d1 migrations apply niso-db --remote`.
 4. Conferir: `npx wrangler d1 migrations list niso-db --remote` responde "No migrations to
    apply" e `PRAGMA table_info(<tabela>)` mostra a coluna.
@@ -200,14 +200,11 @@ recusa migration pendente.
 
 As 12 colunas `*_approved_ip/ua` de `compliance_controls`, `evidence` e `ropa_records` existem
 em produção e no `schema.sql`, mas nenhuma migration as criava. A 0044 leva o DDL a banco novo.
-Produção (`niso-db`) e staging (`niso-db-staging`) têm as 12 colunas (conferido por
-`pragma_table_info` em 2026-10-07). O staging tinha a `d1_migrations` parada na 0028 em
-2026-10-07 (fora do escopo desta migration).
+Produção (`niso-db`) tem as 12 colunas (conferido por `pragma_table_info` em 2026-10-07).
 
-**Em produção e no staging a 0044 NÃO é executada** (abortaria com "duplicate column"). Só se
-registra, antes do merge:
+**Em produção a 0044 NÃO é executada** (abortaria com "duplicate column"). Só se registra, antes
+do merge:
 
     npx wrangler d1 execute niso-db --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0044_aprovacao_ip_ua.sql');"
     npx wrangler d1 migrations list niso-db --remote   # esperado: "No migrations to apply"
-    npx wrangler d1 execute niso-db-staging --env staging --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0044_aprovacao_ip_ua.sql');"
 

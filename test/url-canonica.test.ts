@@ -1,6 +1,6 @@
 // Endereço canônico (Tarefa 7 da arrumação final). Link de e-mail, callback de SSO, base do SCIM,
 // CORS e hosts do MCP saem de `appUrl(env)`, nunca do host da requisição: o IdP do cliente cadastra
-// UM callback, e um host alternativo gerava outro. Staging sobrescreve por `env.APP_URL`.
+// UM callback, e um host alternativo gerava outro. `APP_URL` sobrescreve o padrão.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
@@ -10,7 +10,7 @@ import { applySchema, resetData, resetSessions, sessionFor, workerEnv } from './
 import { sha256Hex } from '../src/helpers';
 
 const CANONICO = 'https://niso.ness.com.br';
-const STAGING = 'https://niso-staging.ness.workers.dev';
+const ALTERNATIVO = 'https://ambiente-alternativo.exemplo.com';
 const A = 'proj-url';
 const ISSUER = 'https://idp.exemplo.com';
 
@@ -22,7 +22,7 @@ describe('appUrl', () => {
   it('padrão é o canônico; APP_URL sobrescreve; barra final sai', () => {
     expect(appUrl()).toBe(CANONICO);
     expect(appUrl({})).toBe(CANONICO);
-    expect(appUrl({ APP_URL: `${STAGING}/` })).toBe(STAGING);
+    expect(appUrl({ APP_URL: `${ALTERNATIVO}/` })).toBe(ALTERNATIVO);
   });
 });
 
@@ -54,8 +54,8 @@ describe('URLs geradas usam o canônico, não o host da requisição', () => {
     expect(await redirectUriDoSso()).toBe(`${CANONICO}/api/v1/public/sso/callback`);
   });
 
-  it('callback de SSO em staging segue APP_URL', async () => {
-    expect(await redirectUriDoSso({ APP_URL: STAGING })).toBe(`${STAGING}/api/v1/public/sso/callback`);
+  it('callback de SSO segue APP_URL', async () => {
+    expect(await redirectUriDoSso({ APP_URL: ALTERNATIVO })).toBe(`${ALTERNATIVO}/api/v1/public/sso/callback`);
   });
 
   it('base_url do SCIM e location dos usuários são canônicos', async () => {
@@ -76,7 +76,7 @@ describe('URLs geradas usam o canônico, não o host da requisição', () => {
     for (const u of Resources) expect(u.meta.location.startsWith(`${CANONICO}/scim/v2/Users/`)).toBe(true);
   });
 
-  it('link de proposta é canônico (e o de staging segue APP_URL)', async () => {
+  it('link de proposta é canônico e segue APP_URL quando ele muda', async () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO leads (id, company_name, cnpj, status, org_id) VALUES ('l-url', 'Cliente', '11222333000181', 'Proposal', 'org_ness')`),
       env.DB.prepare(`INSERT INTO propostas (id, org_id, lead_id, numero, status, cliente, total_projeto, mensalidade, documento_html, documento_hash, valida_ate, criada_por)
@@ -87,8 +87,8 @@ describe('URLs geradas usam o canônico, não o host da requisição', () => {
     expect(r.status, await r.clone().text()).toBe(200);
     expect((await r.json<any>()).url.startsWith(`${CANONICO}/proposta#`)).toBe(true);
 
-    const s = await chamar('/api/v1/propostas/pr-url/link', { method: 'POST', headers: com }, { APP_URL: STAGING });
-    expect((await s.json<any>()).url.startsWith(`${STAGING}/proposta#`)).toBe(true);
+    const s = await chamar('/api/v1/propostas/pr-url/link', { method: 'POST', headers: com }, { APP_URL: ALTERNATIVO });
+    expect((await s.json<any>()).url.startsWith(`${ALTERNATIVO}/proposta#`)).toBe(true);
   });
 });
 
@@ -105,17 +105,17 @@ describe('origens e hosts saem do mesmo endereço', () => {
   const acao = async (origem: string, extra: Record<string, unknown> = {}) =>
     (await chamar('/health', { headers: { Origin: origem } }, extra)).headers.get('access-control-allow-origin');
 
-  it('CORS: canônico sim, legados não (eles redirecionam), staging só com APP_URL de staging', async () => {
+  it('CORS: canônico sim, legados não (eles redirecionam), alternativo só com APP_URL igual a ele', async () => {
     expect(await acao(CANONICO)).toBe(CANONICO);
     expect(await acao('https://n-iso.ness.com.br')).toBeNull();
     expect(await acao('https://niso.ness.workers.dev')).toBeNull();
-    expect(await acao(STAGING)).toBeNull();
-    expect(await acao(STAGING, { APP_URL: STAGING })).toBe(STAGING);
+    expect(await acao(ALTERNATIVO)).toBeNull();
+    expect(await acao(ALTERNATIVO, { APP_URL: ALTERNATIVO })).toBe(ALTERNATIVO);
   });
 
   it('MCP: só o host do APP_URL; loopback fora de produção', () => {
     expect(hostsPermitidosMcp({ ENVIRONMENT: 'production' })).toEqual(['niso.ness.com.br']);
-    expect(hostsPermitidosMcp({ ENVIRONMENT: 'staging', APP_URL: STAGING })).toEqual(['niso-staging.ness.workers.dev', 'localhost', '127.0.0.1']);
+    expect(hostsPermitidosMcp({ ENVIRONMENT: 'test', APP_URL: ALTERNATIVO })).toEqual(['ambiente-alternativo.exemplo.com', 'localhost', '127.0.0.1']);
     expect(hostsPermitidosMcp({ ENVIRONMENT: 'test' })).toContain('localhost');
   });
 });
