@@ -23,9 +23,9 @@ domínio.
 | Cliente | Como |
 |---|---|
 | **Claude Code** | `claude mcp add --transport http niso https://niso.ness.com.br/mcp` |
-| **Codex** | `codex mcp add niso --url https://niso.ness.com.br/mcp`, depois `codex mcp login niso` |
-| **Cursor** | em `.cursor/mcp.json`: `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }` |
-| **Antigravity** | em `~/.gemini/config/mcp_config.json`: `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }` |
+| **Codex** | `codex mcp add niso --url https://niso.ness.com.br/mcp`, depois `codex mcp login niso`. Confira com `codex mcp list`. |
+| **Cursor** | em `.cursor/mcp.json` (ou `~/.cursor/mcp.json`, para todos os projetos): `{ "mcpServers": { "niso": { "url": "https://niso.ness.com.br/mcp" } } }`. Entre por Cursor Settings > MCP. |
+| **Antigravity** | em `~/.gemini/config/mcp_config.json` (antes da 2.0: `~/.gemini/antigravity/mcp_config.json`): `{ "mcpServers": { "niso": { "serverUrl": "https://niso.ness.com.br/mcp" } } }`. Entre pelo botão Authenticate do painel MCP; editor e linha de comando têm login separado. |
 
 Na primeira chamada o cliente abre o navegador. Você:
 
@@ -46,6 +46,18 @@ escolha o outro.
 
 **Não é você?** O agente age como você: a trilha registra
 `agente de <seu e-mail> (<cliente> / <projeto>)`.
+
+### Outros clientes MCP (possíveis, não suportados)
+
+Qualquer cliente que fale MCP por HTTP com OAuth (registro dinâmico, PKCE, callback `https` ou
+`http` em loopback) conecta. A ness. só dá suporte aos quatro acima.
+
+**OpenClaw: não use com dado de cliente.** Ele conecta (`openclaw mcp add`, depois
+`openclaw mcp login niso`), mas é um agente de longa duração que recebe mensagem por WhatsApp,
+Telegram, Slack e outros canais. Qualquer mensagem nesses canais pode virar instrução para um
+agente que grava e apaga no projeto do cliente com o seu alcance. Se mesmo assim for usar: nenhum
+canal aberto a terceiros, um projeto por conexão (já é a regra) e revogue a concessão em
+Governança quando terminar.
 
 ---
 
