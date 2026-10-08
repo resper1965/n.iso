@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Portal do auditor</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/auditor.css">
+  <!-- Portal do auditor externo, só leitura. Sem script inline (CSP script-src 'self'): tudo está em
+       /auditor.js. O token vem no fragmento (#...), que o navegador não envia ao servidor. -->
+  <script src="/auditor.js" defer></script>
+</head>
+<body>
+  <header class="pa-topo">
+    <div class="pa-topo-int">
+      <span class="pa-org" id="pa-org">Portal do auditor</span>
+      <span class="pa-meta" id="pa-meta"></span>
+    </div>
+  </header>
+
+  <main class="pa-main" id="pa-main">
+    <section class="pa-estado" id="pa-estado" role="status" aria-live="polite">
+      <h1 class="pa-estado-titulo" id="pa-estado-titulo">Carregando...</h1>
+      <p class="pa-estado-texto" id="pa-estado-texto"></p>
+    </section>
+
+    <div id="pa-conteudo" hidden>
+      <h1 class="pa-titulo">Declaração de Aplicabilidade e evidências</h1>
+      <dl class="pa-projeto">
+        <dt>Cliente</dt><dd id="pa-cliente"></dd>
+        <dt>Normas</dt><dd id="pa-normas"></dd>
+        <dt>Escopo</dt><dd id="pa-escopo"></dd>
+      </dl>
+      <p class="pa-aviso" id="pa-aviso" role="alert"></p>
+      <div class="pa-acoes">
+        <button type="button" class="pa-btn" id="pa-prova">Baixar a prova dos pedidos de aprovação e ciência (JSON)</button>
+      </div>
+      <h2 class="pa-secao">SoA</h2>
+      <div id="pa-soa"></div>
+      <section id="pa-sem-controle" aria-labelledby="pa-sem-controle-titulo" hidden>
+        <h2 class="pa-secao" id="pa-sem-controle-titulo">Evidências sem controle ligado</h2>
+        <ul class="pa-evs" id="pa-sem-controle-lista"></ul>
+      </section>
+      <section class="pa-nota" aria-labelledby="pa-nota-titulo">
+        <h2 class="pa-secao" id="pa-nota-titulo">Pergunta à consultoria</h2>
+        <label class="pa-nota-rotulo" for="pa-nota-texto">A consultoria vê a pergunta na tela de Auditorias e responde por lá.</label>
+        <textarea class="pa-nota-texto" id="pa-nota-texto" rows="4" maxlength="20000"></textarea>
+        <div class="pa-acoes">
+          <button type="button" class="pa-btn" id="pa-nota-enviar">Registrar pergunta</button>
+          <span class="pa-nota-msg" id="pa-nota-msg" role="status"></span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="pa-rodape-pagina">
+    <p>Acesso somente leitura e com prazo. Não encaminhe este link.</p>
+  </footer>
+</body>
+</html>

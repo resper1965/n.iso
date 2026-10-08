@@ -31,6 +31,15 @@ describe('Raiz e rota desconhecida entregam a tela de entrada', () => {
     expect(assets.pedidos).toEqual(['/', '/login']);
   });
 
+  it('/auditor (página pública do auditor) vai ao asset, sem rota do Worker no meio', async () => {
+    // O Workers Assets (html_handling padrão) resolve /auditor para public/auditor.html.
+    const pedidos: string[] = [];
+    const assets = { fetch: async (req: Request) => { pedidos.push(new URL(req.url).pathname); return new Response('portal'); } };
+    const res = await app.request('/auditor', {}, { ASSETS: assets } as any);
+    expect(await res.text()).toBe('portal');
+    expect(pedidos).toEqual(['/auditor']);
+  });
+
   it('rota desconhecida também cai na tela de entrada', async () => {
     const assets = assetsFalso();
     const res = await app.request('/algo-que-nao-existe', {}, { ASSETS: assets } as any);

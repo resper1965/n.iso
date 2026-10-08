@@ -126,6 +126,7 @@ describe('contrato tela↔API', () => {
   it('nenhuma chamada monta o caminho fora de um literal /api/v1 (senão escaparia deste teste)', () => {
     // Cada uma destas recebe literais /api/v1 que o extrator já pega na origem.
     const PERMITIDAS = [
+      'frontend/public/auditor.js: fetch(caminho',
       'frontend/public/proposta.js: fetch(API + acao',
       'frontend/src/api.js: fetch(API_BASE + p',
       'frontend/src/views/propostas.js: api(\'GET\', caminho',
@@ -136,6 +137,15 @@ describe('contrato tela↔API', () => {
       .flatMap(([arq, src]) => [...src.matchAll(DINAMICA)].map((m) => `${arq.replace(/^\.\.\//, '')}: ${m[0].trim()}`))
       .sort();
     expect(achadas).toEqual(PERMITIDAS);
+  });
+
+  it('public/auditor.js: chamar() recebe o caminho literal, e as quatro chamadas são vistas', () => {
+    expect(CHAMADAS.filter((c) => c.onde.startsWith('frontend/public/auditor.js:')).map(chave)).toEqual([
+      '* /api/v1/public/auditor/ver',
+      '* /api/v1/public/auditor/evidencia',
+      '* /api/v1/public/auditor/pedidos',
+      '* /api/v1/public/auditor/notas/criar',
+    ]);
   });
 
   it('toda chamada do frontend tem rota (ou tolerância com motivo)', () => {

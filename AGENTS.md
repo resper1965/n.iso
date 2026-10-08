@@ -122,6 +122,10 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     para ele caía silenciosamente na tela de login. Confira antes de mexer:
     `curl -sL <domínio>/politicas.html` deve devolver o título "Portal de
     Ciência de Políticas", não o do app.
+  - `frontend/public/auditor.html` (+ `auditor.js`, `auditor.css`) — portal do auditor externo,
+    somente leitura. Serve `/auditor`; o link sai de `POST /api/v1/projects/:id/auditor-token` (cartão
+    em Auditorias) com o token no fragmento, e a página fala só com `/api/v1/public/auditor/*`
+    (`src/routes/public-auditor.ts`), token no corpo, só o hash no banco.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **58 tabelas** (2026-10-06: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
