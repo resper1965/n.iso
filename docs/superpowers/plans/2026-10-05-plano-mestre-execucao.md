@@ -194,3 +194,9 @@ Conferido com `git log --oneline origin/main`, `gh run list --workflow=deploy.ym
   a ponta de proposta, F2 (login OAuth em Codex, Cursor e Antigravity), environment `staging` e a
   variável `STAGING_ATIVO` (`docs/staging.md`), #277 (TypeScript 7), a tag da versão depois do
   merge deste PR.
+
+## 12. Estado em 2026-10-08 (fim do dia)
+
+O estado de hoje está em [`docs/plano-2026-10-fechamento.md`](../../plano-2026-10-fechamento.md), seção
+"Estado em 2026-10-08": produção em `445f063`, migrations 0045 e 0046 aplicadas, nenhum PR aberto,
+Dependabot zerado. As decisões do n.privacy (perguntas 3, 5 e 6) estão registradas lá.
