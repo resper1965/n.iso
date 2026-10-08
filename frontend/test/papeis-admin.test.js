@@ -18,7 +18,8 @@ import { S } from '../src/state.js';
 
 const lido = (glob) => Object.values(glob)[0];
 const html = lido(import.meta.glob('../login.html', { query: '?raw', import: 'default', eager: true }));
-const corpo = html.match(/<body[^>]*>([\s\S]*)<\/body>/)[1].replace(/<script[\s\S]*?<\/script>/g, '');
+let corpo = html.match(/<body[^>]*>([\s\S]*)<\/body>/)[1];
+for (let ant; ant !== corpo;) { ant = corpo; corpo = corpo.replace(/<script[\s\S]*?<\/script[^>]*>/gi, ''); }
 
 beforeAll(async () => {
   vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} takeRecords() { return []; } });

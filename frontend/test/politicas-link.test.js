@@ -15,7 +15,9 @@ let iniciar;
 /** Carrega o script de novo e guarda SÓ o handler de DOMContentLoaded desta carga (os das cargas
  *  anteriores continuam presos em `window`; disparar o evento rodaria todos). */
 async function abrir(hash) {
-  document.documentElement.innerHTML = html.replace(/<script[\s\S]*?<\/script>/g, '');
+  let semScripts = html;
+  for (let ant; ant !== semScripts;) { ant = semScripts; semScripts = semScripts.replace(/<script[\s\S]*?<\/script[^>]*>/gi, ''); }
+  document.documentElement.innerHTML = semScripts;
   window.location.hash = hash;
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);

@@ -37,8 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -79,7 +79,7 @@ jobs:
       # vazio e olhar o formato do erro —, que passa a mentir no dia em que o
       # envelope de validação mudar.
       - name: Deploy
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: deploy --var VERSAO_SHA:${{ github.sha }}
@@ -91,7 +91,7 @@ jobs:
       # empilhar um comentário por falha (a #102 acumulou 25) — uma issue, um estado.
       - name: Avisar falha de deploy
         if: failure()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -116,7 +116,7 @@ jobs:
       # Deploy verde: fecha qualquer issue de falha aberta — o motivo não existe mais.
       - name: Fechar issue de falha (deploy verde)
         if: success()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { owner, repo } = context.repo;

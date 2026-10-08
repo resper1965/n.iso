@@ -1,0 +1,8 @@
+# Configuração do CodeQL (referenciada em .github/workflows/codeql.yml).
+#
+# docs/design/ guarda os protótipos .dc.html do handoff visual: HTML de referência para abrir no
+# navegador, que o Worker não serve (só frontend/dist vai ao ar). Eles geravam 66 dos 100 alertas
+# abertos (useless-expression e missing-origin-check) e escondiam os alertas do código que roda.
+name: n.iso CodeQL
+paths-ignore:
+  - docs/design
