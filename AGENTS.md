@@ -94,7 +94,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services** (`src/services/`, 19 arquivos: `ls src/services/*.ts | wc -l`): entre eles
+- **Services** (`src/services/`, 20 arquivos: `ls src/services/*.ts | wc -l`): entre eles
   `soa-logic.ts` (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
   `policy-generator.ts`, `pedidos.ts`, `organizacao.ts`, `fechar-venda.ts`,
   `preco-proposta.ts`, `transferencia-projeto.ts`, `totp.ts`, `data-subject.ts`.
@@ -128,13 +128,17 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     (`src/routes/public-auditor.ts`), token no corpo, só o hash no banco.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **58 tabelas** (2026-10-06: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
-  em 2026-10-05 o mesmo 58 saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
-  numeradas em `migrations/`, ultima a **0045** (`ls migrations/*.sql | tail -1`). Procedimento
+- **Schema**: `schema.sql` — **59 tabelas** (2026-10-07: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
+  em 2026-10-05 o mesmo 58 (antes da 0046) saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
+  numeradas em `migrations/`, ultima a **0046** (`ls migrations/*.sql | tail -1`). Procedimento
   de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
   `migrations/README.md` — leia antes de tocar em migration.
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
+- **Rotinas agendadas** (`grep -A2 '"triggers"' wrangler.jsonc`): `10 4 * * *` roda a manutencao
+  (`src/manutencao.ts`, purga e retencao) e `0 11 * * *` (08:00 em Brasilia) os avisos de prazo
+  (`src/services/avisos-prazo.ts`: sino + e-mail-resumo, idempotencia em `avisos_prazo`). O
+  `scheduled` de `src/index.ts` despacha por `event.cron`; staging tem `crons: []`.
 - **MCP**: `mcp-server-niso/` expoe o produto a clientes MCP com filtro de
   ferramenta por papel. Ver `mcp-server-niso/README.md`.
 - **Skills do consultor**: `agent-skills/<nome>/` (SKILL.md + references + scripts) e a fonte; o
@@ -192,13 +196,13 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
 
-- **544 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
+- **543 `any` em `src/`** (medido em 2026-10-07, fora `*.test.ts`:
   `git grep -ahoE ': any\b|as any\b|<any>' -- 'src/*.ts' ':!*.test.ts' | wc -l`).
   `tsc --noEmit` limpo diz pouco. Tipar o que voce tocar e melhoria barata; nao
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 172 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
+- **Nenhum dos 177 arquivos de teste do backend mocka o D1 inteiro** (2026-10-07;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
