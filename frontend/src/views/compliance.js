@@ -258,7 +258,7 @@ import { navigate } from '../router.js';
         btn.disabled = true;
         btn.textContent = 'Gerando...';
         try {
-            const res = await api('POST', `/api/v1/projects/${S.currentProject?.id}/generate-policy`, { control_id: controlId });
+            await api('POST', `/api/v1/projects/${S.currentProject?.id}/generate-policy`, { control_id: controlId });
             alert('Política gerada com sucesso! Verifique o Log de Atividade.');
             closeModal();
         } catch(e) { alert(e.message); }

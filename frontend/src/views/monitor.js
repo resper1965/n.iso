@@ -1,7 +1,6 @@
 import { S } from '../state.js';
 import { api, API_BASE } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
-import { navigate } from '../router.js';
 
     async function renderMonitor(c, h, a) {
         h.textContent = 'Monitor de Adequação';

@@ -180,7 +180,7 @@ export function traduzStatus(valor) {
 
 export function renderStatusBadge(arg1, arg2) {
     const knownTypes = ['success', 'warning', 'danger', 'info', 'neutral'];
-    let type = 'neutral';
+    let type;
     let text = '';
 
     if (knownTypes.includes(arg1)) {

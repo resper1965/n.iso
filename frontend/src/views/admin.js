@@ -1,6 +1,6 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
-import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
+import { showToast, openModal, closeModal, escapeHTML } from '../ui.js';
 import { render } from '../router.js';
 
 // S2: wrappers para os handlers COMPOSTOS (a delegação chama uma função só).

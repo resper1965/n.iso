@@ -404,7 +404,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openRiskDetailsModal = function(id) {
         const r = S.risks.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const levelColor = l => l === 'Critical' ? 'var(--danger)' : l === 'High' ? 'var(--warning)' : l === 'Medium' ? '#f59e0b' : 'var(--accent)';
         const score = r.risk_score || (r.impact * r.probability);
@@ -528,7 +527,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openVendorDetailsModal = function(id) {
         const v = S.vendors.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const dilColor = d => d === 'Low' ? 'var(--accent)' : d === 'Medium' ? 'var(--info)' : 'var(--danger)';
         
@@ -703,7 +701,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openEditVendorModal = function(id) {
         const v = S.vendors.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Fornecedor</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
             <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="vnd-e-name" value="${escapeHTML(v.name||'')}"></div>
@@ -868,7 +865,6 @@ window.__grcCloseExecAudit = function (id) {
 
     window.openTrainingDetailsModal = function(id) {
         const r = S.training.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
         const statusColor = s => s === 'Completed' ? 'var(--accent)' : s === 'Expired' ? 'var(--danger)' : 'var(--warning)';
         
@@ -1314,9 +1310,11 @@ window.__grcCloseExecAudit = function (id) {
         forceCloseModal(); render();
     };
 
-    window.openEditCAPAModal = async function(id) {
-        const ca = S.capa.find(x => x.id === id) || {};
-        const projectId = S.activeProject ? S.activeProject.id : '';
+    // Os dois últimos argumentos vêm do clique num aviso (globals.js): o projeto e o registro já
+    // buscados, porque S.capa e o projeto ativo ainda não refletem a tela que acabou de abrir.
+    window.openEditCAPAModal = async function(id, projetoDoAviso, registro) {
+        const ca = registro || S.capa.find(x => x.id === id) || {};
+        const projectId = projetoDoAviso || (S.activeProject ? S.activeProject.id : '');
         let risks = [];
         let audits = [];
         try { risks = await api('GET', `/api/v1/projects/${projectId}/risks`); } catch(e) {}
