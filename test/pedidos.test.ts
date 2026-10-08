@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword } from '../src/helpers';
-import { hashConteudo } from '../src/services/pedidos';
+import { hashConteudo, criarPedido } from '../src/services/pedidos';
 import { applySchema, sessionFor, workerEnv } from './helpers/d1';
 
 /**
@@ -215,7 +215,7 @@ describe('aprovar e recusar', () => {
 
   it('sem autoridade para o papel exigido: 403 e nada gravado (CEO não assina como DPO)', async () => {
     await resetDpia();
-    const { id } = await (await criar(consultor, corpoDpia('ciso', ['ceo@cliente.com']))).json<any>();
+    const { id } = (await criarPedido(env.DB, { projectId: P, tipo: 'dpia', refId: DPIA, papel: 'ciso', destinatarios: [{ email: 'ceo@cliente.com' }], criadoPor: 'cons@ness.lat' }))!;
     const r = await chamar(stCeo, 'POST', `/api/v1/pedidos/${id}/aprovar`, { senha: SENHA });
     expect(r.status).toBe(403);
     expect((await destinatarios(id))[0].status).toBe('pendente');

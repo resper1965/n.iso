@@ -8,7 +8,7 @@ import {
 import { validateBody, pedidoCriarSchema, pedidoDecisaoSchema, pedidoCienciaLoteSchema, pedidoReenvioSchema } from '../schemas';
 import { appUrl } from '../config/url';
 import {
-  criarPedido, politicaVazia, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
+  criarPedido, recusaDeDestinatarios, politicaVazia, conferirVigencia, registrarDecisao, podePedir, autoridadeNoPedido, DIAS_LINK, type PedidoRow,
   substituirPedidosDoDocumento, type TipoPedido, type Vigencia,
 } from '../services/pedidos';
 
@@ -104,6 +104,9 @@ projectPedidosApp.post('/', async (c) => {
 
     const projeto = await c.env.DB.prepare('SELECT org_id FROM projects WHERE id = ?').bind(projectId).first<{ org_id: string }>();
     if (!projeto) return c.json({ error: 'Projeto não encontrado' }, 404);
+
+    const semAutoridade = await recusaDeDestinatarios(c.env.DB, projectId, b.papel_exigido, b.destinatarios);
+    if (semAutoridade) return c.json({ error: semAutoridade }, 400);
 
     const criado = await criarPedido(c.env.DB, {
       projectId, tipo: b.tipo, refId, papel: b.papel_exigido,

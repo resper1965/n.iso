@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword } from '../src/helpers';
-import { hashConteudo } from '../src/services/pedidos';
+import { hashConteudo, criarPedido } from '../src/services/pedidos';
 import { applySchema, sessionFor, workerEnv } from './helpers/d1';
 
 /**
@@ -35,6 +35,9 @@ const criado = async (papel: string, emails: string[]) => {
   expect(r.status, await r.clone().text()).toBe(201);
   return (await r.json() as any).id as string;
 };
+// Pedido que a rota recusaria (destinatário sem a autoridade): a matriz pode mudar depois da criação, e a decisão confere de novo.
+const criadoSemChecagem = async (papel: 'ciso' | 'ceo', emails: string[]) =>
+  (await criarPedido(env.DB, { projectId: P, tipo: 'politica', refId: CTRL, papel, destinatarios: emails.map((email) => ({ email })), criadoPor: 'cons@ness.lat' }))!.id;
 const decidir = (h: Record<string, string>, id: string, acao: 'aprovar' | 'recusar', corpo: Record<string, unknown> = { senha: SENHA }) =>
   chamar(h, 'POST', `/api/v1/pedidos/${id}/${acao}`, corpo);
 
@@ -112,7 +115,7 @@ describe('aprovação de política por pedido', () => {
   });
 
   it('quem não tem o cargo na matriz não aprova: 403 e nada gravado', async () => {
-    const id = await criado('ciso', ['analista@cliente.com']);
+    const id = await criadoSemChecagem('ciso', ['analista@cliente.com']);
     const r = await decidir(analista, id, 'aprovar');
     expect(r.status).toBe(403);
     expect((await controle()).ciso_approved_by).toBeNull();
@@ -120,7 +123,7 @@ describe('aprovação de política por pedido', () => {
   });
 
   it('o CISO não aprova pedido de papel ceo (segregação de funções)', async () => {
-    const id = await criado('ceo', ['ciso@cliente.com']);
+    const id = await criadoSemChecagem('ceo', ['ciso@cliente.com']);
     const r = await decidir(ciso, id, 'aprovar');
     expect(r.status).toBe(403);
     expect(await r.text()).toContain('Segregação de Funções');

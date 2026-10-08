@@ -59,6 +59,23 @@ export async function autoridadeNoPedido(
   return { recusa: recusaDeAssinatura(a, pedido.papel_exigido), nome: a.nome };
 }
 
+/**
+ * Pedido de aprovação (`ciso`/`ceo`) só vai a quem teria a autoridade do papel na matriz do projeto
+ * (a regra das assinaturas, aplicada ao e-mail do destinatário). Devolve a recusa, ou `null`.
+ * Ciência não passa por aqui. A conta de plataforma não é checada: ela é recusada na decisão.
+ */
+export async function recusaDeDestinatarios(
+  db: D1Database, projectId: string, papel: PapelPedido, destinatarios: { email: string }[],
+): Promise<string | null> {
+  if (papel === 'ciente') return null;
+  const quem = papel === 'ceo' ? 'Direção (CEO)' : 'Líder SGSI';
+  const sem: string[] = [];
+  for (const email of new Set(destinatarios.map((d) => d.email.trim().toLowerCase()))) {
+    if (recusaDeAssinatura(await autoridadeDeAssinatura(db, projectId, { email }), papel)) sem.push(email);
+  }
+  return sem.length ? sem.map((e) => `${e} não tem autoridade de ${quem} neste projeto`).join('; ') : null;
+}
+
 /** JSON com chaves ordenadas, em qualquer profundidade: a mesma informação dá sempre o mesmo texto. */
 function canonico(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(canonico);
