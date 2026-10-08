@@ -39,13 +39,14 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Pedido de aprovação de política (Líder SGSI ou Direção): a direção com conta só de leitura aprova em "Meus pedidos", e a assinatura vai para o controle; quem pediu acompanha a aprovação e a recusa em "Ciência de Políticas".
 - Projeto criado pelo aceite da proposta já nasce com os controles da norma vendida (93 da ISO 27001:2022 e os da ISO 27701:2025 pelo papel, quando vendida), com o escopo aceito no lugar do tipo de escopo do levantamento e com o nome "cliente — norma". O contato de quem aceitou entra na governança sem autoridade de assinatura (a promoção é do consultor). Sem consultor, a administração da consultoria é avisada.
 - Governança: aviso quando nenhum membro tem cargo de Direção ou de Líder SGSI (a autoridade de assinatura vem do cargo), ajuda no campo Cargo, e o contato do aceite da proposta aparece marcado como e-mail não verificado; `consultoria_admin` gerencia a matriz e designa consultor na tela, como já podia no servidor.
-- Portal do auditor externo: a consultoria gera, lista e revoga pela tela de Auditorias um link com prazo (`GET|POST /api/v1/projects/:id/auditor-token`, `.../:tokenId/revogar`; o cliente não gera); o auditor abre `/auditor#<token>` e vê o projeto, a SoA (27001 e 27701) com a evidência de cada controle, baixa os arquivos e a prova dos pedidos e registra pergunta à consultoria. Cada download entra na trilha.
+- Portal do auditor externo: a consultoria gera, lista e revoga pela tela de Auditorias um link com prazo (`GET|POST /api/v1/projects/:id/auditor-token`, `.../:tokenId/revogar`; o cliente não gera); o auditor abre `/auditor#<token>` e vê o projeto, a SoA (27001 e 27701) com a evidência de cada controle, baixa os arquivos e a prova dos pedidos, registra pergunta à consultoria e vê a resposta dela. Cada download entra na trilha.
 
 ### Removido
 - `SoALogicEngine`, `OLD_RULES` e `PIMS_RULES`: motor de SoA sem uso e o segundo catálogo 27701 (fica o da edição 2025).
 
 ### Segurança
 - Token do auditor guardado só em SHA-256, com revogação (migration 0045; os tokens anteriores deixam de valer) e prazo comparado até o minuto (antes valia até o fim do dia do vencimento). As rotas `/api/v1/auditor/:token/*`, que punham o token no log de requisição, saem: o portal usa `POST /api/v1/public/auditor/{ver,evidencia,pedidos,notas,notas/criar}` com o token no corpo e limite por IP. O portal não leva mais a linha inteira do projeto (`repository_token`, CNPJ) e o nome do arquivo baixado é codificado no cabeçalho.
+- **Operação:** a 0045 precisa ser APLICADA em produção (não só registrada na `d1_migrations`) antes do deploy, com `npm run db:backup` antes. Sem a coluna `token_hash` e a revogação no banco, o portal do auditor e a geração do link quebram.
 
 ## [11.0.0] - 2026-10-06
 
