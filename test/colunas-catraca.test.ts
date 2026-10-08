@@ -46,7 +46,7 @@ function extrair(): Escrita[] {
   for (const [arq, bruto] of Object.entries(FONTES)) {
     if (arq.endsWith('.test.ts')) continue;
     const txt = semComentario(bruto);
-    const nome = arq.replace('../', '');
+    const nome = arq.replaceAll('../', '');
     for (const m of txt.matchAll(/\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/g)) {
       const colunas = semInterpolacao(m[2]).split(',').map((c) => c.trim()).filter(Boolean);
       // Lista que não é de identificadores (VALUES sem lista, prosa) não é lista de colunas.
