@@ -63,7 +63,7 @@ afterEach(() => {
 describe('HTML da página', () => {
     it('sem script, handler nem estilo inline; script e CSS próprios; fora de busca e sem Referer', () => {
         expect(HTML).not.toMatch(/\son[a-z]+\s*=/i);
-        const scripts = [...HTML.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];
+        const scripts = [...HTML.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)];
         expect(scripts).toHaveLength(1);
         expect(scripts[0][1]).toContain('src="/auditor.js"');
         expect(scripts[0][2].trim()).toBe('');

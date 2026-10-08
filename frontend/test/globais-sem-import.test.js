@@ -20,7 +20,7 @@ for (const d of DEFINIDORES) {
     for (const [, n] of FONTES[d].matchAll(/export\s+(?:async\s+)?(?:function|const|let)\s+([A-Za-z_$][\w$]*)/g)) origem[n] = d;
     for (const [, g] of FONTES[d].matchAll(/export\s*\{([^}]*)\}/g)) for (const n of g.split(',')) origem[n.trim().split(/\s+as\s+/).pop()] = d;
 }
-const SEM_WINDOW = Object.keys(origem).filter((n) => !new RegExp(`window\\.${n.replace(/\$/g, '\\$')}\\s*=`).test(tudo));
+const SEM_WINDOW = Object.keys(origem).filter((n) => !new RegExp(`window\\.${n.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\s*=`).test(tudo));
 const semComentario = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 function usosSemImport() {
