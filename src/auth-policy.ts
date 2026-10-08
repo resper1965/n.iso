@@ -30,6 +30,12 @@ export function isAuditWrite(method: string, path: string): boolean {
 }
 
 /**
+ * Papéis da consultoria em sessão humana: implementam o SGSI, então não auditam (ISO 27001, 9.2).
+ * `consultant` é o nome legado de `consultor`; `consultoria_admin` alcança todos os projetos da org.
+ */
+export const PAPEIS_IMPLEMENTACAO: ReadonlySet<string> = new Set(['consultor', 'consultant', 'consultoria_admin']);
+
+/**
  * Retorna a mensagem de erro (403) quando o papel da chave não pode agir sobre a
  * rota, ou null quando é permitido.
  */
