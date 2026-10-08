@@ -385,14 +385,25 @@ describe('Assinatura eletrônica (D1 real)', () => {
     });
 
     it('assinar com o hash antigo depois de editar o conteúdo dá 409 e segue pendente', async () => {
+      // Quem edita vira uploaded_by e não revisa (403); a edição é de outra conta, o Líder SGSI só assina.
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, password_hash, name, role, client_project_id) VALUES ('usr-cli','cliente@exemplo.com.br','x','Cliente','org_user','proj-1')`
+      ).run();
+      const headersCliente = {
+        ...(await sessionFor({ id: 'usr-cli', email: 'cliente@exemplo.com.br', name: 'Cliente', role: 'org_user', client_project_id: 'proj-1' })),
+        'Content-Type': 'application/json',
+      };
       const put = await worker.fetch(new Request('http://localhost/api/v1/evidence/ev-1/content', {
-        method: 'PUT', headers, body: JSON.stringify({ content: '# Outro texto' }),
+        method: 'PUT', headers: headersCliente, body: JSON.stringify({ content: '# Outro texto' }),
       }), env as any);
       expect(put.status, await put.clone().text()).toBe(200);
+      const { sha256 } = await put.json<{ sha256: string }>();
       const res = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123', file_hash: 'deadbeef' });
       expect(res.status).toBe(409);
       expect(await res.text()).toContain('mudou desde que você abriu');
       expect(await statusDe('ev-1')).toBe('pending');
+      const ok = await post('/api/v1/evidence/ev-1/approve', { role: 'ciso', password: 'password123', file_hash: sha256 });
+      expect(ok.status, await ok.clone().text()).toBe(200);
     });
 
     it('sem file_hash a assinatura é recusada (400)', async () => {
