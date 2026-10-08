@@ -1613,6 +1613,8 @@ window.__grcCloseExecAudit = function (id) {
             ]);
             
             const currentAudit = (audit || []).find(au => au.id === S.activeAuditId) || {};
+            // 9.2: a consultoria implementa, não audita — o servidor recusa o achado (auth.ts).
+            const podeRegistrarAchado = !['consultor', 'consultant', 'consultoria_admin'].includes(S.user?.role);
             
             let html = `
                 <div class="stat-card" style="margin-bottom:2rem;border:1px solid var(--border);background:rgba(229,235,255,0.02)">
@@ -1652,9 +1654,9 @@ window.__grcCloseExecAudit = function (id) {
                             </span>
                         </td>
                         <td style="text-align:center">
-                            <button data-action="openAddFindingModal" data-args="${escapeHTML(JSON.stringify([ctrl.id, ctrl.standard]))}" class="btn" style="padding:4px 10px;font-size:0.75rem;border-color:var(--accent);color:var(--accent)">
+                            ${podeRegistrarAchado ? `<button data-action="openAddFindingModal" data-args="${escapeHTML(JSON.stringify([ctrl.id, ctrl.standard]))}" class="btn" style="padding:4px 10px;font-size:0.75rem;border-color:var(--accent);color:var(--accent)">
                                 ${ctrlFindings.length > 0 ? 'Registrar Achado (' + ctrlFindings.length + ')' : '+ Novo Achado'}
-                            </button>
+                            </button>` : `<span style="font-size:0.75rem;color:var(--muted)">${ctrlFindings.length}</span>`}
                         </td>
                     </tr>
                 `;
@@ -1687,7 +1689,7 @@ window.__grcCloseExecAudit = function (id) {
                             ${f.auditor_notes ? `<div style="font-size:0.75rem;color:var(--muted);background:rgba(255,255,255,0.02);padding:6px 10px;border-radius:6px;margin-bottom:8px"><strong>Notas:</strong> ${escapeHTML(f.auditor_notes)}</div>` : ''}
                             <div style="display:flex;justify-content:space-between;align-items:center">
                                 <span style="font-size:0.7rem;color:var(--muted)">Registrado em: ${f.created_at.split('T')[0]}</span>
-                                <button data-action="deleteFinding" data-args='["${f.id}"]' class="btn" style="padding:2px 6px;font-size:0.7rem;color:red;border-color:rgba(255,0,0,0.15)">Deletar</button>
+                                ${podeRegistrarAchado ? `<button data-action="deleteFinding" data-args='["${f.id}"]' class="btn" style="padding:2px 6px;font-size:0.7rem;color:red;border-color:rgba(255,0,0,0.15)">Deletar</button>` : ''}
                             </div>
                         </div>
                     `;
