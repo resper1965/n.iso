@@ -368,7 +368,6 @@ integrations.get('/api/v1/projects/:projectId/export/training', async (c) => {
 
 integrations.get('/api/v1/projects/:projectId/export/audit-log', async (c) => {
   const projectId = c.req.param('projectId');
-  const user = c.get('user');
   // Escopado ao PROJETO (antes filtrava por actor, exportando as ações do próprio
   // requisitante). Fallback LIKE cobre linhas legadas sem project_id populado.
   const result = await c.env.DB.prepare(

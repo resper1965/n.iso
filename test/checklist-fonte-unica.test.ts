@@ -61,5 +61,6 @@ describe('lista única de checklist', () => {
       }), workerEnv());
       expect(res.status, `${i.id}: ${await res.clone().text()}`).toBe(200);
     }
-  });
+    // Um pedido por item do checklist (~1 s isolado): sob carga estourava os 5 s padrão sem defeito algum.
+  }, 30_000);
 });

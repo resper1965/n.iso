@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, createNotification, escapeHtml, somenteComercial, erro500 } from '../helpers';
-import { DEFAULT_FINANCIAL_MODEL } from '../services/pricing';
+import { genId, logAudit, somenteComercial, erro500 } from '../helpers';
 import { validateBody, leadSchema, leadStatusSchema, cnpjSchema } from '../schemas';
 import { exigirOrg } from '../services/organizacao';
 

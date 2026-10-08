@@ -17,7 +17,6 @@ const dom = () => {
     '<div id="modal-overlay"><div id="modal"><div id="modal-content"></div></div></div><div id="c"></div><h1 id="h"></h1><div id="a"></div>';
   return [$('c'), $('h'), $('a')];
 };
-const espera = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   apiMock.mockReset();

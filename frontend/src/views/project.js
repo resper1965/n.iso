@@ -260,7 +260,6 @@ const ISO_GUIDELINES = {
                 const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                 
                 const isJExpanded = (S.expandedJourneys && S.expandedJourneys[journeyIdx]) === true;
-                const isJ2 = journeyIdx === 1;
                 
                 journeysHtml += `
                     <div class="journey-card fade-in">
@@ -1127,7 +1126,7 @@ const ISO_GUIDELINES = {
         btnEl.disabled = true;
         btnEl.textContent = 'Gerando...';
         try {
-            const res = await api('POST', `/api/v1/projects/${projectId}/checklist/${itemId}/generate`);
+            await api('POST', `/api/v1/projects/${projectId}/checklist/${itemId}/generate`);
             showToast('Documento gerado com sucesso!');
             render();
         } catch(e) {

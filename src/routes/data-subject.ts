@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { logAudit } from '../helpers';
 import { validateBody, identificadorSchema } from '../schemas';
-import { z } from 'zod';
 import { localizarTitular, anonimizarTitular, ropaVencidos } from '../services/data-subject';
 
 /**

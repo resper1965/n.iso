@@ -1,7 +1,6 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
 import { showToast, openModal, closeModal, forceCloseModal, escapeHTML } from '../ui.js';
-import { navigate, render } from '../router.js';
 
 // Espelho de `ehComercial` (src/helpers.ts): o funil de leads é do comercial.
 // Local, e não `window.ehComercial`, para a view não depender da ordem de carga.

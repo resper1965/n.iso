@@ -8,7 +8,6 @@ const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
 vi.mock('../src/api.js', () => ({ api: apiMock, API_BASE: 'http://localhost' }));
 
 import '../src/views/compliance.js';
-import { S } from '../src/state.js';
 
 function montaDom() {
   document.body.innerHTML = `
