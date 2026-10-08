@@ -145,8 +145,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `src/middleware/agente.ts`; gestao das concessoes em `src/routes/agentes.ts`;
   tabela `agente_concessoes`; KV `OAUTH_KV`. Regra: **so `ROTAS_OAUTH` passam
   pelo `OAuthProvider`** (`src/index.ts`) — o resto continua no Hono. KV
-  `OAUTH_KV` (id `fc8dfff4…`) e `staging-OAUTH_KV` (id `9d9d24c0…`) criados em
-  2026-09-29 e declarados no `wrangler.jsonc`. Recurso fixo em
+  `OAUTH_KV` (id `fc8dfff4…`) criado em 2026-09-29 e declarado no `wrangler.jsonc`. Recurso fixo em
   `niso.ness.com.br`. Clientes: Claude Code verificado em producao (30/09/2026); Cursor,
   Codex e Antigravity seguem "A confirmar" na tela Conectar agente (ver CHANGELOG).
 
