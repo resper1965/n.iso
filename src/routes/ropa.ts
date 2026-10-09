@@ -2,10 +2,15 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial, refForaDoProjeto } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
-import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
+import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
+import { criarTransferencia, definirLigacao, lerLigacoes, removerTransferencia } from '../services/tratamentos';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+/** A base legal é um requisito do catálogo global (fatia 4.1): existe ou não, sem tenant. */
+const baseLegalInexistente = async (db: D1Database, id: unknown) =>
+  typeof id === 'string' && id !== '' && !(await db.prepare('SELECT 1 FROM requisitos WHERE id = ?').bind(id).first());
 
 // Direct ROPA operations (/api/v1/ropa)
 ropaApp.put('/:id', async (c) => {
@@ -20,6 +25,7 @@ ropaApp.put('/:id', async (c) => {
     // O projeto vem do ROPA gravado, nunca do corpo.
     const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['owner_parte_id']);
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
+    if (await baseLegalInexistente(c.env.DB, body.base_legal_id)) return c.json({ error: 'base_legal_id inexistente no catálogo de requisitos' }, 400);
     // Sair de 'Approved' pelo PUT deixaria as assinaturas na linha sem motivo nem trilha: é revogação.
     if (atual?.status === 'Approved' && Object.hasOwn(body, 'status')) {
       return c.json({ error: 'ROPA aprovado não muda de status pela edição. Para reabrir, use "Revogar aprovação" (motivo obrigatório).' }, 400);
@@ -28,7 +34,7 @@ ropaApp.put('/:id', async (c) => {
     const p = setParcial(body, {
       processing_purpose: null, data_categories: null, data_subjects: null, legal_basis: null, consent_details: null,
       data_subject_rights_details: null, retention_period: null, recipients: null, international_transfers: 0,
-      transfer_safeguards: null, dpia_required: 0, status: 'Draft', owner: null, owner_parte_id: null,
+      transfer_safeguards: null, dpia_required: 0, status: 'Draft', owner: null, owner_parte_id: null, base_legal_id: null,
     });
     if (p.sql) await c.env.DB.prepare(`UPDATE ropa_records SET ${p.sql}, updated_at=? WHERE id=?`).bind(...p.binds, new Date().toISOString(), id).run();
     const user = c.get('user');
@@ -43,7 +49,11 @@ ropaApp.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await requireResourceAccess(c.env.DB, 'ropa_records', id, c.get('user'));
-    await c.env.DB.prepare('DELETE FROM ropa_records WHERE id = ?').bind(id).run();
+    // As ligações caem por FK; os vínculos de parte não têm FK (alvo polimórfico) e saem aqui, junto.
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM parte_vinculos WHERE alvo_tipo = 'tratamento' AND alvo_id = ?").bind(id),
+      c.env.DB.prepare('DELETE FROM ropa_records WHERE id = ?').bind(id),
+    ]);
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_deleted', user?.email || 'system', `ROPA ${id} deleted`);
     return c.json({ ok: true });
@@ -71,16 +81,17 @@ projectRopaApp.post('/', async (c) => {
     const body = valid.data as any;
     const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['owner_parte_id']);
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
+    if (await baseLegalInexistente(c.env.DB, body.base_legal_id)) return c.json({ error: 'base_legal_id inexistente no catálogo de requisitos' }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
-      `INSERT INTO ropa_records (id, project_id, processing_purpose, data_categories, data_subjects, legal_basis, consent_details, data_subject_rights_details, retention_period, recipients, international_transfers, transfer_safeguards, dpia_required, status, owner, owner_parte_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?, ?)`
+      `INSERT INTO ropa_records (id, project_id, processing_purpose, data_categories, data_subjects, legal_basis, consent_details, data_subject_rights_details, retention_period, recipients, international_transfers, transfer_safeguards, dpia_required, status, owner, owner_parte_id, base_legal_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?, ?, ?)`
     ).bind(
       id, projectId, body.processing_purpose, body.data_categories ?? null, body.data_subjects ?? null,
       body.legal_basis ?? null, body.consent_details ?? null, body.data_subject_rights_details ?? null,
       body.retention_period ?? null, body.recipients ?? null, body.international_transfers ? 1 : 0,
-      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner ?? null, body.owner_parte_id || null, now, now
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner ?? null, body.owner_parte_id || null, body.base_legal_id || null, now, now
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_created', user?.email || 'system', `ROPA ${id} created`);
@@ -88,6 +99,59 @@ projectRopaApp.post('/', async (c) => {
   } catch (e: any) {
     return erro500(c, 'Falha ao criar ROPA', e);
   }
+});
+
+// ─── Ligações do tratamento (fatia 4.1): itens, departamentos, transferências; partes por parte_vinculos ───
+
+projectRopaApp.get('/:recordId/ligacoes', async (c) => {
+  const r = await lerLigacoes(c.env.DB, c.req.param('projectId')!, c.req.param('recordId'));
+  return r ? c.json(r) : c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+});
+
+projectRopaApp.put('/:recordId/itens', async (c) => {
+  try {
+    const v = await validateBody(c, tratamentoItensSchema);
+    if (!v.success) return v.response;
+    const projectId = c.req.param('projectId')!;
+    const r = await definirLigacao(c.env.DB, projectId, c.req.param('recordId'), 'itens', v.data.itens);
+    if (!r) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+    if (!r.ok) return c.json({ error: 'Item inexistente ou de outro projeto', invalidos: r.invalidos }, 400);
+    await logAudit(c.env.DB, 'ropa.itens', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: ${r.total} itens ligados`, '', '', projectId);
+    return c.json({ ok: true, total: r.total });
+  } catch (e) { return erro500(c, 'Falha ao ligar os itens', e); }
+});
+
+projectRopaApp.put('/:recordId/departamentos', async (c) => {
+  try {
+    const v = await validateBody(c, tratamentoDepartamentosSchema);
+    if (!v.success) return v.response;
+    const projectId = c.req.param('projectId')!;
+    const r = await definirLigacao(c.env.DB, projectId, c.req.param('recordId'), 'departamentos', v.data.departamentos);
+    if (!r) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+    if (!r.ok) return c.json({ error: 'Departamento inexistente ou de outro projeto', invalidos: r.invalidos }, 400);
+    await logAudit(c.env.DB, 'ropa.departamentos', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: ${r.total} departamentos ligados`, '', '', projectId);
+    return c.json({ ok: true, total: r.total });
+  } catch (e) { return erro500(c, 'Falha ao ligar os departamentos', e); }
+});
+
+projectRopaApp.post('/:recordId/transferencias', async (c) => {
+  try {
+    const v = await validateBody(c, tratamentoTransferenciaSchema);
+    if (!v.success) return v.response;
+    const projectId = c.req.param('projectId')!;
+    const r = await criarTransferencia(c.env.DB, projectId, c.req.param('recordId'), v.data);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    await logAudit(c.env.DB, 'ropa.transferencia', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: transferência para ${v.data.pais}`, '', '', projectId);
+    return c.json({ ok: true, id: r.id }, 201);
+  } catch (e) { return erro500(c, 'Falha ao registrar a transferência', e); }
+});
+
+projectRopaApp.delete('/:recordId/transferencias/:transferenciaId', async (c) => {
+  try {
+    const projectId = c.req.param('projectId')!;
+    const ok = await removerTransferencia(c.env.DB, projectId, c.req.param('recordId'), c.req.param('transferenciaId'));
+    return ok ? c.json({ ok: true }) : c.json({ error: 'Transferência não encontrada' }, 404);
+  } catch (e) { return erro500(c, 'Falha ao remover a transferência', e); }
 });
 
 // Revogar a aprovação (F6, decisão D1): ato do humano, pela interface, de platform_admin e do

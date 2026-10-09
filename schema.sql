@@ -588,7 +588,8 @@ CREATE TABLE IF NOT EXISTS ropa_records (
     ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
+    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
+    base_legal_id TEXT REFERENCES requisitos(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS audit_schedule (
@@ -1413,3 +1414,35 @@ CREATE TABLE IF NOT EXISTS documento_requisitos (
 );
 CREATE INDEX IF NOT EXISTS idx_doc_requisitos_requisito ON documento_requisitos(requisito_id);
 CREATE INDEX IF NOT EXISTS idx_doc_requisitos_projeto ON documento_requisitos(project_id);
+
+-- Ligações do tratamento (fatia 4.1, migration 0054)
+CREATE TABLE IF NOT EXISTS tratamento_itens (
+    ropa_id TEXT NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL REFERENCES itens(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (ropa_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_trat_itens_item ON tratamento_itens(item_id);
+
+CREATE TABLE IF NOT EXISTS tratamento_departamentos (
+    ropa_id TEXT NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+    departamento_id TEXT NOT NULL REFERENCES departamentos(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (ropa_id, departamento_id)
+);
+CREATE INDEX IF NOT EXISTS idx_trat_deptos_depto ON tratamento_departamentos(departamento_id);
+
+CREATE TABLE IF NOT EXISTS tratamento_transferencias (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    ropa_id TEXT NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+    pais TEXT NOT NULL,
+    destinatario_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
+    mecanismo TEXT,
+    observacao TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_trat_transf_ropa ON tratamento_transferencias(ropa_id);
+CREATE INDEX IF NOT EXISTS idx_trat_transf_projeto ON tratamento_transferencias(project_id);

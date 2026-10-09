@@ -162,10 +162,10 @@ nucleoApp.put('/partes/:id', async (c) => {
 });
 
 // ─── vínculos ──────────────────────────────────────────────────────────────
-/** `tratamento` entra na fatia do RoPA: até lá o alvo não existe. */
+/** `tratamento` é o registro do RoPA (`ropa_records`), que não tem rename (plano da fatia 4, ruling 1). */
 async function conferirAlvo(db: D1Database, projectId: string, tipo: AlvoVinculo, id: string): Promise<'ok' | 'inexistente' | 'indisponivel'> {
   if (tipo === 'projeto') return id === projectId ? 'ok' : 'inexistente';
-  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : tipo === 'item' ? 'itens' : null;
+  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : tipo === 'item' ? 'itens' : tipo === 'tratamento' ? 'ropa_records' : null;
   if (!tabela) return 'indisponivel';
   // `tabela` sai das constantes acima, nunca da requisição; o id vai por bind.
   return (await db.prepare(`SELECT 1 FROM ${tabela} WHERE id = ? AND project_id = ?`).bind(id, projectId).first()) ? 'ok' : 'inexistente';

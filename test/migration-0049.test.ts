@@ -8,7 +8,7 @@ const COLUNAS: [string, string][] = [
   ['corrective_actions', 'assigned_to_parte_id'], ['checklist_progress', 'assigned_to_parte_id'],
 ];
 // Colunas acrescentadas por migrations POSTERIORES à 0049: ficam depois da coluna do responsável.
-const POSTERIORES: Record<string, number> = { compliance_controls: 1 }; // requisito_id (0053)
+const POSTERIORES: Record<string, number> = { compliance_controls: 1, ropa_records: 1 }; // requisito_id (0053), base_legal_id (0054)
 const colunas = async (t: string) =>
   (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<{ name: string }>()).results.map((r) => r.name);
 
