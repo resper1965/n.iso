@@ -83,7 +83,7 @@ quê (mesma regra do [`SECURITY.md`](../../SECURITY.md)).
 | `/agentes` | O agente não gere o próprio acesso. |
 | `/projects/:id/{ropa,dpia}/:id/revoke-approval` | Desaprovar ROPA e DPIA é ato da direção, pela interface (F6, decisão D1). Revogar aprovação de **controle** segue possível, com confirmação. |
 | `DELETE /management-reviews/:id` | Excluir análise crítica destrói registro assinado: só pela interface. |
-| `POST /projects/:id/documentos/:id/versoes/:n/publicar` e `DELETE /projects/:id/documentos/:id/rascunho` | Política: o agente **propõe** (`niso_update_policy` e `niso_generate_policy` gravam um rascunho do documento do controle) e o humano publica ou descarta, pela tela da política. Publicar zera as aprovações e substitui os pedidos abertos. `PUT /controls/:id` também recusa ao agente mudar a descrição, que é o texto da política, salvo a justificativa de "Não aplicável". |
+| `POST /projects/:id/documentos/:id/versoes/:n/publicar`, `DELETE /projects/:id/documentos/:id/rascunho` e `POST /projects/:id/documentos/:id/revisar` | Política: o agente **propõe** (`niso_update_policy` e `niso_generate_policy` gravam um rascunho do documento do controle) e o humano publica ou descarta, pela tela da política. Publicar zera as aprovações e substitui os pedidos abertos. `PUT /controls/:id` também recusa ao agente mudar a descrição, que é o texto da política, salvo a justificativa de "Não aplicável". |
 
 Fonte da lista: `FORA_DO_AGENTE` em `src/middleware/agente.ts`. Mudou lá, muda aqui.
 
