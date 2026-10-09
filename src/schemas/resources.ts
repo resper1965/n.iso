@@ -22,6 +22,7 @@ export const createRiskSchema = z.object({
   treatment_plan: z.string().optional().nullable(),
   control_id: z.string().optional().nullable(),
   owner: z.string().optional().nullable(),
+  owner_parte_id: z.string().optional().nullable(),
   accepted_by: z.string().optional().nullable(),
   accepted_at: z.string().optional().nullable()
 }).passthrough();
