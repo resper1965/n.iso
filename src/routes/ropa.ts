@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../index';
 import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial, refForaDoProjeto } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
-import { criarTransferencia, definirLigacao, lerLigacoes, removerTransferencia } from '../services/tratamentos';
+import { criarTransferencia, definirLigacao, diagramaDoTratamento, lerLigacoes, removerTransferencia } from '../services/tratamentos';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -106,6 +106,11 @@ projectRopaApp.post('/', async (c) => {
 projectRopaApp.get('/:recordId/ligacoes', async (c) => {
   const r = await lerLigacoes(c.env.DB, c.req.param('projectId')!, c.req.param('recordId'));
   return r ? c.json(r) : c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+});
+
+projectRopaApp.get('/:recordId/diagrama', async (c) => {
+  const mermaid = await diagramaDoTratamento(c.env.DB, c.req.param('projectId')!, c.req.param('recordId'));
+  return mermaid === null ? c.json({ error: 'Registro do RoPA não encontrado' }, 404) : c.json({ mermaid });
 });
 
 projectRopaApp.put('/:recordId/itens', async (c) => {

@@ -87,3 +87,44 @@ export async function lerLigacoes(db: D1Database, projectId: string, ropaId: str
     transferencias: transf.results as Ligacoes['transferencias'],
   };
 }
+
+// ─── Diagrama (fatia 4.2) ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Rótulo seguro para Mermaid: sem aspas, colchetes, chaves, barras, crases, `#` (entidade), `<`/`>` (HTML) nem quebra
+ * de linha, e com teto de tamanho. O nome vem do cadastro; o diagrama nunca pode ser o caminho para HTML ou sintaxe injetada.
+ */
+export function rotuloMermaid(texto: string | null | undefined, max = 80): string {
+  const limpo = String(texto ?? '').replace(/[\r\n\t]+/g, ' ').replace(/["'`#<>{}\[\]|\\;]/g, '').replace(/\s+/g, ' ').trim();
+  return limpo.length > max ? `${limpo.slice(0, max - 1)}…` : limpo || '—';
+}
+
+const ROTULO_PAPEL: Record<string, string> = {
+  operador: 'operador', cocontrolador: 'cocontrolador', suboperador: 'suboperador', terceiro: 'destinatário', responsavel: 'responsável',
+};
+
+/** Mermaid derivado das ligações (spec seção 5): nunca guardado, sempre refeito do cadastro. */
+export function montarDiagrama(registro: { finalidade: string; titulares: string | null }, lig: Ligacoes): string {
+  const linhas = ['flowchart LR'];
+  let n = 0;
+  const no = (rotulo: string) => { const id = `n${n++}`; linhas.push(`  ${id}["${rotuloMermaid(rotulo)}"]`); return id; };
+  const t = no(registro.finalidade);
+  if (registro.titulares) { const s = no(`Titulares: ${registro.titulares}`); linhas.push(`  ${s} --> ${t}`); }
+  for (const d of lig.departamentos) linhas.push(`  ${no(`Depto: ${d.nome}`)} --> ${t}`);
+  for (const i of lig.itens) linhas.push(`  ${t} --> ${no(`${i.nome} (${i.tipo})`)}`);
+  for (const p of lig.partes) linhas.push(`  ${t} --- ${no(`${p.nome} (${ROTULO_PAPEL[p.papel] ?? p.papel})`)}`);
+  for (const x of lig.transferencias) {
+    const destino = no(x.destinatario ?? 'Destinatário não informado');
+    linhas.push(`  ${t} -->|"${rotuloMermaid(`${x.pais}${x.mecanismo ? ` · ${x.mecanismo}` : ''}`, 60)}"| ${destino}`);
+  }
+  return linhas.join('\n');
+}
+
+/** O diagrama do registro, ou null se ele não é do projeto. */
+export async function diagramaDoTratamento(db: D1Database, projectId: string, ropaId: string): Promise<string | null> {
+  const reg = await db.prepare('SELECT processing_purpose, data_subjects FROM ropa_records WHERE id = ? AND project_id = ?')
+    .bind(ropaId, projectId).first<{ processing_purpose: string; data_subjects: string | null }>();
+  if (!reg) return null;
+  const lig = await lerLigacoes(db, projectId, ropaId);
+  return lig ? montarDiagrama({ finalidade: reg.processing_purpose, titulares: reg.data_subjects }, lig) : null;
+}

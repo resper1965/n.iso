@@ -45,6 +45,7 @@ import { opcoesDePartes } from '../partes-opcoes.js';
                     r.dpia_required ? window.renderStatusBadge('Sim', 'warning') : window.renderStatusBadge('Não', 'neutral'),
                     window.renderStatusBadge(r.status || 'Active', statusType),
                     `<button class="btn btn-ghost btn-sm" data-action="openROPADetailsModal" data-args='["${r.id}"]'>Detalhes</button>
+                     <button class="btn btn-ghost btn-sm" data-action="openLigacoesTratamento" data-args='["${proj.id}","${r.id}"]'>Ligações</button>
                      <button class="btn btn-ghost btn-sm" style="color:var(--accent)" data-action="openROPAReport" data-args='["${proj.id}"]' data-stop>PDF</button>`
                 ];
             }),
