@@ -36,6 +36,7 @@ import { publicAuditorApp } from './routes/public-auditor';
 import { scimApp } from './routes/scim';
 import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
+import { nucleoApp } from './routes/nucleo';
 import { agentesApp } from './routes/agentes';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
@@ -399,6 +400,7 @@ app.route('/api/v1/pedidos', pedidosApp);
 
 app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
+app.route('/api/v1/projects/:projectId', nucleoApp);
 
 app.route('/api/v1', aiApp);
 app.route('/api/v1', governanceApp);
