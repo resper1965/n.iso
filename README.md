@@ -48,8 +48,8 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 | `frontend/` | Vite + JavaScript sem framework. `login.html` é a casca; `src/views/` tem uma tela por arquivo. |
 | `frontend/public/_headers` | Cabeçalhos de segurança dos **arquivos estáticos** — ver "Duas fontes de cabeçalho", abaixo. |
 | `mcp-server-niso/` | Servidor MCP **local** (stdio, chave de API) que expõe o n.iso a clientes como Claude Desktop, com filtro de ferramenta por papel. O MCP **remoto**, com login, vive no próprio Worker (`src/mcp/`). |
-| `migrations/` | 49 arquivos de migration do D1 (última: 0051), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
-| `test/` | 201 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
+| `migrations/` | 50 arquivos de migration do D1 (última: 0052), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
+| `test/` | 204 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
 | `frontend/test/` | 67 arquivos de teste da UI, em jsdom. |
 | `frontend/e2e/` | 5 specs em Chromium real, sobre o build servido. Pega o que o jsdom não pega. |
 | `docs/` | Runbook, specs, planos e decisões — com [índice próprio](docs/README.md). |
@@ -57,14 +57,14 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 
 ## Testes
 
-Contagens de 2026-10-09: `ls test/*.test.ts | wc -l` (201), `ls frontend/test/*.test.js | wc -l`
+Contagens de 2026-10-09: `ls test/*.test.ts | wc -l` (204), `ls frontend/test/*.test.js | wc -l`
 (67), `ls frontend/e2e/*.spec.js | wc -l` (5), `ls src/routes/*.ts | grep -vc '.test.ts$'` (44),
-`ls migrations/*.sql | wc -l` (49).
+`ls migrations/*.sql | wc -l` (50).
 
 Três suítes, e cada uma existe porque a anterior não alcança o caso:
 
 ```bash
-npm test                              # backend: 201 arquivos, D1 e KV reais
+npm test                              # backend: 204 arquivos, D1 e KV reais
 npm run test:coverage                 # idem, com a catraca de cobertura que gateia o deploy
 npm test --prefix frontend            # UI em jsdom
 npm run test:e2e --prefix frontend    # Chromium real sobre o build

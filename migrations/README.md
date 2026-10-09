@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0051** (`ls migrations/*.sql | tail -1`). São 49 arquivos
+- Última migration no repositório: **0052** (`ls migrations/*.sql | tail -1`). São 50 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -306,3 +306,14 @@ dois triggers e `PRAGMA foreign_key_list(pedido_destinatarios)` apontando para `
 **Ordem de rollout:** 0050 → `POST /projects/:id/documentos/importar` em cada projeto → 0051 → merge/deploy. Sem o
 `importar`, o portal `/politicas` fica vazio (ele só lista documento com versão vigente). Hoje, em produção, `pedidos` não tem
 pedido de política e `policy_acknowledgments` não tem linha (medido em 09/10/2026), então não há prova de política a perder.
+
+## 0052 — exceções a documentos, fatia 3.5 (2026-10)
+
+Cria `documento_excecoes` (uma tabela e dois índices, `IF NOT EXISTS`). Sem carga e sem `ALTER`: nenhuma tabela existente muda.
+A aprovação da exceção não tem coluna: é um pedido `tipo = 'excecao'`, valor que a 0051 já aceita no CHECK de `pedidos.tipo`
+(por isso a 0052 **depende da 0051**; sem ela o pedido de aprovação de exceção falha no CHECK).
+
+Conferência depois de aplicar: `PRAGMA table_info(documento_excecoes)` lista as 12 colunas e `SELECT count(*) FROM documento_excecoes`
+devolve 0. **Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
+--remote` → `npx wrangler d1 migrations list niso-db --remote` → merge. Rollout completo da fase 3: 0050 → `documentos/importar` →
+0051 → 0052 → merge/deploy.
