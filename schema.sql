@@ -365,7 +365,8 @@ CREATE TABLE IF NOT EXISTS compliance_controls (
     ceo_approved_ip TEXT,
     ceo_approved_ua TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
+    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
+    requisito_id TEXT REFERENCES requisitos(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS evidence (
@@ -1364,3 +1365,51 @@ CREATE TABLE IF NOT EXISTS documento_excecoes (
 );
 CREATE INDEX IF NOT EXISTS idx_excecoes_documento ON documento_excecoes(documento_id, status);
 CREATE INDEX IF NOT EXISTS idx_excecoes_projeto ON documento_excecoes(project_id, status, vence_em);
+
+-- Catálogo de requisitos (fatia 2, migration 0053)
+CREATE TABLE IF NOT EXISTS requisito_fontes (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    versao TEXT,
+    vigente_desde TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS requisitos (
+    id TEXT PRIMARY KEY,
+    fonte_id TEXT NOT NULL REFERENCES requisito_fontes(id),
+    referencia TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    pai_id TEXT REFERENCES requisitos(id),
+    papel TEXT CHECK (papel IS NULL OR papel IN ('controlador', 'operador')),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (fonte_id, referencia)
+);
+CREATE INDEX IF NOT EXISTS idx_requisitos_fonte ON requisitos(fonte_id, referencia);
+CREATE INDEX IF NOT EXISTS idx_requisitos_pai ON requisitos(pai_id);
+
+CREATE TABLE IF NOT EXISTS requisito_mapeamentos (
+    de_id TEXT NOT NULL REFERENCES requisitos(id) ON DELETE CASCADE,
+    para_id TEXT NOT NULL REFERENCES requisitos(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('equivalente', 'parcial', 'relacionado')),
+    estado TEXT NOT NULL DEFAULT 'proposto' CHECK (estado IN ('proposto', 'validado_juridico')),
+    validado_por TEXT,
+    validado_em TEXT,
+    nota TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (de_id, para_id),
+    CHECK (de_id <> para_id),
+    CHECK (estado = 'proposto' OR (validado_por IS NOT NULL AND validado_em IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_mapeamentos_para ON requisito_mapeamentos(para_id);
+
+CREATE TABLE IF NOT EXISTS documento_requisitos (
+    documento_id TEXT NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+    requisito_id TEXT NOT NULL REFERENCES requisitos(id),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (documento_id, requisito_id)
+);
+CREATE INDEX IF NOT EXISTS idx_doc_requisitos_requisito ON documento_requisitos(requisito_id);
+CREATE INDEX IF NOT EXISTS idx_doc_requisitos_projeto ON documento_requisitos(project_id);

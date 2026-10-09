@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0052** (`ls migrations/*.sql | tail -1`). São 50 arquivos
+- Última migration no repositório: **0053** (`ls migrations/*.sql | tail -1`). São 51 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -317,3 +317,14 @@ Conferência depois de aplicar: `PRAGMA table_info(documento_excecoes)` lista as
 devolve 0. **Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
 --remote` → `npx wrangler d1 migrations list niso-db --remote` → merge. Rollout completo da fase 3: 0050 → `documentos/importar` →
 0051 → 0052 → merge/deploy.
+
+## 0053 — catálogo de requisitos, fatia 2 (2026-10)
+
+Cria `requisito_fontes`, `requisitos`, `requisito_mapeamentos` e `documento_requisitos` (todas `IF NOT EXISTS`, sem carga) e
+acrescenta `compliance_controls.requisito_id` (anulável, `ON DELETE SET NULL`). O catálogo é global, sem `project_id`. O seed
+(ISO 27001:2022, ISO 27701:2025, depois LGPD e GDPR) é feito por `POST /api/v1/requisitos/semear`, idempotente e que nunca
+sobrescreve o que um administrador editou. O `ALTER ... ADD COLUMN` não é idempotente: aplicar duas vezes falha com "duplicate column".
+
+Conferência depois de aplicar: `PRAGMA table_info` das quatro tabelas e de `compliance_controls` (a coluna `requisito_id`), e
+`SELECT count(*)` das quatro tabelas, que devolve 0 até o seed. **Esta RODA em produção, aditiva, sem janela.** Ordem:
+`npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote` → `migrations list` → seed → merge.
