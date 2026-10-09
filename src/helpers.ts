@@ -571,6 +571,18 @@ const RASTRO_DE_ASSINATURA = /_(approved|signed)_(ip|ua)$/;
 export function semRastroDeAssinatura(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(row).filter(([k]) => !RASTRO_DE_ASSINATURA.test(k)));
 }
+/**
+ * NUNCA devolver credencial no corpo. `repository_token` é secret (uso só server-side, cifrado em
+ * repouso): quem responde com uma linha de `projects` passa por aqui e o cliente recebe só o booleano
+ * `repository_token_set`. Toda rota que faz `SELECT * FROM projects` e devolve o resultado precisa disto;
+ * `test/token-repositorio-sem-vazar.test.ts` procura o segredo no texto das respostas.
+ */
+export function redactProject<T extends Record<string, any> | null | undefined>(p: T): T {
+  if (!p) return p;
+  const { repository_token, ...rest } = p as Record<string, any>;
+  return { ...rest, repository_token_set: !!repository_token } as unknown as T;
+}
+
 export const semRastros = (rows: Record<string, unknown>[] | undefined | null): Record<string, unknown>[] => (rows ?? []).map(semRastroDeAssinatura);
 
 /** Escape HTML entities para prevenir XSS em templates HTML */

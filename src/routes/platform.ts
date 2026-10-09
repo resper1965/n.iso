@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial, valoresParciais } from '../helpers';
+import { redactProject, semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial, valoresParciais } from '../helpers';
 import { atualizarAtivo } from '../services/itens';
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
@@ -426,7 +426,7 @@ platformApp.get('/client/dashboard', async (c) => {
 
     return c.json({
       ok: true,
-      project,
+      project: redactProject(project),
       progress_percent: progressPercent,
       phases: phaseList,
       controls: controlList
@@ -545,7 +545,8 @@ platformApp.get('/portfolio', async (c) => {
       ? c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${v.sql}) ORDER BY created_at DESC`).bind(v.bind)
       : c.env.DB.prepare('SELECT * FROM projects ORDER BY created_at DESC');
     const { results } = await stmt.all();
-    return c.json({ ok: true, portfolio: results || [], projects: results || [] });
+    const projetos = (results || []).map(redactProject);
+    return c.json({ ok: true, portfolio: projetos, projects: projetos });
   } catch (e: any) {
     return erro500(c, 'Erro ao buscar portfólio', e);
   }
