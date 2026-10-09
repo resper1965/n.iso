@@ -184,6 +184,8 @@ const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   propostas: { status: 'rascunho' },
   pedidos: { tipo: 'dpia', papel_exigido: 'ciente' },
   parte_vinculos: { papel: 'responsavel', alvo_tipo: 'projeto' },
+  avaliacoes_terceiro: { metodo: 'auditoria', resultado: 'aprovado' },
+  titular_pedidos: { tipo: 'acesso' },
 };
 
 /**

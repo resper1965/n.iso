@@ -34,7 +34,7 @@ export const TABELA_DO_RECURSO: Record<string, string> = {
 };
 
 /** Recursos que não pertencem a um projeto: usuários, a área comercial e o catálogo global de requisitos. */
-const SEM_PROJETO = new Set(['admin/users', 'users', 'leads', 'proposals', 'requisitos']);
+const SEM_PROJETO = new Set(['admin/users', 'users', 'leads', 'proposals', 'requisitos', 'parametros-legais']);
 
 export type ClasseDaRota = { tipo: 'projeto' } | { tipo: 'tabela'; tabela: string } | { tipo: 'sem-projeto' };
 

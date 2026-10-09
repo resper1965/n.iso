@@ -78,3 +78,63 @@ export const terceiroDocumentoSchema = z.object({
   documento_id: z.string().trim().min(1).max(100),
   papel: z.enum(['dpa', 'contrato', 'outro']).default('dpa'),
 }).strict();
+
+// ─── Titular, incidente e consentimento (fatia 7) ─────────────────────────────
+const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD');
+const instante = z.string().regex(/^\d{4}-\d{2}-\d{2}([T ][\d:.]+Z?)?$/, 'Use AAAA-MM-DD ou data e hora ISO');
+const textoCurto = z.string().trim().min(1).max(500);
+const textoLongo = z.string().trim().max(5000);
+const idParte = z.string().trim().min(1).max(100);
+
+export const parametroLegalSchema = z.object({
+  valor: z.number().int().min(1).max(100000),
+  unidade: z.enum(['horas', 'dias_corridos', 'dias_uteis']),
+  fonte: z.string().trim().min(1).max(1000),
+  revisado_em: dia,
+  revisado_por: z.string().trim().min(1).max(200),
+}).strict();
+
+export const titularPedidoCriarSchema = z.object({
+  tipo: z.enum(['confirmacao', 'acesso', 'correcao', 'anonimizacao_bloqueio_eliminacao', 'portabilidade', 'informacao_compartilhamento', 'revogacao_consentimento', 'oposicao', 'outro']),
+  canal: z.enum(['email', 'telefone', 'formulario', 'presencial', 'outro']).optional(),
+  titular_nome: z.string().trim().max(200).nullish(),
+  titular_contato: z.string().trim().max(300).nullish(),
+  descricao: textoLongo.nullish(),
+  recebido_em: dia.optional(),
+  responsavel_parte_id: idParte.nullish(),
+}).strict();
+
+export const titularPedidoAtualizarSchema = z.object({
+  status: z.enum(['recebido', 'em_andamento', 'respondido', 'negado', 'arquivado']).optional(),
+  resposta_texto: textoLongo.nullable().optional(),
+  responsavel_parte_id: idParte.nullable().optional(),
+  prazo_em: z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'Use AAAA-MM-DD').nullable().optional(),
+  descricao: textoLongo.nullable().optional(),
+}).strict();
+
+export const incidenteCriarSchema = z.object({
+  titulo: textoCurto,
+  descricao: textoLongo.nullish(),
+  ocorrido_em: instante.nullish(),
+  ciencia_em: instante,
+  responsavel_parte_id: idParte.nullish(),
+}).strict();
+
+export const incidenteRiscoSchema = z.object({
+  risco_titular: z.enum(['sem_risco', 'baixo', 'relevante']),
+  avaliacao_texto: textoLongo.nullish(),
+}).strict();
+
+export const incidenteComunicacaoSchema = z.object({
+  destino: z.enum(['anpd', 'titular']),
+  em: instante.optional(),
+}).strict();
+
+export const consentimentoCriarSchema = z.object({
+  ropa_id: idParte,
+  titular_ref: textoCurto,
+  finalidade: textoCurto,
+  versao_aviso: textoCurto,
+  obtido_em: dia,
+  canal: z.string().trim().max(100).nullish(),
+}).strict();

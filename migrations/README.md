@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0057** (`ls migrations/*.sql | tail -1`). São 55 arquivos
+- Última migration no repositório: **0058** (`ls migrations/*.sql | tail -1`). São 56 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -362,3 +362,11 @@ Acrescenta `partes.terceiro_tipo` (anulável, com CHECK) e cria `avaliacoes_terc
 `project_id`). Sem carga e sem tocar linha existente. O `ALTER ... ADD COLUMN` não é idempotente. Conferência: `PRAGMA table_info` das
 duas tabelas e de `partes` (a coluna `terceiro_tipo`), e `SELECT count(*)` das duas tabelas (0). Depende da 0050 (`documentos`) e da 0047
 (`partes`). **Esta RODA em produção, aditiva, sem janela.**
+
+## 0058 — titular, incidente e consentimento, fatia 7 (2026-10)
+
+Cria `parametros_legais` (global), `titular_pedidos`, `incidentes` e `consentimentos` (`IF NOT EXISTS`). **Sem carga: nenhum valor de prazo
+legal é semeado** — o administrador da plataforma cadastra cada prazo, com fonte e data de revisão, pela tela Prazos legais. Enquanto não
+houver valor, o prazo do pedido e do incidente fica nulo ("não calculado") e os avisos dessas fontes não disparam. Conferência:
+`PRAGMA table_info` das quatro tabelas e `SELECT count(*)` de cada (0, inclusive `parametros_legais`). Depende da 0054 (`ropa_records` já
+existe) e da 0047 (`partes`). **Esta RODA em produção, aditiva, sem janela.**

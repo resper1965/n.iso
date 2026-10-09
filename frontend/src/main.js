@@ -14,6 +14,7 @@ import './views/partes.js';
 import './views/documentos.js';
 import './views/requisitos.js';
 import './views/terceiros.js';
+import './views/titular.js';
 import './views/tratamento-ligacoes.js';
 import './views/compliance.js';
 import './views/monitor.js';

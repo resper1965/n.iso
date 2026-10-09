@@ -121,6 +121,7 @@ import {
   documentoRequisitosSchema, requisitoAtualizarSchema, mapeamentoSchema,
   tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema, ropaImportarSchema, liaSalvarSchema,
   terceiroTipoSchema, avaliacaoTerceiroSchema, terceiroDocumentoSchema,
+  parametroLegalSchema, titularPedidoCriarSchema, titularPedidoAtualizarSchema, incidenteCriarSchema, incidenteRiscoSchema, incidenteComunicacaoSchema, consentimentoCriarSchema,
 } from './schemas';
 
 /**
@@ -206,6 +207,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'PUT', caminho: '/api/v1/management-reviews/:id', schema: revisaoAtualizarSchema, nome: 'revisaoAtualizarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/metrics/:id', schema: metricaAtualizarSchema, nome: 'metricaAtualizarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/org/config', schema: configOrgSchema, nome: 'configOrgSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/parametros-legais/:chave', schema: parametroLegalSchema, nome: 'parametroLegalSchema' },
   { metodo: 'POST', caminho: '/api/v1/pedidos/:id/aprovar', schema: pedidoDecisaoSchema, nome: 'pedidoDecisaoSchema' },
   { metodo: 'POST', caminho: '/api/v1/pedidos/:id/recusar', schema: pedidoDecisaoSchema, nome: 'pedidoDecisaoSchema' },
   { metodo: 'PUT', caminho: '/api/v1/platform/orgs/:id/modulos', schema: orgModulosSchema, nome: 'orgModulosSchema' },
@@ -238,6 +240,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/audits', schema: auditScheduleSchema, nome: 'auditScheduleSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/capa', schema: createCapaSchema, nome: 'createCapaSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/certification', schema: certificationSchema, nome: 'certificationSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/consentimentos', schema: consentimentoCriarSchema, nome: 'consentimentoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/controls/:controlId/policy', schema: politicaTextoSchema, nome: 'politicaTextoSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/controls/:controlId/restore-version', schema: versaoRestaurarSchema, nome: 'versaoRestaurarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/data-subject/erase', schema: identificadorSchema, nome: 'identificadorSchema' },
@@ -251,6 +254,9 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos', schema: documentoCriarSchema, nome: 'documentoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-document', schema: documentoGerarSchema, nome: 'documentoGerarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-policies-bulk', schema: politicasLoteSchema, nome: 'politicasLoteSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/incidentes/:id/comunicacoes', schema: incidenteComunicacaoSchema, nome: 'incidenteComunicacaoSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/incidentes/:id/risco', schema: incidenteRiscoSchema, nome: 'incidenteRiscoSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/incidentes', schema: incidenteCriarSchema, nome: 'incidenteCriarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/modulos/:modulo', schema: moduloHabilitarSchema, nome: 'moduloHabilitarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/partes/:id/vinculos', schema: vinculoCriarSchema, nome: 'vinculoCriarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/partes/:id', schema: parteAtualizarSchema, nome: 'parteAtualizarSchema' },
@@ -273,6 +279,8 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/avaliacoes', schema: avaliacaoTerceiroSchema, nome: 'avaliacaoTerceiroSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/documentos', schema: terceiroDocumentoSchema, nome: 'terceiroDocumentoSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/tipo', schema: terceiroTipoSchema, nome: 'terceiroTipoSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/titular-pedidos/:id', schema: titularPedidoAtualizarSchema, nome: 'titularPedidoAtualizarSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/titular-pedidos', schema: titularPedidoCriarSchema, nome: 'titularPedidoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/training/import-external', schema: trainingImportSchema, nome: 'trainingImportSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/training', schema: trainingSchema, nome: 'trainingSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/vendors', schema: createVendorSchema, nome: 'createVendorSchema' },
