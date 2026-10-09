@@ -51,7 +51,7 @@ beforeAll(async () => {
 describe('ligações do registro', () => {
   it('registro novo não tem ligação nenhuma', async () => {
     const rid = await novoRegistro();
-    expect(await ligacoes(rid)).toEqual({ aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false, base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] });
+    expect(await ligacoes(rid)).toEqual({ aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false, terceiros_com_avaliacao_vencida: [], base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] });
   });
 
   it('itens e departamentos: troca o conjunto, repetido conta uma vez, vazio limpa', async () => {

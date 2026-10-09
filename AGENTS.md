@@ -67,7 +67,7 @@ Cloudflare Workers (Hono) + D1 + KV + R2 + Workers AI. Frontend SPA
 Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 
 - **Backend**: `src/index.ts` e o composition root que monta os sub-routers de
-  dominio: **45 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
+  dominio: **46 arquivos em `src/routes/`** (`ls src/routes/*.ts | grep -vc '\.test\.ts$'`,
   2026-10-09). A lista nominal envelhecia a cada PR; leia o diretorio.
 - **Pedidos de aprovacao/ciencia (acesso de stakeholders)**: tabelas `pedidos`
   (conteudo congelado + SHA-256) e `pedido_destinatarios` (a prova por pessoa).
@@ -94,7 +94,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services** (`src/services/`, 29 arquivos: `ls src/services/*.ts | wc -l`): entre eles
+- **Services** (`src/services/`, 30 arquivos: `ls src/services/*.ts | wc -l`): entre eles
   `soa-logic.ts` (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
   `policy-generator.ts`, `pedidos.ts`, `organizacao.ts`, `fechar-venda.ts`,
   `preco-proposta.ts`, `transferencia-projeto.ts`, `totp.ts`, `data-subject.ts`.
@@ -128,9 +128,9 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     (`src/routes/public-auditor.ts`), token no corpo, só o hash no banco.
   - Arquivo novo em `frontend/public/` é copiado como está — mesmo padrão de
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
-- **Schema**: `schema.sql` — **75 tabelas** (2026-10-09: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
+- **Schema**: `schema.sql` — **77 tabelas** (2026-10-09: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
   em 2026-10-05 o mesmo 58 (antes da 0046) saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
-  numeradas em `migrations/`, ultima a **0056** (`ls migrations/*.sql | tail -1`). Procedimento
+  numeradas em `migrations/`, ultima a **0057** (`ls migrations/*.sql | tail -1`). Procedimento
   de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
   `migrations/README.md` — leia antes de tocar em migration.
 - **Inventario (ativos)**: vive em `itens` (nucleo fino) + `item_seguranca` (bloco do n.iso, 1:1), antes `assets`
@@ -194,6 +194,14 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   `liaExigida` vale quando a base do catalogo OU o texto livre diz "legitimo interesse" (sem acento nem caixa) e so aparece em
   `GET .../ropa/:rid/ligacoes` (`lia`, `dpias`, `dpia_pendente`), nao bloqueia. `POST .../ropa/:rid/dpia` cria a DPIA `Draft` ligada e
   pre-preenchida (409 com o id se ja existe). As duas familias de colunas da DPIA NAO foram unificadas (hash de aprovacoes existentes).
+- **Terceiros tipificados (fatia 6, migration 0057)**: o terceiro e uma `partes` do tipo `organizacao` com `terceiro_tipo`
+  (`grande_provedor|medio|pequeno|critico`) e `src/services/terceiros.ts` (rotas `/projects/:id/terceiros*`). **O tipo define o
+  metodo** (`METODO_DO_TIPO`: trust_center, questionario, questionario, auditoria) e o SERVIDOR decide, nao o corpo. `avaliacoes_terceiro`
+  guarda o HISTORICO (resultado, `valido_ate` obrigatorio e futuro, link http(s) de evidencia) e a situacao e DERIVADA da mais recente
+  (`situacaoDe`: pendente, vigente, vencida, reprovada). `documento_partes` liga documento a terceiro como DPA/contrato/outro (a spec pede
+  `documentos.tipo = 'contrato'`; mudar esse CHECK reconstruiria `documentos` e quatro tabelas filhas). Efeitos do vencimento: fonte
+  `avaliacao_terceiro` nos avisos de prazo (titulo com o numero de tratamentos que usam o terceiro) e
+  `terceiros_com_avaliacao_vencida` em `GET .../ropa/:rid/ligacoes`. Sem pedido de aprovacao da avaliacao ainda (o CHECK da 0055 ja aceita).
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
 - **Rotinas agendadas** (`grep -A2 '"triggers"' wrangler.jsonc`): `10 4 * * *` roda a manutencao
@@ -264,7 +272,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 216 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
+- **Nenhum dos 219 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual

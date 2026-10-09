@@ -28,7 +28,7 @@ describe('rotuloMermaid', () => {
 });
 
 describe('montarDiagrama', () => {
-  const vazio = { aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false, base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] };
+  const vazio = { aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false, terceiros_com_avaliacao_vencida: [], base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] };
 
   it('registro sem ligação é só o nó do tratamento', () => {
     expect(montarDiagrama({ finalidade: 'Folha', titulares: null }, vazio)).toBe('flowchart LR\n  n0["Folha"]');

@@ -1287,7 +1287,8 @@ CREATE TABLE IF NOT EXISTS partes (
     user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa', 'inativa')),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    terceiro_tipo TEXT CHECK (terceiro_tipo IS NULL OR terceiro_tipo IN ('grande_provedor', 'medio', 'pequeno', 'critico'))
 );
 CREATE INDEX IF NOT EXISTS idx_partes_projeto ON partes(project_id, status);
 
@@ -1486,3 +1487,29 @@ CREATE TABLE IF NOT EXISTS lia_assessments (
     CHECK (status = 'rascunho' OR (conclusao IS NOT NULL AND concluida_em IS NOT NULL AND concluida_por IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS idx_lia_projeto ON lia_assessments(project_id, status);
+
+-- Terceiros tipificados (fatia 6, migration 0057)
+CREATE TABLE IF NOT EXISTS avaliacoes_terceiro (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    parte_id TEXT NOT NULL REFERENCES partes(id) ON DELETE CASCADE,
+    metodo TEXT NOT NULL CHECK (metodo IN ('trust_center', 'questionario', 'auditoria')),
+    resultado TEXT NOT NULL CHECK (resultado IN ('aprovado', 'com_ressalvas', 'reprovado')),
+    valido_ate TEXT NOT NULL,
+    evidencia_url TEXT,
+    observacao TEXT,
+    avaliado_por TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_aval_terceiro_parte ON avaliacoes_terceiro(parte_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_aval_terceiro_projeto ON avaliacoes_terceiro(project_id, valido_ate);
+
+CREATE TABLE IF NOT EXISTS documento_partes (
+    documento_id TEXT NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+    parte_id TEXT NOT NULL REFERENCES partes(id) ON DELETE CASCADE,
+    papel TEXT NOT NULL DEFAULT 'dpa' CHECK (papel IN ('dpa', 'contrato', 'outro')),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (documento_id, parte_id, papel)
+);
+CREATE INDEX IF NOT EXISTS idx_doc_partes_parte ON documento_partes(parte_id);

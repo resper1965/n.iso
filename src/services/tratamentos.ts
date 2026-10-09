@@ -61,6 +61,8 @@ export type Ligacoes = {
   lia: { exigida: boolean; existe: boolean; status: string | null };
   dpias: { id: string; nome: string | null; status: string | null }[];
   dpia_pendente: boolean;
+  /** Partes do tratamento (terceiros) cuja avaliação mais recente já venceu (fatia 6, spec 4.9). */
+  terceiros_com_avaliacao_vencida: { parte_id: string; nome: string }[];
   base_legal: { id: string; referencia: string; titulo: string } | null;
   itens: { id: string; nome: string; tipo: string }[];
   departamentos: { id: string; nome: string }[];
@@ -75,7 +77,7 @@ export async function lerLigacoes(db: D1Database, projectId: string, ropaId: str
        LEFT JOIN requisitos q ON q.id = r.base_legal_id WHERE r.id = ? AND r.project_id = ?`
   ).bind(ropaId, projectId).first<{ id: string | null; referencia: string | null; titulo: string | null; legal_basis: string | null; dpia_required: number | null }>();
   if (!base) return null;
-  const [itens, deptos, partes, transf, dpias, lia] = await db.batch([
+  const [itens, deptos, partes, transf, dpias, lia, vencidos] = await db.batch([
     db.prepare(`SELECT i.id, i.nome, i.tipo FROM tratamento_itens t JOIN itens i ON i.id = t.item_id WHERE t.ropa_id = ? AND t.project_id = ? ORDER BY i.nome`).bind(ropaId, projectId),
     db.prepare(`SELECT d.id, d.nome FROM tratamento_departamentos t JOIN departamentos d ON d.id = t.departamento_id WHERE t.ropa_id = ? AND t.project_id = ? ORDER BY d.nome`).bind(ropaId, projectId),
     db.prepare(
@@ -88,6 +90,12 @@ export async function lerLigacoes(db: D1Database, projectId: string, ropaId: str
     ).bind(ropaId, projectId),
     db.prepare(`SELECT id, COALESCE(processing_name, system_name) AS nome, status FROM dpia_assessments WHERE ropa_id = ? AND project_id = ? ORDER BY created_at, rowid`).bind(ropaId, projectId),
     db.prepare(`SELECT status FROM lia_assessments WHERE ropa_id = ? AND project_id = ?`).bind(ropaId, projectId),
+    db.prepare(
+      `SELECT DISTINCT p.id AS parte_id, p.nome AS nome FROM parte_vinculos v JOIN partes p ON p.id = v.parte_id
+        WHERE v.alvo_tipo = 'tratamento' AND v.alvo_id = ? AND v.project_id = ? AND p.tipo = 'organizacao'
+          AND (SELECT CASE WHEN a.resultado <> 'reprovado' THEN a.valido_ate END FROM avaliacoes_terceiro a WHERE a.parte_id = p.id ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1) < date('now')
+        ORDER BY p.nome`
+    ).bind(ropaId, projectId),
   ]);
   const liaLinha = (lia.results as { status: string }[])[0];
   const dpiasLidas = dpias.results as Ligacoes['dpias'];
@@ -96,6 +104,7 @@ export async function lerLigacoes(db: D1Database, projectId: string, ropaId: str
     lia: { exigida: ehLegitimoInteresse(base.titulo, base.legal_basis), existe: !!liaLinha, status: liaLinha?.status ?? null },
     dpias: dpiasLidas,
     dpia_pendente: !!base.dpia_required && dpiasLidas.length === 0,
+    terceiros_com_avaliacao_vencida: vencidos.results as Ligacoes['terceiros_com_avaliacao_vencida'],
     base_legal: base.id && base.referencia ? { id: base.id, referencia: base.referencia, titulo: base.titulo ?? '' } : null,
     itens: itens.results as Ligacoes['itens'],
     departamentos: deptos.results as Ligacoes['departamentos'],

@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0056** (`ls migrations/*.sql | tail -1`). São 54 arquivos
+- Última migration no repositório: **0057** (`ls migrations/*.sql | tail -1`). São 55 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -355,3 +355,10 @@ a migration vai zerar) e
 `SELECT count(*) FROM dpia_assessments d JOIN ropa_records r ON r.id = d.ropa_id WHERE r.project_id IS NOT d.project_id` (de OUTRO
 projeto: a migration não toca, trate à mão). **Depois:** os 3 triggers em `sqlite_master`, `PRAGMA table_info(lia_assessments)` e
 as contagens iguais. **Esta RODA em produção.** Depende da 0054 (a DPIA aponta para o registro do RoPA).
+
+## 0057 — terceiros tipificados, fatia 6 (2026-10)
+
+Acrescenta `partes.terceiro_tipo` (anulável, com CHECK) e cria `avaliacoes_terceiro` e `documento_partes` (`IF NOT EXISTS`, todas com
+`project_id`). Sem carga e sem tocar linha existente. O `ALTER ... ADD COLUMN` não é idempotente. Conferência: `PRAGMA table_info` das
+duas tabelas e de `partes` (a coluna `terceiro_tipo`), e `SELECT count(*)` das duas tabelas (0). Depende da 0050 (`documentos`) e da 0047
+(`partes`). **Esta RODA em produção, aditiva, sem janela.**
