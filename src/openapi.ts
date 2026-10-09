@@ -118,6 +118,7 @@ import {
   moduloHabilitarSchema, orgModulosSchema,
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
   documentoCriarSchema, documentoAtualizarSchema, excecaoCriarSchema, excecaoAtualizarSchema, versaoSalvarSchema,
+  documentoRequisitosSchema, requisitoAtualizarSchema, mapeamentoSchema,
 } from './schemas';
 
 /**
@@ -242,6 +243,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/departamentos', schema: departamentoCriarSchema, nome: 'departamentoCriarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/documentos/:id/excecoes/:exId', schema: excecaoAtualizarSchema, nome: 'excecaoAtualizarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos/:id/excecoes', schema: excecaoCriarSchema, nome: 'excecaoCriarSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/documentos/:id/requisitos', schema: documentoRequisitosSchema, nome: 'documentoRequisitosSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos/:id/versoes', schema: versaoSalvarSchema, nome: 'versaoSalvarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/documentos/:id', schema: documentoAtualizarSchema, nome: 'documentoAtualizarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos', schema: documentoCriarSchema, nome: 'documentoCriarSchema' },
@@ -290,6 +292,9 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/public/propostas/recusar', schema: propostaRecusaSchema, nome: 'propostaRecusaSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/propostas/ver', schema: propostaTokenSchema, nome: 'propostaTokenSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/sso/iniciar', schema: ssoInicioSchema, nome: 'ssoInicioSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/requisitos/:id', schema: requisitoAtualizarSchema, nome: 'requisitoAtualizarSchema' },
+  { metodo: 'POST', caminho: '/api/v1/requisitos/mapeamentos', schema: mapeamentoSchema, nome: 'mapeamentoSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/requisitos/mapeamentos', schema: mapeamentoSchema, nome: 'mapeamentoSchema' },
   { metodo: 'PUT', caminho: '/api/v1/risks/:id', schema: riskUpdateSchema, nome: 'riskUpdateSchema' },
   { metodo: 'PUT', caminho: '/api/v1/ropa/:id', schema: ropaSchema, nome: 'ropaSchema' },
   { metodo: 'PUT', caminho: '/api/v1/servicos/:id', schema: servicoSchema, nome: 'servicoSchema' },

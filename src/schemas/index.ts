@@ -48,3 +48,4 @@ export * from './domain';
 export * from './corpos';
 export * from './nucleo';
 export * from './documentos';
+export * from './requisitos';
