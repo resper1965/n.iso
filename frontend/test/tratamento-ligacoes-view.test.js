@@ -147,3 +147,49 @@ describe('ações', () => {
         expect(document.body.textContent).toContain('API route not found');
     });
 });
+
+describe('importação do RoPA por planilha', () => {
+    const abrirImportar = () => {
+        document.body.innerHTML = '<div id="modal-overlay"><div id="modal"><div id="modal-content"></div></div></div>';
+        window.openImportarRopaModal('p9');
+    };
+    const arquivo = (texto) => {
+        const f = new File([texto], 'ropa.csv', { type: 'text/csv' });
+        Object.defineProperty(el('ri-arquivo'), 'files', { value: [f], configurable: true });
+    };
+
+    it('o modal explica o formato e oferece importar e baixar o modelo', () => {
+        abrirImportar();
+        expect(el('modal-content').textContent).toContain('finalidade');
+        expect(document.querySelector('[data-action="enviarImportacaoRopa"]')).not.toBeNull();
+        expect(document.querySelector('[data-action="baixarModeloRopa"]')).not.toBeNull();
+    });
+
+    it('sem arquivo não chama a API', async () => {
+        const f = servir({});
+        abrirImportar();
+        await window.enviarImportacaoRopa('p9');
+        expect(chamadas(f)).toEqual([]);
+    });
+
+    it('manda o texto do arquivo e mostra criados, existentes e recusadas (motivo escapado)', async () => {
+        const f = servir({ 'POST /api/v1/projects/p9/ropa/importar': { ok: true, criados: 2, ja_existiam: 1, recusadas: [{ linha: 4, motivo: 'retention_period: <b>grande</b>' }] } });
+        abrirImportar();
+        arquivo('finalidade\nA\nB');
+        await window.enviarImportacaoRopa('p9');
+        expect(corpoDe(f, 'POST /api/v1/projects/p9/ropa/importar')).toEqual({ csv: 'finalidade\nA\nB' });
+        const rel = el('ri-relatorio');
+        expect(rel.textContent).toContain('2 criados, 1 já existiam, 1 recusadas');
+        expect(rel.textContent).toContain('retention_period: <b>grande</b>');
+        expect(rel.querySelector('b')).toBeNull();
+        expect(window.render).toHaveBeenCalled();
+    });
+
+    it('erro do servidor vira aviso e o relatório fica vazio', async () => {
+        servir({}); // sem dublê: 404 do Worker, que api() lança como erro
+        abrirImportar();
+        arquivo('finalidade\nA');
+        await window.enviarImportacaoRopa('p9');
+        expect(el('ri-relatorio').innerHTML).toBe('');
+    });
+});

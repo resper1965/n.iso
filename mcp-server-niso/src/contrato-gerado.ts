@@ -77,6 +77,7 @@ export const ROTAS = {
   'POST /api/v1/projects/{projectId}/ropa/{recordId}/approve': { obrigatorios: ['role'] },
   'POST /api/v1/projects/{projectId}/ropa/{recordId}/revoke-approval': { obrigatorios: ['reason', 'role'] },
   'POST /api/v1/projects/{projectId}/ropa/{recordId}/transferencias': { obrigatorios: ['pais'] },
+  'POST /api/v1/projects/{projectId}/ropa/importar': { obrigatorios: ['csv'] },
   'POST /api/v1/projects/{projectId}/training': { obrigatorios: ['employee_name', 'training_name'] },
   'POST /api/v1/projects/{projectId}/training/import-external': { obrigatorios: ['records'] },
   'POST /api/v1/projects/{projectId}/vendors': { obrigatorios: ['name'] },

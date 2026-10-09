@@ -148,3 +148,41 @@ window.copiarDiagramaTratamento = async function () {
         showToast('Selecionado: use Ctrl+C para copiar.', 'info');
     }
 };
+
+
+// ─── Importação por planilha (fatia 4.4) ─────────────────────────────────────────────────────────────
+
+const MODELO_CSV = 'finalidade;categorias de dados;titulares;base legal;retencao;destinatarios;transferencia internacional;salvaguardas;dpia requerido;responsavel\n'
+    + 'Folha de pagamento;Dados financeiros;Colaboradores;Obrigação legal;5 anos;Contabilidade;nao;;nao;DPO\n';
+
+window.openImportarRopaModal = function (projectId) {
+    openModal(`
+        <h3>Importar RoPA por planilha</h3>
+        <p style="color:var(--text-dim)">Arquivo CSV com cabeçalho. Só a coluna <strong>finalidade</strong> é obrigatória. Os registros entram como rascunho; o que já existe (mesma finalidade) é pulado, então repetir a importação não duplica.</p>
+        <div class="form-group"><label class="form-label" for="ri-arquivo">Arquivo CSV</label><input class="form-input" id="ri-arquivo" type="file" accept=".csv,text/csv"></div>
+        <div style="display:flex; gap:0.5rem">
+            <button class="btn btn-primary btn-sm" data-action="enviarImportacaoRopa" data-args='${args(projectId)}'>Importar</button>
+            <button class="btn btn-ghost btn-sm" data-action="baixarModeloRopa">Baixar modelo</button>
+        </div>
+        <div id="ri-relatorio" style="margin-top:1rem"></div>
+    `);
+};
+
+window.baixarModeloRopa = function () {
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + MODELO_CSV], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'modelo-ropa.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+window.enviarImportacaoRopa = async function (projectId) {
+    const arq = el('ri-arquivo').files && el('ri-arquivo').files[0];
+    if (!arq) { showToast('Escolha o arquivo CSV', 'error'); return; }
+    let r;
+    try { r = await api('POST', `/api/v1/projects/${projectId}/ropa/importar`, { csv: await arq.text() }); } catch (e) { falha(e, 'Não foi possível importar a planilha'); return; }
+    const recusadas = lista(r.recusadas);
+    el('ri-relatorio').innerHTML = `<p><strong>${escapeHTML(String(r.criados))}</strong> criados, <strong>${escapeHTML(String(r.ja_existiam))}</strong> já existiam, <strong>${escapeHTML(String(recusadas.length))}</strong> recusadas.</p>`
+        + (recusadas.length ? `<table class="data-table"><thead><tr><th>Linha</th><th>Motivo</th></tr></thead><tbody>${recusadas.map((x) => `<tr><td>${escapeHTML(String(x.linha))}</td><td>${escapeHTML(x.motivo)}</td></tr>`).join('')}</tbody></table>` : '');
+    if (r.criados) window.render();
+};

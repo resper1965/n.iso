@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0053** (`ls migrations/*.sql | tail -1`). São 51 arquivos
+- Última migration no repositório: **0055** (`ls migrations/*.sql | tail -1`). São 53 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -328,3 +328,19 @@ sobrescreve o que um administrador editou. O `ALTER ... ADD COLUMN` não é idem
 Conferência depois de aplicar: `PRAGMA table_info` das quatro tabelas e de `compliance_controls` (a coluna `requisito_id`), e
 `SELECT count(*)` das quatro tabelas, que devolve 0 até o seed. **Esta RODA em produção, aditiva, sem janela.** Ordem:
 `npm run db:backup` → `npx wrangler d1 migrations apply niso-db --remote` → `migrations list` → seed → merge.
+
+## 0054 — ligações do tratamento, fatia 4 (2026-10)
+
+Acrescenta `ropa_records.base_legal_id` (anulável, `ON DELETE SET NULL`, aponta para `requisitos`) e cria `tratamento_itens`,
+`tratamento_departamentos` e `tratamento_transferencias` (`IF NOT EXISTS`, todas com `project_id`). Sem carga: nenhuma linha existente
+muda. As partes do tratamento NÃO têm tabela: usam `parte_vinculos` (`alvo_tipo = 'tratamento'`, que a 0047 já aceita). O `ALTER ... ADD
+COLUMN` não é idempotente. Conferência: `PRAGMA table_info` das três tabelas e de `ropa_records`, e `SELECT count(*)` das três (0).
+Depende da 0053 (a FK de `base_legal_id`).
+
+## 0055 — pedidos aceitam `tratamento`, fatia 4 (2026-10)
+
+Reconstrói `pedidos` e `pedido_destinatarios` (PROVA) no molde da 0051 para o CHECK de `pedidos.tipo` aceitar `tratamento` e, de uma
+vez, `avaliacao_terceiro` (fatia 6; reconstruir a tabela de prova de novo só por um valor seria risco sem ganho). Preserva todas as
+linhas, recria os 2 triggers de prova e os 5 índices. **Antes de aplicar:** `npm run db:backup`, `PRAGMA table_info(pedidos)` e
+`(pedido_destinatarios)` iguais ao `schema.sql`, e as contagens das duas tabelas; **depois:** as mesmas contagens, os triggers
+(`pedido_prova_imutavel`, `pedido_dest_prova_imutavel`) e os índices em `sqlite_master`. **Esta RODA em produção.** Depende da 0051.

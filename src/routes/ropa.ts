@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial, refForaDoProjeto } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
-import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
+import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, ropaImportarSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
 import { criarTransferencia, definirLigacao, diagramaDoTratamento, lerLigacoes, removerTransferencia } from '../services/tratamentos';
 import { aprovacoesDoProjeto } from '../services/documentos';
+import { importarTratamentos } from '../services/tratamentos-importar';
 import { conferirPedidosDoDocumento } from './pedidos';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -104,6 +105,17 @@ projectRopaApp.post('/', async (c) => {
   } catch (e: any) {
     return erro500(c, 'Falha ao criar ROPA', e);
   }
+});
+
+// Importação por planilha (fatia 4.4): cria `Draft`, devolve as linhas recusadas, reimportar não duplica.
+projectRopaApp.post('/importar', async (c) => {
+  try {
+    const v = await validateBody(c, ropaImportarSchema);
+    if (!v.success) return v.response;
+    const r = await importarTratamentos(c.env.DB, c.req.param('projectId')!, c.get('user')?.email || 'system', v.data.csv);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json(r);
+  } catch (e) { return erro500(c, 'Falha ao importar o RoPA', e); }
 });
 
 // ─── Ligações do tratamento (fatia 4.1): itens, departamentos, transferências; partes por parte_vinculos ───

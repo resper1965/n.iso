@@ -14,7 +14,7 @@ import { opcoesDePartes } from '../partes-opcoes.js';
         }
         
         const canCrud = S.user && (S.user.role === 'platform_admin' || S.user.role === 'consultant' || S.user.role === 'consultor');
-        a.innerHTML = canCrud ? `<button class="btn btn-primary" data-action="openNewROPAModal" data-args='["${proj.id}"]'>+ Nova Atividade</button>` : '';
+        a.innerHTML = canCrud ? `<button class="btn" data-action="openImportarRopaModal" data-args='["${proj.id}"]'>Importar planilha</button> <button class="btn btn-primary" data-action="openNewROPAModal" data-args='["${proj.id}"]'>+ Nova Atividade</button>` : '';
         
         let records = [];
         try { records = await api('GET', `/api/v1/projects/${proj.id}/ropa`); } catch(e) {}
