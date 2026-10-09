@@ -1,6 +1,6 @@
-# Núcleo comum do n.iso e do n.privacy — spec para revisão
+# Núcleo comum do n.iso e do n.privacy — spec
 
-**Estado:** ESTUDO. Nada aqui está aprovado para implementar.
+**Estado:** APROVADA pelo dono em 2026-10-08. Implementa-se por fatias (seção 9), cada uma com plano próprio em `docs/superpowers/plans/`. A fatia 1 se divide em 1.1 (módulos, partes, vínculos, departamentos), 1.2 (itens e migração dos ativos) e 1.3 (responsáveis em texto viram parte). Fica com o jurídico a pergunta 7, que só trava as fatias 2, 4 e 7.
 **Data:** 2026-10-06.
 **Base:** decisões do dono (perguntas laterais), pesquisa de mercado na web e levantamento do código em `main` (`e9db819`).
 
@@ -303,7 +303,7 @@ item_privacidade                        -- bloco do n.privacy (1:1)
   2. Copiar `assets` para `itens` com **o mesmo id**, `tipo='ativo'`; os campos de segurança vão para `item_seguranca`.
   3. `risks.asset_id` continua válido sem reescrita, porque o id é o mesmo.
   4. As 6 consultas de backend, as 2 telas e a ferramenta MCP passam para `itens` no mesmo PR da migração. Sem view de transição (corte ponytail): volta só se o PR ficar grande demais para revisar.
-  5. Teste de migração com dado de produção anonimizado no staging: contagem igual, todo `risks.asset_id` resolvido, nenhum campo vazio que antes tinha valor.
+  5. Teste de migração com dado de produção anonimizado num D1 local (o staging foi removido no #296): contagem igual, todo `risks.asset_id` resolvido, nenhum campo vazio que antes tinha valor.
   6. `assets` sai no PR seguinte, depois de produção conferida (`test/colunas-catraca.test.ts` serve de modelo para provar que nada mais a lê).
 - **Ponto aberto:** "processo" como item e "tratamento" como entidade (4.7) podem se confundir. Proponho: processo é a atividade de negócio (item); tratamento é o registro do art. 37 que *usa* processos, sistemas e bases.
 
@@ -456,7 +456,7 @@ Esboço. Cada item vira spec própria na ordem da seção 9.
 ## 7. Riscos de desenho
 
 1. **Ativo de segurança e de privacidade têm atributos diferentes.** Resolvido por núcleo fino com blocos 1:1. O risco que sobra é a tentação de pôr atributo de produto no núcleo; regra: coluna nova em `itens` só se os dois produtos a usarem.
-2. **Migração dos ativos de produção.** Backup, id preservado, view de transição e teste com cópia anonimizada no staging. Migration nova segue `migrations/README.md`, e o deploy recusa migration pendente.
+2. **Migração dos ativos de produção.** Backup, id preservado, view de transição e teste com cópia anonimizada num D1 local (o staging foi removido no #296). Migration nova segue `migrations/README.md`, e o deploy recusa migration pendente.
 3. **Reescrever a ligação documento→controle** toca políticas, ciência, portal e pedidos ao mesmo tempo. A prova existente (pedidos fechados) não pode mudar: o trigger `pedido_prova_imutavel` já impede, e a migração não deve tentar.
 4. **MCP.**
    - Preso ao projeto, papéis e confirmação já existem.
@@ -502,8 +502,8 @@ As fatias 2 e 3 podem trocar de lugar: documentos não dependem de requisito par
 
 1. ~~Módulos por projeto, com teto na organização?~~ **Decidido:** sim, e a gestão de organização e projeto é a mesma do n.iso (4.1).
 2. ~~CMP?~~ **Decidido:** não construir; integrar depois.
-3. **Portal público de pedidos do titular entra na fatia 7, ou só o registro interno?**
+3. ~~Portal público de pedidos do titular entra na fatia 7, ou só o registro interno?~~ **Decidido (08/10):** registro interno na fatia 7; o portal público é a 7b, depois, com estas regras: o formulário só recebe e devolve o protocolo (nunca mostra dado), o titular confirma o e-mail por código, não pede CPF, a resposta sai por e-mail fora do portal, limite por IP e por e-mail mais Turnstile. Depende de três respostas do jurídico: que prova de identidade exigir, se a ness. é operadora dos dados coletados e por qual canal a resposta pode sair.
 4. ~~Qual catálogo 27701 vale?~~ **Decidido:** a versão mais nova, 2025. Falta só conferir, contra a norma publicada, qual dos dois catálogos do código a reproduz (4.5).
-5. **`stakeholders` (cláusula 4.2) vira parte?** Recomendo que sim, com vínculo `parte_interessada`.
-6. **Processo como item e tratamento como entidade separada** (4.4): concorda?
+5. ~~`stakeholders` (cláusula 4.2) vira parte?~~ **Decidido (08/10):** sim, com vínculo `parte_interessada`.
+6. ~~Processo como item e tratamento como entidade separada (4.4)?~~ **Decidido (08/10):** sim, separados.
 7. **Jurídico:** prazos do titular e de incidente (ANPD e titular), lista de bases legais, títulos curtos dos artigos e todo `requisito_mapeamentos` antes de `validado_juridico`.
