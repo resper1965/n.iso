@@ -148,10 +148,10 @@ nucleoApp.put('/partes/:id', async (c) => {
 });
 
 // ─── vínculos ──────────────────────────────────────────────────────────────
-/** `item` entra na fatia 1.2 e `tratamento` na do RoPA: até lá o alvo não existe. */
+/** `tratamento` entra na fatia do RoPA: até lá o alvo não existe. */
 async function conferirAlvo(db: D1Database, projectId: string, tipo: AlvoVinculo, id: string): Promise<'ok' | 'inexistente' | 'indisponivel'> {
   if (tipo === 'projeto') return id === projectId ? 'ok' : 'inexistente';
-  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : null;
+  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : tipo === 'item' ? 'itens' : null;
   if (!tabela) return 'indisponivel';
   // `tabela` sai das constantes acima, nunca da requisição; o id vai por bind.
   return (await db.prepare(`SELECT 1 FROM ${tabela} WHERE id = ? AND project_id = ?`).bind(id, projectId).first()) ? 'ok' : 'inexistente';

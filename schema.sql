@@ -364,7 +364,8 @@ CREATE TABLE IF NOT EXISTS compliance_controls (
     ceo_approved_at TEXT,
     ceo_approved_ip TEXT,
     ceo_approved_ua TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS evidence (
@@ -500,7 +501,8 @@ CREATE TABLE IF NOT EXISTS risks (
     accepted_by TEXT,
     accepted_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS risk_history (
@@ -584,7 +586,8 @@ CREATE TABLE IF NOT EXISTS ropa_records (
     ceo_approved_ip TEXT,
     ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    owner_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS audit_schedule (
@@ -618,7 +621,8 @@ CREATE TABLE IF NOT EXISTS corrective_actions (
     status TEXT DEFAULT 'Open',
     resolution TEXT,
     completed_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    assigned_to_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -772,6 +776,7 @@ CREATE TABLE IF NOT EXISTS checklist_progress (
     notes TEXT,
     assigned_to TEXT,
     due_date TEXT,
+    assigned_to_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
     UNIQUE(project_id, phase_number, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_checklist_progress_project ON checklist_progress(project_id);
