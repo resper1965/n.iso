@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { genId, genToken, hashPassword, logAudit, erro500, rateLimitD1, invalidateUserSessions } from '../helpers';
-import { validateBody, criarOrgSchema, atualizarOrgSchema } from '../schemas';
+import { validateBody, criarOrgSchema, atualizarOrgSchema, orgModulosSchema, MODULOS } from '../schemas';
 import { ORG_NESS, SQL_EQUIPE } from '../services/organizacao';
 import { enviarBoasVindas } from './users';
 
@@ -116,6 +116,27 @@ organizacoesApp.put('/:id', async (c) => {
     await logAudit(db, 'org.atualizada', c.get('user').email, `Organização ${id} atualizada: ${JSON.stringify(b)}`);
     return c.json({ ok: true });
   } catch (e) { return erro500(c, 'Erro ao atualizar a organização', e); }
+});
+
+/** Módulos que a consultoria contratou: o teto do que cada projeto dela pode habilitar. */
+organizacoesApp.put('/:id/modulos', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const v = await validateBody(c, orgModulosSchema);
+    if (!v.success) return v.response;
+    const db = c.env.DB;
+    if (!(await db.prepare('SELECT 1 FROM organizations WHERE id = ?').bind(id).first())) return c.json({ error: 'Organização não encontrada' }, 404);
+    const modulos = MODULOS.filter((m) => v.data.modulos.includes(m));
+    for (const m of MODULOS.filter((x) => !modulos.includes(x))) {
+      const em = await db.prepare(
+        `SELECT count(*) AS n FROM projeto_modulos pm JOIN projects p ON p.id = pm.project_id WHERE p.org_id = ? AND pm.modulo = ?`
+      ).bind(id, m).first<{ n: number }>();
+      if (em && em.n > 0) return c.json({ error: `O módulo ${m} está habilitado em ${em.n} projeto(s) da organização` }, 409);
+    }
+    await db.prepare('UPDATE organizations SET modulos_contratados = ? WHERE id = ?').bind(JSON.stringify(modulos), id).run();
+    await logAudit(db, 'org.modulos', c.get('user').email, `Organização ${id}: módulos contratados ${JSON.stringify(modulos)}`);
+    return c.json({ ok: true, modulos });
+  } catch (e) { return erro500(c, 'Erro ao atualizar os módulos', e); }
 });
 
 /*

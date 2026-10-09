@@ -229,6 +229,7 @@ const VALOR_FIXO: Record<string, Record<string, unknown>> = {
   servicos: { tipo: 'avulso' },
   propostas: { status: 'rascunho' },
   pedidos: { tipo: 'dpia', papel_exigido: 'ciente' },
+  parte_vinculos: { papel: 'responsavel', alvo_tipo: 'projeto' },
 };
 
 async function semearTenantAlheio(id: string, projeto: string): Promise<void> {

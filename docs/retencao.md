@@ -29,6 +29,11 @@ rotina de plataforma seria destruir o trabalho pelo qual o cliente paga. Há
 teste que insere um risco e uma evidência com 3000 dias e exige que sobrevivam
 ao cron.
 
+**`partes`, `parte_vinculos`, `departamentos` e `projeto_modulos` também não.** São o cadastro que o
+cliente mantém: quem é o encarregado, quem responde por quê. O prazo é decisão dele. Nome e e-mail em
+`partes` são dado pessoal, e por isso a busca e a eliminação do titular (`FONTES_PII`) as alcançam: a
+pessoa é anonimizada, o vínculo e o fato ficam.
+
 **`audit_logs` também não**, por dois motivos que se somam:
 
 1. os triggers da migration `0018_data_hardening.sql` recusam `DELETE` no nível

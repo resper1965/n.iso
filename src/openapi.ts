@@ -115,6 +115,8 @@ import {
   updateUserSchema,
   vendorUpdateSchema,
   versaoRestaurarSchema,
+  moduloHabilitarSchema, orgModulosSchema,
+  departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
 } from './schemas';
 
 /**
@@ -202,6 +204,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'PUT', caminho: '/api/v1/org/config', schema: configOrgSchema, nome: 'configOrgSchema' },
   { metodo: 'POST', caminho: '/api/v1/pedidos/:id/aprovar', schema: pedidoDecisaoSchema, nome: 'pedidoDecisaoSchema' },
   { metodo: 'POST', caminho: '/api/v1/pedidos/:id/recusar', schema: pedidoDecisaoSchema, nome: 'pedidoDecisaoSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/platform/orgs/:id/modulos', schema: orgModulosSchema, nome: 'orgModulosSchema' },
   { metodo: 'PUT', caminho: '/api/v1/platform/orgs/:id', schema: atualizarOrgSchema, nome: 'atualizarOrgSchema' },
   { metodo: 'POST', caminho: '/api/v1/platform/orgs', schema: criarOrgSchema, nome: 'criarOrgSchema' },
   { metodo: 'POST', caminho: '/api/v1/platform/projects/:id/transferir', schema: transferirProjetoSchema, nome: 'transferirProjetoSchema' },
@@ -234,8 +237,14 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/controls/:controlId/policy', schema: politicaTextoSchema, nome: 'politicaTextoSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/controls/:controlId/restore-version', schema: versaoRestaurarSchema, nome: 'versaoRestaurarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/data-subject/erase', schema: identificadorSchema, nome: 'identificadorSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/departamentos/:id', schema: departamentoAtualizarSchema, nome: 'departamentoAtualizarSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/departamentos', schema: departamentoCriarSchema, nome: 'departamentoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-document', schema: documentoGerarSchema, nome: 'documentoGerarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-policies-bulk', schema: politicasLoteSchema, nome: 'politicasLoteSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/modulos/:modulo', schema: moduloHabilitarSchema, nome: 'moduloHabilitarSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/partes/:id/vinculos', schema: vinculoCriarSchema, nome: 'vinculoCriarSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/partes/:id', schema: parteAtualizarSchema, nome: 'parteAtualizarSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/partes', schema: parteCriarSchema, nome: 'parteCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/pedidos/:id/reenviar', schema: pedidoReenvioSchema, nome: 'pedidoReenvioSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/pedidos/ciencia', schema: pedidoCienciaLoteSchema, nome: 'pedidoCienciaLoteSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/pedidos', schema: pedidoCriarSchema, nome: 'pedidoCriarSchema' },

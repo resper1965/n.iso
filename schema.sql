@@ -682,7 +682,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     termo_aceito_em DATETIME,
     termo_versao TEXT,
     -- Chave do logo no R2 (migration 0040).
-    logo_chave TEXT
+    logo_chave TEXT,
+    -- Módulos que a consultoria contratou: o teto do que cada projeto pode habilitar (migration 0047).
+    modulos_contratados TEXT NOT NULL DEFAULT '["iso"]'
 );
 -- Prefixo de proposta único entre organizações (migration 0040): a conferência na rota tem corrida,
 -- o índice decide. Parcial: organização sem prefixo (NULL) não conflita com outra.
@@ -1230,3 +1232,55 @@ CREATE TABLE IF NOT EXISTS avisos_prazo (
     UNIQUE(fonte, item_id, marco, user_id, vence_em)
 );
 CREATE INDEX IF NOT EXISTS idx_avisos_prazo_email ON avisos_prazo(email_enviado_em, user_id);
+
+-- ─── Núcleo do n.privacy, fatia 1.1 (migration 0047) ───
+CREATE TABLE IF NOT EXISTS projeto_modulos (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    modulo TEXT NOT NULL CHECK (modulo IN ('iso', 'privacy')),
+    habilitado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    habilitado_por TEXT NOT NULL DEFAULT 'sistema',
+    PRIMARY KEY (project_id, modulo)
+);
+CREATE TRIGGER IF NOT EXISTS projeto_modulo_iso_padrao AFTER INSERT ON projects
+BEGIN
+    INSERT OR IGNORE INTO projeto_modulos (project_id, modulo, habilitado_por) VALUES (NEW.id, 'iso', 'sistema');
+END;
+
+CREATE TABLE IF NOT EXISTS departamentos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'inativo')),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project_id, nome)
+);
+
+-- Pessoa ou organização do projeto. O papel é do vínculo, não da parte. Sem CPF (spec 4.2).
+-- user_id liga a pessoa à conta quando existe; a API da 1.1 não o escreve (entra na conciliação, 1.3).
+CREATE TABLE IF NOT EXISTS partes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL DEFAULT 'pessoa' CHECK (tipo IN ('pessoa', 'organizacao')),
+    nome TEXT NOT NULL,
+    email TEXT,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa', 'inativa')),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_partes_projeto ON partes(project_id, status);
+
+-- alvo_id não tem FK: aponta para tabelas diferentes conforme alvo_tipo. A API confere que o alvo
+-- existe NO projeto antes de gravar.
+CREATE TABLE IF NOT EXISTS parte_vinculos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    parte_id TEXT NOT NULL REFERENCES partes(id) ON DELETE CASCADE,
+    papel TEXT NOT NULL CHECK (papel IN ('encarregado', 'dono_processo', 'dono_sistema', 'operador', 'cocontrolador', 'suboperador', 'terceiro', 'responsavel', 'parte_interessada')),
+    alvo_tipo TEXT NOT NULL CHECK (alvo_tipo IN ('projeto', 'item', 'departamento', 'tratamento', 'parte')),
+    alvo_id TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (parte_id, papel, alvo_tipo, alvo_id)
+);
+CREATE INDEX IF NOT EXISTS idx_parte_vinculos_alvo ON parte_vinculos(project_id, alvo_tipo, alvo_id);

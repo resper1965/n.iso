@@ -51,7 +51,7 @@ Os cinco modos de falha que a spec implica e nenhum teste óbvio cobriria, do ma
 - Create: `migrations/0047_nucleo_partes_modulos.sql`
 - Modify: `schema.sql` (coluna em `organizations`; bloco novo no fim do arquivo)
 - Modify: `migrations/README.md` (estado e seção da 0047)
-- Modify: `test/contrato-isolamento-org.test.ts` (`VALOR_FIXO`)
+- Modify: `test/contrato-isolamento-org.test.ts` e `test/contrato-isolamento-topo.test.ts` (`VALOR_FIXO` nos dois: cada um semeia as tabelas por conta própria)
 - Test: `test/migration-0047.test.ts`
 
 **Interfaces:**
@@ -218,9 +218,9 @@ Em `schema.sql`, na tabela `organizations`, troque a última coluna por (ganha v
 
 E acrescente **no fim do arquivo** o mesmo bloco da migration, sem o `ALTER`, sem o `INSERT OR IGNORE ... SELECT` e sem o comentário de cabeçalho: `CREATE TABLE IF NOT EXISTS projeto_modulos`, o `CREATE TRIGGER IF NOT EXISTS projeto_modulo_iso_padrao`, `departamentos`, `partes` com `idx_partes_projeto` e `parte_vinculos` com `idx_parte_vinculos_alvo`, nessa ordem (o gatilho depois de `projeto_modulos`, cada índice depois da sua tabela).
 
-- [ ] **Step 5: Teste de contrato de isolamento — valores de coluna com CHECK**
+- [ ] **Step 5: Testes de contrato de isolamento — valores de coluna com CHECK**
 
-Em `test/contrato-isolamento-org.test.ts`, no objeto `VALOR_FIXO`, acrescente (o semeador genérico não conhece o `CHECK`):
+Em `test/contrato-isolamento-org.test.ts` **e** em `test/contrato-isolamento-topo.test.ts`, no objeto `VALOR_FIXO` de cada um, acrescente (o semeador genérico não conhece o `CHECK`; os dois testes semeiam por conta própria):
 
 ```ts
   parte_vinculos: { papel: 'responsavel', alvo_tipo: 'projeto' },
@@ -230,7 +230,7 @@ Em `test/contrato-isolamento-org.test.ts`, no objeto `VALOR_FIXO`, acrescente (o
 
 Run: `npx vitest run --maxWorkers=1 test/migration-0047.test.ts test/schema-contract.test.ts test/colunas-catraca.test.ts`
 Expected: PASS.
-Run: `npx vitest run --maxWorkers=1 test/contrato-isolamento-org.test.ts`
+Run: `npx vitest run --maxWorkers=1 test/contrato-isolamento-org.test.ts test/contrato-isolamento-topo.test.ts`
 Expected: PASS (a semeadura genérica insere uma linha em cada tabela nova).
 
 - [ ] **Step 7: Documentar a migration**
