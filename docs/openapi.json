@@ -12854,7 +12854,8 @@
                     "type": "string",
                     "enum": [
                       "dpia",
-                      "politica"
+                      "politica",
+                      "documento"
                     ]
                   },
                   "ref_id": {

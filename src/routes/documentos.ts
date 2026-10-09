@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
-import { alvoDaPublicacao, atualizarDocumento, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, marcarRevisado, publicarVersao, salvarRascunho } from '../services/documentos';
+import { alvoDaPublicacao, atualizarDocumento, cienciasDoDocumento, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, marcarRevisado, publicarVersao, salvarRascunho } from '../services/documentos';
 import { aplicarTextoNoControle } from '../services/politica-escrita';
 import { conferirPedidosDoDocumento } from './pedidos';
 import { validateBody, documentoAtualizarSchema, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
@@ -17,6 +17,11 @@ documentosApp.get('/documentos', async (c) => c.json(await listarDocumentos(c.en
 documentosApp.get('/documentos/:id', async (c) => {
   const d = await lerDocumento(c.env.DB, c.req.param('projectId')!, c.req.param('id'));
   return d ? c.json(d) : c.json({ error: 'Documento não encontrado' }, 404);
+});
+
+documentosApp.get('/documentos/:id/ciencias', async (c) => {
+  const r = await cienciasDoDocumento(c.env.DB, c.req.param('projectId')!, c.req.param('id'));
+  return r ? c.json(r) : c.json({ error: 'Documento não encontrado' }, 404);
 });
 
 documentosApp.post('/documentos', async (c) => {

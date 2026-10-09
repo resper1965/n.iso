@@ -1,5 +1,5 @@
 import { logAudit } from '../helpers';
-import { hashConteudo } from './pedidos';
+import { documentoAtual, hashConteudo } from './pedidos';
 import type { DocumentoCriar } from '../schemas';
 
 /** Erro de regra de negócio, com o status que a rota devolve. */
@@ -26,7 +26,8 @@ const comBooleano = (d: LinhaDocumento) => ({ ...d, tem_rascunho: !!d.tem_rascun
 
 export async function listarDocumentos(db: D1Database, projectId: string) {
   const r = await db.prepare(`${SELECT_DOCUMENTO} ORDER BY d.titulo`).bind(projectId).all<LinhaDocumento>();
-  return r.results.map(comBooleano);
+  const aprovacoes = await aprovacoesDoProjeto(db, projectId);
+  return r.results.map((d) => ({ ...comBooleano(d), aprovacao: aprovacoes.get(String(d.id)) ?? semAprovacao() }));
 }
 
 /** O documento com todas as versões (texto incluso). ponytail: sem paginação, um documento tem poucas versões. */
@@ -36,7 +37,8 @@ export async function lerDocumento(db: D1Database, projectId: string, id: string
   const v = await db.prepare(
     `SELECT numero, estado, origem, hash, texto, criado_por, criado_em FROM documento_versoes WHERE documento_id = ? AND project_id = ? ORDER BY numero`
   ).bind(id, projectId).all();
-  return { ...comBooleano(d), versoes: v.results };
+  const aprovacao = (await aprovacoesDoProjeto(db, projectId, id)).get(id) ?? semAprovacao();
+  return { ...comBooleano(d), aprovacao, versoes: v.results };
 }
 
 export async function criarDocumento(db: D1Database, projectId: string, ator: string, dados: DocumentoCriar): Promise<Falha | { ok: true; id: string }> {
@@ -393,4 +395,55 @@ export async function marcarRevisado(db: D1Database, projectId: string, id: stri
   await db.prepare(`UPDATE documentos SET revisar_ate = date('now', '+' || revisar_a_cada_meses || ' months'), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`).bind(id, projectId).run();
   await logAudit(db, 'documento.revisado', ator, `Documento ${id} revisado sem mudança de texto`, '', '', projectId);
   return { ok: true };
+}
+
+// ─── Aprovação por versão e ciências (fatia 3.4) ──────────────────────────────────────────────────────
+
+type Carimbo = { por: string; em: string };
+export type Aprovacao = { ciso: Carimbo | null; ceo: Carimbo | null };
+const semAprovacao = (): Aprovacao => ({ ciso: null, ceo: null });
+
+/**
+ * Aprovação CISO/CEO dos documentos do projeto (ou de um só), DERIVADA dos pedidos, sem coluna nova: vale o pedido
+ * `ciso`/`ceo` aprovado cujo hash é o do conteúdo vigente agora. Versão nova (ou título novo) muda o hash e a aprovação
+ * deixa de valer sozinha; o pedido e a linha do destinatário continuam gravados, intactos. Um hash e uma consulta por
+ * documento que tenha alguma aprovação (ponytail: dezenas por projeto; se passar disso, guarde o hash do vigente).
+ */
+async function aprovacoesDoProjeto(db: D1Database, projectId: string, soDocumento?: string): Promise<Map<string, Aprovacao>> {
+  const { results } = await db.prepare(
+    `SELECT p.ref_id, p.papel_exigido AS papel, p.hash, COALESCE(NULLIF(pd.nome, ''), pd.email) AS por, pd.decidido_em AS em
+       FROM pedido_destinatarios pd JOIN pedidos p ON p.id = pd.pedido_id
+      WHERE p.project_id = ? AND p.tipo = 'documento' AND p.papel_exigido IN ('ciso', 'ceo') AND pd.status = 'aprovado'
+        ${soDocumento ? 'AND p.ref_id = ?' : ''}
+      ORDER BY pd.decidido_em DESC, pd.rowid DESC`
+  ).bind(projectId, ...(soDocumento ? [soDocumento] : [])).all<{ ref_id: string; papel: 'ciso' | 'ceo'; hash: string; por: string; em: string }>();
+  const porDocumento = new Map<string, typeof results>();
+  for (const r of results) porDocumento.set(r.ref_id, [...(porDocumento.get(r.ref_id) ?? []), r]);
+
+  const saida = new Map<string, Aprovacao>();
+  for (const [ref, linhas] of porDocumento) {
+    const atual = await documentoAtual(db, 'documento', ref, projectId);
+    if (!atual) continue;
+    const hash = await hashConteudo(atual.conteudo);
+    const ap = semAprovacao();
+    for (const l of linhas) if (l.hash === hash && !ap[l.papel]) ap[l.papel] = { por: l.por, em: l.em };
+    saida.set(ref, ap);
+  }
+  return saida;
+}
+
+export type CienciaDoDocumento = { nome: string | null; email: string; numero: number; canal: string | null; em: string; atual: boolean };
+
+/** Quem deu ciência de qual versão, por qual canal (conta, link, portal). Mais recente primeiro. */
+export async function cienciasDoDocumento(db: D1Database, projectId: string, documentoId: string): Promise<CienciaDoDocumento[] | null> {
+  const doc = await lerDocumento(db, projectId, documentoId);
+  if (!doc) return null;
+  const { results } = await db.prepare(
+    `SELECT pd.nome, pd.email, json_extract(p.conteudo_json, '$.numero') AS numero, pd.canal, pd.decidido_em AS em
+       FROM pedido_destinatarios pd JOIN pedidos p ON p.id = pd.pedido_id
+      WHERE p.project_id = ? AND p.tipo = 'documento' AND p.ref_id = ? AND pd.status = 'ciente'
+      ORDER BY pd.decidido_em DESC, pd.rowid DESC`
+  ).bind(projectId, documentoId).all<Omit<CienciaDoDocumento, 'atual'>>();
+  const vigente = (doc as { versao_vigente?: number | null }).versao_vigente ?? null;
+  return results.map((r) => ({ ...r, atual: vigente !== null && r.numero === vigente }));
 }
