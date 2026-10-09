@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword } from '../src/helpers';
-import { applySchema, sessionFor } from './helpers/d1';
+import { applySchema, sessionFor, lerAtivo } from './helpers/d1';
 
 /**
  * Isolamento multi-tenant nos routers montados no TOPO (`/api/v1/<coisa>/:id`).
@@ -419,8 +419,10 @@ describe('IDOR cross-tenant nos routers de topo', () => {
         env.DB.prepare(`INSERT INTO certification_tracking (id, project_id, standard, stage) VALUES (?,?,?,?)`)
           .bind('cert-b', B, 'ISO 27001:2022', 'Gap Assessment'),
 
-        env.DB.prepare(`INSERT INTO assets (id, project_id, name) VALUES (?,?,?)`).bind('ast-a', A, 'Ativo do A'),
-        env.DB.prepare(`INSERT INTO assets (id, project_id, name) VALUES (?,?,?)`).bind('ast-b', B, 'Ativo secreto do B'),
+        env.DB.prepare(`INSERT INTO itens (id, project_id, nome) VALUES (?,?,?)`).bind('ast-a', A, 'Ativo do A'),
+        env.DB.prepare(`INSERT INTO itens (id, project_id, nome) VALUES (?,?,?)`).bind('ast-b', B, 'Ativo secreto do B'),
+        env.DB.prepare(`INSERT INTO item_seguranca (item_id, project_id) VALUES (?,?)`).bind('ast-a', A),
+        env.DB.prepare(`INSERT INTO item_seguranca (item_id, project_id) VALUES (?,?)`).bind('ast-b', B),
 
         env.DB.prepare(`INSERT INTO dpia_assessments (id, project_id, processing_name, status) VALUES (?,?,?,?)`)
           .bind('dpia-inv-a', A, 'DPIA do A', 'Draft'),
@@ -453,8 +455,8 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       ['DELETE', '/api/v1/ropa/ropa-b',            'ropa_records',           'ropa-b',  null],
       ['PUT',    '/api/v1/certification/cert-b',   'certification_tracking', 'cert-b',  { stage: 'Certified' }],
       ['DELETE', '/api/v1/certification/cert-b',   'certification_tracking', 'cert-b',  null],
-      ['PUT',    '/api/v1/assets/ast-b',           'assets',                 'ast-b',   { name: 'Alterado por A' }],
-      ['DELETE', '/api/v1/assets/ast-b',           'assets',                 'ast-b',   null],
+      ['PUT',    '/api/v1/assets/ast-b',           'itens',                  'ast-b',   { name: 'Alterado por A' }],
+      ['DELETE', '/api/v1/assets/ast-b',           'itens',                  'ast-b',   null],
       ['PUT',    '/api/v1/dpia/dpia-inv-b',        'dpia_assessments',       'dpia-inv-b', { processing_name: 'Alterado por A' }],
       ['DELETE', '/api/v1/webhooks/wh-b',          'webhooks',               'wh-b',    null],
       ['POST',   '/api/v1/webhooks/test/wh-b',     'webhooks',               'wh-b',    {}],
@@ -483,7 +485,7 @@ describe('IDOR cross-tenant nos routers de topo', () => {
       expect(ropa.processing_purpose).toBe('Tratamento secreto do B');
       const cert = await env.DB.prepare('SELECT stage FROM certification_tracking WHERE id = ?').bind('cert-b').first<any>();
       expect(cert.stage).toBe('Gap Assessment');
-      const ast = await env.DB.prepare('SELECT name FROM assets WHERE id = ?').bind('ast-b').first<any>();
+      const ast = (await lerAtivo('ast-b')) as any;
       expect(ast.name).toBe('Ativo secreto do B');
       const dpia = await env.DB.prepare('SELECT processing_name FROM dpia_assessments WHERE id = ?').bind('dpia-inv-b').first<any>();
       expect(dpia.processing_name).toBe('DPIA secreta do B');
@@ -541,7 +543,7 @@ describe('IDOR cross-tenant nos routers de topo', () => {
         body: JSON.stringify({ name: 'Ativo do A revisado', type: 'Servidor', category: 'Hardware', owner: 'TI', criticality: 'High', description: 'x' }),
       });
       expect(putAst.status, await putAst.clone().text()).toBe(200);
-      const ast = await env.DB.prepare('SELECT name FROM assets WHERE id = ?').bind('ast-a').first<any>();
+      const ast = (await lerAtivo('ast-a')) as any;
       expect(ast.name).toBe('Ativo do A revisado');
 
       const delWh = await req('/api/v1/webhooks/wh-a', { method: 'DELETE', headers: orgAdminA });

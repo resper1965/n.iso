@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { criarAtivo, lerAtivo as lerAtivoDoBanco, type CamposAtivo } from '../../src/services/itens';
 // `?raw` inlina o arquivo como string em tempo de build (Vite), então roda no
 // pool workerd sem tocar node:fs — que é o que quebrava a suíte antes.
 import schemaSql from '../../schema.sql?raw';
@@ -137,3 +138,13 @@ export async function pedir(
 ): Promise<Response> {
   return worker.fetch(new Request(`http://localhost${caminho}`, init), workerEnv());
 }
+
+/** Ativo de fixture, no formato antigo da API (os testes escrevem `name`, `type`, `status: 'Removido'`...). */
+export async function inserirAtivo(a: { id: string; project_id: string; name: string; status?: 'Active' | 'Removido' } & CamposAtivo): Promise<void> {
+  const { id, project_id, status, ...campos } = a;
+  await criarAtivo(env.DB, project_id, campos as CamposAtivo & { name: string }, id);
+  if (status === 'Removido') await env.DB.prepare(`UPDATE itens SET status = 'removido' WHERE id = ?`).bind(id).run();
+}
+
+/** O ativo como a API o devolve (inclui removido), ou null. */
+export const lerAtivo = (id: string) => lerAtivoDoBanco(env.DB, id);

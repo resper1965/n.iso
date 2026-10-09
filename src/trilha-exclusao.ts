@@ -16,7 +16,7 @@
 /** Recurso (primeiro segmento depois de /api/v1/) → tabela que guarda `project_id`. */
 export const TABELA_DO_RECURSO: Record<string, string> = {
   'api-keys': 'api_keys',
-  assets: 'assets',
+  assets: 'itens',
   'audit-findings': 'audit_findings',
   audits: 'audit_schedule',
   capa: 'corrective_actions',

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
+import { criarAtivo, lerAtivo } from '../src/services/itens';
 // `?raw` inlina o arquivo como string em tempo de build (Vite), então o teste roda
 // no pool workerd sem tocar node:fs — que é justamente o que quebrava a suíte antes.
 import schemaSql from '../schema.sql?raw';
@@ -62,13 +63,11 @@ describe('schema contract (real D1)', () => {
     expect(ev.file_hash).toBe('deadbeef');
   });
 
-  it('accepts the assets INSERT the handler uses (type, criticality, description)', async () => {
-    await env.DB.prepare(
-      `INSERT INTO assets (id, project_id, name, type, category, owner, criticality, description, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-    ).bind('a1', 'p1', 'DB', 'Software', 'Hardware', 'ops', 'Medium', 'desc').run();
-    const a = await env.DB.prepare("SELECT type, criticality FROM assets WHERE id='a1'").first<any>();
+  it('accepts the asset INSERT the handler uses (type, criticality, description)', async () => {
+    await criarAtivo(env.DB, 'p1', { name: 'DB', type: 'Software', category: 'Hardware', owner: 'ops', criticality: 'Medium', description: 'desc' }, 'a1');
+    const a = (await lerAtivo(env.DB, 'a1')) as any;
     expect(a.type).toBe('Software');
+    expect(a.criticality).toBe('Medium');
   });
 
   it('accepts the DPIA INSERT the handler uses (processing_name, no system_name)', async () => {
