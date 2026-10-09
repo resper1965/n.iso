@@ -24,6 +24,8 @@ const CAMPOS_DPIA = [
     ['dpo_recommendations', 'Recomendações do DPO'], ['dpo_opinion', 'Parecer do DPO'],
 ];
 const CAMPOS_POLITICA = [['title', 'Título'], ['description', 'Texto da política']];
+// Documento (fatia 3.3): o que o pedido congela é a versão vigente.
+const CAMPOS_DOCUMENTO = [['titulo', 'Título'], ['numero', 'Versão'], ['texto', 'Texto']];
 
 const data = (s) => (s ? new Date(s).toLocaleString('pt-BR') : '');
 const el = (id) => document.getElementById(id);
@@ -58,7 +60,7 @@ window.renderMeusPedidos = async function renderMeusPedidos(c, h, a) {
 };
 
 function conteudoHtml(tipo, conteudo) {
-    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : Object.keys(conteudo).map((k) => [k, k]);
+    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : tipo === 'documento' ? CAMPOS_DOCUMENTO : Object.keys(conteudo).map((k) => [k, k]);
     return campos.filter(([k]) => conteudo[k] !== null && conteudo[k] !== undefined && conteudo[k] !== '')
         .map(([k, rotulo]) => `<div style="margin-bottom:12px">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:4px">${escapeHTML(rotulo)}</div>
@@ -239,33 +241,33 @@ window.renderCienciaLink = async function renderCienciaLink(alvo, projectId) {
 };
 
 window.abrirCienciaLink = async function abrirCienciaLink(projectId) {
-    let politicas = [];
+    let documentos = [];
     try {
-        // api.js desembrulha `{ ok, controls: [...] }` e devolve a lista.
-        const r = await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/controls`);
-        politicas = (Array.isArray(r) ? r : r?.controls || []).filter((c) => c.description && String(c.description).trim());
+        // GET .../documentos devolve a lista pura. Só entra documento com versão vigente: é ela que o pedido congela.
+        const r = await api('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/documentos`);
+        documentos = (Array.isArray(r) ? r : r?.documentos || []).filter((d) => d.versao_vigente !== null && d.versao_vigente !== undefined);
     } catch (e) {
-        showToast('Erro ao carregar as políticas: ' + e.message, 'error');
+        showToast('Erro ao carregar os documentos: ' + e.message, 'error');
         return;
     }
     openModal(`
         <form id="cl-form" data-action-submit="enviarCienciaLink" data-arg-event data-args='${args(projectId)}' data-prevent style="padding:1.5rem 1.75rem;max-width:560px" novalidate>
             <h3 style="font-family:var(--font-head);font-weight:600;font-size:17px;margin:0 0 16px">Nova ciência por link</h3>
             <div class="form-group">
-                <label class="form-label" for="cl-doc">Política</label>
+                <label class="form-label" for="cl-doc">Documento</label>
                 <select class="form-input" id="cl-doc">
-                    ${politicas.map((c) => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.title || c.id)}</option>`).join('')}
+                    ${documentos.map((d) => `<option value="${escapeHTML(d.id)}">${escapeHTML(d.titulo || d.id)} (versão ${escapeHTML(String(d.versao_vigente))})</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
                 <label class="form-label" for="cl-emails">E-mails (um por linha, ou separados por vírgula; até 200)</label>
                 <textarea class="form-input" id="cl-emails" rows="6"></textarea>
             </div>
-            <p style="font-size:11px;color:var(--text-dim);margin:0 0 16px">Cada pessoa recebe um link pessoal, lê o texto atual e confirma com um código enviado ao próprio e-mail. Se a política mudar, o pedido é substituído e é preciso reenviar.</p>
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 16px">Cada pessoa recebe um link pessoal, lê o texto atual e confirma com um código enviado ao próprio e-mail. Se o documento ganhar versão nova, o pedido é substituído e as pessoas pendentes recebem um link novo.</p>
             <p class="login-error" id="cl-erro" role="alert" aria-live="polite"></p>
             <div style="display:flex;justify-content:flex-end;gap:8px">
                 <button type="button" class="btn btn-secondary" data-action="forceCloseModal">Cancelar</button>
-                <button type="submit" class="btn btn-primary"${politicas.length ? '' : ' disabled'}>Enviar links</button>
+                <button type="submit" class="btn btn-primary"${documentos.length ? '' : ' disabled'}>Enviar links</button>
             </div>
         </form>`);
 };
@@ -291,7 +293,7 @@ window.enviarCienciaLink = async function enviarCienciaLink(_evento, projectId) 
     let r;
     try {
         r = await api('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/pedidos/ciencia`, {
-            tipo: 'politica', ref_id: el('cl-doc').value, destinatarios,
+            tipo: 'documento', ref_id: el('cl-doc').value, destinatarios,
         });
     } catch (e) {
         el('cl-erro').textContent = e.message;
