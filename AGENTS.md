@@ -94,7 +94,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
 - **Middleware**: `src/middleware/auth.ts` (sessao, chave de API, RBAC
   write-guard por metodo+rota) e `src/middleware/project-access.ts` (isolamento
   multi-tenant em `/api/v1/projects/:projectId/*`).
-- **Services** (`src/services/`, 23 arquivos: `ls src/services/*.ts | wc -l`): entre eles
+- **Services** (`src/services/`, 24 arquivos: `ls src/services/*.ts | wc -l`): entre eles
   `soa-logic.ts` (93 regras Annex A 2022), `migration-service.ts` (2013→2022),
   `policy-generator.ts`, `pedidos.ts`, `organizacao.ts`, `fechar-venda.ts`,
   `preco-proposta.ts`, `transferencia-projeto.ts`, `totp.ts`, `data-subject.ts`.
@@ -139,8 +139,11 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   acrescente em `CAMPOS` la, nunca interpole nome vindo da requisicao.
 - **Documentos (politicas)**: `documentos` + `documento_versoes` (migration 0050, fatia 3.1), em `src/services/documentos.ts`
   e `src/routes/documentos.ts`. Uma versao vigente e um rascunho por documento (indices parciais unicos); hash e o SHA-256
-  canonico dos pedidos. **Ainda nao e a fonte das politicas**: a politica segue em `compliance_controls.description` e
-  `policy_versions` ate a 3.2. `POST .../documentos/importar` copia para ca so o que tem sinal de politica (versao, aprovacao
+  canonico dos pedidos. **O controle ainda e a fonte das politicas** (`compliance_controls.description` e `policy_versions`)
+  ate a 3.3. Desde a 3.2 todo escritor de politica passa por `src/services/politica-escrita.ts` e espelha o texto no
+  documento, e o **agente (MCP) so grava rascunho**: a rota decide por `c.get('user')?.agente === true`; publicar
+  (`POST .../versoes/:n/publicar`, que aplica o texto no controle) e descartar o rascunho sao atos humanos e estao em
+  `FORA_DO_AGENTE`; `PUT /controls/:id` recusa ao agente mudar `description` fora da justificativa de N/A. `POST .../documentos/importar` copia para ca so o que tem sinal de politica (versao, aprovacao
   ou pedido); `description` preenchida nao basta (em producao e texto de catalogo em quase todo controle).
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
@@ -212,7 +215,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 192 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
+- **Nenhum dos 195 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
