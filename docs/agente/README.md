@@ -94,6 +94,8 @@ em texto, controle, ativo, risco, treinamento, entrevistas, governança e o rest
 que você grava na interface). Evidência pelo agente é **só texto**: transcrever
 um PDF não substitui o documento.
 
+**Política é diferente.** `niso_update_policy` e `niso_generate_policy` gravam um **rascunho**, que aparece num aviso no modal da política. Você publica ou descarta; o agente não altera a política vigente nem publica (o servidor recusa).
+
 ### O que pede o seu "sim"
 
 Quatro ações. O agente deve **mostrar o que vai fazer** (nome e id) e esperar:

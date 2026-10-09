@@ -1,7 +1,12 @@
+import type { Context } from 'hono';
+import type { Bindings, Variables } from '../index';
 import { logAudit, registraErro } from '../helpers';
 import { conferirPedidosDoDocumento } from '../routes/pedidos';
 import { COLUNAS_REVOGACAO } from '../routes/controls';
 import { espelharTexto, garantirDocumentoDoControle, salvarRascunho, type Falha } from './documentos';
+
+/** O contexto Hono das rotas: `conferirPedidosDoDocumento` o usa para a trilha e para o log. */
+type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 /**
  * Passos 2 a 4 da escrita de política, que todo escritor repetia (fatia 3.2):
@@ -15,7 +20,7 @@ import { espelharTexto, garantirDocumentoDoControle, salvarRascunho, type Falha 
  * `policy_versions`). `c` é o contexto Hono, porque `conferirPedidosDoDocumento` o usa para trilha e log.
  */
 export async function aplicarTextoNoControle(
-  c: any, projectId: string, controlId: string, texto: string, ator: string, opcoes: { versaoOpcional?: boolean } = {},
+  c: Ctx, projectId: string, controlId: string, texto: string, ator: string, opcoes: { versaoOpcional?: boolean } = {},
 ): Promise<{ versao: number }> {
   const db: D1Database = c.env.DB;
   await db.prepare(
@@ -43,7 +48,7 @@ export async function aplicarTextoNoControle(
  * documento NUNCA derruba o escritor: a falha dele vai para o log com `registraErro`.
  */
 export async function gravarPolitica(
-  c: any, projectId: string, controlId: string, texto: string, ator: string,
+  c: Ctx, projectId: string, controlId: string, texto: string, ator: string,
   origem: 'humano' | 'gerador', opcoes: { versaoOpcional?: boolean } = {},
 ): Promise<{ versao: number }> {
   const db: D1Database = c.env.DB;
@@ -74,7 +79,7 @@ export async function gravarPolitica(
  * A imposição é do servidor: quem chama decide por `c.get('user')?.agente === true`, vindo de `env.AGENTE`.
  */
 export async function gravarRascunhoDoAgente(
-  c: any, projectId: string, controlId: string, texto: string, ator: string,
+  c: Ctx, projectId: string, controlId: string, texto: string, ator: string,
 ): Promise<Falha | { ok: true; documento_id: string; numero: number }> {
   const db: D1Database = c.env.DB;
   const documentoId = await garantirDocumentoDoControle(db, projectId, controlId, ator);

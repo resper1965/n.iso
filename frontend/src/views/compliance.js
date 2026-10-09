@@ -1734,6 +1734,22 @@ import { navigate } from '../router.js';
         const policyText = policyRes.content || '';
         const codigo = codigoDoControle(ctrl);
 
+        // Rascunho pendente (o agente grava política como rascunho; só um humano publica). Aparece nas duas telas
+        // do modal: com política vigente e no formulário de geração.
+        const rasc = policyRes.rascunho;
+        const rascunhoHtml = rasc ? `
+            <div id="policy-rascunho" style="border:1px solid var(--accent); border-radius:10px; padding:1rem; margin-bottom:1rem">
+                <div style="font-family:'Montserrat',sans-serif; font-weight:600; margin-bottom:0.25rem">Rascunho ${rasc.origem === 'agente' ? 'do agente ' : ''}aguardando revisão</div>
+                <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.5rem">
+                    Por ${escapeHTML(rasc.criado_por || 'autor não registrado')} em ${escapeHTML(rasc.criado_em || '')}. A política vigente só muda quando você publicar.
+                </div>
+                <div style="max-height:200px; overflow:auto; white-space:pre-wrap; font-size:0.8rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:0.75rem">${escapeHTML(rasc.texto || '')}</div>
+                <div style="display:flex; gap:8px; margin-top:0.75rem">
+                    <button class="btn btn-primary btn-sm" data-action="publicarRascunhoPolitica" data-args='${escapeHTML(JSON.stringify([projectId, rasc.documento_id, rasc.numero, ctrl.id]))}'>Publicar rascunho</button>
+                    <button class="btn btn-sm" data-action="descartarRascunhoPolitica" data-args='${escapeHTML(JSON.stringify([projectId, rasc.documento_id, ctrl.id]))}'>Descartar</button>
+                </div>
+            </div>` : '';
+
         let templates = [];
         let options = '';
         try {
@@ -1752,6 +1768,7 @@ import { navigate } from '../router.js';
         const showGenerationFormHtml = () => {
             const formHtml = `
                 <div class="modal-header"><span class="modal-title">Gerar Política ISO — ${escapeHTML(codigo)}</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
+                ${rascunhoHtml}
                 <div class="form-group" style="display:none">
                     <label class="form-label">Controle ISO</label>
                     <input class="form-input" id="policy-control-id" value="${escapeHTML(codigo)}">
@@ -1912,6 +1929,7 @@ import { navigate } from '../router.js';
                         ${escapeHTML(ctrl.title)}
                     </div>
                     
+                    ${rascunhoHtml}
                     ${versionsSelectHtml}
                     ${signatureSealHtml}
 
@@ -2383,6 +2401,28 @@ window.renderEvidence = renderEvidence;
 window.openEvidenceUploadModal = openEvidenceUploadModal;
 window.doEvidenceUpload = doEvidenceUpload;
 window.renderPoliciesDashboard = renderPoliciesDashboard;
+// Publicar o rascunho tem o efeito de uma edição manual: o texto vira o vigente, as aprovações vão a zero e os
+// pedidos abertos são substituídos. O servidor recusa o agente nestas duas rotas.
+window.publicarRascunhoPolitica = async function (projectId, documentoId, numero, controlId) {
+    try {
+        await api('POST', `/api/v1/projects/${projectId}/documentos/${documentoId}/versoes/${numero}/publicar`);
+        showToast('Rascunho publicado. As aprovações anteriores foram zeradas: a política precisa ser assinada de novo.', 'success');
+        await openGeneratePolicyModal(projectId, controlId);
+    } catch (e) {
+        showToast((e && e.message) || 'Não foi possível publicar o rascunho', 'error');
+    }
+};
+
+window.descartarRascunhoPolitica = async function (projectId, documentoId, controlId) {
+    try {
+        await api('DELETE', `/api/v1/projects/${projectId}/documentos/${documentoId}/rascunho`);
+        showToast('Rascunho descartado.', 'success');
+        await openGeneratePolicyModal(projectId, controlId);
+    } catch (e) {
+        showToast((e && e.message) || 'Não foi possível descartar o rascunho', 'error');
+    }
+};
+
 window.openGeneratePolicyModal = openGeneratePolicyModal;
 window.doGeneratePolicy = doGeneratePolicy;
 window.renderAcknowledgments = renderAcknowledgments;
