@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, escapeHtml, erro500, registraErro, autoridadeDeAssinatura, recusaDeAssinatura, ehComercial, projetosVisiveis, somenteNess, somenteComercial, PODE_REVOGAR_APROVACAO, refForaDoProjeto, setParcial, valoresParciais } from '../helpers';
+import { atualizarAtivo } from '../services/itens';
 import { validateBody, assetSchema, dpiaSchema, revogarDpiaSchema, dpiaApprovalSchema, transferirProjetoSchema, precificacaoConfigSchema } from '../schemas';
 import { transferirProjeto, MSG_CORRIDA } from '../services/transferencia-projeto';
 import { verificarCadeia } from '../trilha';
@@ -25,7 +26,7 @@ platformApp.put('/assets/:id', async (c) => {
   // monitora.
   const id = c.req.param('id');
   try {
-    await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
+    await requireResourceAccess(c.env.DB, 'itens', id, c.get('user'));
     const user = c.get('user');
     if (user && user.role === 'org_user') {
       return c.json({ error: 'Forbidden: Cannot edit asset' }, 403);
@@ -35,12 +36,12 @@ platformApp.put('/assets/:id', async (c) => {
     const body = valid.data as any;
     // Parcial: campo ausente preserva (antes o UPDATE fixo gravava NULL em type/category/owner
     // e ignorava location, classification e as notas CID).
-    const p = setParcial(body, {
+    const campos = valoresParciais(body, {
       name: null, type: null, category: 'Hardware', owner: '', criticality: 'Medium', description: '',
       location: null, classification: 'Confidential',
       confidentiality_rating: 3, integrity_rating: 3, availability_rating: 3,
     });
-    if (p.sql) await c.env.DB.prepare(`UPDATE assets SET ${p.sql}, updated_at = datetime('now') WHERE id = ?`).bind(...p.binds, id).run();
+    await atualizarAtivo(c.env.DB, id, null, campos);
 
     await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Asset ${id} updated`);
     return c.json({ ok: true });
@@ -54,12 +55,12 @@ platformApp.delete('/assets/:id', async (c) => {
   // quem traduz a recusa em 403.
   const id = c.req.param('id');
   try {
-    await requireResourceAccess(c.env.DB, 'assets', id, c.get('user'));
+    await requireResourceAccess(c.env.DB, 'itens', id, c.get('user'));
     const user = c.get('user');
     if (user && user.role === 'org_user') {
       return c.json({ error: 'Forbidden: Cannot delete asset' }, 403);
     }
-    await c.env.DB.prepare('DELETE FROM assets WHERE id = ?').bind(id).run();
+    await c.env.DB.prepare('DELETE FROM itens WHERE id = ?').bind(id).run();
     await logAudit(c.env.DB, 'asset.deleted', user?.email || 'system', `Asset ${id} deleted`);
     return c.json({ ok: true });
   } catch (e: any) {

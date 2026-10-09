@@ -275,7 +275,7 @@ export function projetosVisiveis(user: AtorAutorizado | null | undefined): { sql
 
 const ALLOWED_TABLES = [
   'risks', 'vendors', 'training_records', 'ropa_records', 'corrective_actions',
-  'compliance_controls', 'evidence', 'assets', 'stakeholders', 'dpia_assessments',
+  'compliance_controls', 'evidence', 'itens', 'stakeholders', 'dpia_assessments',
   'audit_schedule', 'certification_tracking', 'audit_findings', 'management_reviews',
   'performance_metrics', 'webhooks', 'api_keys', 'auditor_notes'
 ];
@@ -303,7 +303,7 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
 // entra interpolado no SQL, então só sai daqui.
 const TABELA_DA_REF = {
   control_id: 'compliance_controls',
-  asset_id: 'assets',
+  asset_id: 'itens',
   risk_id: 'risks',
   audit_id: 'audit_schedule',
   ropa_id: 'ropa_records',
@@ -350,6 +350,15 @@ export async function idDoControle(db: D1Database, projectId: string, ref: strin
   return row?.id ?? null;
 }
 
+/** Valores de uma atualização PARCIAL: só as chaves presentes no corpo; `null` ou `''` viram o "vazio" da coluna. */
+export function valoresParciais(corpo: Record<string, unknown>, vazios: Record<string, unknown>): Record<string, unknown> {
+  const saida: Record<string, unknown> = {};
+  for (const k of Object.keys(vazios)) {
+    if (Object.hasOwn(corpo, k)) saida[k] = corpo[k] === null || corpo[k] === '' ? vazios[k] : corpo[k];
+  }
+  return saida;
+}
+
 /**
  * SET de atualização PARCIAL: só as colunas presentes no corpo. Campo ausente preserva o valor
  * gravado; `null` ou `''` explícito grava o "vazio" da coluna (NULL, ou o padrão dela). `colunas`
@@ -357,11 +366,9 @@ export async function idDoControle(db: D1Database, projectId: string, ref: strin
  * rota não pode preencher campo ausente com null (transform), senão ausente vira "limpar".
  */
 export function setParcial(corpo: Record<string, unknown>, colunas: Record<string, unknown>): { sql: string; binds: unknown[] } {
-  const presentes = Object.keys(colunas).filter((k) => Object.hasOwn(corpo, k));
-  return {
-    sql: presentes.map((k) => `${k} = ?`).join(', '),
-    binds: presentes.map((k) => (corpo[k] === null || corpo[k] === '' ? colunas[k] : corpo[k])),
-  };
+  const valores = valoresParciais(corpo, colunas);
+  const presentes = Object.keys(valores);
+  return { sql: presentes.map((k) => `${k} = ?`).join(', '), binds: presentes.map((k) => valores[k]) };
 }
 
 /**

@@ -451,29 +451,40 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read
 -- SPRINT 4: RISK ASSESSMENT, VENDORS (KYV), TRAINING
 -- ═══════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS assets (
+-- Itens do inventário (migration 0048; eram `assets`). Núcleo fino: o que os dois produtos usam.
+-- `responsavel_texto` é transitório: o dono vira vínculo em `parte_vinculos` (fatia 1.3).
+CREATE TABLE IF NOT EXISTS itens (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    type TEXT, -- tipo do ativo (usado no cadastro de ativos)
-    category TEXT, -- Informação, Software, Hardware, Pessoas
-    classification TEXT DEFAULT 'Confidential', -- Confidential, Restricted, Internal, Public
-    criticality TEXT DEFAULT 'Medium', -- Low, Medium, High, Critical
-    description TEXT,
-    owner TEXT,
-    location TEXT, -- ex: AWS S3, local, etc.
-    status TEXT DEFAULT 'Active',
-    confidentiality_rating INTEGER DEFAULT 3,
-    integrity_rating INTEGER DEFAULT 3,
-    availability_rating INTEGER DEFAULT 3,
+    nome TEXT NOT NULL,
+    descricao TEXT,
+    responsavel_texto TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'removido')),
+    tipo TEXT NOT NULL DEFAULT 'ativo' CHECK (tipo IN ('sistema', 'ativo', 'base', 'processo')),
+    departamento_id TEXT REFERENCES departamentos(id) ON DELETE SET NULL
 );
+
+-- Bloco do n.iso (1:1). `project_id` repete o do item porque a portabilidade exporta por essa coluna.
+CREATE TABLE IF NOT EXISTS item_seguranca (
+    item_id TEXT PRIMARY KEY REFERENCES itens(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    categoria TEXT,
+    subtipo TEXT,
+    classificacao TEXT DEFAULT 'Confidential',
+    criticidade TEXT DEFAULT 'Medium',
+    localizacao TEXT,
+    nota_c INTEGER DEFAULT 3,
+    nota_i INTEGER DEFAULT 3,
+    nota_d INTEGER DEFAULT 3
+);
+CREATE INDEX IF NOT EXISTS idx_itens_projeto ON itens(project_id, tipo, status);
 
 CREATE TABLE IF NOT EXISTS risks (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+    asset_id TEXT REFERENCES itens(id) ON DELETE SET NULL,
     asset TEXT NOT NULL,
     threat TEXT NOT NULL,
     vulnerability TEXT,
@@ -860,10 +871,9 @@ CREATE INDEX IF NOT EXISTS idx_auditor_notes_project ON auditor_notes(project_id
 -- SPRINT GAPS: ATIVOS, KPIS E ACEITES DE POLÍTICAS
 -- -----------------------------------------------
 
--- ponytail: definição canônica de `assets` unificada acima (inclui type/criticality/
+-- ponytail: definição canônica de `itens` (eram `assets`) unificada acima (inclui type/criticality/
 -- description). A duplicata que existia aqui foi removida — CREATE TABLE IF NOT EXISTS
 -- fazia a segunda ser silenciosamente ignorada e divergir da usada pelo código.
-CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
 
 CREATE TABLE IF NOT EXISTS performance_metrics (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import worker from '../src/index';
 import { hashPassword, sha256Hex } from '../src/helpers';
-import { applySchema, sessionFor, designarConsultor } from './helpers/d1';
+import { applySchema, sessionFor, designarConsultor, inserirAtivo, lerAtivo } from './helpers/d1';
 
 /**
  * Testes de API contra D1 e KV REAIS (miniflare).
@@ -306,7 +306,7 @@ describe('nISO API (D1 e KV reais)', () => {
         body: JSON.stringify({ criticality: 'Critical', owner: 'Infraestrutura' }),
       });
       expect(atualizar.status, await atualizar.clone().text()).toBe(200);
-      const atualizado = await env.DB.prepare('SELECT criticality, owner, name FROM assets WHERE id = ?').bind(assetId).first<any>();
+      const atualizado = (await lerAtivo(assetId)) as any;
       expect(atualizado.criticality).toBe('Critical');
       expect(atualizado.owner).toBe('Infraestrutura');
       // Campo não enviado permanece intacto — atualização é parcial.
@@ -314,16 +314,14 @@ describe('nISO API (D1 e KV reais)', () => {
 
       // Ativo de outro projeto: mesmo asset id, mas na URL do projeto errado.
       const assetAlheioId = 'asset-alheio';
-      await env.DB.prepare(
-        `INSERT INTO assets (id, project_id, name, type, category, owner, criticality) VALUES (?,?,?,?,?,?,?)`
-      ).bind(assetAlheioId, OUTRO, 'Ativo Alheio', 'Hardware', 'Hardware', 'Terceiros', 'Low').run();
+      await inserirAtivo({ id: assetAlheioId, project_id: OUTRO, name: 'Ativo Alheio', type: 'Hardware', category: 'Hardware', owner: 'Terceiros', criticality: 'Low' });
       const cruzado = await req(`/api/v1/projects/${PROJ}/assets/${assetAlheioId}`, {
         method: 'PUT',
         headers: { ...orgAdmin, 'Content-Type': 'application/json' },
         body: JSON.stringify({ criticality: 'Critical' }),
       });
       expect(cruzado.status).toBe(404);
-      const intacto = await env.DB.prepare('SELECT criticality FROM assets WHERE id = ?').bind(assetAlheioId).first<any>();
+      const intacto = (await lerAtivo(assetAlheioId)) as any;
       expect(intacto.criticality).toBe('Low');
 
       const inexistente = await req(`/api/v1/projects/${PROJ}/assets/nao-existe`, {
@@ -345,7 +343,7 @@ describe('nISO API (D1 e KV reais)', () => {
       const remover = await req(`/api/v1/projects/${PROJ}/assets/${assetId}`, { method: 'DELETE', headers: orgAdmin });
       expect(remover.status, await remover.clone().text()).toBe(200);
 
-      const linha = await env.DB.prepare('SELECT status FROM assets WHERE id = ?').bind(assetId).first<any>();
+      const linha = (await lerAtivo(assetId)) as any;
       expect(linha.status).toBe('Removido');
 
       const listar = await req(`/api/v1/projects/${PROJ}/assets`, { headers: orgAdmin });
@@ -355,12 +353,10 @@ describe('nISO API (D1 e KV reais)', () => {
 
       // Ativo de outro projeto não pode ser removido pela URL do projeto do atacante.
       const assetOutroId = 'asset-outro-delete';
-      await env.DB.prepare(
-        `INSERT INTO assets (id, project_id, name, type, category) VALUES (?,?,?,?,?)`
-      ).bind(assetOutroId, OUTRO, 'Ativo do Outro Tenant', 'Hardware', 'Hardware').run();
+      await inserirAtivo({ id: assetOutroId, project_id: OUTRO, name: 'Ativo do Outro Tenant', type: 'Hardware', category: 'Hardware' });
       const cruzado = await req(`/api/v1/projects/${PROJ}/assets/${assetOutroId}`, { method: 'DELETE', headers: orgAdmin });
       expect(cruzado.status).toBe(404);
-      const aindaAtivo = await env.DB.prepare('SELECT status FROM assets WHERE id = ?').bind(assetOutroId).first<any>();
+      const aindaAtivo = (await lerAtivo(assetOutroId)) as any;
       expect(aindaAtivo.status).toBe('Active');
     });
 

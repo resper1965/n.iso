@@ -1,17 +1,13 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { genId, logAudit, erro500 } from '../helpers';
+import { logAudit, erro500 } from '../helpers';
+import { listarAtivos, lerAtivo, criarAtivo, atualizarAtivo, removerAtivo, CAMPOS_ATIVO, type CamposAtivo } from '../services/itens';
 import { validateBody, assetSchema, assetUpdateSchema } from '../schemas';
 
 // Rotas de ativos dentro do projeto (/api/v1/projects/:id/assets*). Extraídas de
 // routes/projects.ts para reduzir aquele arquivo. Registradas no MESMO projectsApp
 // via registerAssetRoutes(app) — é um move puro, sem mudança de rota nem de
 // middleware (o projectAccessMiddleware continua valendo por estarem sob /projects).
-
-const ASSET_UPDATABLE_FIELDS = [
-  'name', 'type', 'category', 'classification', 'criticality', 'description',
-  'owner', 'location', 'confidentiality_rating', 'integrity_rating', 'availability_rating',
-] as const;
 
 export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: Variables }>) {
   app.get('/:id/assets', async (c) => {
@@ -23,12 +19,7 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       }
     }
     // Ativos removidos (soft delete) ficam de fora da listagem padrão.
-    // COALESCE porque `status` é nullable: `status != 'Removido'` é NULL (falso)
-    // para linhas antigas sem status, e elas sumiriam da listagem.
-    const result = await c.env.DB.prepare(
-      "SELECT * FROM assets WHERE project_id = ? AND COALESCE(status, '') != 'Removido' ORDER BY created_at DESC"
-    ).bind(projectId).all();
-    return c.json({ ok: true, assets: result.results });
+    return c.json({ ok: true, assets: await listarAtivos(c.env.DB, projectId) });
   });
 
   app.post('/:id/assets', async (c) => {
@@ -40,17 +31,7 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       }
       const valid = await validateBody(c, assetSchema);
       if (!valid.success) return valid.response;
-      const body = valid.data as any;
-      const id = genId();
-      await c.env.DB.prepare(
-        `INSERT INTO assets (id, project_id, name, type, category, owner, criticality, description,
-           location, classification, confidentiality_rating, integrity_rating, availability_rating, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-      ).bind(
-        id, projectId, body.name, body.type ?? null, body.category || 'Hardware', body.owner || '', body.criticality || 'Medium', body.description || '',
-        body.location ?? null, body.classification || 'Confidential',
-        body.confidentiality_rating ?? 3, body.integrity_rating ?? 3, body.availability_rating ?? 3,
-      ).run();
+      const id = await criarAtivo(c.env.DB, projectId, valid.data as CamposAtivo & { name: string });
 
       await logAudit(c.env.DB, 'asset.created', user?.email || 'system', `Asset ${id} created for project ${projectId}`, '', '', projectId);
       return c.json({ ok: true, id }, 201);
@@ -69,30 +50,16 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       }
       const valid = await validateBody(c, assetUpdateSchema);
       if (!valid.success) return valid.response;
-      const body = valid.data as any;
+      const body = valid.data as CamposAtivo;
+      const campos: CamposAtivo = {};
+      for (const f of CAMPOS_ATIVO) if (body[f] !== undefined) campos[f] = body[f];
+      if (!Object.keys(campos).length) return c.json({ error: 'Nenhum campo para atualizar' }, 400);
 
-      const updates: string[] = [];
-      const values: any[] = [];
-      for (const field of ASSET_UPDATABLE_FIELDS) {
-        if (body[field] !== undefined) {
-          updates.push(`${field} = ?`);
-          values.push(body[field]);
-        }
-      }
-      if (!updates.length) return c.json({ error: 'Nenhum campo para atualizar' }, 400);
-      updates.push("updated_at = datetime('now')");
-      values.push(assetId, projectId);
-
-      const result = await c.env.DB.prepare(
-        `UPDATE assets SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`
-      ).bind(...values).run();
-      if (!result.meta?.changes) {
-        return c.json({ error: 'Ativo não encontrado neste projeto' }, 404);
-      }
+      const changes = await atualizarAtivo(c.env.DB, assetId, projectId, campos);
+      if (!changes) return c.json({ error: 'Ativo não encontrado neste projeto' }, 404);
 
       await logAudit(c.env.DB, 'asset.updated', user?.email || 'system', `Ativo ${assetId} atualizado no projeto ${projectId}`, '', '', projectId);
-      const updated = await c.env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(assetId).first();
-      return c.json({ ok: true, asset: updated });
+      return c.json({ ok: true, asset: await lerAtivo(c.env.DB, assetId) });
     } catch (e: any) {
       return erro500(c, 'Falha ao atualizar ativo', e);
     }
@@ -111,10 +78,7 @@ export function registerAssetRoutes(app: Hono<{ Bindings: Bindings; Variables: V
       // para trilha de auditoria, então não há DELETE físico aqui. Remover um
       // ativo já removido também responde 404 (não é idempotente de propósito,
       // pra deixar claro no cliente que não havia nada a remover).
-      const result = await c.env.DB.prepare(
-        "UPDATE assets SET status = 'Removido', updated_at = datetime('now') WHERE id = ? AND project_id = ? AND status != 'Removido'"
-      ).bind(assetId, projectId).run();
-      if (!result.meta?.changes) {
+      if (!(await removerAtivo(c.env.DB, assetId, projectId))) {
         return c.json({ error: 'Ativo não encontrado neste projeto' }, 404);
       }
 

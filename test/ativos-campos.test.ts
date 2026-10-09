@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, resetSessions, sessionFor } from './helpers/d1';
+import { applySchema, resetData, resetSessions, sessionFor, inserirAtivo, lerAtivo } from './helpers/d1';
 
 describe('ativos: campos gravados, PUT parcial, CSV', () => {
   let headers: Record<string, string>;
@@ -20,38 +20,39 @@ describe('ativos: campos gravados, PUT parcial, CSV', () => {
     });
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as any;
-    const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(id).first<any>();
+    const row = (await lerAtivo(id)) as any;
     expect(row.location).toBe('AWS sa-east-1');
     expect(row.classification).toBe('Restricted');
     expect([row.confidentiality_rating, row.integrity_rating, row.availability_rating]).toEqual([3, 2, 1]);
   });
 
   it('PUT sem um campo não apaga esse campo', async () => {
-    await env.DB.prepare(`INSERT INTO assets (id, project_id, name, type, owner, location) VALUES ('a1','p1','ERP','Software','TI','AWS')`).run();
+    await inserirAtivo({ id: 'a1', project_id: 'p1', name: 'ERP', type: 'Software', owner: 'TI', location: 'AWS' });
     const res = await req('PUT', '/api/v1/assets/a1', { name: 'ERP novo' });
     expect(res.status).toBe(200);
-    const row = await env.DB.prepare(`SELECT name, type, owner, location FROM assets WHERE id='a1'`).first<any>();
-    expect(row).toEqual({ name: 'ERP novo', type: 'Software', owner: 'TI', location: 'AWS' });
+    const { name, type, owner, location } = (await lerAtivo('a1')) as any;
+    expect({ name, type, owner, location }).toEqual({ name: 'ERP novo', type: 'Software', owner: 'TI', location: 'AWS' });
   });
 
   it('POST sem notas CID grava o default 3', async () => {
     const res = await req('POST', '/api/v1/projects/p1/assets', { name: 'X' });
     const { id } = (await res.json()) as any;
-    const row = await env.DB.prepare('SELECT confidentiality_rating c, integrity_rating i, availability_rating a FROM assets WHERE id = ?').bind(id).first<any>();
-    expect(row).toEqual({ c: 3, i: 3, a: 3 });
+    const a = (await lerAtivo(id)) as any;
+    expect({ c: a.confidentiality_rating, i: a.integrity_rating, a: a.availability_rating }).toEqual({ c: 3, i: 3, a: 3 });
   });
 
   it('PUT grava location, classification e notas; null volta ao default 3', async () => {
-    await env.DB.prepare(`INSERT INTO assets (id, project_id, name) VALUES ('a1','p1','ERP')`).run();
+    await inserirAtivo({ id: 'a1', project_id: 'p1', name: 'ERP' });
     await req('PUT', '/api/v1/assets/a1', { name: 'ERP', location: 'AWS', classification: 'Restricted', confidentiality_rating: 1, integrity_rating: 2, availability_rating: 1 });
-    const q = () => env.DB.prepare(`SELECT location, classification, confidentiality_rating c, integrity_rating i, availability_rating a FROM assets WHERE id='a1'`).first<any>();
+    const q = async () => { const a = (await lerAtivo('a1')) as any; return { location: a.location, classification: a.classification, c: a.confidentiality_rating, i: a.integrity_rating, a: a.availability_rating }; };
     expect(await q()).toEqual({ location: 'AWS', classification: 'Restricted', c: 1, i: 2, a: 1 });
     await req('PUT', '/api/v1/assets/a1', { name: 'ERP', confidentiality_rating: null });
     expect((await q()).c).toBe(3);
   });
 
   it('CSV não exporta ativo removido', async () => {
-    await env.DB.prepare(`INSERT INTO assets (id, project_id, name, status) VALUES ('a1','p1','Vivo','Active'), ('a2','p1','Morto','Removido')`).run();
+    await inserirAtivo({ id: 'a1', project_id: 'p1', name: 'Vivo', status: 'Active' });
+    await inserirAtivo({ id: 'a2', project_id: 'p1', name: 'Morto', status: 'Removido' });
     const csv = await (await req('GET', '/api/v1/projects/p1/export/assets')).text();
     expect(csv).toContain('Vivo');
     expect(csv).not.toContain('Morto');
