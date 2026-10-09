@@ -94,7 +94,7 @@ projectPedidosApp.post('/', async (c) => {
     if (!valid.success) return valid.response;
     const b = valid.data;
     // Política: só aprovação. A ciência de política é pelo lote por link (POST /ciencia).
-    if ((b.tipo === 'politica' || b.tipo === 'documento' || b.tipo === 'excecao') && b.papel_exigido === 'ciente') {
+    if ((b.tipo === 'politica' || b.tipo === 'documento' || b.tipo === 'excecao' || b.tipo === 'tratamento') && b.papel_exigido === 'ciente') {
       return c.json({ error: 'Ciência de política ou documento é pelo envio por link ("Nova ciência por link"). Este pedido é de aprovação: escolha Líder SGSI ou Direção.' }, 400);
     }
     // O id do controle chega em qualquer formato ou como código; o pedido guarda o id da linha.

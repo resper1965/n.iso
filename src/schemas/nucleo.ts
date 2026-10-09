@@ -39,3 +39,17 @@ export const departamentoAtualizarSchema = z.object({ nome: nome.optional(), sta
 export const parteCriarSchema = z.object({ tipo: z.enum(['pessoa', 'organizacao']).default('pessoa'), nome, email: email.optional().nullable() });
 export const parteAtualizarSchema = z.object({ nome: nome.optional(), email: email.optional().nullable(), status: z.enum(['ativa', 'inativa']).optional() });
 export const vinculoCriarSchema = z.object({ papel: z.enum(PAPEIS_VINCULO), alvo_tipo: z.enum(ALVOS_VINCULO), alvo_id: z.string().trim().min(1).max(100) });
+
+// ─── Ligações do tratamento (fatia 4.1) ───────────────────────────────────────
+const idCurto = z.string().trim().min(1).max(100);
+export const tratamentoItensSchema = z.object({ itens: z.array(idCurto).max(200) }).strict();
+export const tratamentoDepartamentosSchema = z.object({ departamentos: z.array(idCurto).max(200) }).strict();
+export const tratamentoTransferenciaSchema = z.object({
+  pais: z.string().trim().min(1).max(100),
+  destinatario_parte_id: idCurto.nullish(),
+  mecanismo: z.string().trim().max(300).nullish(),
+  observacao: z.string().trim().max(2000).nullish(),
+}).strict();
+
+/** Importação do RoPA por planilha (fatia 4.4): o CSV inteiro como texto; as linhas são validadas uma a uma no serviço. */
+export const ropaImportarSchema = z.object({ csv: z.string().min(1).max(300_000) }).strict();

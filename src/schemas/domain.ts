@@ -62,6 +62,8 @@ export const ropaSchema = z.object({
   owner: curtoOpcional,
   // Responsável do cadastro de partes (fatia 1.4). Sem o transform de `opcional`: o PUT distingue ausente (mantém) de null (desliga).
   owner_parte_id: z.string().nullish(),
+  // Base legal do catálogo de requisitos (fatia 4.1). Ausente mantém; null desliga.
+  base_legal_id: z.string().trim().min(1).max(200).nullish(),
   // 'Approved' fica de fora de propósito (como na DPIA): aprovar exige senha, autoridade na matriz de
   // Governança e segregação, e isso só existe em POST .../approve e nos pedidos de aprovação.
   // Active/Inactive é o ciclo de vida da atividade de tratamento, que convive com o status de aprovação.
@@ -665,7 +667,7 @@ export const pedidoCriarSchema = z.object({
   // A rota recusa `politica` + `ciente` com 400.
   // `documento` (migration 0051, fatia 3.4): aprovação CISO/CEO de uma versão; a ciência de documento é pelo lote.
   // `excecao` (migration 0051, fatia 3.5): aprovação CISO/CEO de uma exceção a documento; ciência não existe para ela.
-  tipo: z.enum(['dpia', 'politica', 'documento', 'excecao']),
+  tipo: z.enum(['dpia', 'politica', 'documento', 'excecao', 'tratamento']),
   ref_id: z.string().trim().min(1).max(200),
   papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
   destinatarios: z.array(z.object({
