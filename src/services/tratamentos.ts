@@ -1,3 +1,5 @@
+import { aprovacoesDoProjeto, type Aprovacao } from './documentos';
+
 /**
  * Núcleo do n.privacy, fatia 4.1: ligações do registro do RoPA (`ropa_records`, que é o tratamento).
  * Item e departamento são N:N (conjunto trocado de uma vez); a transferência é linha própria; as partes do tratamento
@@ -53,6 +55,7 @@ export async function removerTransferencia(db: D1Database, projectId: string, ro
 }
 
 export type Ligacoes = {
+  aprovacao: Aprovacao;
   base_legal: { id: string; referencia: string; titulo: string } | null;
   itens: { id: string; nome: string; tipo: string }[];
   departamentos: { id: string; nome: string }[];
@@ -80,6 +83,7 @@ export async function lerLigacoes(db: D1Database, projectId: string, ropaId: str
     ).bind(ropaId, projectId),
   ]);
   return {
+    aprovacao: (await aprovacoesDoProjeto(db, projectId, ropaId, 'tratamento')).get(ropaId) ?? { ciso: null, ceo: null },
     base_legal: base.id && base.referencia ? { id: base.id, referencia: base.referencia, titulo: base.titulo ?? '' } : null,
     itens: itens.results as Ligacoes['itens'],
     departamentos: deptos.results as Ligacoes['departamentos'],

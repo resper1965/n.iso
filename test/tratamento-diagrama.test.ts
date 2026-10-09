@@ -28,7 +28,7 @@ describe('rotuloMermaid', () => {
 });
 
 describe('montarDiagrama', () => {
-  const vazio = { base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] };
+  const vazio = { aprovacao: { ciso: null, ceo: null }, base_legal: null, itens: [], departamentos: [], partes: [], transferencias: [] };
 
   it('registro sem ligação é só o nó do tratamento', () => {
     expect(montarDiagrama({ finalidade: 'Folha', titulares: null }, vazio)).toBe('flowchart LR\n  n0["Folha"]');

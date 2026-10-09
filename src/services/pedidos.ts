@@ -18,7 +18,7 @@ import {
   RECUSA_PLATAFORMA, type PapelAssinatura,
 } from '../helpers';
 
-export type TipoPedido = 'dpia' | 'politica' | 'documento' | 'excecao';
+export type TipoPedido = 'dpia' | 'politica' | 'documento' | 'excecao' | 'tratamento';
 export type Canal = 'conta' | 'link' | 'portal';
 /** Validade do link pessoal da ciência; reenviar emite outro. */
 export const DIAS_LINK = 30;
@@ -103,7 +103,7 @@ const COLUNAS_DPIA = [
 type Documento = { titulo: string; conteudo: Record<string, unknown> };
 
 /** Onde mora cada tipo e quais colunas são CONTEÚDO (entram no hash e na conferência do batch). */
-const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[]; titulo: (r: Record<string, unknown>, refId: string) => string }> = {
+const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[]; listas?: readonly string[]; titulo: (r: Record<string, unknown>, refId: string) => string }> = {
   dpia: { tabela: 'dpia_assessments', colunas: COLUNAS_DPIA, titulo: (r, id) => `DPIA: ${String(r.processing_name || r.system_name || id)}` },
   politica: { tabela: 'compliance_controls', colunas: ['title', 'description'], titulo: (r, id) => `Política: ${String(r.title || id)}` },
   // ref_id = documentos.id; o conteúdo é a versão VIGENTE (titulo, texto, numero). O "nome da tabela" é um subselect:
@@ -119,6 +119,23 @@ const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[
     colunas: ['escopo', 'motivo', 'vence_em'],
     titulo: (r, id) => `Exceção: ${String(r.escopo || id).slice(0, 80)}`,
   },
+  // ref_id = ropa_records.id (fatia 4.3). O conteúdo é o registro e tudo o que ele liga: o diagrama é derivado dessas
+  // colunas, então congelá-las congela o diagrama. Status, responsável e aprovações antigas ficam de fora de propósito
+  // (mudar o status não pode invalidar a aprovação do conteúdo). Listas em ordem fixa para o hash ser estável.
+  tratamento: {
+    tabela: "(SELECT r.id AS id, r.project_id AS project_id, r.processing_purpose AS finalidade, r.data_categories AS categorias, r.data_subjects AS titulares, " +
+      "r.legal_basis AS base_legal_texto, r.base_legal_id AS base_legal_id, r.retention_period AS retencao, r.recipients AS destinatarios, " +
+      "r.international_transfers AS transferencia_internacional, r.transfer_safeguards AS salvaguardas, r.dpia_required AS dpia_requerido, " +
+      "(SELECT json_group_array(x.n) FROM (SELECT i.nome || ' (' || i.tipo || ')' AS n FROM tratamento_itens t JOIN itens i ON i.id = t.item_id WHERE t.ropa_id = r.id ORDER BY i.nome, i.id) x) AS itens, " +
+      "(SELECT json_group_array(x.n) FROM (SELECT d.nome AS n FROM tratamento_departamentos t JOIN departamentos d ON d.id = t.departamento_id WHERE t.ropa_id = r.id ORDER BY d.nome, d.id) x) AS departamentos, " +
+      "(SELECT json_group_array(x.n) FROM (SELECT v.papel || ': ' || p.nome AS n FROM parte_vinculos v JOIN partes p ON p.id = v.parte_id WHERE v.alvo_tipo = 'tratamento' AND v.alvo_id = r.id ORDER BY v.papel, p.nome, v.id) x) AS partes, " +
+      "(SELECT json_group_array(x.n) FROM (SELECT t.pais || ' | ' || COALESCE(p.nome, '') || ' | ' || COALESCE(t.mecanismo, '') AS n FROM tratamento_transferencias t LEFT JOIN partes p ON p.id = t.destinatario_parte_id WHERE t.ropa_id = r.id ORDER BY t.pais, t.id) x) AS transferencias " +
+      "FROM ropa_records r)",
+    colunas: ['finalidade', 'categorias', 'titulares', 'base_legal_texto', 'base_legal_id', 'retencao', 'destinatarios', 'transferencia_internacional', 'salvaguardas', 'dpia_requerido', 'itens', 'departamentos', 'partes', 'transferencias'],
+    // Colunas que o SQL entrega como JSON (json_group_array): viram lista de verdade no conteúdo congelado.
+    listas: ['itens', 'departamentos', 'partes', 'transferencias'],
+    titulo: (r, id) => `Tratamento: ${String(r.finalidade || id).slice(0, 80)}`,
+  },
 };
 
 /** Conteúdo atual do documento (do projeto informado), ou `null` se não existe nele. */
@@ -127,7 +144,8 @@ export async function documentoAtual(db: D1Database, tipo: TipoPedido, refId: st
   const row = await db.prepare(`SELECT ${d.colunas.join(', ')} FROM ${d.tabela} WHERE id = ? AND project_id = ?`)
     .bind(refId, projectId).first<Record<string, unknown>>();
   if (!row) return null;
-  return { titulo: d.titulo(row, refId), conteudo: Object.fromEntries(d.colunas.map((c) => [c, row[c] ?? null])) };
+  const lista = (c: string) => (d.listas?.includes(c) && typeof row[c] === 'string' ? JSON.parse(row[c] as string) : row[c] ?? null);
+  return { titulo: d.titulo(row, refId), conteudo: Object.fromEntries(d.colunas.map((c) => [c, lista(c)])) };
 }
 
 /** Texto-padrão que o catálogo grava quando a política ainda não foi escrita. */
@@ -358,7 +376,7 @@ export async function registrarDecisao(db: D1Database, a: {
   ];
   // Documento e exceção: a prova da aprovação é a linha do destinatário (hash, IP, user-agent, MFA); não há coluna de assinatura a escrever.
   // Sem esta condição, cairia em `assinaturaDpia` e assinaria um DPIA de mesmo id.
-  if (a.assinar && p.tipo !== 'documento' && p.tipo !== 'excecao') {
+  if (a.assinar && p.tipo !== 'documento' && p.tipo !== 'excecao' && p.tipo !== 'tratamento') {
     const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
     // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
     const st = p.tipo === 'politica'

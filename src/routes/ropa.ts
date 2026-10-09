@@ -4,6 +4,8 @@ import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAs
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
 import { criarTransferencia, definirLigacao, diagramaDoTratamento, lerLigacoes, removerTransferencia } from '../services/tratamentos';
+import { aprovacoesDoProjeto } from '../services/documentos';
+import { conferirPedidosDoDocumento } from './pedidos';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 export const projectRopaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -39,6 +41,7 @@ ropaApp.put('/:id', async (c) => {
     if (p.sql) await c.env.DB.prepare(`UPDATE ropa_records SET ${p.sql}, updated_at=? WHERE id=?`).bind(...p.binds, new Date().toISOString(), id).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_updated', user?.email || 'system', `ROPA ${id} updated`);
+    if (atual?.project_id) await conferirPedidosDoDocumento(c, 'tratamento', id, atual.project_id);
     return c.json({ ok: true });
   } catch (e: any) {
     return erro500(c, 'Falha ao atualizar ROPA', e);
@@ -70,7 +73,9 @@ projectRopaApp.get('/', async (c) => {
      LEFT JOIN partes pa ON pa.id = r.owner_parte_id AND pa.project_id = r.project_id
      WHERE r.project_id = ? ORDER BY r.created_at DESC`
   ).bind(projectId).all();
-  return c.json({ ok: true, records: semRastros(result.results) });
+  const aprovacoes = await aprovacoesDoProjeto(c.env.DB, projectId!, undefined, 'tratamento');
+  const records = semRastros(result.results as Record<string, unknown>[]).map((r) => ({ ...r, aprovacao_pedido: aprovacoes.get(String(r.id)) ?? { ciso: null, ceo: null } }));
+  return c.json({ ok: true, records });
 });
 
 projectRopaApp.post('/', async (c) => {
@@ -122,6 +127,7 @@ projectRopaApp.put('/:recordId/itens', async (c) => {
     if (!r) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
     if (!r.ok) return c.json({ error: 'Item inexistente ou de outro projeto', invalidos: r.invalidos }, 400);
     await logAudit(c.env.DB, 'ropa.itens', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: ${r.total} itens ligados`, '', '', projectId);
+    await conferirPedidosDoDocumento(c, 'tratamento', c.req.param('recordId'), projectId);
     return c.json({ ok: true, total: r.total });
   } catch (e) { return erro500(c, 'Falha ao ligar os itens', e); }
 });
@@ -135,6 +141,7 @@ projectRopaApp.put('/:recordId/departamentos', async (c) => {
     if (!r) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
     if (!r.ok) return c.json({ error: 'Departamento inexistente ou de outro projeto', invalidos: r.invalidos }, 400);
     await logAudit(c.env.DB, 'ropa.departamentos', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: ${r.total} departamentos ligados`, '', '', projectId);
+    await conferirPedidosDoDocumento(c, 'tratamento', c.req.param('recordId'), projectId);
     return c.json({ ok: true, total: r.total });
   } catch (e) { return erro500(c, 'Falha ao ligar os departamentos', e); }
 });
@@ -147,6 +154,7 @@ projectRopaApp.post('/:recordId/transferencias', async (c) => {
     const r = await criarTransferencia(c.env.DB, projectId, c.req.param('recordId'), v.data);
     if (!r.ok) return c.json({ error: r.error }, r.status);
     await logAudit(c.env.DB, 'ropa.transferencia', c.get('user')?.email || 'system', `ROPA ${c.req.param('recordId')}: transferência para ${v.data.pais}`, '', '', projectId);
+    await conferirPedidosDoDocumento(c, 'tratamento', c.req.param('recordId'), projectId);
     return c.json({ ok: true, id: r.id }, 201);
   } catch (e) { return erro500(c, 'Falha ao registrar a transferência', e); }
 });
@@ -155,6 +163,7 @@ projectRopaApp.delete('/:recordId/transferencias/:transferenciaId', async (c) =>
   try {
     const projectId = c.req.param('projectId')!;
     const ok = await removerTransferencia(c.env.DB, projectId, c.req.param('recordId'), c.req.param('transferenciaId'));
+    if (ok) await conferirPedidosDoDocumento(c, 'tratamento', c.req.param('recordId'), projectId);
     return ok ? c.json({ ok: true }) : c.json({ error: 'Transferência não encontrada' }, 404);
   } catch (e) { return erro500(c, 'Falha ao remover a transferência', e); }
 });

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500, logAudit, podeAdministrarOrg } from '../helpers';
 import { importarPartes, conciliarResponsaveis } from '../services/partes';
+import { conferirPedidosDoDocumento } from './pedidos';
 import {
   validateBody, moduloHabilitarSchema, MODULOS, parseModulos, type Modulo,
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
@@ -193,15 +194,21 @@ nucleoApp.post('/partes/:id/vinculos', async (c) => {
       throw e;
     }
     await logAudit(db, 'parte.vinculada', c.get('user').email, `Parte ${parteId}: ${papel} em ${alvo_tipo}`, '', '', projectId);
+    // As partes do tratamento entram no conteúdo congelado do pedido de aprovação (fatia 4.3).
+    if (alvo_tipo === 'tratamento') await conferirPedidosDoDocumento(c, 'tratamento', alvo_id, projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e) { return erro500(c, 'Falha ao vincular a parte', e); }
 });
 
 nucleoApp.delete('/partes/:id/vinculos/:vinculoId', async (c) => {
   try {
+    const projectId = c.req.param('projectId')!;
+    const alvo = await c.env.DB.prepare('SELECT alvo_tipo, alvo_id FROM parte_vinculos WHERE id = ? AND parte_id = ? AND project_id = ?')
+      .bind(c.req.param('vinculoId'), c.req.param('id'), projectId).first<{ alvo_tipo: string; alvo_id: string }>();
     const r = await c.env.DB.prepare('DELETE FROM parte_vinculos WHERE id = ? AND parte_id = ? AND project_id = ?')
-      .bind(c.req.param('vinculoId'), c.req.param('id'), c.req.param('projectId')!).run();
+      .bind(c.req.param('vinculoId'), c.req.param('id'), projectId).run();
     if (!r.meta.changes) return c.json({ error: 'Vínculo não encontrado' }, 404);
+    if (alvo?.alvo_tipo === 'tratamento') await conferirPedidosDoDocumento(c, 'tratamento', alvo.alvo_id, projectId);
     return c.json({ ok: true });
   } catch (e) { return erro500(c, 'Falha ao remover o vínculo', e); }
 });

@@ -10,6 +10,7 @@ const PAPEIS_PARTE = { operador: 'Operador', cocontrolador: 'Cocontrolador', sub
 const TIPOS_ITEM = { sistema: 'Sistema', ativo: 'Ativo', base: 'Base', processo: 'Processo' };
 const PAIS_DAS_BASES = ['lgpd:art7', 'lgpd:art11'];
 
+const podePedir = () => typeof window.podePedirAprovacao === 'function' && window.podePedirAprovacao(S.user);
 const podeEditar = () => !!S.user && ['platform_admin', 'consultant', 'consultor', 'consultoria_admin'].includes(S.user.role);
 const lista = (r) => (Array.isArray(r) ? r : []);
 const args = (...v) => escapeHTML(JSON.stringify(v));
@@ -24,6 +25,13 @@ async function acao(projectId, ropaId, fazer, padrao, sucesso) {
         await window.openLigacoesTratamento(projectId, ropaId);
     } catch (e) { falha(e, padrao); }
 }
+
+/** Aprovação derivada dos pedidos: vale o pedido aprovado cujo conteúdo é o de hoje; mudar o registro ou uma ligação tira a validade. */
+const textoAprovacao = (ap) => {
+    if (!ap || (!ap.ciso && !ap.ceo)) return 'Sem aprovação por pedido vigente.';
+    const quem = (c) => `${escapeHTML(c.por)} em ${escapeHTML(String(c.em || '').slice(0, 10))}`;
+    return [ap.ciso ? `Líder SGSI: ${quem(ap.ciso)}` : '', ap.ceo ? `Direção: ${quem(ap.ceo)}` : ''].filter(Boolean).join(' · ');
+};
 
 const secao = (titulo, corpo) => `<h4 style="margin:1.25rem 0 0.5rem">${titulo}</h4>${corpo}`;
 const vazio = (texto) => `<p style="color:var(--text-dim)">${texto}</p>`;
@@ -54,6 +62,8 @@ window.openLigacoesTratamento = async function (projectId, ropaId) {
     openModal(`
         <h3>Ligações do tratamento</h3>
         <p style="color:var(--text-dim)">${escapeHTML(finalidade)}</p>
+        ${secao('Aprovação', `<p id="tl-aprovacao">${textoAprovacao(lig.aprovacao)}</p>
+            ${podePedir() ? `<button class="btn btn-sm" data-action="pedirAprovacaoTratamento" data-args='${args(projectId, ropaId)}'>Pedir aprovação</button>` : ''}`)}
         ${secao('Base legal', `
             <p id="tl-base-atual">${lig.base_legal ? `${escapeHTML(lig.base_legal.referencia)} — ${escapeHTML(lig.base_legal.titulo)}` : 'Não definida'}</p>
             ${editar && bases.length ? `<div style="display:flex; gap:0.5rem; align-items:flex-end"><div class="form-group" style="flex:1; margin:0"><label class="form-label" for="tl-base">Base legal do catálogo</label>
@@ -95,6 +105,8 @@ window.openLigacoesTratamento = async function (projectId, ropaId) {
 };
 
 const marcadosDe = (tipo) => [...document.querySelectorAll(`input[data-tl="${tipo}"]:checked`)].map((i) => i.value);
+
+window.pedirAprovacaoTratamento = (projectId, ropaId) => window.abrirPedidoAprovacao(projectId, 'tratamento', ropaId);
 
 window.salvarItensTratamento = (projectId, ropaId) => acao(projectId, ropaId,
     () => api('PUT', `${base(projectId, ropaId)}/itens`, { itens: marcadosDe('item') }), 'Não foi possível salvar os itens', 'Itens salvos.');

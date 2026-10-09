@@ -28,6 +28,12 @@ const CAMPOS_POLITICA = [['title', 'Título'], ['description', 'Texto da políti
 const CAMPOS_DOCUMENTO = [['titulo', 'Título'], ['numero', 'Versão'], ['texto', 'Texto']];
 // Exceção a documento (fatia 3.5): o que o pedido congela.
 const CAMPOS_EXCECAO = [['escopo', 'Escopo'], ['motivo', 'Motivo'], ['vence_em', 'Vence em']];
+// Tratamento do RoPA (fatia 4.3): o registro e tudo o que ele liga. Listas chegam como lista; 0/1 viram Sim/Não.
+const CAMPOS_TRATAMENTO = [['finalidade', 'Finalidade'], ['titulares', 'Titulares'], ['categorias', 'Categorias de dados'], ['base_legal_texto', 'Base legal'],
+    ['retencao', 'Retenção'], ['destinatarios', 'Destinatários'], ['transferencia_internacional', 'Transferência internacional'], ['salvaguardas', 'Salvaguardas'],
+    ['dpia_requerido', 'DPIA requerido'], ['itens', 'Sistemas, bases e processos'], ['departamentos', 'Departamentos'], ['partes', 'Partes'], ['transferencias', 'Transferências']];
+const SIM_NAO = ['transferencia_internacional', 'dpia_requerido'];
+const textoDoCampo = (k, v) => (Array.isArray(v) ? v.join('\n') : SIM_NAO.includes(k) ? (v ? 'Sim' : 'Não') : String(v));
 
 const data = (s) => (s ? new Date(s).toLocaleString('pt-BR') : '');
 const el = (id) => document.getElementById(id);
@@ -62,11 +68,11 @@ window.renderMeusPedidos = async function renderMeusPedidos(c, h, a) {
 };
 
 function conteudoHtml(tipo, conteudo) {
-    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : tipo === 'documento' ? CAMPOS_DOCUMENTO : tipo === 'excecao' ? CAMPOS_EXCECAO : Object.keys(conteudo).map((k) => [k, k]);
-    return campos.filter(([k]) => conteudo[k] !== null && conteudo[k] !== undefined && conteudo[k] !== '')
+    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : tipo === 'documento' ? CAMPOS_DOCUMENTO : tipo === 'excecao' ? CAMPOS_EXCECAO : tipo === 'tratamento' ? CAMPOS_TRATAMENTO : Object.keys(conteudo).map((k) => [k, k]);
+    return campos.filter(([k]) => conteudo[k] !== null && conteudo[k] !== undefined && conteudo[k] !== '' && !(Array.isArray(conteudo[k]) && !conteudo[k].length))
         .map(([k, rotulo]) => `<div style="margin-bottom:12px">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:4px">${escapeHTML(rotulo)}</div>
-            <div style="font-size:14px;color:var(--text);white-space:pre-wrap">${escapeHTML(String(conteudo[k]))}</div>
+            <div style="font-size:14px;color:var(--text);white-space:pre-wrap">${escapeHTML(textoDoCampo(k, conteudo[k]))}</div>
         </div>`).join('') || '<p style="color:var(--text-dim)">Documento sem conteúdo preenchido.</p>';
 }
 
@@ -167,7 +173,7 @@ window.abrirPedidoAprovacao = async function abrirPedidoAprovacao(projectId, tip
             <div class="form-group">
                 <label class="form-label" for="pn-papel">O que é pedido</label>
                 <select class="form-input" id="pn-papel">
-                    ${Object.entries(PAPEIS).filter(([v]) => !['politica', 'documento', 'excecao'].includes(tipo) || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
+                    ${Object.entries(PAPEIS).filter(([v]) => !['politica', 'documento', 'excecao', 'tratamento'].includes(tipo) || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
                 </select>
             </div>
             <fieldset class="form-group" style="border:0;padding:0;margin:0 0 12px">

@@ -1,5 +1,5 @@
 import { logAudit } from '../helpers';
-import { documentoAtual, hashConteudo } from './pedidos';
+import { documentoAtual, hashConteudo, type TipoPedido } from './pedidos';
 import type { DocumentoCriar } from '../schemas';
 
 /** Erro de regra de negócio, com o status que a rota devolve. */
@@ -409,20 +409,20 @@ const semAprovacao = (): Aprovacao => ({ ciso: null, ceo: null });
  * deixa de valer sozinha; o pedido e a linha do destinatário continuam gravados, intactos. Um hash e uma consulta por
  * documento que tenha alguma aprovação (ponytail: dezenas por projeto; se passar disso, guarde o hash do vigente).
  */
-async function aprovacoesDoProjeto(db: D1Database, projectId: string, soDocumento?: string): Promise<Map<string, Aprovacao>> {
+export async function aprovacoesDoProjeto(db: D1Database, projectId: string, soDocumento?: string, tipo: TipoPedido = 'documento'): Promise<Map<string, Aprovacao>> {
   const { results } = await db.prepare(
     `SELECT p.ref_id, p.papel_exigido AS papel, p.hash, COALESCE(NULLIF(pd.nome, ''), pd.email) AS por, pd.decidido_em AS em
        FROM pedido_destinatarios pd JOIN pedidos p ON p.id = pd.pedido_id
-      WHERE p.project_id = ? AND p.tipo = 'documento' AND p.papel_exigido IN ('ciso', 'ceo') AND pd.status = 'aprovado'
+      WHERE p.project_id = ? AND p.tipo = ? AND p.papel_exigido IN ('ciso', 'ceo') AND pd.status = 'aprovado'
         ${soDocumento ? 'AND p.ref_id = ?' : ''}
       ORDER BY pd.decidido_em DESC, pd.rowid DESC`
-  ).bind(projectId, ...(soDocumento ? [soDocumento] : [])).all<{ ref_id: string; papel: 'ciso' | 'ceo'; hash: string; por: string; em: string }>();
+  ).bind(projectId, tipo, ...(soDocumento ? [soDocumento] : [])).all<{ ref_id: string; papel: 'ciso' | 'ceo'; hash: string; por: string; em: string }>();
   const porDocumento = new Map<string, typeof results>();
   for (const r of results) porDocumento.set(r.ref_id, [...(porDocumento.get(r.ref_id) ?? []), r]);
 
   const saida = new Map<string, Aprovacao>();
   for (const [ref, linhas] of porDocumento) {
-    const atual = await documentoAtual(db, 'documento', ref, projectId);
+    const atual = await documentoAtual(db, tipo, ref, projectId);
     if (!atual) continue;
     const hash = await hashConteudo(atual.conteudo);
     const ap = semAprovacao();
