@@ -142,8 +142,33 @@ export async function definirRequisitosDoDocumento(db: D1Database, projectId: st
   return { ok: true as const, total: unicos.length };
 }
 
+/** Requisitos a que a evidência do projeto serve. */
+export async function requisitosDaEvidencia(db: D1Database, projectId: string, evidenciaId: string) {
+  const { results } = await db.prepare(
+    `SELECT r.id, r.fonte_id, r.referencia, r.titulo FROM evidencia_requisitos er JOIN requisitos r ON r.id = er.requisito_id
+      WHERE er.project_id = ?1 AND er.evidencia_id = ?2 ORDER BY r.fonte_id, r.rowid`
+  ).bind(projectId, evidenciaId).all<{ id: string; fonte_id: string; referencia: string; titulo: string }>();
+  return results;
+}
+
+/** Troca o conjunto de requisitos da evidência. null = evidência não é do projeto; `desconhecidos` = ids que não existem no catálogo. */
+export async function definirRequisitosDaEvidencia(db: D1Database, projectId: string, evidenciaId: string, ids: string[]) {
+  if (!(await db.prepare('SELECT 1 FROM evidence WHERE id = ? AND project_id = ?').bind(evidenciaId, projectId).first())) return null;
+  const unicos = [...new Set(ids)];
+  const { results } = await db.prepare('SELECT id FROM requisitos WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(unicos)).all<{ id: string }>();
+  const existentes = new Set(results.map((x) => x.id));
+  const desconhecidos = unicos.filter((x) => !existentes.has(x));
+  if (desconhecidos.length) return { ok: false as const, desconhecidos };
+  await db.batch([
+    db.prepare('DELETE FROM evidencia_requisitos WHERE evidencia_id = ? AND project_id = ?').bind(evidenciaId, projectId),
+    db.prepare(`INSERT INTO evidencia_requisitos (evidencia_id, requisito_id, project_id) SELECT ?1, value, ?2 FROM json_each(?3)`).bind(evidenciaId, projectId, JSON.stringify(unicos)),
+  ]);
+  return { ok: true as const, total: unicos.length };
+}
+
 export type OrigemCobertura =
   | { tipo: 'documento'; id: string; titulo: string }
+  | { tipo: 'evidencia'; id: string; titulo: string; status: string }
   | { tipo: 'controle'; id: string; titulo: string; status: string; mapeamento: 'equivalente' | 'parcial' };
 export type Lacuna = { requisito_id: string; referencia: string; titulo: string; pai_id: string | null; situacao: 'coberto' | 'parcial' | 'lacuna'; origens: OrigemCobertura[] };
 
@@ -151,10 +176,11 @@ export type Lacuna = { requisito_id: string; referencia: string; titulo: string;
  * Cobertura de uma fonte no projeto (spec 4.9, escopo da fatia 2). Um requisito está **coberto** se há documento
  * VIGENTE ligado a ele, ou controle do projeto (nem `Missing` nem `Not Applicable`) ligado por mapeamento
  * `validado_juridico` do tipo `equivalente`; **parcial** se só há mapeamento `parcial`; senão é **lacuna**.
- * Mapeamento `relacionado` e `proposto` nunca cobrem. Evidência ainda não conta (vem com `evidencia_requisitos`).
+ * Mapeamento `relacionado` e `proposto` nunca cobrem. Evidência (fatia 8) ligada ao requisito cobre se `conforming` e dentro da validade
+ * (ou sem validade); `partial` dá cobertura parcial; vencida, pendente ou `non_conforming` não conta.
  */
 export async function lacunasDaFonte(db: D1Database, projectId: string, fonte: string): Promise<Lacuna[]> {
-  const [reqs, docs, ctrls] = await db.batch([
+  const [reqs, docs, ctrls, evids] = await db.batch([
     db.prepare('SELECT id, referencia, titulo, pai_id FROM requisitos WHERE fonte_id = ? ORDER BY rowid').bind(fonte),
     db.prepare(
       `SELECT dr.requisito_id AS requisito_id, d.id AS id, d.titulo AS titulo
@@ -174,16 +200,23 @@ export async function lacunasDaFonte(db: D1Database, projectId: string, fonte: s
           AND COALESCE(c.status, 'Missing') NOT IN ('Missing', 'Not Applicable')
           AND m.de_id IN (SELECT id FROM requisitos WHERE fonte_id = ?2)`
     ).bind(projectId, fonte),
+    db.prepare(
+      `SELECT er.requisito_id AS requisito_id, e.id AS id, e.file_name AS titulo, e.evaluation_status AS status
+         FROM evidencia_requisitos er JOIN evidence e ON e.id = er.evidencia_id
+        WHERE er.project_id = ?1 AND e.project_id = ?1 AND e.evaluation_status IN ('conforming', 'partial')
+          AND (e.valido_ate IS NULL OR e.valido_ate >= date('now')) AND er.requisito_id IN (SELECT id FROM requisitos WHERE fonte_id = ?2)`
+    ).bind(projectId, fonte),
   ]);
   const origens = new Map<string, OrigemCobertura[]>();
   const somar = (rid: string, o: OrigemCobertura) => origens.set(rid, [...(origens.get(rid) ?? []), o]);
   for (const d of docs.results as { requisito_id: string; id: string; titulo: string }[]) somar(d.requisito_id, { tipo: 'documento', id: d.id, titulo: d.titulo });
+  for (const e of evids.results as { requisito_id: string; id: string; titulo: string; status: string }[]) somar(e.requisito_id, { tipo: 'evidencia', id: e.id, titulo: e.titulo, status: e.status });
   for (const c of ctrls.results as { requisito_id: string; id: string; titulo: string; status: string; tipo: 'equivalente' | 'parcial' }[]) {
     somar(c.requisito_id, { tipo: 'controle', id: c.id, titulo: c.titulo, status: c.status, mapeamento: c.tipo });
   }
   return (reqs.results as { id: string; referencia: string; titulo: string; pai_id: string | null }[]).map((r) => {
     const o = origens.get(r.id) ?? [];
-    const cobre = o.some((x) => x.tipo === 'documento' || x.mapeamento === 'equivalente');
+    const cobre = o.some((x) => x.tipo === 'documento' || (x.tipo === 'evidencia' && x.status === 'conforming') || (x.tipo === 'controle' && x.mapeamento === 'equivalente'));
     return { requisito_id: r.id, referencia: r.referencia, titulo: r.titulo, pai_id: r.pai_id, situacao: cobre ? 'coberto' : o.length ? 'parcial' : 'lacuna', origens: o };
   });
 }

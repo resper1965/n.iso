@@ -398,7 +398,8 @@ CREATE TABLE IF NOT EXISTS evidence (
     ceo_approved_ip TEXT,
     ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    valido_ate TEXT
 );
 
 -- ═══════════════════════════════════════════════
@@ -1513,3 +1514,91 @@ CREATE TABLE IF NOT EXISTS documento_partes (
     PRIMARY KEY (documento_id, parte_id, papel)
 );
 CREATE INDEX IF NOT EXISTS idx_doc_partes_parte ON documento_partes(parte_id);
+
+-- Titular, incidente e consentimento (fatia 7, migration 0058)
+CREATE TABLE IF NOT EXISTS parametros_legais (
+    chave TEXT PRIMARY KEY,
+    valor INTEGER NOT NULL CHECK (valor > 0),
+    unidade TEXT NOT NULL CHECK (unidade IN ('horas', 'dias_corridos', 'dias_uteis')),
+    fonte TEXT NOT NULL,
+    revisado_em TEXT NOT NULL,
+    revisado_por TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS titular_pedidos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    protocolo TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('confirmacao', 'acesso', 'correcao', 'anonimizacao_bloqueio_eliminacao', 'portabilidade', 'informacao_compartilhamento', 'revogacao_consentimento', 'oposicao', 'outro')),
+    canal TEXT NOT NULL DEFAULT 'outro' CHECK (canal IN ('email', 'telefone', 'formulario', 'presencial', 'outro')),
+    titular_nome TEXT,
+    titular_contato TEXT,
+    descricao TEXT,
+    recebido_em TEXT NOT NULL,
+    prazo_em TEXT,
+    status TEXT NOT NULL DEFAULT 'recebido' CHECK (status IN ('recebido', 'em_andamento', 'respondido', 'negado', 'arquivado')),
+    respondido_em TEXT,
+    resposta_texto TEXT,
+    responsavel_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
+    criado_por TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project_id, protocolo),
+    CHECK (status NOT IN ('respondido', 'negado') OR respondido_em IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_titular_pedidos_projeto ON titular_pedidos(project_id, status, prazo_em);
+
+CREATE TABLE IF NOT EXISTS incidentes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    protocolo TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    ocorrido_em TEXT,
+    ciencia_em TEXT NOT NULL,
+    risco_titular TEXT CHECK (risco_titular IS NULL OR risco_titular IN ('sem_risco', 'baixo', 'relevante')),
+    avaliacao_texto TEXT,
+    comunicacao_anpd_em TEXT,
+    comunicacao_titular_em TEXT,
+    prazo_anpd_em TEXT,
+    prazo_titular_em TEXT,
+    status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'avaliado', 'comunicado', 'encerrado')),
+    responsavel_parte_id TEXT REFERENCES partes(id) ON DELETE SET NULL,
+    criado_por TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project_id, protocolo),
+    CHECK (status <> 'encerrado' OR risco_titular IS NOT NULL),
+    CHECK (status <> 'encerrado' OR risco_titular <> 'relevante' OR comunicacao_anpd_em IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_incidentes_projeto ON incidentes(project_id, status);
+
+CREATE TABLE IF NOT EXISTS consentimentos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    ropa_id TEXT NOT NULL REFERENCES ropa_records(id) ON DELETE CASCADE,
+    titular_ref TEXT NOT NULL,
+    finalidade TEXT NOT NULL,
+    versao_aviso TEXT NOT NULL,
+    obtido_em TEXT NOT NULL,
+    canal TEXT,
+    revogado_em TEXT,
+    revogado_por TEXT,
+    criado_por TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_consentimentos_ropa ON consentimentos(ropa_id);
+CREATE INDEX IF NOT EXISTS idx_consentimentos_projeto ON consentimentos(project_id, revogado_em);
+
+-- Evidência com validade e requisito (fatia 8, migration 0059)
+CREATE TABLE IF NOT EXISTS evidencia_requisitos (
+    evidencia_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+    requisito_id TEXT NOT NULL REFERENCES requisitos(id),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (evidencia_id, requisito_id)
+);
+CREATE INDEX IF NOT EXISTS idx_evid_requisitos_requisito ON evidencia_requisitos(requisito_id);
+CREATE INDEX IF NOT EXISTS idx_evid_requisitos_projeto ON evidencia_requisitos(project_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_validade ON evidence(valido_ate);

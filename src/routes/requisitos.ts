@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500, logAudit } from '../helpers';
 import {
-  definirRequisitosDoDocumento, lacunasDaFonte, lerRequisito, ligarControles, listarFontes, listarRequisitos,
-  requisitosDoDocumento, semearCatalogo, veMapeamentoProposto,
+  definirRequisitosDaEvidencia, definirRequisitosDoDocumento, lacunasDaFonte, lerRequisito, ligarControles, listarFontes, listarRequisitos,
+  requisitosDaEvidencia, requisitosDoDocumento, semearCatalogo, veMapeamentoProposto,
 } from '../services/requisitos';
-import { documentoRequisitosSchema, mapeamentoSchema, requisitoAtualizarSchema, validateBody } from '../schemas';
+import { documentoRequisitosSchema, evidenciaValidadeSchema, mapeamentoSchema, requisitoAtualizarSchema, validateBody } from '../schemas';
+import { definirValidade } from '../services/evidencia-validade';
 
 type Ctx = { Bindings: Bindings; Variables: Variables };
 
@@ -144,6 +145,35 @@ projetoRequisitosApp.put('/documentos/:id/requisitos', async (c) => {
     await logAudit(c.env.DB, 'documento.requisitos', c.get('user').email, `Documento ${c.req.param('id')}: ${r.total} requisitos ligados`, '', '', projectId);
     return c.json({ ok: true, total: r.total });
   } catch (e) { return erro500(c, 'Falha ao ligar os requisitos ao documento', e); }
+});
+
+projetoRequisitosApp.get('/evidence/:evidenceId/requisitos', async (c) => {
+  const projectId = c.req.param('projectId')!;
+  const ev = await c.env.DB.prepare('SELECT valido_ate FROM evidence WHERE id = ? AND project_id = ?').bind(c.req.param('evidenceId'), projectId).first<{ valido_ate: string | null }>();
+  if (!ev) return c.json({ error: 'Evidência não encontrada' }, 404);
+  return c.json({ valido_ate: ev.valido_ate, requisitos: await requisitosDaEvidencia(c.env.DB, projectId, c.req.param('evidenceId')) });
+});
+
+projetoRequisitosApp.put('/evidence/:evidenceId/requisitos', async (c) => {
+  try {
+    const v = await validateBody(c, documentoRequisitosSchema);
+    if (!v.success) return v.response;
+    const projectId = c.req.param('projectId')!;
+    const r = await definirRequisitosDaEvidencia(c.env.DB, projectId, c.req.param('evidenceId'), v.data.requisitos);
+    if (!r) return c.json({ error: 'Evidência não encontrada' }, 404);
+    if (!r.ok) return c.json({ error: 'Requisito não encontrado', desconhecidos: r.desconhecidos }, 400);
+    await logAudit(c.env.DB, 'evidencia.requisitos', c.get('user').email, `Evidência ${c.req.param('evidenceId')}: ${r.total} requisitos ligados`, '', '', projectId);
+    return c.json({ ok: true, total: r.total });
+  } catch (e) { return erro500(c, 'Falha ao ligar os requisitos à evidência', e); }
+});
+
+projetoRequisitosApp.put('/evidence/:evidenceId/validade', async (c) => {
+  try {
+    const v = await validateBody(c, evidenciaValidadeSchema);
+    if (!v.success) return v.response;
+    const r = await definirValidade(c.env.DB, c.req.param('projectId')!, c.req.param('evidenceId'), c.get('user').email, v.data.valido_ate);
+    return r.ok ? c.json({ ok: true }) : c.json({ error: r.error }, r.status);
+  } catch (e) { return erro500(c, 'Falha ao definir a validade da evidência', e); }
 });
 
 projetoRequisitosApp.get('/requisitos/lacunas', async (c) => {
