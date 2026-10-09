@@ -71,7 +71,7 @@ Visão do encarregado (lacunas de 4.9, pedidos do titular, incidentes), visão p
 ## O que só o dono faz (a execução não depende, exceto o item 1)
 
 1. **Material jurídico revisado** (títulos de LGPD e GDPR, mapeamentos, prazos do titular e do incidente, lista de bases legais): destrava a task 3 da fatia 2 e os valores da fatia 7.
-2. Revogar o token do Twyn e gravar o novo (issue #317); guardar a `TOKEN_ENC_KEY`; apagar dumps de `C:\Users\resper\backups-niso\`.
+2. Revogar o token do projeto real e gravar o novo (issue #317); guardar a `TOKEN_ENC_KEY`; apagar dumps de `C:\Users\resper\backups-niso\`.
 3. Escolher, quando chegar a fatia 8, a identidade visual da casca.
 
 ## Riscos e como a execução os trata

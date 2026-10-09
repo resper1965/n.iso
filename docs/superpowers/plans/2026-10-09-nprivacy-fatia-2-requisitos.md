@@ -23,7 +23,7 @@
 7. **Edição só por `platform_admin`**, com `logAudit` em toda mudança de título e de mapeamento. Cliente e consultor leem. Apagar requisito que tem controle ou documento apontando para ele é 409.
 8. **`compliance_controls.requisito_id`** é coluna anulável (`ALTER ... ADD COLUMN`, `REFERENCES requisitos(id) ON DELETE SET NULL`). O backfill casa por norma + primeiro token do título (o código), o mesmo critério do `stmtControles`. `semearControles` passa a gravar o `requisito_id` dos controles novos.
 9. **`documento_requisitos`** (N:N, `PRIMARY KEY (documento_id, requisito_id)`, com `project_id`) entra aqui porque a fatia 3 deixou a ligação esperando. O documento continua existindo sem nenhuma linha.
-10. **Lacuna da LGPD (escopo desta fatia):** um artigo é **coberto** se há um documento vigente ligado a ele, ou um controle do projeto ligado por mapeamento validado cujo status não seja `Missing`/`Not Applicable`. Caso contrário é **lacuna**. `evidencia_requisitos` (spec 4.7) fica para a fatia que mexer em evidência; a lacuna de hoje não conta evidência e a tela diz isso.
+10. **Lacuna da LGPD (escopo desta fatia):** um artigo é **coberto** se há um documento vigente ligado a ele, ou um controle do projeto ligado por mapeamento validado cujo status não seja `Missing`/`Not Applicable`. Se só há mapeamento `parcial`, é **parcial**; caso contrário é **lacuna**. Mapeamento `relacionado` e `proposto` nunca cobrem (decidido na execução). `evidencia_requisitos` (spec 4.7) fica para a fatia que mexer em evidência; a lacuna de hoje não conta evidência e a tela diz isso.
 
 ## Global Constraints
 
@@ -98,7 +98,7 @@
 1. `npm run db:backup` (mover o dump para `C:\Users\resper\backups-niso\`, fora do repositório).
 2. `npx wrangler d1 migrations apply niso-db --remote`, depois `PRAGMA table_info` das 4 tabelas e da coluna nova.
 3. Merge; conferir `/health` com o SHA.
-4. `POST /api/v1/requisitos/semear` como `platform_admin`: conferir `count(*)` por fonte e quantos `compliance_controls` ficaram com `requisito_id` (Twyn: 229 controles).
+4. `POST /api/v1/requisitos/semear` como `platform_admin`: conferir `count(*)` por fonte e quantos `compliance_controls` ficaram com `requisito_id` (projeto real: 229 controles).
 
 ## Gaps declarados desta fatia
 
