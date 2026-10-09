@@ -5,8 +5,7 @@ import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprov
 import { semRastroDeAssinatura, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
-import { conferirPedidosDoDocumento } from './pedidos';
-import { COLUNAS_REVOGACAO } from './controls';
+import { gravarPolitica } from '../services/politica-escrita';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -55,25 +54,8 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
       return erro500(c, 'Falha ao gerar política', new Error(result.content));
     }
 
-    // Save policy markdown directly to compliance_controls.description
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
-    ).bind(result.content, idLinha, projectId).run();
-    await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
-
-    // Insert new version in policy_versions
-    try {
-      const countRow = await c.env.DB.prepare(
-        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, idLinha, controlId).first<{ count: number }>();
-      const nextVer = (countRow?.count || 0) + 1;
-      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-      await c.env.DB.prepare(
-        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, idLinha, nextVer, result.content, c.get('user')?.email || 'system').run();
-    } catch (e) {
-      console.error("Erro ao registrar versão da política", e);
-    }
+    // Grava no controle (fonte até a 3.3), no histórico e no documento.
+    await gravarPolitica(c, projectId, idLinha, result.content, c.get('user')?.email || 'system', 'gerador', { versaoOpcional: true });
 
     await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Política gerada para controle ${controlId}, projeto ${projectId}`);
 
@@ -275,24 +257,7 @@ policies.post('/api/v1/projects/:projectId/generate-policies-bulk', async (c) =>
           successful++;
 
           // Salvar markdown da política e limpar assinaturas de demonstração
-          await c.env.DB.prepare(
-            'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
-          ).bind(result.content, idLinha, projectId).run();
-          await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
-
-          // Registrar histórico de versão
-          try {
-            const countRow = await c.env.DB.prepare(
-              'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-            ).bind(projectId, idLinha, controlId).first<{ count: number }>();
-            const nextVer = (countRow?.count || 0) + 1;
-            const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-            await c.env.DB.prepare(
-              'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-            ).bind(versionId, projectId, idLinha, nextVer, result.content, c.get('user')?.email || 'system').run();
-          } catch (e) {
-            console.error("Erro ao registrar versão no bulk", e);
-          }
+          await gravarPolitica(c, projectId, idLinha, result.content, c.get('user')?.email || 'system', 'gerador', { versaoOpcional: true });
 
           await logAudit(c.env.DB, 'policy.generated', c.get('user')?.email ?? 'system', `Bulk policy generated: ${controlId}, project ${projectId}`);
           policies.push({ control_id: controlId, success: true, content_preview: result.content.substring(0, 200) });
@@ -438,20 +403,7 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/restore-version',
   if (!row) return c.json({ error: 'Versão da política não encontrada' }, 404);
 
   // Texto restaurado é texto diferente do assinado: zera as duas aprovações, como a edição e a geração.
-  await c.env.DB.prepare(
-    `UPDATE compliance_controls SET description = ?, ${COLUNAS_REVOGACAO.ciso}, ${COLUNAS_REVOGACAO.ceo}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
-  ).bind(row.policy_text, controlId, projectId).run();
-  await conferirPedidosDoDocumento(c, 'politica', controlId, projectId);
-
-  const countRow = await c.env.DB.prepare(
-    'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-  ).bind(projectId, controlId, controlIdRaw).first<{ count: number }>();
-  const nextVer = (countRow?.count || 0) + 1;
-  const newVerId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-
-  await c.env.DB.prepare(
-    'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(newVerId, projectId, controlId, nextVer, row.policy_text, c.get('user')?.email || 'system').run();
+  const { versao: nextVer } = await gravarPolitica(c, projectId, controlId, row.policy_text, c.get('user')?.email || 'system', 'humano');
 
   await logAudit(c.env.DB, 'policy.restored', c.get('user')?.email || 'system', `Política ${controlIdRaw} restaurada para versão ${row.version}, projeto ${projectId}`);
 
@@ -491,20 +443,7 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c
     const canonicalId = control.id;
 
     // Atualiza o texto "atual" e zera aprovações — o conteúdo mudou, aprovações anteriores não valem mais
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
-    ).bind(text, canonicalId, projectId).run();
-    await conferirPedidosDoDocumento(c, 'politica', canonicalId, projectId);
-
-    // Registra a nova versão no histórico
-    const countRow = await c.env.DB.prepare(
-      'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND control_id = ?'
-    ).bind(projectId, canonicalId).first<{ count: number }>();
-    const nextVer = (countRow?.count || 0) + 1;
-    const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-    await c.env.DB.prepare(
-      'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(versionId, projectId, canonicalId, nextVer, text, userEmail).run();
+    const { versao: nextVer } = await gravarPolitica(c, projectId, canonicalId, text, userEmail, 'humano');
 
     await logAudit(c.env.DB, 'policy.manually_edited', userEmail, `Política do controle ${canonicalId} editada manualmente (versão ${nextVer}), projeto ${projectId}`);
 
@@ -569,24 +508,7 @@ policies.post('/api/v1/projects/:projectId/policies/generate-from-template', asy
     // Save policy markdown directly to compliance_controls.description
     const idLinha = await idDoControle(c.env.DB, projectId, control_id);
     if (!idLinha) return c.json({ error: 'Controle não encontrado' }, 404);
-    await c.env.DB.prepare(
-      'UPDATE compliance_controls SET description = ?, ciso_approved_by = NULL, ciso_approved_at = NULL, ciso_approved_ip = NULL, ciso_approved_ua = NULL, ceo_approved_by = NULL, ceo_approved_at = NULL, ceo_approved_ip = NULL, ceo_approved_ua = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?'
-    ).bind(markdown, idLinha, projectId).run();
-    await conferirPedidosDoDocumento(c, 'politica', idLinha, projectId);
-
-    // Insert new version in policy_versions
-    try {
-      const countRow = await c.env.DB.prepare(
-        'SELECT COUNT(*) as count FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?)'
-      ).bind(projectId, idLinha, control_id).first<{ count: number }>();
-      const nextVer = (countRow?.count || 0) + 1;
-      const versionId = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-      await c.env.DB.prepare(
-        'INSERT INTO policy_versions (id, project_id, control_id, version, policy_text, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(versionId, projectId, idLinha, nextVer, markdown, user?.email || 'system').run();
-    } catch (e) {
-      console.error("Erro ao registrar versão da política", e);
-    }
+    await gravarPolitica(c, projectId, idLinha, markdown, user?.email || 'system', 'gerador', { versaoOpcional: true });
 
     await logAudit(c.env.DB, 'policy.generated_from_template', user?.email ?? 'system', `Política gerada via template ${template_name} para o controle ${control_id}, projeto ${projectId}`);
 
