@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500, logAudit, podeAdministrarOrg } from '../helpers';
+import { importarPartes, conciliarResponsaveis } from '../services/partes';
 import {
   validateBody, moduloHabilitarSchema, MODULOS, parseModulos, type Modulo,
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
@@ -130,6 +131,19 @@ nucleoApp.post('/partes', async (c) => {
   } catch (e) { return erro500(c, 'Falha ao criar a parte', e); }
 });
 
+// ─── importar e conciliar (sob demanda, por projeto, repetíveis) ───────────
+nucleoApp.post('/partes/importar', async (c) => {
+  try {
+    return c.json({ ok: true, ...(await importarPartes(c.env.DB, c.req.param('projectId')!, c.get('user').email)) });
+  } catch (e) { return erro500(c, 'Falha ao importar as partes', e); }
+});
+
+nucleoApp.post('/partes/conciliar', async (c) => {
+  try {
+    return c.json({ ok: true, ...(await conciliarResponsaveis(c.env.DB, c.req.param('projectId')!, c.get('user').email)) });
+  } catch (e) { return erro500(c, 'Falha ao conciliar os responsáveis', e); }
+});
+
 nucleoApp.put('/partes/:id', async (c) => {
   try {
     const projectId = c.req.param('projectId')!;
@@ -148,10 +162,10 @@ nucleoApp.put('/partes/:id', async (c) => {
 });
 
 // ─── vínculos ──────────────────────────────────────────────────────────────
-/** `item` entra na fatia 1.2 e `tratamento` na do RoPA: até lá o alvo não existe. */
+/** `tratamento` entra na fatia do RoPA: até lá o alvo não existe. */
 async function conferirAlvo(db: D1Database, projectId: string, tipo: AlvoVinculo, id: string): Promise<'ok' | 'inexistente' | 'indisponivel'> {
   if (tipo === 'projeto') return id === projectId ? 'ok' : 'inexistente';
-  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : null;
+  const tabela = tipo === 'departamento' ? 'departamentos' : tipo === 'parte' ? 'partes' : tipo === 'item' ? 'itens' : null;
   if (!tabela) return 'indisponivel';
   // `tabela` sai das constantes acima, nunca da requisição; o id vai por bind.
   return (await db.prepare(`SELECT 1 FROM ${tabela} WHERE id = ? AND project_id = ?`).bind(id, projectId).first()) ? 'ok' : 'inexistente';

@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0048** (`ls migrations/*.sql | tail -1`). São 46 arquivos
+- Última migration no repositório: **0049** (`ls migrations/*.sql | tail -1`). São 47 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -260,3 +260,16 @@ mostra `iso` com a contagem de `projects`; `PRAGMA table_info(organizations)` li
 **Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
 --remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to apply") →
 merge, porque `deploy.yml` recusa migration pendente.
+
+## 0049 — responsável aponta para a parte, fatia 1.3 (2026-10)
+
+Cinco `ALTER TABLE ... ADD COLUMN ... REFERENCES partes(id) ON DELETE SET NULL`: `risks.owner_parte_id`,
+`compliance_controls.owner_parte_id`, `ropa_records.owner_parte_id`, `corrective_actions.assigned_to_parte_id`
+e `checklist_progress.assigned_to_parte_id`. O texto do responsável fica onde está. Sem carga: quem liga
+texto a parte é `POST /api/v1/projects/:projectId/partes/importar` e `.../partes/conciliar`, por projeto.
+ADD COLUMN não é idempotente: aplicar duas vezes falha com "duplicate column". Nenhuma linha muda.
+
+Conferência depois de aplicar: `PRAGMA table_info(risks)` lista `owner_parte_id` (e igual nas outras quatro).
+
+**Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations
+apply niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` → merge.
