@@ -3,6 +3,7 @@ import { api, API_BASE } from '../api.js';
 import { showToast, openModal, closeModal, escapeHTML, traduzStatus } from '../ui.js';
 import { navigate } from '../router.js';
 import { renderAcessoAuditor } from './auditor-acesso.js';
+import { opcoesDePartes } from '../partes-opcoes.js';
 
 // S2: wrappers para handlers COMPOSTOS/inline (a delegação chama uma função só).
 window.__grcDeleteRisk = function (riskId) {
@@ -260,15 +261,6 @@ window.__grcCloseExecAudit = function (id) {
             acceptGroup.style.display = 'none';
         }
     };
-
-    // Responsável do cadastro de partes (fatia 1.4). Falha ou lista vazia: só a opção em branco, o texto livre continua valendo.
-    async function opcoesDePartes(projectId, selecionada) {
-        let partes = [];
-        try { partes = await api('GET', `/api/v1/projects/${projectId}/partes?status=ativa`); } catch(e) {}
-        if (!Array.isArray(partes)) partes = [];
-        return '<option value="">-- Sem responsável cadastrado --</option>' + partes
-            .map(p => `<option value="${escapeHTML(p.id)}" ${p.id === selecionada ? 'selected' : ''}>${escapeHTML(p.nome)}</option>`).join('');
-    }
 
     window.openNewRiskModal = async function(projectId) {
         let assets = [];
@@ -1166,7 +1158,7 @@ window.__grcCloseExecAudit = function (id) {
 
                 return [
                     `<strong>${escapeHTML(ca.title)}</strong>`,
-                    escapeHTML(ca.assigned_to || 'Sem responsável'),
+                    escapeHTML(ca.assigned_to_parte_nome || ca.assigned_to || 'Sem responsável'),
                     ca.due_date || '—',
                     window.renderStatusBadge(ca.severity || 'Medium', sevBadgeType),
                     window.renderStatusBadge(ca.status || 'Open', statusBadgeType),
@@ -1229,7 +1221,7 @@ window.__grcCloseExecAudit = function (id) {
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsável</div>
-                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(ca.assigned_to || 'Sem responsavel')}</div>
+                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(ca.assigned_to_parte_nome || ca.assigned_to || 'Sem responsavel')}</div>
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Prazo de Conclusao</div>
@@ -1266,6 +1258,7 @@ window.__grcCloseExecAudit = function (id) {
         try { risks = await api('GET', `/api/v1/projects/${projectId}/risks`); } catch(e) {}
         try { audits = await api('GET', `/api/v1/projects/${projectId}/audits`); } catch(e) {}
         const projectControls = S.controls.filter(ctrl => ctrl.project_id === projectId);
+        const parteOptions = await opcoesDePartes(projectId, null);
 
         openModal(`
             <div class="modal-header"><span class="modal-title">Nova Acao Corretiva</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
@@ -1278,7 +1271,8 @@ window.__grcCloseExecAudit = function (id) {
                     <select class="form-input" id="capa-sev"><option value="Low">Baixo</option><option value="Medium" selected>Médio</option><option value="High">Alto</option><option value="Critical">Crítico</option></select></div>
                 <div class="form-group" style="flex:1"><label class="form-label">Prazo</label><input class="form-input" id="capa-due" type="date"></div>
             </div>
-            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="capa-assigned" placeholder="Ex: CISO"></div>
+            <div class="form-group"><label class="form-label">Responsável (cadastro de partes)</label><select class="form-input" id="capa-assigned-parte">${parteOptions}</select></div>
+            <div class="form-group"><label class="form-label">Responsável (texto livre)</label><input class="form-input" id="capa-assigned" placeholder="Ex: CISO"></div>
             
             <div class="card-label" style="margin-top:1rem;margin-bottom:0.5rem">Vinculos e Associacao</div>
             <div class="form-group">
@@ -1316,6 +1310,7 @@ window.__grcCloseExecAudit = function (id) {
             severity: document.getElementById('capa-sev').value, 
             due_date: document.getElementById('capa-due').value || null, 
             assigned_to: document.getElementById('capa-assigned').value,
+            assigned_to_parte_id: document.getElementById('capa-assigned-parte').value || null,
             audit_id: document.getElementById('capa-audit').value || null,
             risk_id: document.getElementById('capa-risk').value || null,
             control_id: document.getElementById('capa-control').value || null
@@ -1335,6 +1330,7 @@ window.__grcCloseExecAudit = function (id) {
         try { risks = await api('GET', `/api/v1/projects/${projectId}/risks`); } catch(e) {}
         try { audits = await api('GET', `/api/v1/projects/${projectId}/audits`); } catch(e) {}
         const projectControls = S.controls.filter(ctrl => ctrl.project_id === projectId);
+        const parteOptions = await opcoesDePartes(projectId, ca.assigned_to_parte_id);
 
         openModal(`
             <div class="modal-header"><span class="modal-title">Editar Acao Corretiva</span><button class="btn-ghost" data-action="forceCloseModal">&times;</button></div>
@@ -1354,8 +1350,9 @@ window.__grcCloseExecAudit = function (id) {
             </div>
             <div style="display:flex;gap:0.5rem">
                 <div class="form-group" style="flex:1"><label class="form-label">Prazo</label><input class="form-input" id="capa-e-due" type="date" value="${ca.due_date||''}"></div>
-                <div class="form-group" style="flex:1"><label class="form-label">Responsável</label><input class="form-input" id="capa-e-assigned" value="${escapeHTML(ca.assigned_to||'')}"></div>
+                <div class="form-group" style="flex:1"><label class="form-label">Responsável (cadastro de partes)</label><select class="form-input" id="capa-e-assigned-parte">${parteOptions}</select></div>
             </div>
+            <div class="form-group"><label class="form-label">Responsável (texto livre)</label><input class="form-input" id="capa-e-assigned" value="${escapeHTML(ca.assigned_to||'')}"></div>
             <div class="form-group"><label class="form-label">Resolucao (Se fechada)</label><textarea class="form-input" id="capa-e-resolution">${escapeHTML(ca.resolution||'')}</textarea></div>
             
             <div class="card-label" style="margin-top:1rem;margin-bottom:0.5rem">Vinculos e Associacao</div>
@@ -1397,6 +1394,7 @@ window.__grcCloseExecAudit = function (id) {
             severity: document.getElementById('capa-e-sev').value, 
             status: document.getElementById('capa-e-status').value, 
             assigned_to: document.getElementById('capa-e-assigned').value,
+            assigned_to_parte_id: document.getElementById('capa-e-assigned-parte').value || null,
             due_date: document.getElementById('capa-e-due').value || null,
             resolution: document.getElementById('capa-e-resolution').value || null,
             audit_id: document.getElementById('capa-e-audit').value || null,

@@ -60,6 +60,8 @@ export const ropaSchema = z.object({
   data_subject_rights_details: longoOpcional,
   dpia_required: boolLike,
   owner: curtoOpcional,
+  // Responsável do cadastro de partes (fatia 1.4). Sem o transform de `opcional`: o PUT distingue ausente (mantém) de null (desliga).
+  owner_parte_id: z.string().nullish(),
   // 'Approved' fica de fora de propósito (como na DPIA): aprovar exige senha, autoridade na matriz de
   // Governança e segregação, e isso só existe em POST .../approve e nos pedidos de aprovação.
   // Active/Inactive é o ciclo de vida da atividade de tratamento, que convive com o status de aprovação.

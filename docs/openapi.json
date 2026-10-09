@@ -2931,6 +2931,12 @@
                       "null"
                     ]
                   },
+                  "assigned_to_parte_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "due_date": {
                     "type": [
                       "string",
@@ -10399,6 +10405,12 @@
                       "null"
                     ]
                   },
+                  "assigned_to_parte_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "due_date": {
                     "type": [
                       "string",
@@ -13675,6 +13687,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "owner_parte_id": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "status": {
@@ -17978,6 +17996,12 @@
                       {
                         "type": "null"
                       }
+                    ]
+                  },
+                  "owner_parte_id": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "status": {
