@@ -92,7 +92,7 @@ export const ROTAS = {
   'POST /api/v1/public/pedidos/ciencia': { obrigatorios: ['codigo', 'nome', 'token'] },
   'POST /api/v1/public/pedidos/codigo': { obrigatorios: ['token'] },
   'POST /api/v1/public/pedidos/ver': { obrigatorios: ['token'] },
-  'POST /api/v1/public/policies/ack': { obrigatorios: ['policy_type'] },
+  'POST /api/v1/public/policies/ack': { obrigatorios: ['documento_id'] },
   'POST /api/v1/public/policies/request-otp': { obrigatorios: ['email', 'project_id'] },
   'POST /api/v1/public/policies/verify-otp': { obrigatorios: ['email', 'otp', 'project_id'] },
   'POST /api/v1/public/propostas/aceitar': { obrigatorios: ['cargo', 'email', 'nome', 'poderes', 'token'] },
