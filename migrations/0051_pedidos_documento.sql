@@ -2,6 +2,8 @@
 --
 -- 1. `pedidos.tipo` passa a aceitar `documento` (ref_id = documentos.id; o conteúdo congelado é a versão
 --    vigente: titulo, texto e numero).
+-- 1b. `pedidos.tipo` também aceita `excecao` (exceção a documento, fatia 3.5): entra AGORA porque esta tabela é prova e
+--    reconstruí-la uma segunda vez, só por um valor de CHECK, seria risco sem ganho. Nenhum código grava `excecao` ainda.
 -- 2. `pedido_destinatarios.canal` passa a aceitar `portal`: a ciência de quem entra pelo portal público
 --    /politicas com código por e-mail, gravada já decidida.
 --
@@ -18,7 +20,7 @@ CREATE TABLE pedidos_new (
     id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica', 'documento')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica', 'documento', 'excecao')),
     ref_id TEXT NOT NULL,
     titulo TEXT NOT NULL,
     papel_exigido TEXT NOT NULL CHECK (papel_exigido IN ('ciso', 'ceo', 'ciente')),

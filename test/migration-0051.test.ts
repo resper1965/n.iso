@@ -40,8 +40,9 @@ describe('migration 0051 — tipo documento e canal portal em pedidos', () => {
     const fk = (await env.DB.prepare('PRAGMA foreign_key_list(pedido_destinatarios)').all<{ table: string; on_delete: string }>()).results;
     expect(fk.map((f) => [f.table, f.on_delete])).toEqual([['pedidos', 'CASCADE']]);
 
-    // tipo e canal novos entram; valores fora da lista continuam recusados
+    // tipo e canal novos entram (documento e excecao; portal); valores fora da lista continuam recusados
     await ped('p-doc', 'documento').run();
+    await ped('p-exc', 'excecao').run(); // reservado para a fatia 3.5: entra no CHECK agora, para não reconstruir a tabela de prova de novo
     await dest('d-portal', 'p-doc', 'portal').run();
     await expect(ped('p-x', 'outro').run()).rejects.toThrow();
     await expect(dest('d-fax', 'p-doc', 'fax').run()).rejects.toThrow();
