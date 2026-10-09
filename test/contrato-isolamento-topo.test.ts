@@ -194,6 +194,9 @@ const CATALOGO_GLOBAL: Record<string, string> = {
   // irmã `GET /api/v1/policy-templates` já lista tudo para qualquer sessão.
   // Não há dado de tenant a vazar aqui.
   'GET /api/v1/policy-templates/:id': 'catálogo global, sem coluna project_id',
+  // `requisitos` (fatia 2) é catálogo de referência, sem `project_id`: as normas e leis são as mesmas para todos.
+  // Só o mapeamento ainda `proposto` é restringido por papel, e isso não é isolamento de tenant.
+  'GET /api/v1/requisitos/:id': 'catálogo global, sem coluna project_id',
 };
 
 /**

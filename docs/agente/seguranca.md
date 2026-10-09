@@ -84,6 +84,7 @@ quê (mesma regra do [`SECURITY.md`](../../SECURITY.md)).
 | `/projects/:id/{ropa,dpia}/:id/revoke-approval` | Desaprovar ROPA e DPIA é ato da direção, pela interface (F6, decisão D1). Revogar aprovação de **controle** segue possível, com confirmação. |
 | `DELETE /management-reviews/:id` | Excluir análise crítica destrói registro assinado: só pela interface. |
 | `POST /projects/:id/documentos/:id/versoes/:n/publicar`, `DELETE /projects/:id/documentos/:id/rascunho`, `POST /projects/:id/documentos/:id/revisar` e `POST /projects/:id/documentos/:id/excecoes/:id/revogar` | Política: o agente **propõe** (`niso_update_policy` e `niso_generate_policy` gravam um rascunho do documento do controle) e o humano publica ou descarta, pela tela da política. Publicar zera as aprovações e substitui os pedidos abertos. `PUT /controls/:id` também recusa ao agente mudar a descrição, que é o texto da política, salvo a justificativa de "Não aplicável". |
+| `POST`, `PUT` e `DELETE /requisitos*` | O catálogo de requisitos (títulos, mapeamentos e seed) é edição do administrador da plataforma, com trilha: o agente só lê. Ligar requisito a documento (`PUT /projects/:id/documentos/:id/requisitos`) continua aberto, porque é metadado sem efeito de aprovação. |
 
 Fonte da lista: `FORA_DO_AGENTE` em `src/middleware/agente.ts`. Mudou lá, muda aqui.
 

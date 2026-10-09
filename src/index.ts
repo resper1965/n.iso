@@ -38,6 +38,7 @@ import { aiApp } from './routes/ai';
 import { governanceApp } from './routes/governance';
 import { nucleoApp } from './routes/nucleo';
 import { documentosApp } from './routes/documentos';
+import { requisitosApp, projetoRequisitosApp } from './routes/requisitos';
 import { agentesApp } from './routes/agentes';
 import { auditorApp } from './routes/auditor';
 import { platformApp } from './routes/platform';
@@ -403,6 +404,8 @@ app.route('/api/v1/certification', certificationsApp);
 app.route('/api/v1/projects/:projectId/certification', projectCertificationsApp);
 app.route('/api/v1/projects/:projectId', nucleoApp);
 app.route('/api/v1/projects/:projectId', documentosApp);
+app.route('/api/v1/requisitos', requisitosApp);
+app.route('/api/v1/projects/:projectId', projetoRequisitosApp);
 
 app.route('/api/v1', aiApp);
 app.route('/api/v1', governanceApp);

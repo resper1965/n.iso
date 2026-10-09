@@ -130,6 +130,10 @@ const VINCULO_ALHEIO: [string, (p: Ctx) => string, (p: Ctx) => unknown][] = [
 /** Rota sem parâmetro, não GET, que não recebe nem devolve recurso de outra organização. */
 const SEM_RECURSO_ALHEIO: Record<string, string> = {
   'POST /api/v1/auth/setup': 'bootstrap do primeiro admin, por SETUP_KEY; sem sessão',
+  'POST /api/v1/requisitos/semear': 'catálogo global de requisitos, só platform_admin; não recebe id de recurso',
+  'POST /api/v1/requisitos/mapeamentos': 'catálogo global de requisitos, só platform_admin; ids são de requisito, não de organização',
+  'PUT /api/v1/requisitos/mapeamentos': 'catálogo global de requisitos, só platform_admin',
+  'DELETE /api/v1/requisitos/mapeamentos': 'catálogo global de requisitos, só platform_admin',
   'POST /api/v1/auth/login': 'login: identidade global por e-mail e senha',
   'POST /api/v1/auth/reset-password-first': 'troca da senha provisória da própria conta',
   'POST /api/v1/auth/forgot-password': 'pedido de redefinição por e-mail; não devolve dado',

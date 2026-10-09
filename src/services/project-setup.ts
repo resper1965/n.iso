@@ -1,3 +1,4 @@
+import { fonteDaNorma } from './requisitos';
 import { genId } from '../helpers';
 import { PHASE_TITLES } from '../constants';
 
@@ -36,12 +37,14 @@ type ItemDeCatalogo = { code: string; title: string };
  */
 export function stmtControles(db: D1Database, projectId: string, standard: string, lista: readonly ItemDeCatalogo[]): D1PreparedStatement {
   return db.prepare(
-    `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at)
-     SELECT lower(hex(randomblob(16))), ?1, ?2, j.value, '', 'Missing', 0, datetime('now') FROM json_each(?3) j
+    `INSERT INTO compliance_controls (id, project_id, standard, title, description, status, maturity, updated_at, requisito_id)
+     SELECT lower(hex(randomblob(16))), ?1, ?2, j.value, '', 'Missing', 0, datetime('now'),
+            (SELECT r.id FROM requisitos r WHERE r.fonte_id = ?4 AND r.referencia = substr(j.value, 1, instr(j.value || ' ', ' ') - 1))
+       FROM json_each(?3) j
       WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?1)
         AND NOT EXISTS (SELECT 1 FROM compliance_controls c WHERE c.project_id = ?1 AND c.standard = ?2
           AND substr(c.title, 1, instr(c.title || ' ', ' ') - 1) = substr(j.value, 1, instr(j.value || ' ', ' ') - 1))`
-  ).bind(projectId, standard, JSON.stringify(lista.map((c) => `${c.code} — ${c.title}`)));
+  ).bind(projectId, standard, JSON.stringify(lista.map((c) => `${c.code} — ${c.title}`)), fonteDaNorma(standard));
 }
 
 /** Semeia, como 'Missing', os controles da lista que o projeto ainda não tem. */
