@@ -7,6 +7,8 @@ const COLUNAS: [string, string][] = [
   ['risks', 'owner_parte_id'], ['compliance_controls', 'owner_parte_id'], ['ropa_records', 'owner_parte_id'],
   ['corrective_actions', 'assigned_to_parte_id'], ['checklist_progress', 'assigned_to_parte_id'],
 ];
+// Colunas acrescentadas por migrations POSTERIORES à 0049: ficam depois da coluna do responsável.
+const POSTERIORES: Record<string, number> = { compliance_controls: 1 }; // requisito_id (0053)
 const colunas = async (t: string) =>
   (await env.DB.prepare(`SELECT name FROM pragma_table_info('${t}')`).all<{ name: string }>()).results.map((r) => r.name);
 
@@ -14,7 +16,8 @@ describe('migration 0049 — responsável aponta para a parte', () => {
   it('o schema canônico tem as cinco colunas, no fim de cada tabela, ligadas a partes', async () => {
     await applySchema();
     for (const [tabela, coluna] of COLUNAS) {
-      expect((await colunas(tabela)).at(-1), tabela).toBe(coluna);
+      const cols = await colunas(tabela);
+      expect(cols.slice(0, cols.length - (POSTERIORES[tabela] ?? 0)).at(-1), tabela).toBe(coluna);
       const fk = await env.DB.prepare(`SELECT "table" AS t, on_delete AS d FROM pragma_foreign_key_list('${tabela}') WHERE "from" = ?`).bind(coluna).first();
       expect(fk, tabela).toEqual({ t: 'partes', d: 'SET NULL' });
     }

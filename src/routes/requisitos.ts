@@ -47,8 +47,8 @@ requisitosApp.post('/mapeamentos', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO requisito_mapeamentos (de_id, para_id, tipo, estado, validado_por, validado_em, nota) VALUES (?, ?, ?, ?, ?, ?, ?)`
       ).bind(m.de_id, m.para_id, m.tipo, m.estado, m.validado_por ?? null, m.validado_em ?? null, m.nota ?? null).run();
-    } catch (e: any) {
-      if (/UNIQUE|PRIMARY KEY/i.test(String(e?.message))) return c.json({ error: 'Esse mapeamento já existe' }, 409);
+    } catch (e) {
+      if (/UNIQUE|PRIMARY KEY/i.test(String((e as Error)?.message))) return c.json({ error: 'Esse mapeamento já existe' }, 409);
       throw e;
     }
     await logAudit(c.env.DB, 'requisitos.mapeamento', c.get('user').email, `Mapeamento ${m.de_id} → ${m.para_id} (${m.tipo}, ${m.estado}) criado`);
