@@ -5,7 +5,8 @@ import { validateBody, politicaGerarSchema, documentoGerarSchema, documentoAprov
 import { semRastroDeAssinatura, idDoControle, logAudit, escapeHtml, erro500, registraErro, sha256Hex } from '../helpers';
 import { PolicyAgent } from '../agents/policy';
 import { PolicyGeneratorService, TemplateNaoEncontrado } from '../services/policy-generator';
-import { gravarPolitica } from '../services/politica-escrita';
+import { gravarPolitica, gravarRascunhoDoAgente } from '../services/politica-escrita';
+import { rascunhoDoControle } from '../services/documentos';
 
 const policies = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -52,6 +53,16 @@ policies.post('/api/v1/projects/:projectId/generate-policy', async (c) => {
     if (!result.success) {
       // result.content traz o texto cru de cada provedor de IA: vai ao log, não ao cliente.
       return erro500(c, 'Falha ao gerar política', new Error(result.content));
+    }
+
+    // O agente propõe, o humano publica: rascunho do documento, e o controle fica como está.
+    if (c.get('user')?.agente === true) {
+      const r = await gravarRascunhoDoAgente(c, projectId, idLinha, result.content, c.get('user')?.email || 'system');
+      if (!r.ok) return c.json({ error: r.error }, r.status);
+      return c.json({
+        ok: true, rascunho: true, documento_id: r.documento_id, numero: r.numero,
+        policy_markdown: result.content, control: controlId, confidence: result.confidence, metadata: result.metadata,
+      });
     }
 
     // Grava no controle (fonte até a 3.3), no histórico e no documento.
@@ -340,7 +351,8 @@ policies.get('/api/v1/projects/:projectId/controls/:controlId/policy', async (c)
     const { results: versions } = await c.env.DB.prepare(
       'SELECT id, version, created_by, created_at FROM policy_versions WHERE project_id = ? AND (control_id = ? OR control_id = ?) ORDER BY version DESC'
     ).bind(projectId, p.control.id, ref).all();
-    return c.json({ ok: true, control: semRastroDeAssinatura(p.control), content: p.control.description ?? '', hash: p.hash, versions });
+    const rascunho = await rascunhoDoControle(c.env.DB, projectId, p.control.id);
+    return c.json({ ok: true, control: semRastroDeAssinatura(p.control), content: p.control.description ?? '', hash: p.hash, versions, rascunho: rascunho ?? null });
   } catch (e) {
     return erro500(c, 'Falha ao ler a política', e);
   }
@@ -441,6 +453,13 @@ policies.post('/api/v1/projects/:projectId/controls/:controlId/policy', async (c
     const userEmail = c.get('user')?.email ?? 'system';
     // control.id é o id canônico que de fato existe em compliance_controls (FK de policy_versions).
     const canonicalId = control.id;
+
+    // O agente propõe, o humano publica: rascunho do documento, e o controle fica como está.
+    if (c.get('user')?.agente === true) {
+      const r = await gravarRascunhoDoAgente(c, projectId, canonicalId, text, userEmail);
+      if (!r.ok) return c.json({ error: r.error }, r.status);
+      return c.json({ ok: true, rascunho: true, control_id: canonicalId, documento_id: r.documento_id, numero: r.numero });
+    }
 
     // Atualiza o texto "atual" e zera aprovações — o conteúdo mudou, aprovações anteriores não valem mais
     const { versao: nextVer } = await gravarPolitica(c, projectId, canonicalId, text, userEmail, 'humano');

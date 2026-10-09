@@ -281,3 +281,21 @@ export async function descartarRascunho(db: D1Database, projectId: string, docum
   await logAudit(db, 'documento.rascunho_descartado', ator, `Documento ${documentoId}: rascunho descartado`, '', '', projectId);
   return { ok: true };
 }
+
+/** O rascunho pendente do documento de um controle (o que o agente propôs), ou null. */
+export async function rascunhoDoControle(db: D1Database, projectId: string, controlId: string) {
+  return db.prepare(
+    `SELECT d.id AS documento_id, v.numero, v.texto, v.origem, v.criado_por, v.criado_em
+     FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.estado = 'rascunho'
+     WHERE d.origem_control_id = ? AND d.project_id = ?`
+  ).bind(controlId, projectId).first<{ documento_id: string; numero: number; texto: string; origem: string; criado_por: string | null; criado_em: string }>();
+}
+
+/** O controle ligado a um documento e o texto de uma versão dele (para aplicar uma publicação no controle). */
+export async function alvoDaPublicacao(db: D1Database, projectId: string, documentoId: string, numero: number) {
+  return db.prepare(
+    `SELECT d.origem_control_id AS controle, v.texto
+     FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.numero = ?
+     WHERE d.id = ? AND d.project_id = ?`
+  ).bind(numero, documentoId, projectId).first<{ controle: string | null; texto: string }>();
+}

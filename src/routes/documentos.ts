@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
-import { criarDocumento, importarDocumentos, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
+import { alvoDaPublicacao, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
+import { aplicarTextoNoControle } from '../services/politica-escrita';
 import { validateBody, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
 
 /**
@@ -46,7 +47,21 @@ documentosApp.post('/documentos/:id/versoes/:numero/publicar', async (c) => {
   try {
     const numero = Number(c.req.param('numero'));
     if (!Number.isInteger(numero) || numero < 1) return c.json({ error: 'Número de versão inválido' }, 400);
-    const r = await publicarVersao(c.env.DB, c.req.param('projectId')!, c.req.param('id'), numero, c.get('user').email);
-    return r.ok ? c.json({ ok: true, numero: r.numero }) : c.json({ error: r.error }, r.status);
+    const projectId = c.req.param('projectId')!;
+    const ator = c.get('user').email;
+    const r = await publicarVersao(c.env.DB, projectId, c.req.param('id'), numero, ator);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    // Documento que veio de um controle: publicar tem o efeito de uma edição manual da política (texto no controle,
+    // aprovações a zero, pedidos conferidos, versão no histórico). Até a 3.3 o controle é a fonte da ciência.
+    const alvo = await alvoDaPublicacao(c.env.DB, projectId, c.req.param('id'), numero);
+    if (alvo?.controle) await aplicarTextoNoControle(c, projectId, alvo.controle, alvo.texto, ator);
+    return c.json({ ok: true, numero: r.numero });
   } catch (e) { return erro500(c, 'Falha ao publicar a versão', e); }
+});
+
+documentosApp.delete('/documentos/:id/rascunho', async (c) => {
+  try {
+    const r = await descartarRascunho(c.env.DB, c.req.param('projectId')!, c.req.param('id'), c.get('user').email);
+    return r.ok ? c.json({ ok: true }) : c.json({ error: r.error }, r.status);
+  } catch (e) { return erro500(c, 'Falha ao descartar o rascunho', e); }
 });

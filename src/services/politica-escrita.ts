@@ -1,37 +1,23 @@
-import { registraErro } from '../helpers';
+import { logAudit, registraErro } from '../helpers';
 import { conferirPedidosDoDocumento } from '../routes/pedidos';
 import { COLUNAS_REVOGACAO } from '../routes/controls';
-import { espelharTexto, garantirDocumentoDoControle } from './documentos';
+import { espelharTexto, garantirDocumentoDoControle, salvarRascunho, type Falha } from './documentos';
 
 /**
- * A sequência que todo escritor de texto de política repetia, agora numa função só (fatia 3.2):
+ * Passos 2 a 4 da escrita de política, que todo escritor repetia (fatia 3.2):
  *
- * 1. garante o documento do controle (antes de escrever, para a primeira escrita não perder o histórico);
  * 2. grava o texto no controle e zera as duas aprovações (o texto mudou, o que foi assinado não vale mais);
  * 3. confere os pedidos abertos (o conteúdo congelado mudou: o pedido antigo é substituído);
- * 4. registra a versão em `policy_versions`;
- * 5. espelha o texto no documento.
+ * 4. registra a versão em `policy_versions`.
  *
- * Até a 3.3 o controle segue sendo a fonte (ciência, portal e pedidos leem dele), então os passos 1 e 5 NUNCA
- * derrubam o escritor: a falha vai para o log com `registraErro`. `versaoOpcional` reproduz as rotas de geração,
- * em que a falha ao registrar a versão também só é logada; nas demais ela propaga, como antes.
- *
- * `controlId` é o id CANÔNICO do controle (o que existe em `compliance_controls`, FK de `policy_versions`).
- * `c` é o contexto Hono, porque `conferirPedidosDoDocumento` o usa para a trilha e para o log.
+ * `versaoOpcional` reproduz as rotas de geração, em que a falha ao registrar a versão só é logada; nas demais
+ * ela propaga, como antes. `controlId` é o id CANÔNICO (o que existe em `compliance_controls`, FK de
+ * `policy_versions`). `c` é o contexto Hono, porque `conferirPedidosDoDocumento` o usa para trilha e log.
  */
-export async function gravarPolitica(
-  c: any, projectId: string, controlId: string, texto: string, ator: string,
-  origem: 'humano' | 'gerador', opcoes: { versaoOpcional?: boolean } = {},
+export async function aplicarTextoNoControle(
+  c: any, projectId: string, controlId: string, texto: string, ator: string, opcoes: { versaoOpcional?: boolean } = {},
 ): Promise<{ versao: number }> {
   const db: D1Database = c.env.DB;
-
-  let documentoId: string | null = null;
-  try {
-    documentoId = await garantirDocumentoDoControle(db, projectId, controlId, ator);
-  } catch (e) {
-    registraErro(c, e);
-  }
-
   await db.prepare(
     `UPDATE compliance_controls SET description = ?, ${COLUNAS_REVOGACAO.ciso}, ${COLUNAS_REVOGACAO.ceo}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`
   ).bind(texto, controlId, projectId).run();
@@ -48,6 +34,29 @@ export async function gravarPolitica(
     if (!opcoes.versaoOpcional) throw e;
     registraErro(c, e);
   }
+  return { versao };
+}
+
+/**
+ * Escrita HUMANA (ou de gerador) de política: documento garantido, texto aplicado no controle e espelhado
+ * no documento. Até a 3.3 o controle segue sendo a fonte (ciência, portal e pedidos leem dele), então o
+ * documento NUNCA derruba o escritor: a falha dele vai para o log com `registraErro`.
+ */
+export async function gravarPolitica(
+  c: any, projectId: string, controlId: string, texto: string, ator: string,
+  origem: 'humano' | 'gerador', opcoes: { versaoOpcional?: boolean } = {},
+): Promise<{ versao: number }> {
+  const db: D1Database = c.env.DB;
+
+  // Antes de escrever, para a primeira escrita não perder o histórico que ainda está só em policy_versions.
+  let documentoId: string | null = null;
+  try {
+    documentoId = await garantirDocumentoDoControle(db, projectId, controlId, ator);
+  } catch (e) {
+    registraErro(c, e);
+  }
+
+  const { versao } = await aplicarTextoNoControle(c, projectId, controlId, texto, ator, opcoes);
 
   if (documentoId) {
     try {
@@ -57,4 +66,20 @@ export async function gravarPolitica(
     }
   }
   return { versao };
+}
+
+/**
+ * Escrita do AGENTE (MCP): vira rascunho do documento do controle e NADA mais. O controle, as aprovações, os
+ * pedidos e `policy_versions` ficam como estão; um humano publica (`POST /documentos/:id/versoes/:n/publicar`).
+ * A imposição é do servidor: quem chama decide por `c.get('user')?.agente === true`, vindo de `env.AGENTE`.
+ */
+export async function gravarRascunhoDoAgente(
+  c: any, projectId: string, controlId: string, texto: string, ator: string,
+): Promise<Falha | { ok: true; documento_id: string; numero: number }> {
+  const db: D1Database = c.env.DB;
+  const documentoId = await garantirDocumentoDoControle(db, projectId, controlId, ator);
+  const r = await salvarRascunho(db, projectId, documentoId, ator, texto, 'agente');
+  if (!r.ok) return r;
+  await logAudit(db, 'policy.rascunho_do_agente', ator, `Rascunho de política do agente para o controle ${controlId} (versão ${r.numero})`, '', '', projectId);
+  return { ok: true, documento_id: documentoId, numero: r.numero };
 }

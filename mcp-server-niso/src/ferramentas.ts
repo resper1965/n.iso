@@ -224,7 +224,7 @@ export const TOOLS: Ferramenta[] = [
   },
   {
     name: "niso_generate_policy",
-    description: `Generate a policy document for a control via the n.iso PolicyAgent (AI draft — must be reviewed before approval). ${WRITE_GUARDRAIL}`,
+    description: `Generate a policy document for a control via the n.iso PolicyAgent (AI draft). The server saves it as a DRAFT of the control's policy document: nothing in the current policy changes until a human publishes it on the policy screen. ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -346,7 +346,7 @@ export const TOOLS: Ferramenta[] = [
   },
   {
     name: "niso_update_policy",
-    description: `Manually edit the text of a control's policy (NOT AI generation — the exact text provided replaces the current one and creates a new version in the history). Invalidates any prior CISO/CEO approval on that control, since the content changed. ${WRITE_GUARDRAIL}`,
+    description: `Propose the text of a control's policy (NOT AI generation — the exact text provided). The server saves it as a DRAFT of the control's policy document: the current policy, its CISO/CEO approvals and its open approval requests stay untouched until a human publishes the draft on the policy screen. Tell the user a draft is waiting for review; never say the policy was changed. ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -359,7 +359,7 @@ export const TOOLS: Ferramenta[] = [
   },
   {
     name: "niso_update_control",
-    description: `Update fields of an existing SoA control (status, title and/or description). At least one of the three must be provided. This does NOT reset prior CISO/CEO approvals — to rewrite the policy text and invalidate approvals, use niso_update_policy instead. ${WRITE_GUARDRAIL}`,
+    description: `Update fields of an existing SoA control (status, title and/or description). At least one of the three must be provided. Changing the description resets any prior CISO/CEO approval. The agent may change the description only to record the justification of a Not Applicable control; to propose policy text use niso_update_policy (it saves a draft for human review). ${WRITE_GUARDRAIL}`,
     inputSchema: {
       type: "object",
       properties: {
