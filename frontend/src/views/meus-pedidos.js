@@ -26,6 +26,8 @@ const CAMPOS_DPIA = [
 const CAMPOS_POLITICA = [['title', 'Título'], ['description', 'Texto da política']];
 // Documento (fatia 3.3): o que o pedido congela é a versão vigente.
 const CAMPOS_DOCUMENTO = [['titulo', 'Título'], ['numero', 'Versão'], ['texto', 'Texto']];
+// Exceção a documento (fatia 3.5): o que o pedido congela.
+const CAMPOS_EXCECAO = [['escopo', 'Escopo'], ['motivo', 'Motivo'], ['vence_em', 'Vence em']];
 
 const data = (s) => (s ? new Date(s).toLocaleString('pt-BR') : '');
 const el = (id) => document.getElementById(id);
@@ -60,7 +62,7 @@ window.renderMeusPedidos = async function renderMeusPedidos(c, h, a) {
 };
 
 function conteudoHtml(tipo, conteudo) {
-    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : tipo === 'documento' ? CAMPOS_DOCUMENTO : Object.keys(conteudo).map((k) => [k, k]);
+    const campos = tipo === 'dpia' ? CAMPOS_DPIA : tipo === 'politica' ? CAMPOS_POLITICA : tipo === 'documento' ? CAMPOS_DOCUMENTO : tipo === 'excecao' ? CAMPOS_EXCECAO : Object.keys(conteudo).map((k) => [k, k]);
     return campos.filter(([k]) => conteudo[k] !== null && conteudo[k] !== undefined && conteudo[k] !== '')
         .map(([k, rotulo]) => `<div style="margin-bottom:12px">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:4px">${escapeHTML(rotulo)}</div>
@@ -165,7 +167,7 @@ window.abrirPedidoAprovacao = async function abrirPedidoAprovacao(projectId, tip
             <div class="form-group">
                 <label class="form-label" for="pn-papel">O que é pedido</label>
                 <select class="form-input" id="pn-papel">
-                    ${Object.entries(PAPEIS).filter(([v]) => tipo !== 'politica' || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
+                    ${Object.entries(PAPEIS).filter(([v]) => !['politica', 'documento', 'excecao'].includes(tipo) || v !== 'ciente').map(([v, r]) => `<option value="${v}">${escapeHTML(r)}</option>`).join('')}
                 </select>
             </div>
             <fieldset class="form-group" style="border:0;padding:0;margin:0 0 12px">
