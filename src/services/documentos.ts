@@ -122,3 +122,70 @@ export async function publicarVersao(
   await logAudit(db, 'documento.publicado', ator, `Documento ${documentoId}: versão ${numero} publicada`, '', '', projectId);
   return { ok: true, numero };
 }
+
+export type ResumoImportacaoDocumentos = {
+  criados: number; ja_existiam: number; versoes: number; ignorados_nao_aplicavel: number; ignorados_sem_texto: number;
+};
+
+/**
+ * Traz as políticas que já existem para `documentos`. Hoje a política é o texto em
+ * `compliance_controls.description` com o histórico em `policy_versions`, mas `description` preenchida NÃO
+ * quer dizer política (em produção é texto de catálogo em quase todo controle). O sinal de política é ter
+ * versão em `policy_versions`, aprovação CISO/CEO ou pedido `tipo = 'politica'`. Controle "Não aplicável"
+ * fica de fora: ali `description` é a justificativa da SoA.
+ *
+ * As versões vêm de `policy_versions` em ordem, renumeradas de 1 a n; se o texto atual do controle difere da
+ * última (ou não há versões), entra mais uma com ele. A última é a vigente. Repetível: o controle que já tem
+ * documento (`origem_control_id`) é pulado. Um batch por controle: documento e versões entram juntos ou não entram.
+ */
+export async function importarDocumentos(db: D1Database, projectId: string, ator: string): Promise<ResumoImportacaoDocumentos> {
+  const [controles, historico] = await Promise.all([
+    db.prepare(
+      `SELECT c.id, c.title, c.description, c.status,
+         EXISTS (SELECT 1 FROM documentos d WHERE d.origem_control_id = c.id) AS ja
+       FROM compliance_controls c
+       WHERE c.project_id = ?
+         AND (EXISTS (SELECT 1 FROM policy_versions pv WHERE pv.control_id = c.id)
+              OR c.ciso_approved_by IS NOT NULL OR c.ceo_approved_by IS NOT NULL
+              OR EXISTS (SELECT 1 FROM pedidos p WHERE p.project_id = c.project_id AND p.tipo = 'politica' AND p.ref_id = c.id))
+       ORDER BY c.id`
+    ).bind(projectId).all<{ id: string; title: string; description: string | null; status: string | null; ja: number }>(),
+    db.prepare(
+      `SELECT pv.control_id, pv.policy_text, pv.created_by FROM policy_versions pv
+       JOIN compliance_controls c ON c.id = pv.control_id
+       WHERE c.project_id = ? ORDER BY pv.control_id, pv.version, pv.rowid`
+    ).bind(projectId).all<{ control_id: string; policy_text: string; created_by: string | null }>(),
+  ]);
+
+  const porControle = new Map<string, { texto: string; por: string | null }[]>();
+  for (const h of historico.results) {
+    if (!h.policy_text?.trim()) continue;
+    porControle.set(h.control_id, [...(porControle.get(h.control_id) ?? []), { texto: h.policy_text, por: h.created_by }]);
+  }
+
+  const resumo: ResumoImportacaoDocumentos = { criados: 0, ja_existiam: 0, versoes: 0, ignorados_nao_aplicavel: 0, ignorados_sem_texto: 0 };
+  for (const c of controles.results) {
+    if (c.status === 'Not Applicable') { resumo.ignorados_nao_aplicavel++; continue; }
+    if (c.ja) { resumo.ja_existiam++; continue; }
+
+    const versoes = [...(porControle.get(c.id) ?? [])];
+    if (c.description?.trim() && versoes.at(-1)?.texto !== c.description) versoes.push({ texto: c.description, por: ator });
+    if (!versoes.length) { resumo.ignorados_sem_texto++; continue; }
+
+    const id = crypto.randomUUID();
+    const hashes = await Promise.all(versoes.map((v) => hashDoTexto(v.texto)));
+    await db.batch([
+      db.prepare(`INSERT INTO documentos (id, project_id, tipo, titulo, status, origem_control_id) VALUES (?, ?, 'politica', ?, 'vigente', ?)`)
+        .bind(id, projectId, c.title, c.id),
+      ...versoes.map((v, i) =>
+        db.prepare(`INSERT INTO documento_versoes (id, project_id, documento_id, numero, texto, hash, estado, origem, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, 'humano', ?)`)
+          .bind(crypto.randomUUID(), projectId, id, i + 1, v.texto, hashes[i], i === versoes.length - 1 ? 'vigente' : 'substituida', v.por ?? ator)),
+    ]);
+    resumo.criados++;
+    resumo.versoes += versoes.length;
+  }
+  await logAudit(db, 'documentos.importados', ator,
+    `Importação de políticas: ${resumo.criados} criadas, ${resumo.ja_existiam} já existiam, ${resumo.versoes} versões, ` +
+    `${resumo.ignorados_nao_aplicavel} não aplicáveis e ${resumo.ignorados_sem_texto} sem texto ignorados`, '', '', projectId);
+  return resumo;
+}

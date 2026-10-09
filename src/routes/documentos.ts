@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
-import { criarDocumento, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
+import { criarDocumento, importarDocumentos, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
 import { validateBody, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
 
 /**
@@ -24,6 +24,13 @@ documentosApp.post('/documentos', async (c) => {
     const r = await criarDocumento(c.env.DB, c.req.param('projectId')!, c.get('user').email, v.data);
     return r.ok ? c.json({ ok: true, id: r.id }, 201) : c.json({ error: r.error }, r.status);
   } catch (e) { return erro500(c, 'Falha ao criar o documento', e); }
+});
+
+// Importa as políticas que já existem (sob demanda, por projeto, repetível). Antes de qualquer `/:id`.
+documentosApp.post('/documentos/importar', async (c) => {
+  try {
+    return c.json({ ok: true, ...(await importarDocumentos(c.env.DB, c.req.param('projectId')!, c.get('user').email)) });
+  } catch (e) { return erro500(c, 'Falha ao importar os documentos', e); }
 });
 
 documentosApp.post('/documentos/:id/versoes', async (c) => {
