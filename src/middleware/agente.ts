@@ -89,6 +89,7 @@ const FORA_DO_AGENTE: Array<[RegExp, string, string[]?]> = [
   // O agente propõe política (rascunho); publicar e descartar o rascunho é ato humano, pela interface (fatia 3.2).
   [/^\/api\/v1\/projects\/[^/]+\/documentos\/[^/]+\/versoes\/[^/]+\/publicar$/, 'publicar versão de documento é ato humano, pela interface', ['POST']],
   [/^\/api\/v1\/projects\/[^/]+\/documentos\/[^/]+\/rascunho$/, 'descartar rascunho de documento é ato humano, pela interface', ['DELETE']],
+  [/^\/api\/v1\/projects\/[^/]+\/documentos\/[^/]+\/revisar$/, 'marcar documento como revisado é ato humano, pela interface', ['POST']],
   [/^\/api\/v1\/management-reviews\/[^/]+$/, 'excluir análise crítica destrói registro assinado: use a interface', ['DELETE']],
 ];
 

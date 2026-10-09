@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
-import { alvoDaPublicacao, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
+import { alvoDaPublicacao, atualizarDocumento, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, marcarRevisado, publicarVersao, salvarRascunho } from '../services/documentos';
 import { aplicarTextoNoControle } from '../services/politica-escrita';
 import { conferirPedidosDoDocumento } from './pedidos';
-import { validateBody, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
+import { validateBody, documentoAtualizarSchema, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
 
 /**
  * Núcleo do n.privacy, fatia 3.1: documentos e versões. Montado em `/api/v1/projects/:projectId`, então o
@@ -26,6 +26,28 @@ documentosApp.post('/documentos', async (c) => {
     const r = await criarDocumento(c.env.DB, c.req.param('projectId')!, c.get('user').email, v.data);
     return r.ok ? c.json({ ok: true, id: r.id }, 201) : c.json({ error: r.error }, r.status);
   } catch (e) { return erro500(c, 'Falha ao criar o documento', e); }
+});
+
+documentosApp.put('/documentos/:id', async (c) => {
+  try {
+    const v = await validateBody(c, documentoAtualizarSchema);
+    if (!v.success) return v.response;
+    // Aposentar ou reativar é decisão humana; o agente pode reorganizar (título, tipo, pai, dono), não mudar o status.
+    if (v.data.status !== undefined && c.get('user')?.agente === true) return c.json({ error: 'Forbidden: mudar o status do documento é ato humano, pela interface' }, 403);
+    const projectId = c.req.param('projectId')!;
+    const r = await atualizarDocumento(c.env.DB, projectId, c.req.param('id'), c.get('user').email, v.data);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    // O título é conteúdo congelado no pedido de ciência: mudou, o pedido aberto é conferido (e substituído).
+    if (r.tituloMudou) await conferirPedidosDoDocumento(c, 'documento', c.req.param('id'), projectId);
+    return c.json({ ok: true });
+  } catch (e) { return erro500(c, 'Falha ao atualizar o documento', e); }
+});
+
+documentosApp.post('/documentos/:id/revisar', async (c) => {
+  try {
+    const r = await marcarRevisado(c.env.DB, c.req.param('projectId')!, c.req.param('id'), c.get('user').email);
+    return r.ok ? c.json({ ok: true }) : c.json({ error: r.error }, r.status);
+  } catch (e) { return erro500(c, 'Falha ao marcar o documento como revisado', e); }
 });
 
 // Importa as políticas que já existem (sob demanda, por projeto, repetível). Antes de qualquer `/:id`.

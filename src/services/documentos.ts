@@ -40,7 +40,8 @@ export async function lerDocumento(db: D1Database, projectId: string, id: string
 }
 
 export async function criarDocumento(db: D1Database, projectId: string, ator: string, dados: DocumentoCriar): Promise<Falha | { ok: true; id: string }> {
-  if (dados.pai_id && !(await existeNoProjeto(db, 'documentos', dados.pai_id, projectId))) return falha(400, 'pai_id inexistente ou de outro projeto');
+  const recusa = await validarHierarquia(db, projectId, { tipo: dados.tipo, paiId: dados.pai_id });
+  if (recusa) return falha(400, recusa);
   if (dados.dono_parte_id && !(await existeNoProjeto(db, 'partes', dados.dono_parte_id, projectId))) return falha(400, 'dono_parte_id inexistente ou de outro projeto');
   const id = crypto.randomUUID();
   const hash = await hashDoTexto(dados.texto);
@@ -298,4 +299,98 @@ export async function alvoDaPublicacao(db: D1Database, projectId: string, docume
      FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.numero = ?
      WHERE d.id = ? AND d.project_id = ?`
   ).bind(numero, documentoId, projectId).first<{ controle: string | null; texto: string }>();
+}
+
+// ─── Hierarquia, edição de metadados e revisão (fatia 3.4) ─────────────────────────────────────────────
+
+/** Que tipo de documento pode ser pai de cada tipo: política → norma → procedimento. */
+const PAIS_PERMITIDOS: Record<string, readonly string[]> = { politica: [], norma: ['politica'], procedimento: ['norma', 'politica'] };
+const ROTULO_TIPO: Record<string, string> = { politica: 'política', norma: 'norma', procedimento: 'procedimento' };
+
+/**
+ * A hierarquia vale ou não? Devolve a mensagem de recusa, ou `null`. Confere o pai (existe no projeto e é de um tipo
+ * permitido) e, ao mudar o tipo de um documento que já tem filhos, confere se os filhos continuam válidos sob o tipo novo.
+ * Ciclo não precisa de checagem própria: o pai é sempre de um nível ACIMA (procedimento < norma < política) e a política
+ * não tem pai, então não há caminho que volte ao mesmo documento.
+ */
+export async function validarHierarquia(
+  db: D1Database, projectId: string, a: { id?: string; tipo: string; paiId: string | null | undefined },
+): Promise<string | null> {
+  const permitidos = PAIS_PERMITIDOS[a.tipo];
+  if (!permitidos) return 'Tipo de documento desconhecido';
+  if (a.paiId) {
+    if (!permitidos.length) return `${ROTULO_TIPO[a.tipo][0].toUpperCase() + ROTULO_TIPO[a.tipo].slice(1)} não tem documento pai`;
+    const pai = await db.prepare('SELECT id, tipo FROM documentos WHERE id = ? AND project_id = ?').bind(a.paiId, projectId).first<{ id: string; tipo: string }>();
+    if (!pai) return 'pai_id inexistente ou de outro projeto';
+    if (!permitidos.includes(pai.tipo)) return `${ROTULO_TIPO[a.tipo][0].toUpperCase() + ROTULO_TIPO[a.tipo].slice(1)} não pode ter ${ROTULO_TIPO[pai.tipo]} como pai`;
+  }
+  if (a.id) {
+    const { results: filhos } = await db.prepare('SELECT tipo FROM documentos WHERE pai_id = ? AND project_id = ?').bind(a.id, projectId).all<{ tipo: string }>();
+    for (const f of filhos) {
+      if (!(PAIS_PERMITIDOS[f.tipo] ?? []).includes(a.tipo)) return `Há ${ROTULO_TIPO[f.tipo]} abaixo deste documento: ele não pode ser ${ROTULO_TIPO[a.tipo]}`;
+    }
+  }
+  return null;
+}
+
+export type DocumentoAtualizar = {
+  titulo?: string; tipo?: string; pai_id?: string | null; dono_parte_id?: string | null;
+  revisar_a_cada_meses?: number | null; status?: 'vigente' | 'obsoleto';
+};
+
+/**
+ * Edita os metadados do documento (nunca o texto: texto é versão). `tituloMudou` avisa quem chama para conferir os pedidos
+ * abertos: o título faz parte do conteúdo congelado do pedido de ciência.
+ */
+export async function atualizarDocumento(
+  db: D1Database, projectId: string, id: string, ator: string, campos: DocumentoAtualizar,
+): Promise<Falha | { ok: true; tituloMudou: boolean }> {
+  if (!Object.keys(campos).length) return falha(400, 'Informe ao menos um campo para atualizar');
+  const atual = await db.prepare('SELECT id, tipo, pai_id, titulo, status FROM documentos WHERE id = ? AND project_id = ?')
+    .bind(id, projectId).first<{ id: string; tipo: string; pai_id: string | null; titulo: string; status: string }>();
+  if (!atual) return falha(404, 'Documento não encontrado');
+
+  if (campos.tipo !== undefined || campos.pai_id !== undefined) {
+    const recusa = await validarHierarquia(db, projectId, {
+      id, tipo: campos.tipo ?? atual.tipo, paiId: campos.pai_id !== undefined ? campos.pai_id : atual.pai_id,
+    });
+    if (recusa) return falha(400, recusa);
+  }
+  if (campos.dono_parte_id && !(await existeNoProjeto(db, 'partes', campos.dono_parte_id, projectId))) return falha(400, 'dono_parte_id inexistente ou de outro projeto');
+  if (campos.status === 'vigente') {
+    const tem = await db.prepare(`SELECT 1 FROM documento_versoes WHERE documento_id = ? AND estado = 'vigente'`).bind(id).first();
+    if (!tem) return falha(409, 'Só um documento com versão vigente volta a vigente: publique uma versão');
+  }
+
+  // Colunas fixas, nunca nomes vindos da requisição.
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  const quando = <K extends keyof DocumentoAtualizar>(k: K, sql: string, valor: unknown) => { if (campos[k] !== undefined) { sets.push(sql); binds.push(valor); } };
+  quando('titulo', 'titulo = ?', campos.titulo);
+  quando('tipo', 'tipo = ?', campos.tipo);
+  quando('pai_id', 'pai_id = ?', campos.pai_id ?? null);
+  quando('dono_parte_id', 'dono_parte_id = ?', campos.dono_parte_id ?? null);
+  quando('revisar_a_cada_meses', 'revisar_a_cada_meses = ?', campos.revisar_a_cada_meses ?? null);
+  quando('status', 'status = ?', campos.status);
+  if (campos.revisar_a_cada_meses === null) sets.push('revisar_ate = NULL');
+  // Periodicidade nova num documento já vigente e sem data de revisão: a primeira revisão fica a N meses de hoje.
+  else if (campos.revisar_a_cada_meses !== undefined) sets.push(`revisar_ate = COALESCE(revisar_ate, CASE WHEN status = 'vigente' THEN date('now', '+' || revisar_a_cada_meses || ' months') END)`);
+
+  await db.prepare(`UPDATE documentos SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`).bind(...binds, id, projectId).run();
+  await logAudit(db, 'documento.atualizado', ator, `Documento ${id} atualizado (${Object.keys(campos).join(', ')})`, '', '', projectId);
+  return { ok: true, tituloMudou: campos.titulo !== undefined && campos.titulo !== atual.titulo };
+}
+
+/**
+ * Documento vigente revisado sem mudar o texto: a próxima revisão volta a ficar a N meses de hoje, sem criar versão.
+ * Exige periodicidade definida; documento que não está vigente não tem revisão.
+ */
+export async function marcarRevisado(db: D1Database, projectId: string, id: string, ator: string): Promise<Falha | { ok: true }> {
+  const d = await db.prepare('SELECT status, revisar_a_cada_meses AS meses FROM documentos WHERE id = ? AND project_id = ?').bind(id, projectId).first<{ status: string; meses: number | null }>();
+  if (!d) return falha(404, 'Documento não encontrado');
+  if (d.status !== 'vigente') return falha(409, 'Só documento vigente tem revisão');
+  if (!d.meses) return falha(409, 'Defina a periodicidade de revisão antes de marcar como revisado');
+  await db.prepare(`UPDATE documentos SET revisar_ate = date('now', '+' || revisar_a_cada_meses || ' months'), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`).bind(id, projectId).run();
+  await logAudit(db, 'documento.revisado', ator, `Documento ${id} revisado sem mudança de texto`, '', '', projectId);
+  return { ok: true };
 }
