@@ -11,6 +11,7 @@ import './views/commercial.js';
 import './views/project.js';
 import './views/grc.js';
 import './views/partes.js';
+import './views/documentos.js';
 import './views/compliance.js';
 import './views/monitor.js';
 

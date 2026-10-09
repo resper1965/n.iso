@@ -154,6 +154,14 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   copiado para o pedido novo. Nada novo entra em `policy_acknowledgments` pelo portal; o registro manual interno
   (`POST /projects/:id/policy-acknowledgments`) ainda escreve nela ate a 3.4. A aprovacao CISO/CEO de documento NAO existe
   ainda (so `ciente`): segue nas colunas do controle e no pedido `politica`.
+  **Tela, hierarquia e aprovacao por versao (3.4)**: `frontend/src/views/documentos.js` (`#nav-documentos`). A hierarquia e regra do
+  servidor (`validarHierarquia`: politica sem pai; norma sob politica; procedimento sob norma ou politica; ciclo e impossivel por
+  construcao). `PUT /documentos/:id` edita metadados (nunca o texto), `POST .../revisar` renova `revisar_ate` sem versao, e a
+  fonte `documento` de `src/services/avisos-prazo.ts` avisa a revisao vencida. A aprovacao CISO/CEO de documento e **derivada
+  dos pedidos** (`tipo = 'documento'`, papel `ciso`/`ceo`): vale o pedido aprovado cujo hash e o do conteudo vigente agora, entao
+  versao nova invalida sozinha sem apagar prova; `registrarDecisao` nao assina nada em controle/DPIA para documento (a prova e a
+  linha do destinatario). `GET /documentos/:id/ciencias` lista quem deu ciencia de qual versao e por qual canal. A tela de
+  politicas por controle (`policies-dashboard`) continua: ainda tem geracao por IA, assinatura por controle e relatorio impresso.
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
 - **Rotinas agendadas** (`grep -A2 '"triggers"' wrangler.jsonc`): `10 4 * * *` roda a manutencao
@@ -224,7 +232,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 198 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
+- **Nenhum dos 201 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual
@@ -235,7 +243,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
 - **Frontend com pouco teste por linha.** ~15,1 mil linhas de JS (2026-10-09)
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 66 arquivos de teste em jsdom
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 67 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.

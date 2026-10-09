@@ -117,7 +117,7 @@ import {
   versaoRestaurarSchema,
   moduloHabilitarSchema, orgModulosSchema,
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
-  documentoCriarSchema, versaoSalvarSchema,
+  documentoCriarSchema, documentoAtualizarSchema, versaoSalvarSchema,
 } from './schemas';
 
 /**
@@ -241,6 +241,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/departamentos/:id', schema: departamentoAtualizarSchema, nome: 'departamentoAtualizarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/departamentos', schema: departamentoCriarSchema, nome: 'departamentoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos/:id/versoes', schema: versaoSalvarSchema, nome: 'versaoSalvarSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/documentos/:id', schema: documentoAtualizarSchema, nome: 'documentoAtualizarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos', schema: documentoCriarSchema, nome: 'documentoCriarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-document', schema: documentoGerarSchema, nome: 'documentoGerarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-policies-bulk', schema: politicasLoteSchema, nome: 'politicasLoteSchema' },

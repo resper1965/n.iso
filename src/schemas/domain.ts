@@ -663,7 +663,8 @@ export const propostaAjusteSchema = z.object({ token: tokenProposta, mensagem: z
 export const pedidoCriarSchema = z.object({
   // `politica` só para aprovação (ciso/ceo): a ciência de política é pelo lote por link (pedidoCienciaLoteSchema).
   // A rota recusa `politica` + `ciente` com 400.
-  tipo: z.enum(['dpia', 'politica']),
+  // `documento` (migration 0051, fatia 3.4): aprovação CISO/CEO de uma versão; a ciência de documento é pelo lote.
+  tipo: z.enum(['dpia', 'politica', 'documento']),
   ref_id: z.string().trim().min(1).max(200),
   papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
   destinatarios: z.array(z.object({

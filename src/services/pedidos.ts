@@ -350,7 +350,9 @@ export async function registrarDecisao(db: D1Database, a: {
       .bind(a.status, decididoEm, link ? 'link' : 'conta', a.ip, a.ua, p.hash, a.mfa ? 1 : 0, a.nome, a.motivo, a.destId,
         ...(link ? [a.tokenHash ?? ''] : []), p.id, p.hash, p.ref_id, p.project_id, ...ok.binds),
   ];
-  if (a.assinar) {
+  // Documento: a prova da aprovação é a linha do destinatário (hash, IP, user-agent, MFA); não há coluna de assinatura a escrever.
+  // Sem esta condição, cairia em `assinaturaDpia` e assinaria um DPIA de mesmo id.
+  if (a.assinar && p.tipo !== 'documento') {
     const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
     // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
     const st = p.tipo === 'politica'
