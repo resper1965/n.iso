@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
-import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial } from '../helpers';
+import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial, refForaDoProjeto } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
 import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema } from '../schemas';
 
@@ -16,7 +16,10 @@ ropaApp.put('/:id', async (c) => {
     if (!valid.success) return valid.response;
     // Ausente preserva o valor gravado (setParcial); o transform de boolLike deixa a chave com undefined.
     const body = Object.fromEntries(Object.entries(valid.data as Record<string, unknown>).filter(([, v]) => v !== undefined)) as any;
-    const atual = await c.env.DB.prepare('SELECT status FROM ropa_records WHERE id = ?').bind(id).first<{ status: string | null }>();
+    const atual = await c.env.DB.prepare('SELECT status, project_id FROM ropa_records WHERE id = ?').bind(id).first<{ status: string | null; project_id: string | null }>();
+    // O projeto vem do ROPA gravado, nunca do corpo.
+    const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['owner_parte_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     // Sair de 'Approved' pelo PUT deixaria as assinaturas na linha sem motivo nem trilha: é revogação.
     if (atual?.status === 'Approved' && Object.hasOwn(body, 'status')) {
       return c.json({ error: 'ROPA aprovado não muda de status pela edição. Para reabrir, use "Revogar aprovação" (motivo obrigatório).' }, 400);
@@ -25,7 +28,7 @@ ropaApp.put('/:id', async (c) => {
     const p = setParcial(body, {
       processing_purpose: null, data_categories: null, data_subjects: null, legal_basis: null, consent_details: null,
       data_subject_rights_details: null, retention_period: null, recipients: null, international_transfers: 0,
-      transfer_safeguards: null, dpia_required: 0, status: 'Draft', owner: null,
+      transfer_safeguards: null, dpia_required: 0, status: 'Draft', owner: null, owner_parte_id: null,
     });
     if (p.sql) await c.env.DB.prepare(`UPDATE ropa_records SET ${p.sql}, updated_at=? WHERE id=?`).bind(...p.binds, new Date().toISOString(), id).run();
     const user = c.get('user');
@@ -52,7 +55,11 @@ ropaApp.delete('/:id', async (c) => {
 // Project ROPA operations (/api/v1/projects/:projectId/ropa)
 projectRopaApp.get('/', async (c) => {
   const projectId = c.req.param('projectId');
-  const result = await c.env.DB.prepare('SELECT * FROM ropa_records WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  const result = await c.env.DB.prepare(
+    `SELECT r.*, pa.nome AS owner_parte_nome FROM ropa_records r
+     LEFT JOIN partes pa ON pa.id = r.owner_parte_id AND pa.project_id = r.project_id
+     WHERE r.project_id = ? ORDER BY r.created_at DESC`
+  ).bind(projectId).all();
   return c.json({ ok: true, records: semRastros(result.results) });
 });
 
@@ -62,16 +69,18 @@ projectRopaApp.post('/', async (c) => {
     const valid = await validateBody(c, ropaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['owner_parte_id']);
+    if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
-      `INSERT INTO ropa_records (id, project_id, processing_purpose, data_categories, data_subjects, legal_basis, consent_details, data_subject_rights_details, retention_period, recipients, international_transfers, transfer_safeguards, dpia_required, status, owner, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`
+      `INSERT INTO ropa_records (id, project_id, processing_purpose, data_categories, data_subjects, legal_basis, consent_details, data_subject_rights_details, retention_period, recipients, international_transfers, transfer_safeguards, dpia_required, status, owner, owner_parte_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?, ?)`
     ).bind(
       id, projectId, body.processing_purpose, body.data_categories ?? null, body.data_subjects ?? null,
       body.legal_basis ?? null, body.consent_details ?? null, body.data_subject_rights_details ?? null,
       body.retention_period ?? null, body.recipients ?? null, body.international_transfers ? 1 : 0,
-      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner ?? null, now, now
+      body.transfer_safeguards ?? null, body.dpia_required ? 1 : 0, body.owner ?? null, body.owner_parte_id || null, now, now
     ).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'ropa_created', user?.email || 'system', `ROPA ${id} created`);

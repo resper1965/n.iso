@@ -223,7 +223,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   assim que o codebase acumulou consulta a tabela inexistente. Caminho novo de
   banco: teste de integracao real, no estilo de `test/schema-contract.test.ts`.
 - **Frontend com pouco teste por linha.** ~15,1 mil linhas de JS (2026-10-09)
-  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 64 arquivos de teste em jsdom
+  (`cat frontend/src/*.js frontend/src/views/*.js | wc -l`), 65 arquivos de teste em jsdom
   (`ls frontend/test/*.test.js | wc -l`) e 5 specs E2E em Chromium (`ls frontend/e2e/*.spec.js`),
   que rodam no CI. `test/e2e/mfa.py` e legado, fora do CI. A maior parte das telas ainda nao
   tem teste proprio.
