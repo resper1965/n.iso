@@ -60,6 +60,9 @@ ALTER TABLE pedido_destinatarios_new RENAME TO pedido_destinatarios;
 
 CREATE INDEX IF NOT EXISTS idx_pedidos_projeto ON pedidos(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_pedidos_documento ON pedidos(tipo, ref_id, status);
+-- Um pedido "em pé" aberto por documento para a ciência do portal público (criado_por = 'sistema:portal'):
+-- dois acessos simultâneos não criam dois contêineres. A substituição marca o antigo ANTES de criar o novo.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_portal_aberto ON pedidos(tipo, ref_id) WHERE criado_por = 'sistema:portal' AND status = 'aberto';
 CREATE INDEX IF NOT EXISTS idx_pedido_dest_pedido ON pedido_destinatarios(pedido_id);
 CREATE INDEX IF NOT EXISTS idx_pedido_dest_email ON pedido_destinatarios(email);
 CREATE INDEX IF NOT EXISTS idx_pedido_dest_user ON pedido_destinatarios(user_id);

@@ -672,7 +672,8 @@ export const pedidoCriarSchema = z.object({
 // Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
 // Teto de 200 por lote. A aprovação (com assinatura) de DPIA e de política fica em `pedidoCriarSchema`.
 export const pedidoCienciaLoteSchema = z.object({
-  tipo: z.enum(['politica', 'dpia']),
+  // `documento` (migration 0051): ref_id = documentos.id, conteúdo = a versão vigente.
+  tipo: z.enum(['politica', 'dpia', 'documento']),
   ref_id: z.string().trim().min(1).max(200),
   destinatarios: z.array(z.object({
     email: z.string().trim().email().max(320),

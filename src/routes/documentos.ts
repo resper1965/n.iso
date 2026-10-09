@@ -3,6 +3,7 @@ import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
 import { alvoDaPublicacao, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, publicarVersao, salvarRascunho } from '../services/documentos';
 import { aplicarTextoNoControle } from '../services/politica-escrita';
+import { conferirPedidosDoDocumento } from './pedidos';
 import { validateBody, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
 
 /**
@@ -51,6 +52,8 @@ documentosApp.post('/documentos/:id/versoes/:numero/publicar', async (c) => {
     const ator = c.get('user').email;
     const r = await publicarVersao(c.env.DB, projectId, c.req.param('id'), numero, ator);
     if (!r.ok) return c.json({ error: r.error }, r.status);
+    // Versão nova vigente: os pedidos de ciência abertos do documento são conferidos (substituídos, se o conteúdo mudou).
+    await conferirPedidosDoDocumento(c, 'documento', c.req.param('id'), projectId);
     // Documento que veio de um controle: publicar tem o efeito de uma edição manual da política (texto no controle,
     // aprovações a zero, pedidos conferidos, versão no histórico). Até a 3.3 o controle é a fonte da ciência.
     const alvo = await alvoDaPublicacao(c.env.DB, projectId, c.req.param('id'), numero);

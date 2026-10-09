@@ -1188,6 +1188,9 @@ CREATE TABLE IF NOT EXISTS pedidos (
 );
 CREATE INDEX IF NOT EXISTS idx_pedidos_projeto ON pedidos(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_pedidos_documento ON pedidos(tipo, ref_id, status);
+-- Um pedido "em pé" aberto por documento para a ciência do portal público (criado_por = 'sistema:portal'):
+-- dois acessos simultâneos não criam dois contêineres. A substituição marca o antigo ANTES de criar o novo.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_portal_aberto ON pedidos(tipo, ref_id) WHERE criado_por = 'sistema:portal' AND status = 'aberto';
 -- Pedido também é prova (0043): conteúdo, hash e documento nunca mudam; fechado não muda de status
 -- nem de substituto. `org_id` livre (transferência de projeto). DELETE livre (cascata do projeto).
 CREATE TRIGGER IF NOT EXISTS pedido_prova_imutavel

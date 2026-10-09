@@ -47,10 +47,20 @@ describe('migration 0051 — tipo documento e canal portal em pedidos', () => {
     await expect(dest('d-fax', 'p-doc', 'fax').run()).rejects.toThrow();
 
     // os cinco índices, e o do token continua único parcial
-    for (const n of ['idx_pedidos_projeto', 'idx_pedidos_documento', 'idx_pedido_dest_pedido', 'idx_pedido_dest_email', 'idx_pedido_dest_user', 'idx_pedido_dest_token']) {
+    for (const n of ['idx_pedidos_projeto', 'idx_pedidos_documento', 'idx_pedidos_portal_aberto', 'idx_pedido_dest_pedido', 'idx_pedido_dest_email', 'idx_pedido_dest_user', 'idx_pedido_dest_token']) {
       expect(await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").bind(n).first(), n).toBeTruthy();
     }
     await expect(env.DB.prepare(`INSERT INTO pedido_destinatarios (id, pedido_id, email, token_hash) VALUES ('d-dup', 'p-doc', 'dup@x.io', 'tok1')`).run()).rejects.toThrow(/UNIQUE/);
+
+    // um contêiner aberto do portal por documento; depois de substituído, outro pode nascer
+    const portal = (id: string) => env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, criado_por)
+      VALUES (?, 'org_ness', 'm51', 'documento', 'doc-x', 't', 'ciente', '{}', 'h', 'sistema:portal')`).bind(id);
+    await portal('c1').run();
+    await expect(portal('c2').run()).rejects.toThrow(/UNIQUE/);
+    await env.DB.prepare(`UPDATE pedidos SET status = 'substituido', substituido_por = 'c2' WHERE id = 'c1'`).run();
+    await portal('c2').run();
+    await ped('p-lote-1', 'documento').run(); // pedidos de outra origem (lote por link) não entram no índice
+    await env.DB.prepare(`INSERT INTO pedidos (id, org_id, project_id, tipo, ref_id, titulo, papel_exigido, conteudo_json, hash, criado_por) VALUES ('p-lote-2', 'org_ness', 'm51', 'documento', 'r', 't', 'ciente', '{}', 'h', 'u')`).run();
 
     // os DOIS triggers de prova sobreviveram ao DROP
     for (const t of ['pedido_prova_imutavel', 'pedido_dest_prova_imutavel']) {

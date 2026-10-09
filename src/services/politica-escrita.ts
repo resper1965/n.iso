@@ -65,7 +65,9 @@ export async function gravarPolitica(
 
   if (documentoId) {
     try {
-      await espelharTexto(db, projectId, documentoId, texto, ator, origem);
+      const { criada } = await espelharTexto(db, projectId, documentoId, texto, ator, origem);
+      // Versão nova vigente: os pedidos de ciência abertos do documento são conferidos.
+      if (criada) await conferirPedidosDoDocumento(c, 'documento', documentoId, projectId);
     } catch (e) {
       registraErro(c, e);
     }

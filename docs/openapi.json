@@ -12533,7 +12533,8 @@
                     "type": "string",
                     "enum": [
                       "politica",
-                      "dpia"
+                      "dpia",
+                      "documento"
                     ]
                   },
                   "ref_id": {
