@@ -11,7 +11,7 @@ import '../src/views/tratamento-ligacoes.js';
 
 const B = '/api/v1/projects/p9/ropa/r1';
 const LIG = (extra = {}) => ({
-    aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false,
+    aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false, terceiros_com_avaliacao_vencida: [],
     base_legal: { id: 'lgpd:art7:i', referencia: 'art. 7, I', titulo: 'Base <b>x</b>' },
     itens: [{ id: 'it1', nome: 'ERP <i>x</i>', tipo: 'sistema' }],
     departamentos: [{ id: 'dp1', nome: 'RH' }],
@@ -242,5 +242,15 @@ describe('avaliações: DPIA e LIA', () => {
         expect(el('tl-avaliacoes').textContent).toContain('em rascunho');
         expect(el('tl-lia')).toBeNull();
         expect(document.querySelector('[data-action="criarDpiaDoTratamento"]')).toBeNull();
+    });
+});
+
+describe('terceiro com avaliação vencida', () => {
+    it('avisa na seção de partes, com o nome escapado; sem vencido não aparece', async () => {
+        await abrir({ [`GET ${B}/ligacoes`]: LIG({ terceiros_com_avaliacao_vencida: [{ parte_id: 'pa1', nome: 'Operadora <b>y</b>' }] }) });
+        expect(el('tl-vencidos').textContent).toContain('Avaliação vencida: Operadora <b>y</b>');
+        expect(el('tl-vencidos').querySelector('b')).toBeNull();
+        await abrir();
+        expect(el('tl-vencidos')).toBeNull();
     });
 });

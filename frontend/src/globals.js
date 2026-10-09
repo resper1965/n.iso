@@ -950,7 +950,7 @@ window.markNotifRead = async function markNotifRead(id) {
 // Telas abertas pelos avisos de prazo (src/services/avisos-prazo.ts, TELA). Elas leem S.activeProject:
 // sem trocá-lo, o aviso do projeto B abria a lista do A.
 // ponytail: troca só em memória; recarregar volta ao projeto salvo em localStorage.
-const TELA_DO_AVISO = { capa: 'capa', audits: 'audits', certification: 'certification', policies: 'policies-dashboard', documentos: 'documentos' };
+const TELA_DO_AVISO = { capa: 'capa', audits: 'audits', certification: 'certification', policies: 'policies-dashboard', documentos: 'documentos', terceiros: 'terceiros' };
 window.handleNotificationClick = async function handleNotificationClick(id) {
         const n = (S.notifications || []).find(x => x.id === id);
         

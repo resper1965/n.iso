@@ -61,3 +61,20 @@ export const liaSalvarSchema = z.object({
 
 /** Importação do RoPA por planilha (fatia 4.4): o CSV inteiro como texto; as linhas são validadas uma a uma no serviço. */
 export const ropaImportarSchema = z.object({ csv: z.string().min(1).max(300_000) }).strict();
+
+// ─── Terceiros tipificados (fatia 6) ──────────────────────────────────────────
+export const terceiroTipoSchema = z.object({ terceiro_tipo: z.enum(['grande_provedor', 'medio', 'pequeno', 'critico']).nullable() }).strict();
+
+/** A evidência vira link na tela: só http(s), nunca `javascript:` nem `data:`. */
+const urlWeb = z.string().trim().max(2000).regex(/^https?:\/\/\S+$/i, 'Use um link http ou https');
+export const avaliacaoTerceiroSchema = z.object({
+  resultado: z.enum(['aprovado', 'com_ressalvas', 'reprovado']),
+  valido_ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD'),
+  evidencia_url: urlWeb.nullish(),
+  observacao: z.string().trim().max(2000).nullish(),
+}).strict();
+
+export const terceiroDocumentoSchema = z.object({
+  documento_id: z.string().trim().min(1).max(100),
+  papel: z.enum(['dpa', 'contrato', 'outro']).default('dpa'),
+}).strict();

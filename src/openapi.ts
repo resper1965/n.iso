@@ -120,6 +120,7 @@ import {
   documentoCriarSchema, documentoAtualizarSchema, excecaoCriarSchema, excecaoAtualizarSchema, versaoSalvarSchema,
   documentoRequisitosSchema, requisitoAtualizarSchema, mapeamentoSchema,
   tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema, ropaImportarSchema, liaSalvarSchema,
+  terceiroTipoSchema, avaliacaoTerceiroSchema, terceiroDocumentoSchema,
 } from './schemas';
 
 /**
@@ -269,6 +270,9 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/ropa', schema: ropaSchema, nome: 'ropaSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/security-policy', schema: politicaTenantSchema, nome: 'politicaTenantSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/sso', schema: ssoConfigSchema, nome: 'ssoConfigSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/avaliacoes', schema: avaliacaoTerceiroSchema, nome: 'avaliacaoTerceiroSchema' },
+  { metodo: 'POST', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/documentos', schema: terceiroDocumentoSchema, nome: 'terceiroDocumentoSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/terceiros/:parteId/tipo', schema: terceiroTipoSchema, nome: 'terceiroTipoSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/training/import-external', schema: trainingImportSchema, nome: 'trainingImportSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/training', schema: trainingSchema, nome: 'trainingSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/vendors', schema: createVendorSchema, nome: 'createVendorSchema' },
