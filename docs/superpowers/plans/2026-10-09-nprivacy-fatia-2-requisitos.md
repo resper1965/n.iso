@@ -98,7 +98,7 @@
 1. `npm run db:backup` (mover o dump para `C:\Users\resper\backups-niso\`, fora do repositório).
 2. `npx wrangler d1 migrations apply niso-db --remote`, depois `PRAGMA table_info` das 4 tabelas e da coluna nova.
 3. Merge; conferir `/health` com o SHA.
-4. `POST /api/v1/requisitos/semear` como `platform_admin`: conferir `count(*)` por fonte e quantos `compliance_controls` ficaram com `requisito_id` (Twyn: 229 controles).
+4. `POST /api/v1/requisitos/semear` como `platform_admin`: conferir `count(*)` por fonte e quantos `compliance_controls` ficaram com `requisito_id` (projeto real: 229 controles).
 
 ## Gaps declarados desta fatia
 
