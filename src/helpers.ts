@@ -308,6 +308,7 @@ const TABELA_DA_REF = {
   audit_id: 'audit_schedule',
   ropa_id: 'ropa_records',
   owner_parte_id: 'partes',
+  assigned_to_parte_id: 'partes',
 } as const;
 export type RefDeProjeto = keyof typeof TABELA_DA_REF;
 

@@ -19,10 +19,10 @@ capaApp.put('/:id', async (c) => {
     // O projeto vem da CAPA gravada, nunca do corpo. Sem isto, apontar para o risco de outro
     // projeto deixava o dono dele apagar esta CAPA pelo ON DELETE CASCADE.
     const atual = await c.env.DB.prepare('SELECT project_id FROM corrective_actions WHERE id = ?').bind(id).first<{ project_id: string | null }>();
-    const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['audit_id', 'risk_id', 'control_id']);
+    const fora = await refForaDoProjeto(c.env.DB, atual?.project_id, body, ['audit_id', 'risk_id', 'control_id', 'assigned_to_parte_id']);
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const completedAt = body.status === 'Closed' ? new Date().toISOString() : null;
-    const p = setParcial(body, { audit_id: null, risk_id: null, control_id: null, description: null, severity: null, assigned_to: null, due_date: null, resolution: null });
+    const p = setParcial(body, { audit_id: null, risk_id: null, control_id: null, description: null, severity: null, assigned_to: null, assigned_to_parte_id: null, due_date: null, resolution: null });
     await c.env.DB.prepare(
       `UPDATE corrective_actions SET title=?, status=?, completed_at=?${p.sql ? ', ' + p.sql : ''} WHERE id=?`
     ).bind(body.title, body.status, completedAt, ...p.binds, id).run();
@@ -52,7 +52,11 @@ capaApp.delete('/:id', async (c) => {
 // Project CAPA operations (/api/v1/projects/:projectId/capa)
 projectCapaApp.get('/', async (c) => {
   const projectId = c.req.param('projectId');
-  const result = await c.env.DB.prepare('SELECT * FROM corrective_actions WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+  const result = await c.env.DB.prepare(
+    `SELECT ca.*, pa.nome AS assigned_to_parte_nome FROM corrective_actions ca
+     LEFT JOIN partes pa ON pa.id = ca.assigned_to_parte_id AND pa.project_id = ca.project_id
+     WHERE ca.project_id = ? ORDER BY ca.created_at DESC`
+  ).bind(projectId).all();
   return c.json({ ok: true, actions: result.results });
 });
 
@@ -62,14 +66,14 @@ projectCapaApp.post('/', async (c) => {
     const valid = await validateBody(c, createCapaSchema);
     if (!valid.success) return valid.response;
     const body = valid.data as any;
-    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['audit_id', 'risk_id', 'control_id']);
+    const fora = await refForaDoProjeto(c.env.DB, projectId, body, ['audit_id', 'risk_id', 'control_id', 'assigned_to_parte_id']);
     if (fora) return c.json({ error: `${fora} inexistente ou de outro projeto` }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
-      `INSERT INTO corrective_actions (id, project_id, audit_id, risk_id, control_id, title, description, severity, assigned_to, due_date, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)`
-    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description ?? null, body.severity ?? 'Medium', body.assigned_to ?? null, body.due_date ?? null, now).run();
+      `INSERT INTO corrective_actions (id, project_id, audit_id, risk_id, control_id, title, description, severity, assigned_to, assigned_to_parte_id, due_date, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)`
+    ).bind(id, projectId, body.audit_id || null, body.risk_id || null, body.control_id || null, body.title, body.description ?? null, body.severity ?? 'Medium', body.assigned_to ?? null, body.assigned_to_parte_id || null, body.due_date ?? null, now).run();
     const user = c.get('user');
     await logAudit(c.env.DB, 'capa_created', user?.email || 'system', `CAPA ${id} created`);
     return c.json({ ok: true, id }, 201);
