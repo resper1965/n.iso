@@ -13,6 +13,7 @@ versionamento [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não publicado]
 
 ### Corrigido
+- `repository_token` vazava em três rotas que devolviam a linha crua de `projects`: `GET /api/v1/portfolio` (e, por ele, a ferramenta `niso_list_projects` do MCP), `GET /api/v1/client/dashboard` (alcança o papel cliente) e `GET /api/v1/projects/:id/audit-pack`. As três passam por `redactProject` (agora em `helpers.ts`) e devolvem só `repository_token_set`. `test/token-repositorio-sem-vazar.test.ts` procura o segredo no texto das respostas. Quem teve a listagem aberta deve tratar o token como exposto e trocá-lo.
 - SoA: `api(...) || []` nunca caía no `[]` (a chamada devolve uma Promise, sempre verdadeira); com resposta nula de controles a tela mostrava o erro em vez de uma lista vazia.
 - Pedidos: pedido de aprovação (Líder SGSI ou Direção) só é criado se todo destinatário tem a autoridade do papel na matriz de Governança do projeto; senão 400 dizendo quem não tem. A ciência não muda, e a decisão continua conferindo a autoridade.
 - Minimização: IP e user-agent de quem assina (`*_approved_ip/ua`, `*_signed_ip`) não saem mais nas leituras JSON de controles, evidências, ROPA, DPIA, análise crítica, política e pacote de auditoria; seguem só no banco e na trilha. O modal da política deixa de mostrar "Origem".

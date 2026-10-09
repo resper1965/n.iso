@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 
-import { semRastros, genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
+import { redactProject, semRastros, genId, genToken, logAudit, validateUpload, erro500, somenteNess, ehEquipeNess, sha256Hex, projetosVisiveis, designacaoDoCriador, refForaDoProjeto } from '../helpers';
 import { itemDoChecklist, controleDoItem, marcarItemComEvidencia } from '../services/checklist-evidencia';
 import { resolverOrg, SEM_ORG, limiteDoPlanoAtingido, LIMITE_PROJETOS } from '../services/organizacao';
 import { INTERVIEW_TRACKS } from '../constants';
@@ -276,15 +276,8 @@ projectsApp.get('/:projectId/export', async (c) => {
   }
 });
 
-// NUNCA devolver credenciais no corpo. `repository_token` é secret (uso só
-// server-side); redigido aqui — o cliente recebe apenas um booleano indicando se
-// há token configurado. Em repouso ele é cifrado (AES-GCM, ver secret-crypto.ts);
-// consumidores server-side leem via getRepositoryToken (decifra).
-function redactProject<T extends Record<string, any> | null | undefined>(p: T): T {
-  if (!p) return p;
-  const { repository_token, ...rest } = p as Record<string, any>;
-  return { ...rest, repository_token_set: !!repository_token } as unknown as T;
-}
+// `redactProject` (helpers.ts) tira `repository_token` do corpo. Em repouso ele é cifrado (AES-GCM, ver
+// secret-crypto.ts); consumidores server-side leem via getRepositoryToken (decifra).
 
 /**
  * Lê o `repository_token` de um projeto DECIFRADO, para uso server-side (git ops).
@@ -1089,7 +1082,7 @@ projectsApp.get('/:id/audit-pack', async (c) => {
     return c.json({
       ok: true,
       pack: {
-        project,
+        project: redactProject(project),
         phases: phases.results || [],
         controls: semRastros(controls.results),
         evidence: semRastros(evidence.results),
