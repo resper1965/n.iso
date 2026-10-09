@@ -199,7 +199,7 @@ describe('ações do detalhe', () => {
         await window.salvarMetadadosDocumento('p9', 'p1'); // sem rota de PUT: 404 do Worker
         expect(document.querySelector('.toast-error')).not.toBeNull();
         expect(el('doc-e-titulo')).not.toBeNull();
-        expect(chamadas(f).filter((k) => k.startsWith('GET /api/v1/projects/p9/documentos/p1'))).toHaveLength(3); // abriu uma vez (detalhe + ciências + exceções)
+        expect(chamadas(f).filter((k) => k.startsWith('GET /api/v1/projects/p9/documentos/p1'))).toHaveLength(4); // abriu uma vez (detalhe + ciências + exceções + requisitos)
     });
 
     it('nova versão (rascunho), publicar, descartar e marcar revisado chamam as rotas certas', async () => {
@@ -307,5 +307,64 @@ describe('exceções ao documento', () => {
     it('documento sem exceção: mensagem', async () => {
         await abrir({ 'GET /api/v1/projects/p9/documentos/p1/excecoes': [] });
         expect(secao().textContent).toContain('Nenhuma exceção');
+    });
+});
+
+describe('requisitos do documento', () => {
+    const CATALOGO = [
+        { id: 'lgpd:art37', fonte_id: 'lgpd', referencia: 'art. 37', titulo: 'Registro <b>das</b> operações', pai_id: null, papel: null },
+        { id: 'lgpd:art46', fonte_id: 'lgpd', referencia: 'art. 46', titulo: 'Segurança', pai_id: null, papel: null },
+    ];
+    const abrir = async (extra = {}) => {
+        const f = servir(rotas({
+            'GET /api/v1/projects/p9/documentos/p1': DETALHE(),
+            'GET /api/v1/projects/p9/documentos/p1/ciencias': [],
+            'GET /api/v1/projects/p9/documentos/p1/excecoes': [],
+            'GET /api/v1/projects/p9/documentos/p1/requisitos': [{ id: 'lgpd:art46', fonte_id: 'lgpd', referencia: 'art. 46', titulo: 'Segurança' }],
+            'GET /api/v1/requisitos': CATALOGO,
+            ...extra,
+        }));
+        await abrirLista();
+        await window.openDocumentoModal('p9', 'p1');
+        return f;
+    };
+    const secao = () => el('doc-requisitos');
+
+    it('lista os requisitos ligados e oferece só os que faltam, tudo escapado', async () => {
+        await abrir();
+        expect(secao().textContent).toContain('lgpd art. 46');
+        const opcoes = [...el('doc-req-add').querySelectorAll('option')].map((o) => o.value);
+        expect(opcoes).toEqual(['', 'lgpd:art37']);
+        expect(el('doc-req-add').textContent).toContain('Registro <b>das</b> operações');
+        expect(secao().querySelector('b')).toBeNull();
+    });
+
+    it('ligar manda o conjunto atual mais o escolhido; sem escolha não envia', async () => {
+        const f = await abrir({ 'PUT /api/v1/projects/p9/documentos/p1/requisitos': { ok: true, total: 2 } });
+        await window.ligarRequisitoDocumento('p9', 'p1');
+        expect(chamadas(f)).not.toContain('PUT /api/v1/projects/p9/documentos/p1/requisitos');
+        el('doc-req-add').value = 'lgpd:art37';
+        await window.ligarRequisitoDocumento('p9', 'p1');
+        expect(corpoDe(f, 'PUT /api/v1/projects/p9/documentos/p1/requisitos')).toEqual({ requisitos: ['lgpd:art46', 'lgpd:art37'] });
+    });
+
+    it('desligar manda o conjunto sem o requisito', async () => {
+        const f = await abrir({ 'PUT /api/v1/projects/p9/documentos/p1/requisitos': { ok: true, total: 0 } });
+        await window.desligarRequisitoDocumento('p9', 'p1', 'lgpd:art46');
+        expect(corpoDe(f, 'PUT /api/v1/projects/p9/documentos/p1/requisitos')).toEqual({ requisitos: [] });
+    });
+
+    it('papel só de leitura vê os requisitos, sem seletor nem botões, e não busca o catálogo', async () => {
+        S.user = { role: 'org_user' };
+        const f = await abrir();
+        expect(secao().textContent).toContain('lgpd art. 46');
+        expect(secao().querySelector('[data-action]')).toBeNull();
+        expect(el('doc-req-add')).toBeNull();
+        expect(chamadas(f)).not.toContain('GET /api/v1/requisitos');
+    });
+
+    it('documento sem requisito: mensagem', async () => {
+        await abrir({ 'GET /api/v1/projects/p9/documentos/p1/requisitos': [] });
+        expect(secao().textContent).toContain('Nenhum requisito ligado');
     });
 });
