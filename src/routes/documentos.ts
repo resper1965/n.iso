@@ -3,8 +3,9 @@ import type { Bindings, Variables } from '../index';
 import { erro500 } from '../helpers';
 import { alvoDaPublicacao, atualizarDocumento, cienciasDoDocumento, criarDocumento, descartarRascunho, importarDocumentos, lerDocumento, listarDocumentos, marcarRevisado, publicarVersao, salvarRascunho } from '../services/documentos';
 import { aplicarTextoNoControle } from '../services/politica-escrita';
+import { atualizarExcecao, criarExcecao, listarExcecoes, revogarExcecao } from '../services/excecoes';
 import { conferirPedidosDoDocumento } from './pedidos';
-import { validateBody, documentoAtualizarSchema, documentoCriarSchema, versaoSalvarSchema } from '../schemas';
+import { validateBody, documentoAtualizarSchema, documentoCriarSchema, excecaoAtualizarSchema, excecaoCriarSchema, versaoSalvarSchema } from '../schemas';
 
 /**
  * Núcleo do n.privacy, fatia 3.1: documentos e versões. Montado em `/api/v1/projects/:projectId`, então o
@@ -17,6 +18,46 @@ documentosApp.get('/documentos', async (c) => c.json(await listarDocumentos(c.en
 documentosApp.get('/documentos/:id', async (c) => {
   const d = await lerDocumento(c.env.DB, c.req.param('projectId')!, c.req.param('id'));
   return d ? c.json(d) : c.json({ error: 'Documento não encontrado' }, 404);
+});
+
+// ─── Exceções a documentos (fatia 3.5) ───────────────────────────────────────────────────────────────
+
+documentosApp.get('/documentos/:id/excecoes', async (c) => {
+  const r = await listarExcecoes(c.env.DB, c.req.param('projectId')!, c.req.param('id'));
+  return r ? c.json(r) : c.json({ error: 'Documento não encontrado' }, 404);
+});
+
+documentosApp.post('/documentos/:id/excecoes', async (c) => {
+  try {
+    const v = await validateBody(c, excecaoCriarSchema);
+    if (!v.success) return v.response;
+    const r = await criarExcecao(c.env.DB, c.req.param('projectId')!, c.req.param('id'), c.get('user').email, v.data);
+    return r.ok ? c.json({ ok: true, id: r.id }, 201) : c.json({ error: r.error }, r.status);
+  } catch (e) { return erro500(c, 'Falha ao registrar a exceção', e); }
+});
+
+documentosApp.put('/documentos/:id/excecoes/:exId', async (c) => {
+  try {
+    const v = await validateBody(c, excecaoAtualizarSchema);
+    if (!v.success) return v.response;
+    const projectId = c.req.param('projectId')!;
+    const r = await atualizarExcecao(c.env.DB, projectId, c.req.param('id'), c.req.param('exId'), c.get('user').email, v.data);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    // Escopo, motivo e prazo são o conteúdo congelado do pedido: o pedido aberto é conferido (e substituído).
+    await conferirPedidosDoDocumento(c, 'excecao', c.req.param('exId'), projectId);
+    return c.json({ ok: true });
+  } catch (e) { return erro500(c, 'Falha ao atualizar a exceção', e); }
+});
+
+documentosApp.post('/documentos/:id/excecoes/:exId/revogar', async (c) => {
+  try {
+    const projectId = c.req.param('projectId')!;
+    const r = await revogarExcecao(c.env.DB, projectId, c.req.param('id'), c.req.param('exId'), c.get('user').email);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    // Revogada, a exceção sai do conteúdo conferível: o pedido aberto vira `cancelado`.
+    await conferirPedidosDoDocumento(c, 'excecao', c.req.param('exId'), projectId);
+    return c.json({ ok: true });
+  } catch (e) { return erro500(c, 'Falha ao revogar a exceção', e); }
 });
 
 documentosApp.get('/documentos/:id/ciencias', async (c) => {

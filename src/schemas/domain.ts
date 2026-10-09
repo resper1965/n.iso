@@ -662,7 +662,8 @@ export const pedidoCriarSchema = z.object({
   // `politica` só para aprovação (ciso/ceo): a ciência de política é pelo lote por link (pedidoCienciaLoteSchema).
   // A rota recusa `politica` + `ciente` com 400.
   // `documento` (migration 0051, fatia 3.4): aprovação CISO/CEO de uma versão; a ciência de documento é pelo lote.
-  tipo: z.enum(['dpia', 'politica', 'documento']),
+  // `excecao` (migration 0051, fatia 3.5): aprovação CISO/CEO de uma exceção a documento; ciência não existe para ela.
+  tipo: z.enum(['dpia', 'politica', 'documento', 'excecao']),
   ref_id: z.string().trim().min(1).max(200),
   papel_exigido: z.enum(['ciso', 'ceo', 'ciente']),
   destinatarios: z.array(z.object({

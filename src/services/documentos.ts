@@ -4,7 +4,7 @@ import type { DocumentoCriar } from '../schemas';
 
 /** Erro de regra de negócio, com o status que a rota devolve. */
 export type Falha = { ok: false; status: 400 | 404 | 409; error: string };
-const falha = (status: Falha['status'], error: string): Falha => ({ ok: false, status, error });
+export const falha = (status: Falha['status'], error: string): Falha => ({ ok: false, status, error });
 
 /** Nome da tabela entra no SQL: só destes dois literais, nunca da requisição. */
 const existeNoProjeto = async (db: D1Database, tabela: 'documentos' | 'partes', id: string, projectId: string): Promise<boolean> =>

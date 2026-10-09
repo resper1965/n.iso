@@ -18,7 +18,7 @@ import {
   RECUSA_PLATAFORMA, type PapelAssinatura,
 } from '../helpers';
 
-export type TipoPedido = 'dpia' | 'politica' | 'documento';
+export type TipoPedido = 'dpia' | 'politica' | 'documento' | 'excecao';
 export type Canal = 'conta' | 'link' | 'portal';
 /** Validade do link pessoal da ciência; reenviar emite outro. */
 export const DIAS_LINK = 30;
@@ -112,6 +112,12 @@ const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[
     tabela: "(SELECT d.id AS id, d.project_id AS project_id, d.titulo AS titulo, v.texto AS texto, v.numero AS numero FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.estado = 'vigente')",
     colunas: ['titulo', 'texto', 'numero'],
     titulo: (r, id) => `Documento: ${String(r.titulo || id)}`,
+  },
+  // ref_id = documento_excecoes.id (fatia 3.5). Só exceção ATIVA existe para o pedido: revogada some, e o pedido aberto vira `cancelado`.
+  excecao: {
+    tabela: "(SELECT e.id AS id, e.project_id AS project_id, e.escopo AS escopo, e.motivo AS motivo, e.vence_em AS vence_em FROM documento_excecoes e WHERE e.status = 'ativa')",
+    colunas: ['escopo', 'motivo', 'vence_em'],
+    titulo: (r, id) => `Exceção: ${String(r.escopo || id).slice(0, 80)}`,
   },
 };
 
@@ -350,9 +356,9 @@ export async function registrarDecisao(db: D1Database, a: {
       .bind(a.status, decididoEm, link ? 'link' : 'conta', a.ip, a.ua, p.hash, a.mfa ? 1 : 0, a.nome, a.motivo, a.destId,
         ...(link ? [a.tokenHash ?? ''] : []), p.id, p.hash, p.ref_id, p.project_id, ...ok.binds),
   ];
-  // Documento: a prova da aprovação é a linha do destinatário (hash, IP, user-agent, MFA); não há coluna de assinatura a escrever.
+  // Documento e exceção: a prova da aprovação é a linha do destinatário (hash, IP, user-agent, MFA); não há coluna de assinatura a escrever.
   // Sem esta condição, cairia em `assinaturaDpia` e assinaria um DPIA de mesmo id.
-  if (a.assinar && p.tipo !== 'documento') {
+  if (a.assinar && p.tipo !== 'documento' && p.tipo !== 'excecao') {
     const guarda = { destId: a.destId, status: a.status, decididoEm, conteudoJson: p.conteudo_json };
     // Cada tipo assina pela MESMA função da aprovação direta: DPIA (platform.ts) e política (controls.ts).
     const st = p.tipo === 'politica'
