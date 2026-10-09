@@ -12,7 +12,7 @@ import { S } from '../src/state.js';
 const IDS_SIDEBAR = [
     'nav-dashboard', 'nav-projects', 'nav-leads', 'nav-assessments', 'nav-proposals',
     'nav-project', 'nav-monitor', 'nav-soa', 'nav-governance', 'nav-stakeholders',
-    'nav-context', 'nav-assets', 'nav-risks', 'nav-vendors', 'nav-training',
+    'nav-context', 'nav-assets', 'nav-risks', 'nav-vendors', 'nav-documentos', 'nav-training',
     'nav-acknowledgments', 'nav-policies', 'nav-audits', 'nav-capa', 'nav-mgmt',
     'nav-evidence', 'nav-ropa', 'nav-dpia', 'nav-ai',
     'nav-audit-trail', 'nav-users', 'nav-settings',
@@ -28,7 +28,7 @@ const VIEWS = [
     'renderGovernance', 'renderCertification', 'renderAIChat', 'renderSettings',
     'renderUsers', 'renderAssessmentDetail', 'renderSelfServiceAssessment', 'renderProjectDetail',
     'renderSoA', 'renderStakeholders', 'renderContext', 'renderAuditExecution',
-    'renderManagementReview', 'renderPropostas', 'updateActiveProjectWidget', 'updateHeaderUser',
+    'renderManagementReview', 'renderPropostas', 'renderDocumentos', 'renderPartes', 'updateActiveProjectWidget', 'updateHeaderUser',
 ];
 
 function itemAtivo() {
@@ -135,6 +135,11 @@ describe('navigate()', () => {
             expect(anterior.classList.contains('active')).toBe(false);
             expect(anterior.hasAttribute('aria-current')).toBe(false);
             expect(itemAtivo().id).toBe('nav-vendors');
+        });
+
+        it('a tela Documentos destaca o próprio item da barra lateral', () => {
+            navigate('documentos');
+            expect(itemAtivo().id).toBe('nav-documentos');
         });
 
         it('view composta com prefixo valido resolve o item certo', () => {
