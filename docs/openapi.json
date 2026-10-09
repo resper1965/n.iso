@@ -12721,6 +12721,12 @@
                       "null"
                     ]
                   },
+                  "owner_parte_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "accepted_by": {
                     "type": [
                       "string",
@@ -17269,6 +17275,12 @@
                     ]
                   },
                   "owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "owner_parte_id": {
                     "type": [
                       "string",
                       "null"

@@ -212,7 +212,7 @@ window.__grcCloseExecAudit = function (id) {
                                 <div class="item-name">${escapeHTML(r.asset)} — ${escapeHTML(r.threat)}</div>
                                 <div class="item-meta" style="margin-top:0.25rem">
                                     <strong>Probabilidade:</strong> ${r.probability} | <strong>Impacto:</strong> ${r.impact} | 
-                                    <strong>Tratamento:</strong> ${escapeHTML(traduzStatus(r.treatment) || 'Não definido')} | <strong>Responsável:</strong> ${escapeHTML(r.owner || 'Sem dono')}
+                                    <strong>Tratamento:</strong> ${escapeHTML(traduzStatus(r.treatment) || 'Não definido')} | <strong>Responsável:</strong> ${escapeHTML(r.owner_parte_nome || r.owner || 'Sem dono')}
                                     ${r.control_standard ? ` | <strong>Controle:</strong> <span class="badge badge-implemented" style="padding:2px 6px;font-size:0.75rem">${escapeHTML(r.control_standard)}</span>` : ''}
                                     ${r.treatment === 'Accept' && r.accepted_by ? ` | <strong>Aceito por:</strong> ${escapeHTML(r.accepted_by)}` : ''}
                                 </div>
@@ -261,6 +261,15 @@ window.__grcCloseExecAudit = function (id) {
         }
     };
 
+    // Responsável do cadastro de partes (fatia 1.4). Falha ou lista vazia: só a opção em branco, o texto livre continua valendo.
+    async function opcoesDePartes(projectId, selecionada) {
+        let partes = [];
+        try { partes = await api('GET', `/api/v1/projects/${projectId}/partes?status=ativa`); } catch(e) {}
+        if (!Array.isArray(partes)) partes = [];
+        return '<option value="">-- Sem responsável cadastrado --</option>' + partes
+            .map(p => `<option value="${escapeHTML(p.id)}" ${p.id === selecionada ? 'selected' : ''}>${escapeHTML(p.nome)}</option>`).join('');
+    }
+
     window.openNewRiskModal = async function(projectId) {
         let assets = [];
         let controls = [];
@@ -270,6 +279,7 @@ window.__grcCloseExecAudit = function (id) {
             controls = await api('GET', `/api/v1/projects/${projectId}/controls`);
         } catch(e) {}
         if (!Array.isArray(controls)) controls = [];
+        const parteOptions = await opcoesDePartes(projectId, null);
 
         const controlOptions = controls
             .filter(c => c.status !== 'Not Applicable')
@@ -316,7 +326,8 @@ window.__grcCloseExecAudit = function (id) {
                 <div class="form-group"><label class="form-label">Assinado/Aceito por</label><input class="form-input" id="risk-accepted-by" placeholder="Ex: Maria Silva (CEO)"></div>
                 <div class="form-group"><label class="form-label">Data do Aceite</label><input class="form-input" id="risk-accepted-at" type="date"></div>
             </div>
-            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
+            <div class="form-group"><label class="form-label">Responsável (cadastro de partes)</label><select class="form-input" id="risk-owner-parte">${parteOptions}</select></div>
+            <div class="form-group"><label class="form-label">Responsável (texto livre)</label><input class="form-input" id="risk-owner" placeholder="Ex: CISO"></div>
             <div class="form-group"><label class="form-label">Plano de Tratamento</label><textarea class="form-input" id="risk-plan" rows="2" placeholder="Descreva as acoes..."></textarea></div>
             <button class="btn btn-primary" style="width:100%" data-action="createRisk" data-args='["${projectId}"]'>Registrar Risco</button>
         `);
@@ -338,6 +349,7 @@ window.__grcCloseExecAudit = function (id) {
             treatment: treatment,
             control_id: document.getElementById('risk-control').value || null,
             owner: document.getElementById('risk-owner').value,
+            owner_parte_id: document.getElementById('risk-owner-parte').value || null,
             treatment_plan: document.getElementById('risk-plan').value,
             accepted_by: treatment === 'Accept' ? document.getElementById('risk-accepted-by').value : null,
             accepted_at: treatment === 'Accept' ? document.getElementById('risk-accepted-at').value : null
@@ -355,6 +367,7 @@ window.__grcCloseExecAudit = function (id) {
             controls = await api('GET', `/api/v1/projects/${projectId}/controls`);
         } catch(e) {}
         if (!Array.isArray(controls)) controls = [];
+        const parteOptions = await opcoesDePartes(projectId, r.owner_parte_id);
 
         const controlOptions = controls
             .filter(c => c.status !== 'Not Applicable')
@@ -379,7 +392,8 @@ window.__grcCloseExecAudit = function (id) {
                     ${controlOptions}
                 </select>
             </div>
-            <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="risk-e-owner" value="${escapeHTML(r.owner||'')}"></div>
+            <div class="form-group"><label class="form-label">Responsável (cadastro de partes)</label><select class="form-input" id="risk-e-owner-parte">${parteOptions}</select></div>
+            <div class="form-group"><label class="form-label">Responsável (texto livre)</label><input class="form-input" id="risk-e-owner" value="${escapeHTML(r.owner||'')}"></div>
             <div style="display:flex;gap:0.5rem;justify-content:space-between;margin-top:1rem">
                 <button class="btn" style="color:var(--danger)" data-action="__grcDeleteRisk" data-args='["${riskId}"]'>Excluir</button>
                 <button class="btn btn-primary" data-action="updateRisk" data-args='["${riskId}"]'>Salvar</button>
@@ -396,7 +410,8 @@ window.__grcCloseExecAudit = function (id) {
             probability: +document.getElementById('risk-e-prob').value, 
             treatment: document.getElementById('risk-e-treatment').value, 
             control_id: document.getElementById('risk-e-control').value || null,
-            owner: document.getElementById('risk-e-owner').value 
+            owner: document.getElementById('risk-e-owner').value,
+            owner_parte_id: document.getElementById('risk-e-owner-parte').value || null
         };
         await api('PUT', `/api/v1/risks/${id}`, body);
         forceCloseModal(); render();
@@ -441,7 +456,7 @@ window.__grcCloseExecAudit = function (id) {
                     </div>
                     <div>
                         <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; font-weight:500; margin-bottom:4px">Responsável (Owner)</div>
-                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(r.owner || 'Sem dono')}</div>
+                        <div style="font-size:0.85rem; font-weight:600; color:var(--text)">${escapeHTML(r.owner_parte_nome || r.owner || 'Sem dono')}</div>
                     </div>
                     ${r.control_standard ? `
                     <div style="grid-column:span 2">

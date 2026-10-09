@@ -44,6 +44,7 @@ export     function navigate(view, data) {
         else if (S.view === 'policies-dashboard') renderPoliciesDashboard(c, h, a);
         else if (S.view === 'risks') renderRisks(c, h, a);
         else if (S.view === 'vendors') renderVendors(c, h, a);
+        else if (S.view === 'partes') renderPartes(c, h, a);
         else if (S.view === 'training') renderTraining(c, h, a);
         else if (S.view === 'ropa') renderROPA(c, h, a);
         else if (S.view === 'dpia') renderDPIA(c, h, a);
