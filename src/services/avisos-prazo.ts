@@ -11,7 +11,7 @@ import { appUrl } from '../config/url';
 import { log } from '../observability';
 import type { Bindings } from '../index';
 
-export type Fonte = 'capa' | 'checklist' | 'auditoria' | 'certificado' | 'link_auditor' | 'politica';
+export type Fonte = 'capa' | 'checklist' | 'auditoria' | 'certificado' | 'link_auditor' | 'politica' | 'documento';
 
 export type ItemPrazo = {
   fonte: Fonte;
@@ -66,6 +66,8 @@ export function marcoDoDia(vence: string, hoje: string): string | null {
  * link revogado; certificado renovado e política revisada saem sozinhos, porque a data anda.
  * Política: o filtro efetivo é "as duas assinaturas" (CISO e CEO); a descrição (texto) do catálogo quase
  * sempre existe, então o teste de texto não vazio quase nunca descarta nada.
+ * Documento (fatia 3.4): `revisar_ate` de documento VIGENTE; revisar (data nova) ou aposentar tira o item. O responsável
+ * é o e-mail da parte dona, senão o nome.
  * ponytail: '-3 hours' é o fuso de São Paulo fixo (sem horário de verão desde 2019); se voltar, troca
  * por conversão no TypeScript.
  */
@@ -87,6 +89,10 @@ const FONTES: Record<Fonte, string> = {
       c.title AS titulo, c.owner AS responsavel
     FROM compliance_controls c JOIN projects p ON p.id = c.project_id
     WHERE trim(COALESCE(c.description, '')) <> '' AND c.ciso_approved_at IS NOT NULL AND c.ceo_approved_at IS NOT NULL`,
+  documento: `SELECT d.id AS item_id, d.project_id, date(substr(d.revisar_ate, 1, 10)) AS vence_em, d.titulo AS titulo,
+      COALESCE(NULLIF(trim(pa.email), ''), pa.nome) AS responsavel
+    FROM documentos d JOIN projects p ON p.id = d.project_id LEFT JOIN partes pa ON pa.id = d.dono_parte_id AND pa.project_id = d.project_id
+    WHERE d.status = 'vigente' AND d.revisar_ate IS NOT NULL`,
 };
 
 /** Os itens que têm marco hoje. Uma fonte que falha vai para `falhas` e as outras seguem. */
@@ -157,12 +163,12 @@ export type ResultadoAvisos = { avisos_criados: number; emails_enviados: number;
 
 const ROTULO: Record<Fonte, string> = {
   capa: 'CAPA', checklist: 'Item do checklist', auditoria: 'Auditoria', certificado: 'Certificado',
-  link_auditor: 'Link do auditor', politica: 'Política',
+  link_auditor: 'Link do auditor', politica: 'Política', documento: 'Documento',
 };
 
 /** Tela de cada fonte no clique do sino (frontend/src/globals.js, handleNotificationClick). */
 const TELA: Record<Fonte, string> = {
-  capa: '/capa', checklist: '', auditoria: '/audits', certificado: '/certification', link_auditor: '/audits', politica: '/policies',
+  capa: '/capa', checklist: '', auditoria: '/audits', certificado: '/certification', link_auditor: '/audits', politica: '/policies', documento: '/documentos',
 };
 
 const dataBr = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}`;
@@ -172,6 +178,7 @@ const quando = (marco: string) => (marco === 'D-7' ? 'vence em 7 dias' : marco =
 export function tituloDoAviso(item: Pick<ItemDoDia, 'fonte' | 'marco' | 'titulo'>): string {
   const d7 = item.marco === 'D-7';
   if (item.fonte === 'politica') return `Política ${item.titulo.split(' ')[0]} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
+  if (item.fonte === 'documento') return `Documento ${item.titulo} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
   if (item.fonte === 'auditoria') return `Auditoria ${d7 ? 'em 7 dias' : 'hoje'}`;
   return `${ROTULO[item.fonte]} ${quando(item.marco)}`;
 }
