@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0046** (`ls migrations/*.sql | tail -1`). São 44 arquivos
+- Última migration no repositório: **0047** (`ls migrations/*.sql | tail -1`). São 45 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -243,3 +243,20 @@ item_id, marco, user_id, vence_em, titulo, criado_em, email_enviado_em`.
 d1 migrations apply niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado:
 "No migrations to apply") → merge, porque `deploy.yml` recusa migration pendente. O cron novo (`0 11 * * *`) entra com o deploy;
 sem a tabela, a rotina registraria falha em todo item.
+
+---
+
+## 0047 — núcleo do n.privacy, fatia 1.1 (2026-10)
+
+Cria `projeto_modulos`, `departamentos`, `partes` e `parte_vinculos`, acrescenta
+`organizations.modulos_contratados` (padrão `["iso"]`) e o gatilho `projeto_modulo_iso_padrao`. Os
+projetos que já existem recebem o módulo `iso`. Só `CREATE ... IF NOT EXISTS` e um `ALTER ... ADD COLUMN`
+(não idempotente: aplicar duas vezes falha com "duplicate column"). Nenhuma tabela existente perde dado.
+
+Conferência depois de aplicar: `PRAGMA table_info(partes)` mostra `id, project_id, tipo, nome, email,
+user_id, status, created_at, updated_at`; `SELECT modulo, count(*) FROM projeto_modulos GROUP BY modulo`
+mostra `iso` com a contagem de `projects`; `PRAGMA table_info(organizations)` lista `modulos_contratados`.
+
+**Esta RODA em produção.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply niso-db
+--remote` → `npx wrangler d1 migrations list niso-db --remote` (esperado: "No migrations to apply") →
+merge, porque `deploy.yml` recusa migration pendente.
