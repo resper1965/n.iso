@@ -101,13 +101,15 @@ describe('vínculos', () => {
     expect(await nVinculos(parte)).toBe(antes);
   });
 
-  it('papel que não serve ao alvo: 400; alvo tratamento ainda não existe: 400', async () => {
+  it('papel que não serve ao alvo: 400; tratamento é o registro do RoPA (fatia 4): inexistente é 400, existente vincula', async () => {
     const r = await vincular(parte, { papel: 'encarregado', alvo_tipo: 'departamento', alvo_id: dep });
     expect(r.status).toBe(400);
     expect((await json<{ error: string }>(r)).error).toMatch(/não se aplica/);
     const i = await vincular(parte, { papel: 'operador', alvo_tipo: 'tratamento', alvo_id: 'qualquer' });
     expect(i.status).toBe(400);
-    expect((await json<{ error: string }>(i)).error).toMatch(/ainda não existe/);
+    expect((await json<{ error: string }>(i)).error).toMatch(/inexistente ou de outro projeto/);
+    await env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES ('trat-ok', 'proj-a', 'Folha')`).run();
+    expect((await vincular(parte, { papel: 'operador', alvo_tipo: 'tratamento', alvo_id: 'trat-ok' })).status).toBe(201);
     expect((await vincular(parte, { papel: 'rei', alvo_tipo: 'projeto', alvo_id: 'proj-a' })).status).toBe(400);
   });
 

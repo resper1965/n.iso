@@ -16,7 +16,6 @@ const lista = (r) => (Array.isArray(r) ? r : []);
 const args = (...v) => escapeHTML(JSON.stringify(v));
 const el = (id) => document.getElementById(id);
 const falha = (e, padrao) => showToast((e && e.message) || padrao, 'error');
-const base = (projectId, ropaId) => `/api/v1/projects/${projectId}/ropa/${ropaId}`;
 
 async function acao(projectId, ropaId, fazer, padrao, sucesso) {
     try {
@@ -38,10 +37,10 @@ const vazio = (texto) => `<p style="color:var(--text-dim)">${texto}</p>`;
 
 window.openLigacoesTratamento = async function (projectId, ropaId) {
     let lig;
-    try { lig = await api('GET', `${base(projectId, ropaId)}/ligacoes`); } catch (e) { falha(e, 'Não foi possível abrir as ligações'); return; }
+    try { lig = await api('GET', `/api/v1/projects/${projectId}/ropa/${ropaId}/ligacoes`); } catch (e) { falha(e, 'Não foi possível abrir as ligações'); return; }
     const editar = podeEditar();
     let itens = [], deptos = [], partes = [], bases = [], diagrama = '';
-    try { diagrama = (await api('GET', `${base(projectId, ropaId)}/diagrama`)).mermaid || ''; } catch (e) { /* abre sem o diagrama */ }
+    try { diagrama = (await api('GET', `/api/v1/projects/${projectId}/ropa/${ropaId}/diagrama`)).mermaid || ''; } catch (e) { /* abre sem o diagrama */ }
     if (editar) {
         try { const r = await api('GET', `/api/v1/projects/${projectId}/assets`); itens = Array.isArray(r) ? r : lista(r && r.assets); } catch (e) { /* sem seletor de itens */ }
         try { deptos = lista(await api('GET', `/api/v1/projects/${projectId}/departamentos`)); } catch (e) { /* idem */ }
@@ -109,10 +108,10 @@ const marcadosDe = (tipo) => [...document.querySelectorAll(`input[data-tl="${tip
 window.pedirAprovacaoTratamento = (projectId, ropaId) => window.abrirPedidoAprovacao(projectId, 'tratamento', ropaId);
 
 window.salvarItensTratamento = (projectId, ropaId) => acao(projectId, ropaId,
-    () => api('PUT', `${base(projectId, ropaId)}/itens`, { itens: marcadosDe('item') }), 'Não foi possível salvar os itens', 'Itens salvos.');
+    () => api('PUT', `/api/v1/projects/${projectId}/ropa/${ropaId}/itens`, { itens: marcadosDe('item') }), 'Não foi possível salvar os itens', 'Itens salvos.');
 
 window.salvarDepartamentosTratamento = (projectId, ropaId) => acao(projectId, ropaId,
-    () => api('PUT', `${base(projectId, ropaId)}/departamentos`, { departamentos: marcadosDe('depto') }), 'Não foi possível salvar os departamentos', 'Departamentos salvos.');
+    () => api('PUT', `/api/v1/projects/${projectId}/ropa/${ropaId}/departamentos`, { departamentos: marcadosDe('depto') }), 'Não foi possível salvar os departamentos', 'Departamentos salvos.');
 
 window.salvarBaseLegalTratamento = (projectId, ropaId) => {
     const registro = (S.ropa || []).find((r) => r.id === ropaId) || {};
@@ -131,13 +130,13 @@ window.removerParteTratamento = (projectId, ropaId, parteId, vinculoId) => acao(
 window.adicionarTransferenciaTratamento = function (projectId, ropaId) {
     const pais = el('tl-pais').value.trim();
     if (!pais) { showToast('Informe o país', 'error'); return; }
-    return acao(projectId, ropaId, () => api('POST', `${base(projectId, ropaId)}/transferencias`, {
+    return acao(projectId, ropaId, () => api('POST', `/api/v1/projects/${projectId}/ropa/${ropaId}/transferencias`, {
         pais, destinatario_parte_id: el('tl-dest').value || null, mecanismo: el('tl-mec').value.trim() || null,
     }), 'Não foi possível registrar a transferência', 'Transferência registrada.');
 };
 
 window.removerTransferenciaTratamento = (projectId, ropaId, id) => acao(projectId, ropaId,
-    () => api('DELETE', `${base(projectId, ropaId)}/transferencias/${id}`), 'Não foi possível remover a transferência', 'Transferência removida.');
+    () => api('DELETE', `/api/v1/projects/${projectId}/ropa/${ropaId}/transferencias/${id}`), 'Não foi possível remover a transferência', 'Transferência removida.');
 
 window.copiarDiagramaTratamento = async function () {
     const texto = el('tl-diagrama').textContent;
