@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0050** (`ls migrations/*.sql | tail -1`). São 48 arquivos
+- Última migration no repositório: **0051** (`ls migrations/*.sql | tail -1`). São 49 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -288,3 +288,21 @@ colunas; `SELECT count(*) FROM documentos` devolve 0 até a importação. Depois
 
 **Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply
 niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` → merge.
+
+## 0051 — pedidos aceitam `documento` e canal `portal`, fatia 3.3 (2026-10)
+
+**Reconstrói `pedidos` e `pedido_destinatarios`**, que são PROVA (ciência e aprovação com hash, IP e user-agent), para
+ampliar dois CHECKs: `pedidos.tipo` ganha `documento` e `pedido_destinatarios.canal` ganha `portal`. Mesmo molde da 0042:
+as duas tabelas novas nascem ligadas entre si, a filha antiga cai primeiro, o `RENAME` reescreve a FK, e os **dois
+triggers** de prova (0042 e 0043, que o `DROP TABLE` leva junto) e os índices são recriados no fim. Acrescenta o índice
+único parcial `idx_pedidos_portal_aberto` (um pedido "em pé" aberto do portal por documento).
+
+**Antes de aplicar em produção** (a 0042 já avisava de deriva): conferir `PRAGMA table_info(pedidos)` e
+`PRAGMA table_info(pedido_destinatarios)` contra o `schema.sql` (16 colunas na filha), anotar `SELECT count(*)` de cada
+tabela e de `pedido_destinatarios WHERE status <> 'pendente'`, e rodar `npm run db:backup`. **Depois:** as contagens iguais,
+`SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name IN ('pedidos','pedido_destinatarios')` devolvendo os
+dois triggers e `PRAGMA foreign_key_list(pedido_destinatarios)` apontando para `pedidos`.
+
+**Ordem de rollout:** 0050 → `POST /projects/:id/documentos/importar` em cada projeto → 0051 → merge/deploy. Sem o
+`importar`, o portal `/politicas` fica vazio (ele só lista documento com versão vigente). Hoje, em produção, `pedidos` não tem
+pedido de política e `policy_acknowledgments` não tem linha (medido em 09/10/2026), então não há prova de política a perder.

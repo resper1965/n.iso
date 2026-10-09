@@ -29,7 +29,7 @@ rotina de plataforma seria destruir o trabalho pelo qual o cliente paga. Há
 teste que insere um risco e uma evidência com 3000 dias e exige que sobrevivam
 ao cron.
 
-**`partes`, `parte_vinculos`, `departamentos`, `projeto_modulos`, `itens`, `item_seguranca`, `documentos` e `documento_versoes` também não.** São o cadastro que o
+**`partes`, `parte_vinculos`, `departamentos`, `projeto_modulos`, `itens`, `item_seguranca`, `documentos` e `documento_versoes` também não.** A ciência de documento (pedidos `tipo = 'documento'` e as linhas de `pedido_destinatarios`, inclusive as do canal `portal`) é prova e não é purgada: correção é pedido novo. São o cadastro que o
 cliente mantém: quem é o encarregado, quem responde por quê. O prazo é decisão dele. Nome e e-mail em
 `partes` são dado pessoal, e por isso a busca e a eliminação do titular (`FONTES_PII`) as alcançam: a
 pessoa é anonimizada, o vínculo e o fato ficam.

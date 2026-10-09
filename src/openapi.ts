@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { APP_URL_PADRAO } from './config/url';
 import {
-  aceiteDePoliticaSchema,
+  aceiteDeDocumentoSchema,
   assessmentAtualizarSchema,
   assessmentBlocoSchema,
   assessmentCriarSchema,
@@ -279,7 +279,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/public/pedidos/ciencia', schema: pedidoCienciaLinkSchema, nome: 'pedidoCienciaLinkSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/pedidos/codigo', schema: pedidoTokenSchema, nome: 'pedidoTokenSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/pedidos/ver', schema: pedidoTokenSchema, nome: 'pedidoTokenSchema' },
-  { metodo: 'POST', caminho: '/api/v1/public/policies/ack', schema: aceiteDePoliticaSchema, nome: 'aceiteDePoliticaSchema' },
+  { metodo: 'POST', caminho: '/api/v1/public/policies/ack', schema: aceiteDeDocumentoSchema, nome: 'aceiteDeDocumentoSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/policies/request-otp', schema: otpPedidoSchema, nome: 'otpPedidoSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/policies/verify-otp', schema: otpVerificacaoSchema, nome: 'otpVerificacaoSchema' },
   { metodo: 'POST', caminho: '/api/v1/public/propostas/aceitar', schema: propostaAceiteLinkSchema, nome: 'propostaAceiteLinkSchema' },

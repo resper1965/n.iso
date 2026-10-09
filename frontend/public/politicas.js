@@ -4,7 +4,7 @@
 // addEventListener no DOMContentLoaded abaixo.
 //
 // Este portal é anônimo por sessão de OTP, mas o conteúdo que ele exibe
-// (título, norma e texto da política) vem de `compliance_controls`,
+// (título, tipo e texto do documento) vem de `documentos`, versão vigente,
 // editável por papéis com escrita no app autenticado. Sem escapar aqui,
 // um campo com `<img onerror=...>` executa para todo mundo que autentica
 // por OTP para ler as políticas — a própria audiência que este portal
@@ -22,10 +22,13 @@ let state = {
   email: '',
   name: '',
   token: '',
-  controls: [],
-  acknowledgments: [],
-  selectedControl: null
+  documents: [],
+  legacy: [],
+  selectedId: null
 };
+
+// A ciência é da VERSÃO: `atual` quando o número lido é o da vigente; senão é de uma versão anterior.
+const TIPOS = { politica: 'Política', norma: 'Norma', procedimento: 'Procedimento' };
 
 window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
@@ -87,6 +90,11 @@ function concluidoLink(texto) {
 const quando = (s) => (s ? new Date(String(s).replace(' ', 'T') + (String(s).includes('Z') ? '' : 'Z')).toLocaleString('pt-BR') : '');
 
 function conteudoLink(tipo, conteudo) {
+  if (tipo === 'documento') {
+    return `<h2 style="margin: 0 0 0.25rem;">${escapeHTML(conteudo.titulo)}</h2>
+      <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">Versão ${escapeHTML(conteudo.numero)}</div>
+      <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #1e293b;">${escapeHTML(conteudo.texto) || 'Documento sem texto.'}</div>`;
+  }
   if (tipo === 'politica') {
     return `<h2 style="margin: 0 0 1rem;">${escapeHTML(conteudo.title)}</h2>
       <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #1e293b;">${escapeHTML(conteudo.description) || 'Documento sem texto.'}</div>`;
@@ -221,43 +229,52 @@ async function handleVerifyOtp(e) {
   }
 }
 
-async function loadPolicyList() {
+async function loadPolicyList(manterId) {
   try {
     const res = await fetch(`/api/v1/public/policies/list?token=${state.token}`);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Falha ao carregar políticas');
+    if (!res.ok) throw new Error(data.error || 'Falha ao carregar documentos');
 
-    state.controls = data.controls || [];
-    state.acknowledgments = data.acknowledgments || [];
+    state.documents = data.documents || [];
+    state.legacy = data.legacy || [];
 
-    document.getElementById('client-header-tag').innerText = data.project?.client_name || 'Portal de Políticas';
-    document.getElementById('reader-project-name').innerText = data.project?.client_name || 'Diretrizes da Organização';
-    document.getElementById('reader-user-info').innerText = `${state.name} (${state.email})`;
+    document.getElementById('client-header-tag').textContent = data.project?.client_name || 'Portal de Políticas';
+    document.getElementById('reader-project-name').textContent = data.project?.client_name || 'Diretrizes da Organização';
+    document.getElementById('reader-user-info').textContent = `${state.name} (${state.email})`;
 
-    renderPolicyList();
+    renderPolicyList(manterId);
   } catch (err) {
     alert('Erro: ' + err.message);
   }
 }
 
-function renderPolicyList() {
+/** Selo de cada item: "Assinado" na versão vigente; "Versão anterior (n)" se a pessoa só leu uma versão passada. */
+function seloDaCiencia(doc) {
+  if (!doc.ciencia) return '';
+  return doc.ciencia.atual
+    ? '<span class="ack-badge">Assinado</span>'
+    : `<span class="ack-badge">Versão anterior (${escapeHTML(doc.ciencia.numero)})</span>`;
+}
+
+function renderPolicyList(manterId) {
   const container = document.getElementById('policy-list-container');
-  if (!state.controls || state.controls.length === 0) {
-    container.innerHTML = '<div style="font-size:0.8rem;color:var(--text-dim)">Nenhuma política cadastrada.</div>';
+  const antigas = (state.legacy || []).length
+    ? `<div style="margin-top:1rem;font-size:0.72rem;color:var(--text-dim)">Registros anteriores, sem prova de versão: ${state.legacy.map((a) => escapeHTML(a.policy_type)).join(', ')}.</div>`
+    : '';
+  if (!state.documents || state.documents.length === 0) {
+    container.innerHTML = '<div style="font-size:0.8rem;color:var(--text-dim)">Nenhum documento vigente.</div>' + antigas;
     return;
   }
 
-  container.innerHTML = state.controls.map((ctrl, idx) => {
-    const isSigned = state.acknowledgments.some(a => a.policy_type === ctrl.title || a.policy_type === ctrl.id);
-    return `
-      <div class="policy-item ${idx === 0 ? 'active' : ''}" data-idx="${idx}" id="pol-item-${idx}">
-        ${escapeHTML(ctrl.title)}
-        ${isSigned ? '<span class="ack-badge">Assinado</span>' : ''}
+  container.innerHTML = state.documents.map((doc, idx) => `
+      <div class="policy-item" data-idx="${idx}" id="pol-item-${idx}">
+        ${escapeHTML(doc.titulo)}
+        ${seloDaCiencia(doc)}
       </div>
-    `;
-  }).join('');
+    `).join('') + antigas;
 
-  selectPolicy(0);
+  const idx = manterId ? state.documents.findIndex((d) => d.id === manterId) : -1;
+  selectPolicy(idx >= 0 ? idx : 0);
 }
 
 function selectPolicy(idx) {
@@ -265,36 +282,42 @@ function selectPolicy(idx) {
   const activeEl = document.getElementById(`pol-item-${idx}`);
   if (activeEl) activeEl.classList.add('active');
 
-  const ctrl = state.controls[idx];
-  state.selectedControl = ctrl;
+  const doc = state.documents[idx];
+  if (!doc) return;
+  state.selectedId = doc.id;
 
   const paper = document.getElementById('document-paper-body');
   paper.innerHTML = `
     <div style="border-bottom: 2px solid #00ade8; padding-bottom: 1rem; margin-bottom: 1.5rem;">
-      <h2 style="margin: 0; color: #070b14;">${escapeHTML(ctrl.title)}</h2>
-      <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Norma Referência: ${escapeHTML(ctrl.standard) || 'ISO 27001 / LGPD'}</div>
+      <h2 style="margin: 0; color: #070b14;">${escapeHTML(doc.titulo)}</h2>
+      <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">${escapeHTML(TIPOS[doc.tipo] || 'Documento')} · versão ${escapeHTML(doc.numero)}</div>
     </div>
     <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #1e293b;">
-      ${escapeHTML(ctrl.description) || 'Conteúdo da política corporativa vigente.'}
+      ${escapeHTML(doc.texto) || 'Conteúdo do documento vigente.'}
     </div>
   `;
 
   const ackBox = document.getElementById('ack-controls');
   ackBox.classList.remove('hidden');
 
-  const existingAck = state.acknowledgments.find(a => a.policy_type === ctrl.title || a.policy_type === ctrl.id);
   const pendingBox = document.getElementById('ack-pending-box');
   const completedBox = document.getElementById('ack-completed-box');
+  const aviso = document.getElementById('ack-prev-note');
 
-  if (existingAck) {
+  if (doc.ciencia && doc.ciencia.atual) {
     pendingBox.classList.add('hidden');
     completedBox.classList.remove('hidden');
-    document.getElementById('ack-details-hash').innerText = `Data/Hora: ${new Date(existingAck.acknowledged_at).toLocaleString()} | IP: ${existingAck.ip_address || 'Registrado'}`;
+    document.getElementById('ack-details-hash').textContent = `Versão ${doc.ciencia.numero} · ${new Date(String(doc.ciencia.em).replace(' ', 'T') + (String(doc.ciencia.em).includes('Z') ? '' : 'Z')).toLocaleString()}`;
   } else {
     completedBox.classList.add('hidden');
     pendingBox.classList.remove('hidden');
     document.getElementById('chk-accept').checked = false;
     toggleSignButton(false);
+    // Já leu uma versão anterior: a ciência dela fica gravada, mas esta é outra e pede confirmação nova.
+    if (aviso) {
+      aviso.textContent = doc.ciencia ? `Você deu ciência da versão ${doc.ciencia.numero}. Esta é a versão ${doc.numero}: leia e confirme de novo.` : '';
+      aviso.classList.toggle('hidden', !doc.ciencia);
+    }
   }
 }
 
@@ -305,28 +328,26 @@ function toggleSignButton(enabled) {
 }
 
 async function handleSignAck() {
-  if (!state.selectedControl) return;
+  const doc = state.documents.find((d) => d.id === state.selectedId);
+  if (!doc) return;
   try {
+    // Só o id: nome e e-mail são os da sessão (código por e-mail), o servidor não aceita outros.
     const res = await fetch(`/api/v1/public/policies/ack?token=${state.token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        policy_type: state.selectedControl.title,
-        user_name: state.name,
-        user_email: state.email
-      })
+      body: JSON.stringify({ documento_id: doc.id })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro ao registrar ciência');
 
-    state.acknowledgments.push({
-      policy_type: state.selectedControl.title,
-      acknowledged_at: data.acknowledged_at,
-      ip_address: data.ip_address
-    });
-
-    renderPolicyList();
-    selectPolicy(state.controls.indexOf(state.selectedControl));
+    if (data.numero !== doc.numero) {
+      // Saiu versão nova entre a leitura e a confirmação: a ciência ficou na vigente de agora. Recarrega para ler.
+      await loadPolicyList(doc.id);
+      alert(`O documento foi atualizado para a versão ${data.numero} enquanto você lia. A ciência ficou registrada nela: leia o texto novo.`);
+      return;
+    }
+    doc.ciencia = { numero: data.numero, em: data.acknowledged_at, atual: true };
+    renderPolicyList(doc.id);
   } catch (err) {
     alert('Erro ao assinar: ' + err.message);
   }

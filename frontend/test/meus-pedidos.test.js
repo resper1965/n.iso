@@ -69,6 +69,21 @@ describe('abrir e decidir', () => {
     expect(document.querySelector('label[for="pd-senha"]')).toBeTruthy();
   });
 
+  it('pedido de documento: mostra título, versão e texto congelados, escapados', async () => {
+    await abrir({
+      id: 'pd2', tipo: 'documento', titulo: 'Documento: Política de Acesso', papel_exigido: 'ciente', status: 'aberto',
+      hash: 'b'.repeat(64), criado_por: 'cons@ness.lat', criado_em: '2026-10-09T10:00:00Z',
+      conteudo: { titulo: 'Política <b>de</b> Acesso', numero: 3, texto: '<img src=x onerror=alert(1)>' },
+    });
+    const html = el('modal-content').innerHTML;
+    expect(html).toContain('Versão');
+    expect(html).toContain('&lt;img');
+    expect(document.querySelector('#modal-content img')).toBeNull();
+    expect(document.querySelector('#modal-content b')).toBeNull();
+    expect(el('modal-content').textContent).toContain('Política <b>de</b> Acesso');
+    expect(el('modal-content').textContent).toContain('3');
+  });
+
   it('aprovar manda a senha; senha errada (401) mostra o erro e não desloga', async () => {
     await abrir();
     el('pd-senha').value = 'errada';
@@ -129,20 +144,24 @@ describe('pedir aprovação (consultoria)', () => {
 });
 
 describe('ciência por link (consultoria, fatia 3)', () => {
-  it('nova ciência: escolhe a política, separa os e-mails da lista e envia o lote', async () => {
-    fetchMock.mockResolvedValueOnce(json({ ok: true, controls: [
-      { id: 'c1', title: 'Política de Segurança', description: 'Texto' },
-      { id: 'c2', title: 'Sem texto', description: '' },
-    ] }));
+  it('nova ciência: escolhe o documento vigente, separa os e-mails da lista e envia o lote', async () => {
+    // GET .../documentos (src/routes/documentos.ts): lista pura; só entra quem tem versão vigente
+    fetchMock.mockResolvedValueOnce(json([
+      { id: 'd1', tipo: 'politica', titulo: 'Política de <b>Segurança</b>', status: 'vigente', versao_vigente: 2, tem_rascunho: false },
+      { id: 'd2', tipo: 'politica', titulo: 'Só rascunho', status: 'rascunho', versao_vigente: null, tem_rascunho: true },
+    ]));
     await window.abrirCienciaLink('p1');
-    expect([...el('cl-doc').options].map((o) => o.value)).toEqual(['c1']);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/v1\/projects\/p1\/documentos$/);
+    expect([...el('cl-doc').options].map((o) => o.value)).toEqual(['d1']);
+    expect(el('cl-doc').options[0].textContent).toBe('Política de <b>Segurança</b> (versão 2)');
+    expect(el('cl-doc').querySelector('b')).toBeNull(); // título é texto, não HTML
     el('cl-emails').value = 'ana@cliente.com; bia@cliente.com\nana@cliente.com, invalido';
     fetchMock.mockResolvedValueOnce(json({ id: 'pd7', hash: 'h', enviados: 2, falhas: [] }, 201));
     el('cl-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await espera();
     const [url, init] = fetchMock.mock.calls.at(-1);
     expect(url).toMatch(/\/api\/v1\/projects\/p1\/pedidos\/ciencia$/);
-    expect(JSON.parse(init.body)).toEqual({ tipo: 'politica', ref_id: 'c1', destinatarios: [{ email: 'ana@cliente.com' }, { email: 'bia@cliente.com' }] });
+    expect(JSON.parse(init.body)).toEqual({ tipo: 'documento', ref_id: 'd1', destinatarios: [{ email: 'ana@cliente.com' }, { email: 'bia@cliente.com' }] });
   });
 
   it('acompanhamento: situação por pessoa escapada, versão anterior, e reenviar aos pendentes', async () => {

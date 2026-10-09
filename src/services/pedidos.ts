@@ -18,8 +18,8 @@ import {
   RECUSA_PLATAFORMA, type PapelAssinatura,
 } from '../helpers';
 
-export type TipoPedido = 'dpia' | 'politica';
-export type Canal = 'conta' | 'link';
+export type TipoPedido = 'dpia' | 'politica' | 'documento';
+export type Canal = 'conta' | 'link' | 'portal';
 /** Validade do link pessoal da ciência; reenviar emite outro. */
 export const DIAS_LINK = 30;
 export type PapelPedido = 'ciso' | 'ceo' | 'ciente';
@@ -106,6 +106,13 @@ type Documento = { titulo: string; conteudo: Record<string, unknown> };
 const DOCUMENTOS: Record<TipoPedido, { tabela: string; colunas: readonly string[]; titulo: (r: Record<string, unknown>, refId: string) => string }> = {
   dpia: { tabela: 'dpia_assessments', colunas: COLUNAS_DPIA, titulo: (r, id) => `DPIA: ${String(r.processing_name || r.system_name || id)}` },
   politica: { tabela: 'compliance_controls', colunas: ['title', 'description'], titulo: (r, id) => `Política: ${String(r.title || id)}` },
+  // ref_id = documentos.id; o conteúdo é a versão VIGENTE (titulo, texto, numero). O "nome da tabela" é um subselect:
+  // publicar versão nova muda o hash e a máquina de substituição funciona sem mudar. `FROM ${tabela} d` e `FROM ${tabela}` valem.
+  documento: {
+    tabela: "(SELECT d.id AS id, d.project_id AS project_id, d.titulo AS titulo, v.texto AS texto, v.numero AS numero FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.estado = 'vigente')",
+    colunas: ['titulo', 'texto', 'numero'],
+    titulo: (r, id) => `Documento: ${String(r.titulo || id)}`,
+  },
 };
 
 /** Conteúdo atual do documento (do projeto informado), ou `null` se não existe nele. */
@@ -218,7 +225,8 @@ export async function conferirVigencia(db: D1Database, p: PedidoRow): Promise<Vi
     const atual = await db.prepare('SELECT status, substituido_por FROM pedidos WHERE id = ?').bind(p.id).first<{ status: string; substituido_por: string | null }>();
     return { vigente: false, status: atual?.status ?? 'substituido', substituido_por: atual?.substituido_por ?? null };
   }
-  const { results: dests } = await db.prepare('SELECT email, nome, user_id FROM pedido_destinatarios WHERE pedido_id = ?').bind(p.id).all<Destinatario>();
+  // Quem leu pelo portal público (canal `portal`) não vai para o pedido novo: revê a versão nova quando voltar ao portal.
+  const { results: dests } = await db.prepare("SELECT email, nome, user_id FROM pedido_destinatarios WHERE pedido_id = ? AND COALESCE(canal, '') <> 'portal'").bind(p.id).all<Destinatario>();
   await db.batch(inserirPedido(db, {
     id: novoId, projectId: p.project_id, tipo: p.tipo, refId: p.ref_id, papel: p.papel_exigido, doc, hash, criadoPor: p.criado_por,
   }, dests));
@@ -359,4 +367,70 @@ export async function registrarDecisao(db: D1Database, a: {
     WHERE id = ?1 AND status = 'aberto'`).bind(p.id));
   const res = await db.batch(stmts);
   return !!res[0].meta?.changes;
+}
+
+/** `criado_por` do pedido "em pé" que guarda a ciência de quem entra pelo portal público (índice único parcial na 0051). */
+export const CONTEINER_PORTAL = 'sistema:portal';
+
+export type CienciaPortal =
+  | { ok: true; numero: number; hash: string; decididoEm: string; jaExistia: boolean }
+  | { ok: false; status: 404 | 409; error: string };
+
+/**
+ * Ciência de uma pessoa que entrou no portal público com código por e-mail (sem pedido prévio). A prova é a de
+ * sempre: uma linha de `pedido_destinatarios` JÁ DECIDIDA (`ciente`, canal `portal`, `hash_lido`, IP, user-agent)
+ * num pedido de ciência "em pé" do documento, achado ou criado na hora. É sempre a versão VIGENTE no momento do
+ * registro, e `numero` volta para a tela dizer qual foi. O mesmo e-mail na mesma versão não duplica.
+ */
+export async function registrarCienciaPortal(
+  db: D1Database, a: { projectId: string; documentoId: string; nome: string; email: string; ip: string | null; ua: string | null },
+): Promise<CienciaPortal> {
+  const doc = await documentoAtual(db, 'documento', a.documentoId, a.projectId);
+  if (!doc) return { ok: false, status: 404, error: 'Documento não encontrado ou sem versão vigente' };
+  const numero = Number(doc.conteudo.numero);
+  const email = a.email.trim().toLowerCase();
+
+  const achar = () => db.prepare(
+    `SELECT * FROM pedidos WHERE project_id = ? AND tipo = 'documento' AND ref_id = ? AND papel_exigido = 'ciente' AND criado_por = ? AND status = 'aberto'
+      ORDER BY criado_em DESC, rowid DESC LIMIT 1`
+  ).bind(a.projectId, a.documentoId, CONTEINER_PORTAL).first<PedidoRow>();
+
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    let pedido = await achar();
+    if (pedido) {
+      // O contêiner pode ter ficado para trás de uma versão publicada: confere, e usa o substituto.
+      const vig = await conferirVigencia(db, pedido);
+      if (!vig.vigente) pedido = vig.substituido_por ? await db.prepare('SELECT * FROM pedidos WHERE id = ?').bind(vig.substituido_por).first<PedidoRow>() : null;
+    }
+    if (pedido) {
+      const ja = await db.prepare(`SELECT decidido_em FROM pedido_destinatarios WHERE pedido_id = ? AND lower(email) = ? AND status = 'ciente'`)
+        .bind(pedido.id, email).first<{ decidido_em: string }>();
+      if (ja) return { ok: true, numero, hash: pedido.hash, decididoEm: ja.decidido_em, jaExistia: true };
+    }
+
+    const hash = await hashConteudo(doc.conteudo);
+    const decididoEm = new Date().toISOString();
+    const u = await db.prepare(`SELECT id FROM users WHERE lower(email) = ? AND COALESCE(ativo, 1) <> 0`).bind(email).first<{ id: string }>();
+    const pedidoId = pedido?.id ?? genId();
+    // A condição vai no próprio INSERT: só grava se o pedido segue aberto e com o hash que acabamos de ler.
+    const inserirDestinatario = db.prepare(
+      `INSERT INTO pedido_destinatarios (id, pedido_id, nome, email, user_id, aberto_em, status, decidido_em, canal, ip, user_agent, hash_lido, mfa_usado)
+       SELECT ?, ?, ?, ?, ?, ?, 'ciente', ?, 'portal', ?, ?, ?, 0
+        WHERE EXISTS (SELECT 1 FROM pedidos WHERE id = ? AND status = 'aberto' AND hash = ?)`
+    ).bind(genId(), pedidoId, a.nome, email, u?.id ?? null, decididoEm, decididoEm, a.ip, a.ua, hash, pedidoId, hash);
+    try {
+      const res = pedido
+        ? [await inserirDestinatario.run()]
+        : await db.batch([
+            ...inserirPedido(db, { id: pedidoId, projectId: a.projectId, tipo: 'documento', refId: a.documentoId, papel: 'ciente', doc, hash, criadoPor: CONTEINER_PORTAL }, []),
+            inserirDestinatario,
+          ]);
+      if (res[res.length - 1].meta?.changes) return { ok: true, numero, hash, decididoEm, jaExistia: false };
+      // O pedido deixou de estar aberto/igual entre a leitura e a gravação (versão publicada agora): lê de novo.
+    } catch (e) {
+      // Dois acessos criando o contêiner ao mesmo tempo: o índice único barrou o segundo; lê de novo e usa o do primeiro.
+      if (!String((e as { message?: string })?.message ?? e).includes('UNIQUE')) throw e;
+    }
+  }
+  return { ok: false, status: 409, error: 'O documento mudou durante o registro; recarregue e tente de novo' };
 }

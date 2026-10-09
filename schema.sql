@@ -1175,7 +1175,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('dpia', 'politica', 'documento', 'excecao')),
     ref_id TEXT NOT NULL,
     titulo TEXT NOT NULL,
     papel_exigido TEXT NOT NULL CHECK (papel_exigido IN ('ciso', 'ceo', 'ciente')),
@@ -1188,6 +1188,9 @@ CREATE TABLE IF NOT EXISTS pedidos (
 );
 CREATE INDEX IF NOT EXISTS idx_pedidos_projeto ON pedidos(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_pedidos_documento ON pedidos(tipo, ref_id, status);
+-- Um pedido "em pé" aberto por documento para a ciência do portal público (criado_por = 'sistema:portal'):
+-- dois acessos simultâneos não criam dois contêineres. A substituição marca o antigo ANTES de criar o novo.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pedidos_portal_aberto ON pedidos(tipo, ref_id) WHERE criado_por = 'sistema:portal' AND status = 'aberto';
 -- Pedido também é prova (0043): conteúdo, hash e documento nunca mudam; fechado não muda de status
 -- nem de substituto. `org_id` livre (transferência de projeto). DELETE livre (cascata do projeto).
 CREATE TRIGGER IF NOT EXISTS pedido_prova_imutavel
@@ -1213,7 +1216,7 @@ CREATE TABLE IF NOT EXISTS pedido_destinatarios (
     aberto_em DATETIME,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'ciente', 'aprovado', 'recusado')),
     decidido_em DATETIME,
-    canal TEXT CHECK (canal IS NULL OR canal IN ('conta', 'link')),
+    canal TEXT CHECK (canal IS NULL OR canal IN ('conta', 'link', 'portal')),
     ip TEXT,
     user_agent TEXT,
     hash_lido TEXT,

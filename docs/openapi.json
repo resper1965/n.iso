@@ -12545,7 +12545,8 @@
                     "type": "string",
                     "enum": [
                       "politica",
-                      "dpia"
+                      "dpia",
+                      "documento"
                     ]
                   },
                   "ref_id": {
@@ -16646,22 +16647,16 @@
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
-                  "policy_type": {
+                  "documento_id": {
                     "type": "string",
-                    "minLength": 1
-                  },
-                  "user_name": {
-                    "type": "string"
-                  },
-                  "user_email": {
-                    "type": "string",
-                    "format": "email",
-                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    "minLength": 1,
+                    "maxLength": 100
                   }
                 },
                 "required": [
-                  "policy_type"
-                ]
+                  "documento_id"
+                ],
+                "additionalProperties": false
               }
             }
           }

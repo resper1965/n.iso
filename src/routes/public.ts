@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings } from '../index';
-import { logAudit, genNumericCode, erro500, sendEmail, escapeHtml, rateLimit } from '../helpers';
-import { validateBody, otpPedidoSchema, otpVerificacaoSchema, aceiteDePoliticaSchema, ssoInicioSchema } from '../schemas';
+import { logAudit, genNumericCode, erro500, sendEmail, escapeHtml, rateLimit, rateLimitD1 } from '../helpers';
+import { validateBody, otpPedidoSchema, otpVerificacaoSchema, aceiteDeDocumentoSchema, ssoInicioSchema } from '../schemas';
 import {
   configPorDominio, descobrir, iniciarLogin, consumirState, trocarCodigo,
   validarIdToken, provisionar, segredoDoCliente,
@@ -10,6 +10,11 @@ import { resolveHostIsPublic } from './integrations';
 import { chavePublicaJwk, ALG_ASSINATURA } from '../portabilidade';
 import { genToken, SESSION_TTL_SEC } from '../helpers';
 import { appUrl } from '../config/url';
+import { registrarCienciaPortal } from '../services/pedidos';
+
+/** Tentativas de código por e-mail no portal de políticas: 5 por código; a contagem recomeça ao pedir código novo. */
+const MAX_TENTATIVAS_OTP = 5;
+const chaveTentativasOtp = (projectId: string, email: string) => `pol-otp:tentativa:${projectId}:${email}`;
 
 export const publicApp = new Hono<{ Bindings: Bindings }>();
 
@@ -69,6 +74,8 @@ publicApp.post('/policies/request-otp', async (c) => {
     };
 
     await c.env.SESSIONS.put(otpKey, JSON.stringify(otpData), { expirationTtl: 900 });
+    // Código novo, contagem de tentativas nova (o pedido de código já tem o próprio limite de 5 por hora).
+    await c.env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(chaveTentativasOtp(project_id, cleanEmail)).run();
 
     // O OTP é a ÚNICA credencial do portal público de políticas. Ele deve chegar
     // só ao dono do e-mail — nunca no corpo da resposta (isso derrubaria o 2º
@@ -110,6 +117,13 @@ publicApp.post('/policies/verify-otp', async (c) => {
 
     if (!stored) {
       return c.json({ error: 'Código expirado ou inválido. Solicite um novo código.' }, 400);
+    }
+
+    // Código de 6 dígitos sem limite de tentativas se adivinha: 5 por código, e ao estourar ele é descartado.
+    // Só chega aqui quem pediu código (a chave não é livre), então a tabela não cresce com chute.
+    if (!(await rateLimitD1(c.env.DB, chaveTentativasOtp(project_id, cleanEmail), MAX_TENTATIVAS_OTP, 900))) {
+      await c.env.SESSIONS.delete(otpKey);
+      return c.json({ error: 'Muitas tentativas. Peça um novo código.' }, 429);
     }
 
     const otpData = JSON.parse(stored);
@@ -154,13 +168,27 @@ publicApp.get('/policies/list', async (c) => {
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(session.project_id).first<any>();
     if (!project) return c.json({ error: 'Projeto não encontrado' }, 404);
 
-    const { results: controls } = await c.env.DB.prepare(
-      `SELECT id, standard, title, description, status FROM compliance_controls WHERE project_id = ? ORDER BY title ASC`
-    ).bind(session.project_id).all<any>();
+    // Só documento com versão vigente. Texto de catálogo de controle sem documento NÃO é política e não entra.
+    const { results: documentos } = await c.env.DB.prepare(
+      `SELECT d.id, d.tipo, d.titulo, v.numero, v.texto
+         FROM documentos d JOIN documento_versoes v ON v.documento_id = d.id AND v.estado = 'vigente'
+        WHERE d.project_id = ? ORDER BY d.titulo ASC`
+    ).bind(session.project_id).all<{ id: string; tipo: string; titulo: string; numero: number; texto: string }>();
 
-    const { results: acks } = await c.env.DB.prepare(
-      `SELECT * FROM policy_acknowledgments WHERE project_id = ? AND user_email = ?`
-    ).bind(session.project_id, session.email).all<any>();
+    // A ciência mais recente deste e-mail por documento, de qualquer pedido (inclusive os já substituídos).
+    const { results: cienciasDoEmail } = await c.env.DB.prepare(
+      `SELECT p.ref_id AS documento_id, json_extract(p.conteudo_json, '$.numero') AS numero, pd.decidido_em AS em
+         FROM pedido_destinatarios pd JOIN pedidos p ON p.id = pd.pedido_id
+        WHERE p.project_id = ? AND p.tipo = 'documento' AND lower(pd.email) = ? AND pd.status = 'ciente'
+        ORDER BY pd.decidido_em DESC`
+    ).bind(session.project_id, session.email).all<{ documento_id: string; numero: number; em: string }>();
+    const ultima = new Map<string, { numero: number; em: string }>();
+    for (const x of cienciasDoEmail) if (!ultima.has(x.documento_id)) ultima.set(x.documento_id, { numero: x.numero, em: x.em });
+
+    // Ciência antiga (sem versão nem hash): só leitura, para a pessoa ver o que já registrou.
+    const { results: legacy } = await c.env.DB.prepare(
+      `SELECT policy_type, acknowledged_at FROM policy_acknowledgments WHERE project_id = ? AND lower(user_email) = ? ORDER BY acknowledged_at DESC`
+    ).bind(session.project_id, session.email).all<{ policy_type: string; acknowledged_at: string }>();
 
     return c.json({
       ok: true,
@@ -173,8 +201,11 @@ publicApp.get('/policies/list', async (c) => {
         name: session.name,
         email: session.email
       },
-      controls: controls || [],
-      acknowledgments: acks || []
+      documents: (documentos || []).map((d) => {
+        const u = ultima.get(d.id);
+        return { ...d, ciencia: u ? { numero: u.numero, em: u.em, atual: u.numero === d.numero } : null };
+      }),
+      legacy: legacy || []
     });
   } catch (e: any) {
     return erro500(c, 'Falha ao carregar políticas', e);
@@ -190,32 +221,27 @@ publicApp.post('/policies/ack', async (c) => {
     if (!sessionRaw) return c.json({ error: 'Sessão expirada. Por favor, autentique-se novamente.' }, 401);
 
     const session = JSON.parse(sessionRaw);
-    const v = await validateBody(c, aceiteDePoliticaSchema);
+    const v = await validateBody(c, aceiteDeDocumentoSchema);
     if (!v.success) return v.response;
-    const { policy_type, user_name, user_email } = v.data;
 
-    const nameToRecord = user_name || session.name;
-    const emailToRecord = user_email || session.email;
-    const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
-    const userAgent = c.req.header('User-Agent') || 'unknown';
+    // Nome e e-mail são os da sessão (provados pelo código no e-mail); o corpo não os escolhe.
+    const r = await registrarCienciaPortal(c.env.DB, {
+      projectId: session.project_id, documentoId: v.data.documento_id, nome: session.name, email: session.email,
+      ip: c.req.header('CF-Connecting-IP') || null, ua: c.req.header('User-Agent') || null,
+    });
+    if (!r.ok) return c.json({ error: r.error }, r.status);
 
-    const ackId = crypto.randomUUID().replace(/-/g, '');
-    const now = new Date().toISOString();
-
-    await c.env.DB.prepare(
-      'INSERT INTO policy_acknowledgments (id, project_id, policy_type, user_name, user_email, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(ackId, session.project_id, policy_type, nameToRecord, emailToRecord, ipAddress, userAgent).run();
-
-    await logAudit(c.env.DB, 'policy.acknowledged_public', emailToRecord, `Ciência registrada via portal público para ${policy_type} por ${nameToRecord}`);
-
+    if (!r.jaExistia) {
+      await logAudit(c.env.DB, 'policy.acknowledged_public', session.email,
+        `Ciência registrada via portal público: documento ${v.data.documento_id}, versão ${r.numero}, por ${session.name}`, '', '', session.project_id);
+    }
     return c.json({
       ok: true,
-      id: ackId,
-      acknowledged_at: now,
-      policy_type,
-      user_name: nameToRecord,
-      user_email: emailToRecord,
-      ip_address: ipAddress
+      documento_id: v.data.documento_id,
+      numero: r.numero,
+      hash: r.hash,
+      acknowledged_at: r.decididoEm,
+      ja_registrada: r.jaExistia,
     });
   } catch (e: any) {
     return erro500(c, 'Erro ao registrar ciência eletrônica', e);

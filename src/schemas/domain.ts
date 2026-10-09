@@ -447,12 +447,13 @@ export const otpVerificacaoSchema = z.object({
   otp: z.string().min(1, 'Código OTP é obrigatório'),
 });
 
-/** Aceite de política. Nome e e-mail caem para os da sessão quando ausentes. */
-export const aceiteDePoliticaSchema = z.object({
-  policy_type: z.string().min(1, 'Tipo/Nome da Política é obrigatório'),
-  user_name: z.string().optional(),
-  user_email: z.string().email('E-mail inválido').optional(),
-});
+/**
+ * Ciência de documento pelo portal público. SÓ o id: nome e e-mail são os da sessão (código por e-mail); o corpo
+ * não os escolhe. `strict`: campo extra é 400.
+ */
+export const aceiteDeDocumentoSchema = z.object({
+  documento_id: z.string().min(1, 'Documento é obrigatório').max(100),
+}).strict();
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  MFA e direitos do titular — eram locais aos arquivos de rota
@@ -674,7 +675,8 @@ export const pedidoCriarSchema = z.object({
 // Ciência em massa por link (fatia 3, migration 0042): só `ciente`, para quem não tem conta.
 // Teto de 200 por lote. A aprovação (com assinatura) de DPIA e de política fica em `pedidoCriarSchema`.
 export const pedidoCienciaLoteSchema = z.object({
-  tipo: z.enum(['politica', 'dpia']),
+  // `documento` (migration 0051): ref_id = documentos.id, conteúdo = a versão vigente.
+  tipo: z.enum(['politica', 'dpia', 'documento']),
   ref_id: z.string().trim().min(1).max(200),
   destinatarios: z.array(z.object({
     email: z.string().trim().email().max(320),
