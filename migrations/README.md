@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0049** (`ls migrations/*.sql | tail -1`). São 47 arquivos
+- Última migration no repositório: **0050** (`ls migrations/*.sql | tail -1`). São 48 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -273,3 +273,18 @@ Conferência depois de aplicar: `PRAGMA table_info(risks)` lista `owner_parte_id
 
 **Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations
 apply niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` → merge.
+
+## 0050 — documentos e versões, fatia 3.1 (2026-10)
+
+Cria `documentos` e `documento_versoes` (duas tabelas e quatro índices, todos `IF NOT EXISTS`). Sem carga e sem
+`ALTER`: nenhuma tabela existente muda e nenhuma linha é copiada. As políticas que já existem entram por
+`POST /api/v1/projects/:projectId/documentos/importar`, por projeto e repetível, porque o hash SHA-256 não se
+calcula em SQLite. Os índices parciais `idx_doc_versao_vigente` e `idx_doc_versao_rascunho` garantem uma versão
+vigente e um rascunho, no máximo, por documento.
+
+Conferência depois de aplicar: `PRAGMA table_info(documentos)` e `PRAGMA table_info(documento_versoes)` listam as
+colunas; `SELECT count(*) FROM documentos` devolve 0 até a importação. Depois do `importar`, o esperado em produção é
+**um documento por controle que já tenha versão de política** (medido em 09/10/2026: 4 controles, 9 versões).
+
+**Esta RODA em produção, aditiva, sem janela.** Ordem: `npm run db:backup` → `npx wrangler d1 migrations apply
+niso-db --remote` → `npx wrangler d1 migrations list niso-db --remote` → merge.

@@ -61,6 +61,8 @@ export const ROTAS = {
   'POST /api/v1/projects/{projectId}/controls/{controlId}/restore-version': { obrigatorios: ['version_id'] },
   'POST /api/v1/projects/{projectId}/data-subject/erase': { obrigatorios: ['identificador', 'justificativa'] },
   'POST /api/v1/projects/{projectId}/departamentos': { obrigatorios: ['nome'] },
+  'POST /api/v1/projects/{projectId}/documentos': { obrigatorios: ['texto', 'titulo'] },
+  'POST /api/v1/projects/{projectId}/documentos/{id}/versoes': { obrigatorios: ['texto'] },
   'POST /api/v1/projects/{projectId}/generate-document': { obrigatorios: ['fields', 'itemId'] },
   'POST /api/v1/projects/{projectId}/generate-policies-bulk': { obrigatorios: [] },
   'POST /api/v1/projects/{projectId}/partes': { obrigatorios: ['nome'] },

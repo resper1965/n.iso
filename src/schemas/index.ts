@@ -47,3 +47,4 @@ export * from './resources';
 export * from './domain';
 export * from './corpos';
 export * from './nucleo';
+export * from './documentos';
