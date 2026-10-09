@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Bindings, Variables } from '../index';
 import { erro500, logAudit, podeAdministrarOrg } from '../helpers';
+import { importarPartes, conciliarResponsaveis } from '../services/partes';
 import {
   validateBody, moduloHabilitarSchema, MODULOS, parseModulos, type Modulo,
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
@@ -128,6 +129,19 @@ nucleoApp.post('/partes', async (c) => {
     await logAudit(c.env.DB, 'parte.criada', c.get('user').email, `Parte ${v.data.tipo} criada`, '', '', projectId);
     return c.json({ ok: true, id }, 201);
   } catch (e) { return erro500(c, 'Falha ao criar a parte', e); }
+});
+
+// ─── importar e conciliar (sob demanda, por projeto, repetíveis) ───────────
+nucleoApp.post('/partes/importar', async (c) => {
+  try {
+    return c.json({ ok: true, ...(await importarPartes(c.env.DB, c.req.param('projectId')!, c.get('user').email)) });
+  } catch (e) { return erro500(c, 'Falha ao importar as partes', e); }
+});
+
+nucleoApp.post('/partes/conciliar', async (c) => {
+  try {
+    return c.json({ ok: true, ...(await conciliarResponsaveis(c.env.DB, c.req.param('projectId')!, c.get('user').email)) });
+  } catch (e) { return erro500(c, 'Falha ao conciliar os responsáveis', e); }
 });
 
 nucleoApp.put('/partes/:id', async (c) => {

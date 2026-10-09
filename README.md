@@ -48,8 +48,8 @@ liberado, então o frontend em dev fala com o Worker sem preflight.
 | `frontend/` | Vite + JavaScript sem framework. `login.html` é a casca; `src/views/` tem uma tela por arquivo. |
 | `frontend/public/_headers` | Cabeçalhos de segurança dos **arquivos estáticos** — ver "Duas fontes de cabeçalho", abaixo. |
 | `mcp-server-niso/` | Servidor MCP **local** (stdio, chave de API) que expõe o n.iso a clientes como Claude Desktop, com filtro de ferramenta por papel. O MCP **remoto**, com login, vive no próprio Worker (`src/mcp/`). |
-| `migrations/` | 46 arquivos de migration do D1 (última: 0048), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
-| `test/` | 185 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
+| `migrations/` | 47 arquivos de migration do D1 (última: 0049), aplicados em ordem. Nunca editar uma já aplicada ([`migrations/README.md`](migrations/README.md)). |
+| `test/` | 187 arquivos de teste do backend, no pool `workerd` (D1 e KV de verdade). |
 | `frontend/test/` | 61 arquivos de teste da UI, em jsdom. |
 | `frontend/e2e/` | 5 specs em Chromium real, sobre o build servido. Pega o que o jsdom não pega. |
 | `docs/` | Runbook, specs, planos e decisões — com [índice próprio](docs/README.md). |
