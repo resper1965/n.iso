@@ -123,6 +123,33 @@ export async function publicarVersao(
   return { ok: true, numero };
 }
 
+type ControleDePolitica = { id: string; title: string; description: string | null };
+type VersaoDeHistorico = { texto: string; por: string | null };
+
+/**
+ * Cria o documento de UM controle a partir do histórico (`policy_versions`) e do texto atual. A última versão é a
+ * vigente. Devolve `null` quando não há texto nenhum (nem histórico, nem `description`). Um batch: documento e
+ * versões entram juntos ou não entram.
+ */
+async function importarControle(
+  db: D1Database, projectId: string, c: ControleDePolitica, historico: VersaoDeHistorico[], ator: string,
+): Promise<{ id: string; versoes: number } | null> {
+  const versoes = [...historico];
+  if (c.description?.trim() && versoes.at(-1)?.texto !== c.description) versoes.push({ texto: c.description, por: ator });
+  if (!versoes.length) return null;
+
+  const id = crypto.randomUUID();
+  const hashes = await Promise.all(versoes.map((v) => hashDoTexto(v.texto)));
+  await db.batch([
+    db.prepare(`INSERT INTO documentos (id, project_id, tipo, titulo, status, origem_control_id) VALUES (?, ?, 'politica', ?, 'vigente', ?)`)
+      .bind(id, projectId, c.title, c.id),
+    ...versoes.map((v, i) =>
+      db.prepare(`INSERT INTO documento_versoes (id, project_id, documento_id, numero, texto, hash, estado, origem, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, 'humano', ?)`)
+        .bind(crypto.randomUUID(), projectId, id, i + 1, v.texto, hashes[i], i === versoes.length - 1 ? 'vigente' : 'substituida', v.por ?? ator)),
+  ]);
+  return { id, versoes: versoes.length };
+}
+
 export type ResumoImportacaoDocumentos = {
   criados: number; ja_existiam: number; versoes: number; ignorados_nao_aplicavel: number; ignorados_sem_texto: number;
 };
@@ -168,24 +195,89 @@ export async function importarDocumentos(db: D1Database, projectId: string, ator
     if (c.status === 'Not Applicable') { resumo.ignorados_nao_aplicavel++; continue; }
     if (c.ja) { resumo.ja_existiam++; continue; }
 
-    const versoes = [...(porControle.get(c.id) ?? [])];
-    if (c.description?.trim() && versoes.at(-1)?.texto !== c.description) versoes.push({ texto: c.description, por: ator });
-    if (!versoes.length) { resumo.ignorados_sem_texto++; continue; }
-
-    const id = crypto.randomUUID();
-    const hashes = await Promise.all(versoes.map((v) => hashDoTexto(v.texto)));
-    await db.batch([
-      db.prepare(`INSERT INTO documentos (id, project_id, tipo, titulo, status, origem_control_id) VALUES (?, ?, 'politica', ?, 'vigente', ?)`)
-        .bind(id, projectId, c.title, c.id),
-      ...versoes.map((v, i) =>
-        db.prepare(`INSERT INTO documento_versoes (id, project_id, documento_id, numero, texto, hash, estado, origem, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, 'humano', ?)`)
-          .bind(crypto.randomUUID(), projectId, id, i + 1, v.texto, hashes[i], i === versoes.length - 1 ? 'vigente' : 'substituida', v.por ?? ator)),
-    ]);
+    const feito = await importarControle(db, projectId, c, porControle.get(c.id) ?? [], ator);
+    if (!feito) { resumo.ignorados_sem_texto++; continue; }
     resumo.criados++;
-    resumo.versoes += versoes.length;
+    resumo.versoes += feito.versoes;
   }
   await logAudit(db, 'documentos.importados', ator,
     `Importação de políticas: ${resumo.criados} criadas, ${resumo.ja_existiam} já existiam, ${resumo.versoes} versões, ` +
     `${resumo.ignorados_nao_aplicavel} não aplicáveis e ${resumo.ignorados_sem_texto} sem texto ignorados`, '', '', projectId);
   return resumo;
+}
+
+/**
+ * O documento do controle, criado se ainda não existe. Chamada ANTES de qualquer escrita de política, para a
+ * primeira escrita não perder o histórico: controle com sinal de política (versão, aprovação ou pedido) e que
+ * não é "Não aplicável" é importado como na 3.1; qualquer outro ganha um documento vazio em rascunho (a
+ * `description` dele pode ser só texto de catálogo ou a justificativa da SoA, e não vira versão).
+ */
+export async function garantirDocumentoDoControle(db: D1Database, projectId: string, controlId: string, ator: string): Promise<string> {
+  const achar = () => db.prepare(`SELECT id FROM documentos WHERE origem_control_id = ? AND project_id = ?`).bind(controlId, projectId).first<{ id: string }>();
+  const existente = await achar();
+  if (existente) return existente.id;
+
+  const c = await db.prepare(
+    `SELECT c.id, c.title, c.description, c.status,
+       (EXISTS (SELECT 1 FROM policy_versions pv WHERE pv.control_id = c.id)
+        OR c.ciso_approved_by IS NOT NULL OR c.ceo_approved_by IS NOT NULL
+        OR EXISTS (SELECT 1 FROM pedidos p WHERE p.project_id = c.project_id AND p.tipo = 'politica' AND p.ref_id = c.id)) AS sinal
+     FROM compliance_controls c WHERE c.id = ? AND c.project_id = ?`
+  ).bind(controlId, projectId).first<ControleDePolitica & { status: string | null; sinal: number }>();
+  if (!c) throw new Error('Controle não encontrado neste projeto');
+
+  try {
+    if (c.sinal && c.status !== 'Not Applicable') {
+      const h = await db.prepare(`SELECT policy_text, created_by FROM policy_versions WHERE control_id = ? ORDER BY version, rowid`)
+        .bind(controlId).all<{ policy_text: string; created_by: string | null }>();
+      const historico = h.results.filter((r) => r.policy_text?.trim()).map((r) => ({ texto: r.policy_text, por: r.created_by }));
+      const feito = await importarControle(db, projectId, c, historico, ator);
+      if (feito) return feito.id;
+    }
+    const id = crypto.randomUUID();
+    await db.prepare(`INSERT INTO documentos (id, project_id, tipo, titulo, status, origem_control_id) VALUES (?, ?, 'politica', ?, 'rascunho', ?)`)
+      .bind(id, projectId, c.title, controlId).run();
+    return id;
+  } catch (e) {
+    // Duas chamadas ao mesmo tempo: o índice de um documento por controle barrou a segunda; vale o da primeira.
+    if (!unico(e)) throw e;
+    const vencedor = await achar();
+    if (vencedor) return vencedor.id;
+    throw e;
+  }
+}
+
+/**
+ * Registra no documento um texto que já foi gravado no controle: vira a versão vigente seguinte, direto (sem
+ * passar pelo rascunho, que pode estar ocupado por uma proposta do agente). Texto igual ao da vigente não cria nada.
+ */
+export async function espelharTexto(
+  db: D1Database, projectId: string, documentoId: string, texto: string, ator: string, origem: 'humano' | 'agente' | 'gerador',
+): Promise<{ criada: boolean }> {
+  const hash = await hashDoTexto(texto);
+  const vigente = await db.prepare(`SELECT hash FROM documento_versoes WHERE documento_id = ? AND project_id = ? AND estado = 'vigente'`)
+    .bind(documentoId, projectId).first<{ hash: string }>();
+  if (vigente?.hash === hash) return { criada: false };
+
+  await db.batch([
+    db.prepare(`UPDATE documento_versoes SET estado = 'substituida' WHERE documento_id = ? AND project_id = ? AND estado = 'vigente'`).bind(documentoId, projectId),
+    db.prepare(
+      `INSERT INTO documento_versoes (id, project_id, documento_id, numero, texto, hash, estado, origem, criado_por)
+       SELECT ?, ?, ?, COALESCE(MAX(numero), 0) + 1, ?, ?, 'vigente', ?, ? FROM documento_versoes WHERE documento_id = ?`
+    ).bind(crypto.randomUUID(), projectId, documentoId, texto, hash, origem, ator, documentoId),
+    db.prepare(
+      `UPDATE documentos SET status = 'vigente', updated_at = CURRENT_TIMESTAMP,
+         revisar_ate = CASE WHEN revisar_a_cada_meses IS NOT NULL THEN date('now', '+' || revisar_a_cada_meses || ' months') END
+       WHERE id = ? AND project_id = ?`
+    ).bind(documentoId, projectId),
+  ]);
+  return { criada: true };
+}
+
+/** Descarta o rascunho pendente do documento. A versão vigente e as substituídas ficam. */
+export async function descartarRascunho(db: D1Database, projectId: string, documentoId: string, ator: string): Promise<Falha | { ok: true }> {
+  const r = await db.prepare(`DELETE FROM documento_versoes WHERE documento_id = ? AND project_id = ? AND estado = 'rascunho'`).bind(documentoId, projectId).run();
+  if (!r.meta.changes) return falha(404, 'Não há rascunho para descartar');
+  await logAudit(db, 'documento.rascunho_descartado', ator, `Documento ${documentoId}: rascunho descartado`, '', '', projectId);
+  return { ok: true };
 }
