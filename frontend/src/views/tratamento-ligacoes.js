@@ -32,6 +32,27 @@ const textoAprovacao = (ap) => {
     return [ap.ciso ? `Líder SGSI: ${quem(ap.ciso)}` : '', ap.ceo ? `Direção: ${quem(ap.ceo)}` : ''].filter(Boolean).join(' · ');
 };
 
+const CONCLUSOES = { prevalece: 'O interesse do controlador prevalece', nao_prevalece: 'Os direitos do titular prevalecem' };
+const campoLia = (id, rotulo, valor, travado) => `<div class="form-group"><label class="form-label" for="${id}">${rotulo}</label><textarea class="form-input" id="${id}" rows="2" maxlength="5000" ${travado ? 'disabled' : ''}>${escapeHTML(valor || '')}</textarea></div>`;
+
+/** Formulário da LIA: rascunho salva, concluir exige o conjunto, concluída só reabre. Texto sempre escapado. */
+function formularioLia(lia, projectId, ropaId) {
+    const travado = !!lia && lia.status === 'concluida';
+    return `<div id="tl-lia">
+        ${campoLia('tl-lia-fin', 'Finalidade legítima', lia && lia.finalidade_legitima, travado)}
+        ${campoLia('tl-lia-nec', 'Necessidade', lia && lia.necessidade, travado)}
+        ${campoLia('tl-lia-bal', 'Balanceamento com os direitos do titular', lia && lia.balanceamento, travado)}
+        ${campoLia('tl-lia-sal', 'Salvaguardas', lia && lia.salvaguardas, travado)}
+        <div class="form-group"><label class="form-label" for="tl-lia-con">Conclusão</label>
+            <select class="form-input" id="tl-lia-con" ${travado ? 'disabled' : ''}><option value="">— sem conclusão —</option>${Object.entries(CONCLUSOES).map(([v, r]) =>
+                `<option value="${v}" ${lia && lia.conclusao === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+            ${travado ? `<button class="btn btn-sm" data-action="reabrirLiaTratamento" data-args='${args(projectId, ropaId)}'>Reabrir para editar</button>`
+                : `<button class="btn btn-sm" data-action="salvarLiaTratamento" data-args='${args(projectId, ropaId, false)}'>Salvar rascunho</button>
+                   <button class="btn btn-primary btn-sm" data-action="salvarLiaTratamento" data-args='${args(projectId, ropaId, true)}'>Concluir</button>`}
+        </div></div>`;
+}
+
 const secao = (titulo, corpo) => `<h4 style="margin:1.25rem 0 0.5rem">${titulo}</h4>${corpo}`;
 const vazio = (texto) => `<p style="color:var(--text-dim)">${texto}</p>`;
 
@@ -39,8 +60,9 @@ window.openLigacoesTratamento = async function (projectId, ropaId) {
     let lig;
     try { lig = await api('GET', `/api/v1/projects/${projectId}/ropa/${ropaId}/ligacoes`); } catch (e) { falha(e, 'Não foi possível abrir as ligações'); return; }
     const editar = podeEditar();
-    let itens = [], deptos = [], partes = [], bases = [], diagrama = '';
+    let itens = [], deptos = [], partes = [], bases = [], diagrama = '', lia = null;
     try { diagrama = (await api('GET', `/api/v1/projects/${projectId}/ropa/${ropaId}/diagrama`)).mermaid || ''; } catch (e) { /* abre sem o diagrama */ }
+    try { lia = (await api('GET', `/api/v1/projects/${projectId}/ropa/${ropaId}/lia`)).lia || null; } catch (e) { /* abre sem a LIA */ }
     if (editar) {
         try { const r = await api('GET', `/api/v1/projects/${projectId}/assets`); itens = Array.isArray(r) ? r : lista(r && r.assets); } catch (e) { /* sem seletor de itens */ }
         try { deptos = lista(await api('GET', `/api/v1/projects/${projectId}/departamentos`)); } catch (e) { /* idem */ }
@@ -63,6 +85,12 @@ window.openLigacoesTratamento = async function (projectId, ropaId) {
         <p style="color:var(--text-dim)">${escapeHTML(finalidade)}</p>
         ${secao('Aprovação', `<p id="tl-aprovacao">${textoAprovacao(lig.aprovacao)}</p>
             ${podePedir() ? `<button class="btn btn-sm" data-action="pedirAprovacaoTratamento" data-args='${args(projectId, ropaId)}'>Pedir aprovação</button>` : ''}`)}
+        ${secao('Avaliações', `<div id="tl-avaliacoes">
+            <p><strong>DPIA</strong>: ${lig.dpias.length ? lig.dpias.map((d) => `${escapeHTML(d.nome || 'Sem nome')} (${escapeHTML(d.status || '—')})`).join(', ') + ` <button class="btn btn-ghost btn-sm" data-action="navigate" data-args='["dpia"]'>Abrir a tela de DPIA</button>`
+                : (lig.dpia_pendente ? 'exigida por este registro e ainda não criada.' : 'nenhuma ligada.')}
+            ${editar && !lig.dpias.length ? `<button class="btn btn-sm" data-action="criarDpiaDoTratamento" data-args='${args(projectId, ropaId)}'>Criar DPIA a partir do tratamento</button>` : ''}</p>
+            <p><strong>LIA</strong> (teste de legítimo interesse): ${lig.lia.exigida ? 'exigida pela base legal' : 'não exigida pela base legal'}${lig.lia.existe ? ` · ${escapeHTML(lig.lia.status === 'concluida' ? 'concluída' : 'em rascunho')}` : (lig.lia.exigida ? ' · ainda não feita' : '')}.</p>
+            ${editar ? formularioLia(lia, projectId, ropaId) : (lia ? `<p style="color:var(--text-dim)">${escapeHTML(lia.finalidade_legitima || '')}</p>` : '')}</div>`)}
         ${secao('Base legal', `
             <p id="tl-base-atual">${lig.base_legal ? `${escapeHTML(lig.base_legal.referencia)} — ${escapeHTML(lig.base_legal.titulo)}` : 'Não definida'}</p>
             ${editar && bases.length ? `<div style="display:flex; gap:0.5rem; align-items:flex-end"><div class="form-group" style="flex:1; margin:0"><label class="form-label" for="tl-base">Base legal do catálogo</label>
@@ -106,6 +134,18 @@ window.openLigacoesTratamento = async function (projectId, ropaId) {
 const marcadosDe = (tipo) => [...document.querySelectorAll(`input[data-tl="${tipo}"]:checked`)].map((i) => i.value);
 
 window.pedirAprovacaoTratamento = (projectId, ropaId) => window.abrirPedidoAprovacao(projectId, 'tratamento', ropaId);
+
+window.criarDpiaDoTratamento = (projectId, ropaId) => acao(projectId, ropaId,
+    () => api('POST', `/api/v1/projects/${projectId}/ropa/${ropaId}/dpia`), 'Não foi possível criar a DPIA', 'DPIA criada. Complete-a na tela de DPIA.');
+
+window.salvarLiaTratamento = (projectId, ropaId, concluir) => acao(projectId, ropaId, () => api('PUT', `/api/v1/projects/${projectId}/ropa/${ropaId}/lia`, {
+    finalidade_legitima: el('tl-lia-fin').value.trim() || null, necessidade: el('tl-lia-nec').value.trim() || null,
+    balanceamento: el('tl-lia-bal').value.trim() || null, salvaguardas: el('tl-lia-sal').value.trim() || null,
+    conclusao: el('tl-lia-con').value || null, status: concluir ? 'concluida' : 'rascunho',
+}), 'Não foi possível salvar a LIA', concluir ? 'LIA concluída.' : 'LIA salva.');
+
+window.reabrirLiaTratamento = (projectId, ropaId) => acao(projectId, ropaId,
+    () => api('PUT', `/api/v1/projects/${projectId}/ropa/${ropaId}/lia`, { status: 'rascunho' }), 'Não foi possível reabrir a LIA', 'LIA reaberta.');
 
 window.salvarItensTratamento = (projectId, ropaId) => acao(projectId, ropaId,
     () => api('PUT', `/api/v1/projects/${projectId}/ropa/${ropaId}/itens`, { itens: marcadosDe('item') }), 'Não foi possível salvar os itens', 'Itens salvos.');

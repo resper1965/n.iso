@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0055** (`ls migrations/*.sql | tail -1`). São 53 arquivos
+- Última migration no repositório: **0056** (`ls migrations/*.sql | tail -1`). São 54 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -344,3 +344,14 @@ vez, `avaliacao_terceiro` (fatia 6; reconstruir a tabela de prova de novo só po
 linhas, recria os 2 triggers de prova e os 5 índices. **Antes de aplicar:** `npm run db:backup`, `PRAGMA table_info(pedidos)` e
 `(pedido_destinatarios)` iguais ao `schema.sql`, e as contagens das duas tabelas; **depois:** as mesmas contagens, os triggers
 (`pedido_prova_imutavel`, `pedido_dest_prova_imutavel`) e os índices em `sqlite_master`. **Esta RODA em produção.** Depende da 0051.
+
+## 0056 — DPIA ligada ao tratamento e LIA, fatia 5 (2026-10)
+
+Cria `lia_assessments` e três triggers que dão a `dpia_assessments.ropa_id` o efeito de uma FK `ON DELETE SET NULL` **que confere o
+projeto** (a tabela não é reconstruída: tem assinatura e deriva histórica, ver 0013). Antes, um `UPDATE` zera `ropa_id` que aponta para
+registro inexistente (só esse caso). **Antes de aplicar:** `npm run db:backup` e conferir
+`SELECT count(*) FROM dpia_assessments WHERE ropa_id IS NOT NULL AND ropa_id NOT IN (SELECT id FROM ropa_records)` (referência morta que
+a migration vai zerar) e
+`SELECT count(*) FROM dpia_assessments d JOIN ropa_records r ON r.id = d.ropa_id WHERE r.project_id IS NOT d.project_id` (de OUTRO
+projeto: a migration não toca, trate à mão). **Depois:** os 3 triggers em `sqlite_master`, `PRAGMA table_info(lia_assessments)` e
+as contagens iguais. **Esta RODA em produção.** Depende da 0054 (a DPIA aponta para o registro do RoPA).

@@ -51,5 +51,13 @@ export const tratamentoTransferenciaSchema = z.object({
   observacao: z.string().trim().max(2000).nullish(),
 }).strict();
 
+/** LIA (fatia 5): tudo opcional (rascunho parcial); o serviço exige o conjunto para concluir. `.strict()`: campo desconhecido é 400. */
+const textoLia = z.string().trim().max(5000).nullable();
+export const liaSalvarSchema = z.object({
+  finalidade_legitima: textoLia.optional(), necessidade: textoLia.optional(), balanceamento: textoLia.optional(), salvaguardas: textoLia.optional(),
+  conclusao: z.enum(['prevalece', 'nao_prevalece']).nullable().optional(),
+  status: z.enum(['rascunho', 'concluida']).optional(),
+}).strict();
+
 /** Importação do RoPA por planilha (fatia 4.4): o CSV inteiro como texto; as linhas são validadas uma a uma no serviço. */
 export const ropaImportarSchema = z.object({ csv: z.string().min(1).max(300_000) }).strict();

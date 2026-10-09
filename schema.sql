@@ -1446,3 +1446,43 @@ CREATE TABLE IF NOT EXISTS tratamento_transferencias (
 );
 CREATE INDEX IF NOT EXISTS idx_trat_transf_ropa ON tratamento_transferencias(ropa_id);
 CREATE INDEX IF NOT EXISTS idx_trat_transf_projeto ON tratamento_transferencias(project_id);
+
+-- DPIA ligada ao tratamento e LIA (fatia 5, migration 0056)
+CREATE TRIGGER IF NOT EXISTS dpia_ropa_do_projeto_ins
+BEFORE INSERT ON dpia_assessments
+WHEN NEW.ropa_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ropa_records r WHERE r.id = NEW.ropa_id AND r.project_id IS NEW.project_id)
+BEGIN
+    SELECT RAISE(ABORT, 'ropa_id inexistente ou de outro projeto');
+END;
+
+CREATE TRIGGER IF NOT EXISTS dpia_ropa_do_projeto_upd
+BEFORE UPDATE OF ropa_id ON dpia_assessments
+WHEN NEW.ropa_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ropa_records r WHERE r.id = NEW.ropa_id AND r.project_id IS NEW.project_id)
+BEGIN
+    SELECT RAISE(ABORT, 'ropa_id inexistente ou de outro projeto');
+END;
+
+CREATE TRIGGER IF NOT EXISTS dpia_ropa_apagada
+AFTER DELETE ON ropa_records
+BEGIN
+    UPDATE dpia_assessments SET ropa_id = NULL WHERE ropa_id = OLD.id;
+END;
+
+CREATE TABLE IF NOT EXISTS lia_assessments (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    ropa_id TEXT NOT NULL UNIQUE REFERENCES ropa_records(id) ON DELETE CASCADE,
+    finalidade_legitima TEXT,
+    necessidade TEXT,
+    balanceamento TEXT,
+    salvaguardas TEXT,
+    conclusao TEXT CHECK (conclusao IS NULL OR conclusao IN ('prevalece', 'nao_prevalece')),
+    status TEXT NOT NULL DEFAULT 'rascunho' CHECK (status IN ('rascunho', 'concluida')),
+    concluida_em DATETIME,
+    concluida_por TEXT,
+    criado_por TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (status = 'rascunho' OR (conclusao IS NOT NULL AND concluida_em IS NOT NULL AND concluida_por IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_lia_projeto ON lia_assessments(project_id, status);

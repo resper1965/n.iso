@@ -11,6 +11,7 @@ import '../src/views/tratamento-ligacoes.js';
 
 const B = '/api/v1/projects/p9/ropa/r1';
 const LIG = (extra = {}) => ({
+    aprovacao: { ciso: null, ceo: null }, lia: { exigida: false, existe: false, status: null }, dpias: [], dpia_pendente: false,
     base_legal: { id: 'lgpd:art7:i', referencia: 'art. 7, I', titulo: 'Base <b>x</b>' },
     itens: [{ id: 'it1', nome: 'ERP <i>x</i>', tipo: 'sistema' }],
     departamentos: [{ id: 'dp1', nome: 'RH' }],
@@ -21,6 +22,7 @@ const LIG = (extra = {}) => ({
 const rotas = (extra = {}) => ({
     [`GET ${B}/ligacoes`]: LIG(),
     [`GET ${B}/diagrama`]: { mermaid: 'flowchart LR\n  n0["Folha"]' },
+    [`GET ${B}/lia`]: { lia: null },
     'GET /api/v1/projects/p9/assets': { ok: true, assets: [{ id: 'it1', name: 'ERP' }, { id: 'it2', name: 'Folha' }] },
     'GET /api/v1/projects/p9/departamentos': [{ id: 'dp1', nome: 'RH' }, { id: 'dp2', nome: 'TI' }],
     'GET /api/v1/projects/p9/partes': [{ id: 'pa1', nome: 'Operadora', status: 'ativa' }, { id: 'pa2', nome: 'Antiga', status: 'inativa' }],
@@ -191,5 +193,54 @@ describe('importação do RoPA por planilha', () => {
         arquivo('finalidade\nA');
         await window.enviarImportacaoRopa('p9');
         expect(el('ri-relatorio').innerHTML).toBe('');
+    });
+});
+
+describe('avaliações: DPIA e LIA', () => {
+    it('DPIA exigida e ausente: aviso e botão de criar; criar chama o POST e reabre', async () => {
+        const f = await abrir({ [`GET ${B}/ligacoes`]: LIG({ dpia_pendente: true }), [`POST ${B}/dpia`]: { ok: true, id: 'd1' } });
+        expect(el('tl-avaliacoes').textContent).toContain('exigida por este registro e ainda não criada');
+        await window.criarDpiaDoTratamento('p9', 'r1');
+        expect(chamadas(f)).toContain(`POST ${B}/dpia`);
+    });
+
+    it('DPIA ligada: lista nome e situação (escapados), sem botão de criar', async () => {
+        await abrir({ [`GET ${B}/ligacoes`]: LIG({ dpias: [{ id: 'd1', nome: 'Folha <b>x</b>', status: 'Draft' }] }) });
+        expect(el('tl-avaliacoes').textContent).toContain('Folha <b>x</b> (Draft)');
+        expect(el('tl-avaliacoes').querySelector('b')).toBeNull();
+        expect(document.querySelector('[data-action="criarDpiaDoTratamento"]')).toBeNull();
+    });
+
+    it('LIA exigida e ausente: avisa; salvar rascunho e concluir mandam os campos e o status certo', async () => {
+        const f = await abrir({ [`GET ${B}/ligacoes`]: LIG({ lia: { exigida: true, existe: false, status: null } }), [`PUT ${B}/lia`]: { ok: true, id: 'l1' } });
+        expect(el('tl-avaliacoes').textContent).toContain('exigida pela base legal');
+        expect(el('tl-avaliacoes').textContent).toContain('ainda não feita');
+        el('tl-lia-fin').value = ' Prevenir fraude ';
+        el('tl-lia-con').value = 'prevalece';
+        await window.salvarLiaTratamento('p9', 'r1', false);
+        expect(corpoDe(f, `PUT ${B}/lia`)).toEqual({ finalidade_legitima: 'Prevenir fraude', necessidade: null, balanceamento: null, salvaguardas: null, conclusao: 'prevalece', status: 'rascunho' });
+        el('tl-lia-fin').value = 'x'; el('tl-lia-nec').value = 'y'; el('tl-lia-bal').value = 'z';
+        await window.salvarLiaTratamento('p9', 'r1', true);
+        const puts = f.mock.calls.filter(([u, o]) => o?.method === 'PUT' && new URL(u, 'http://localhost').pathname === `${B}/lia`);
+        expect(JSON.parse(puts.at(-1)[1].body).status).toBe('concluida');
+    });
+
+    it('LIA concluída: campos travados, texto escapado, só reabrir; reabrir manda status rascunho', async () => {
+        const lia = { id: 'l1', finalidade_legitima: 'Fraude <b>x</b>', necessidade: 'n', balanceamento: 'b', salvaguardas: null, conclusao: 'prevalece', status: 'concluida' };
+        const f = await abrir({ [`GET ${B}/ligacoes`]: LIG({ lia: { exigida: true, existe: true, status: 'concluida' } }), [`GET ${B}/lia`]: { lia }, [`PUT ${B}/lia`]: { ok: true } });
+        expect(el('tl-lia-fin').disabled).toBe(true);
+        expect(el('tl-lia-fin').value).toBe('Fraude <b>x</b>');
+        expect(el('tl-lia').querySelector('b')).toBeNull();
+        expect(document.querySelector('[data-action="salvarLiaTratamento"]')).toBeNull();
+        await window.reabrirLiaTratamento('p9', 'r1');
+        expect(corpoDe(f, `PUT ${B}/lia`)).toEqual({ status: 'rascunho' });
+    });
+
+    it('papel só de leitura vê o estado, sem formulário nem botão de criar', async () => {
+        S.user = { role: 'org_user' };
+        await abrir({ [`GET ${B}/ligacoes`]: LIG({ lia: { exigida: true, existe: true, status: 'rascunho' } }) });
+        expect(el('tl-avaliacoes').textContent).toContain('em rascunho');
+        expect(el('tl-lia')).toBeNull();
+        expect(document.querySelector('[data-action="criarDpiaDoTratamento"]')).toBeNull();
     });
 });

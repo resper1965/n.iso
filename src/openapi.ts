@@ -119,7 +119,7 @@ import {
   departamentoCriarSchema, departamentoAtualizarSchema, parteCriarSchema, parteAtualizarSchema, vinculoCriarSchema,
   documentoCriarSchema, documentoAtualizarSchema, excecaoCriarSchema, excecaoAtualizarSchema, versaoSalvarSchema,
   documentoRequisitosSchema, requisitoAtualizarSchema, mapeamentoSchema,
-  tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema, ropaImportarSchema,
+  tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema, ropaImportarSchema, liaSalvarSchema,
 } from './schemas';
 
 /**
@@ -262,6 +262,7 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/ropa/:recordId/approve', schema: ropaApprovalSchema, nome: 'ropaApprovalSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/ropa/:recordId/departamentos', schema: tratamentoDepartamentosSchema, nome: 'tratamentoDepartamentosSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/ropa/:recordId/itens', schema: tratamentoItensSchema, nome: 'tratamentoItensSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/ropa/:recordId/lia', schema: liaSalvarSchema, nome: 'liaSalvarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/ropa/:recordId/revoke-approval', schema: revogarRopaSchema, nome: 'revogarRopaSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/ropa/:recordId/transferencias', schema: tratamentoTransferenciaSchema, nome: 'tratamentoTransferenciaSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/ropa/importar', schema: ropaImportarSchema, nome: 'ropaImportarSchema' },

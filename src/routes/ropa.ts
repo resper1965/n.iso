@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import { Bindings, Variables } from '../index';
 import { semRastros, logAudit, requireResourceAccess, escapeHtml, autoridadeDeAssinatura, recusaDeAssinatura, erro500, registraErro, PODE_REVOGAR_APROVACAO, setParcial, refForaDoProjeto } from '../helpers';
 import { COLUNAS_REVOGACAO } from './controls';
-import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, ropaImportarSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
+import { validateBody, ropaSchema, ropaApprovalSchema, revogarRopaSchema, ropaImportarSchema, liaSalvarSchema, tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema } from '../schemas';
 import { criarTransferencia, definirLigacao, diagramaDoTratamento, lerLigacoes, removerTransferencia } from '../services/tratamentos';
 import { aprovacoesDoProjeto } from '../services/documentos';
 import { importarTratamentos } from '../services/tratamentos-importar';
+import { apagarLia, criarDpiaDoTratamento, lerLia, salvarLia } from '../services/lia';
 import { conferirPedidosDoDocumento } from './pedidos';
 
 export const ropaApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -116,6 +117,41 @@ projectRopaApp.post('/importar', async (c) => {
     if (!r.ok) return c.json({ error: r.error }, r.status);
     return c.json(r);
   } catch (e) { return erro500(c, 'Falha ao importar o RoPA', e); }
+});
+
+// ─── LIA e DPIA do tratamento (fatia 5) ───────────────────────────────────────────────────────────
+
+projectRopaApp.get('/:recordId/lia', async (c) => {
+  const projectId = c.req.param('projectId')!;
+  if (!(await c.env.DB.prepare('SELECT 1 FROM ropa_records WHERE id = ? AND project_id = ?').bind(c.req.param('recordId'), projectId).first())) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+  return c.json({ lia: await lerLia(c.env.DB, projectId, c.req.param('recordId')) });
+});
+
+projectRopaApp.put('/:recordId/lia', async (c) => {
+  try {
+    const v = await validateBody(c, liaSalvarSchema);
+    if (!v.success) return v.response;
+    const r = await salvarLia(c.env.DB, c.req.param('projectId')!, c.req.param('recordId'), c.get('user')?.email || 'system', v.data);
+    return r.ok ? c.json({ ok: true, id: r.id }, r.criada ? 201 : 200) : c.json({ error: r.error }, r.status);
+  } catch (e) { return erro500(c, 'Falha ao salvar a LIA', e); }
+});
+
+projectRopaApp.delete('/:recordId/lia', async (c) => {
+  try {
+    const ok = await apagarLia(c.env.DB, c.req.param('projectId')!, c.req.param('recordId'), c.get('user')?.email || 'system');
+    return ok ? c.json({ ok: true }) : c.json({ error: 'LIA não encontrada' }, 404);
+  } catch (e) { return erro500(c, 'Falha ao apagar a LIA', e); }
+});
+
+projectRopaApp.post('/:recordId/dpia', async (c) => {
+  try {
+    const projectId = c.req.param('projectId')!;
+    const lig = await lerLigacoes(c.env.DB, projectId, c.req.param('recordId'));
+    if (!lig) return c.json({ error: 'Registro do RoPA não encontrado' }, 404);
+    const r = await criarDpiaDoTratamento(c.env.DB, projectId, c.req.param('recordId'), c.get('user')?.email || 'system', lig);
+    if (!r.ok) return c.json({ error: r.error, ...('id' in r ? { id: r.id } : {}) }, r.status);
+    return c.json({ ok: true, id: r.id }, 201);
+  } catch (e) { return erro500(c, 'Falha ao criar a DPIA do tratamento', e); }
 });
 
 // ─── Ligações do tratamento (fatia 4.1): itens, departamentos, transferências; partes por parte_vinculos ───
