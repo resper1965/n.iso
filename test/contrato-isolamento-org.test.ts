@@ -73,6 +73,12 @@ const CORPOS: Record<string, (alvo: Org) => unknown> = {
   'POST /api/v1/pedidos/:id/recusar': () => ({ senha: SENHA }),
   'POST /api/v1/projects/:projectId/pedidos': (alvo) => ({ tipo: 'dpia', ref_id: alvo.rec, papel_exigido: 'ciente', destinatarios: [{ email: `stk@${alvo.m}.lat` }] }),
   'POST /api/v1/leads/:id/enrich-cnpj': () => ({ cnpj: '11222333000181' }),
+  'PUT /api/v1/projects/:projectId/modulos/:modulo': () => ({ habilitado: true }),
+  'POST /api/v1/projects/:projectId/departamentos': () => ({ nome: 'Varredura' }),
+  'PUT /api/v1/projects/:projectId/departamentos/:id': () => ({ nome: 'Varredura' }),
+  'POST /api/v1/projects/:projectId/partes': () => ({ nome: 'Varredura' }),
+  'PUT /api/v1/projects/:projectId/partes/:id': () => ({ nome: 'Varredura' }),
+  'POST /api/v1/projects/:projectId/partes/:id/vinculos': (alvo) => ({ papel: 'responsavel', alvo_tipo: 'departamento', alvo_id: alvo.rec }),
   // tenta trazer o projeto alheio para a organização de quem chama: só platform_admin transfere
   'POST /api/v1/platform/projects/:id/transferir': (alvo) => ({ orgDestinoId: alvo === B ? NESS.org : B.org, motivo: 'varredura de isolamento' }),
 };
