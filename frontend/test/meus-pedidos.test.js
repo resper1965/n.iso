@@ -84,6 +84,20 @@ describe('abrir e decidir', () => {
     expect(el('modal-content').textContent).toContain('3');
   });
 
+  it('pedido de exceção: mostra escopo, motivo e prazo congelados, escapados', async () => {
+    await abrir({
+      id: 'pd3', tipo: 'excecao', titulo: 'Exceção: Equipe X', papel_exigido: 'ciso', status: 'aberto',
+      hash: 'c'.repeat(64), criado_por: 'cons@ness.lat', criado_em: '2026-10-09T10:00:00Z',
+      conteudo: { escopo: 'Equipe <b>X</b>', motivo: '<img src=x onerror=alert(1)>', vence_em: '2027-01-31' },
+    });
+    const html = el('modal-content').innerHTML;
+    expect(html).toContain('Escopo');
+    expect(html).toContain('Motivo');
+    expect(html).toContain('2027-01-31');
+    expect(document.querySelector('#modal-content img')).toBeNull();
+    expect(document.querySelector('#modal-content b')).toBeNull();
+  });
+
   it('aprovar manda a senha; senha errada (401) mostra o erro e não desloga', async () => {
     await abrir();
     el('pd-senha').value = 'errada';

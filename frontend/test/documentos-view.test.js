@@ -34,6 +34,11 @@ const DETALHE = (extra = {}) => ({
     ],
     versao_vigente: 2, tem_rascunho: true, ...extra,
 });
+const EXCECOES = [
+    { id: 'ex1', escopo: 'Equipe <b>X</b>', motivo: 'Migração <i>em curso</i>', vence_em: '2027-01-31', status: 'ativa', situacao: 'aprovada', aprovacao: { por: 'Cida Matriz', em: '2026-10-01', papel: 'ciso' } },
+    { id: 'ex2', escopo: 'Filial', motivo: 'Obra', vence_em: '2026-12-01', status: 'ativa', situacao: 'sem_pedido', aprovacao: null },
+    { id: 'ex3', escopo: 'Antiga', motivo: 'Fim', vence_em: '2026-01-01', status: 'revogada', situacao: 'revogada', aprovacao: null },
+];
 const CIENCIAS = [{ nome: 'Gil <b>x</b>', email: 'gil@cliente.com', numero: 2, canal: 'portal', em: '2026-10-05 09:00:00', atual: true }];
 
 const rotas = (extra = {}) => ({
@@ -169,6 +174,7 @@ describe('ações do detalhe', () => {
         const f = servir(rotas({
             'GET /api/v1/projects/p9/documentos/p1': detalhe,
             'GET /api/v1/projects/p9/documentos/p1/ciencias': CIENCIAS,
+            'GET /api/v1/projects/p9/documentos/p1/excecoes': EXCECOES,
             ...extra,
         }));
         await abrirLista();
@@ -193,7 +199,7 @@ describe('ações do detalhe', () => {
         await window.salvarMetadadosDocumento('p9', 'p1'); // sem rota de PUT: 404 do Worker
         expect(document.querySelector('.toast-error')).not.toBeNull();
         expect(el('doc-e-titulo')).not.toBeNull();
-        expect(chamadas(f).filter((k) => k.startsWith('GET /api/v1/projects/p9/documentos/p1'))).toHaveLength(2); // abriu uma vez (detalhe + ciências)
+        expect(chamadas(f).filter((k) => k.startsWith('GET /api/v1/projects/p9/documentos/p1'))).toHaveLength(3); // abriu uma vez (detalhe + ciências + exceções)
     });
 
     it('nova versão (rascunho), publicar, descartar e marcar revisado chamam as rotas certas', async () => {
@@ -231,5 +237,75 @@ describe('ações do detalhe', () => {
         expect(botao).not.toBeNull();
         window.pedirAprovacaoDocumento('p9', 'p1');
         expect(window.abrirPedidoAprovacao).toHaveBeenCalledWith('p9', 'documento', 'p1');
+    });
+});
+
+describe('exceções ao documento', () => {
+    const abrir = async (extra = {}) => {
+        const f = servir(rotas({
+            'GET /api/v1/projects/p9/documentos/p1': DETALHE(),
+            'GET /api/v1/projects/p9/documentos/p1/ciencias': [],
+            'GET /api/v1/projects/p9/documentos/p1/excecoes': EXCECOES,
+            ...extra,
+        }));
+        await abrirLista();
+        await window.openDocumentoModal('p9', 'p1');
+        return f;
+    };
+    const secao = () => el('doc-excecoes');
+
+    it('lista escopo, motivo, prazo, situação e quem aprovou, tudo escapado', async () => {
+        await abrir();
+        const t = secao().textContent;
+        expect(t).toContain('Equipe <b>X</b>');
+        expect(t).toContain('Migração <i>em curso</i>');
+        expect(t).toContain('31/01/2027');
+        expect(t).toContain('Aprovada');
+        expect(t).toContain('Cida Matriz');
+        expect(t).toContain('Sem pedido de aprovação');
+        expect(t).toContain('Revogada');
+        expect(secao().querySelector('b')).toBeNull();
+        expect(secao().querySelector('i')).toBeNull();
+    });
+
+    it('só a exceção ativa tem Pedir aprovação e Revogar; a revogada não tem botão', async () => {
+        await abrir();
+        const argsDe = (a) => [...secao().querySelectorAll(`[data-action="${a}"]`)].map((b) => JSON.parse(b.getAttribute('data-args')).at(-1));
+        expect(argsDe('pedirAprovacaoExcecao')).toEqual(['ex1', 'ex2']);
+        expect(argsDe('revogarExcecaoDocumento')).toEqual(['ex1', 'ex2']);
+    });
+
+    it('nova exceção manda escopo, motivo e prazo; campo vazio não envia', async () => {
+        const f = await abrir({ 'POST /api/v1/projects/p9/documentos/p1/excecoes': { ok: true, id: 'ex9' } });
+        el('doc-exc-escopo').value = '  ';
+        await window.criarExcecaoDocumento('p9', 'p1');
+        expect(chamadas(f).some((k) => k === 'POST /api/v1/projects/p9/documentos/p1/excecoes')).toBe(false);
+        el('doc-exc-escopo').value = ' Equipe de suporte ';
+        el('doc-exc-motivo').value = 'Migração';
+        el('doc-exc-vence').value = '2027-03-31';
+        await window.criarExcecaoDocumento('p9', 'p1');
+        expect(corpoDe(f, 'POST /api/v1/projects/p9/documentos/p1/excecoes')).toEqual({ escopo: 'Equipe de suporte', motivo: 'Migração', vence_em: '2027-03-31' });
+    });
+
+    it('revogar chama a rota; pedir aprovação abre o pedido de exceção', async () => {
+        const f = await abrir({ 'POST /api/v1/projects/p9/documentos/p1/excecoes/ex2/revogar': { ok: true } });
+        await window.revogarExcecaoDocumento('p9', 'p1', 'ex2');
+        expect(chamadas(f)).toContain('POST /api/v1/projects/p9/documentos/p1/excecoes/ex2/revogar');
+        window.abrirPedidoAprovacao = vi.fn();
+        window.pedirAprovacaoExcecao('p9', 'ex1');
+        expect(window.abrirPedidoAprovacao).toHaveBeenCalledWith('p9', 'excecao', 'ex1');
+    });
+
+    it('papel só de leitura vê a lista, sem formulário nem botões', async () => {
+        S.user = { role: 'org_user' };
+        await abrir();
+        expect(secao().textContent).toContain('Equipe <b>X</b>');
+        expect(secao().querySelector('[data-action]')).toBeNull();
+        expect(el('doc-exc-escopo')).toBeNull();
+    });
+
+    it('documento sem exceção: mensagem', async () => {
+        await abrir({ 'GET /api/v1/projects/p9/documentos/p1/excecoes': [] });
+        expect(secao().textContent).toContain('Nenhuma exceção');
     });
 });

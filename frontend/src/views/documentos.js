@@ -10,6 +10,8 @@ const TIPOS = { politica: 'Política', norma: 'Norma', procedimento: 'Procedimen
 const STATUS = { rascunho: ['Rascunho', 'info'], vigente: ['Vigente', 'success'], obsoleto: ['Obsoleto', 'info'] };
 const ESTADO_VERSAO = { rascunho: 'Rascunho', vigente: 'Vigente', substituida: 'Substituída' };
 const CANAIS = { conta: 'conta', link: 'link', portal: 'portal' };
+const SITUACAO_EXCECAO = { aprovada: 'Aprovada', aguardando: 'Aguardando aprovação', sem_pedido: 'Sem pedido de aprovação', vencida: 'Vencida', revogada: 'Revogada' };
+const PAPEL_APROVADOR = { ciso: 'Líder SGSI', ceo: 'Direção' };
 
 const podeEditar = () => !!S.user && ['platform_admin', 'consultant', 'consultor', 'consultoria_admin', 'org_admin'].includes(S.user.role);
 const podePedir = () => typeof window.podePedirAprovacao === 'function' && window.podePedirAprovacao(S.user);
@@ -139,8 +141,10 @@ window.criarDocumentoNovo = async function (projectId) {
 window.openDocumentoModal = async function (projectId, id) {
     let d;
     let ciencias = [];
+    let excecoes = [];
     try { d = await api('GET', `/api/v1/projects/${projectId}/documentos/${id}`); } catch (e) { falha(e, 'Não foi possível abrir o documento'); return; }
     try { ciencias = lista(await api('GET', `/api/v1/projects/${projectId}/documentos/${id}/ciencias`)); } catch (e) { /* o resto do documento abre sem as ciências */ }
+    try { excecoes = lista(await api('GET', `/api/v1/projects/${projectId}/documentos/${id}/excecoes`)); } catch (e) { /* idem, sem as exceções */ }
     const editar = podeEditar();
     const versoes = lista(d.versoes);
     const rascunho = versoes.find((v) => v.estado === 'rascunho');
@@ -211,6 +215,27 @@ window.openDocumentoModal = async function (projectId, id) {
             ${ciencias.map((x) => `<tr><td>${escapeHTML(x.nome || x.email)}${x.nome ? `<div style="font-size:11px;color:var(--text-dim)">${escapeHTML(x.email)}</div>` : ''}</td>
                 <td>${escapeHTML(String(x.numero))}${x.atual ? '' : ' (anterior)'}</td><td>${escapeHTML(CANAIS[x.canal] || x.canal || '')}</td><td>${escapeHTML(String(x.em || ''))}</td></tr>`).join('')}
         </tbody></table>` : '<p style="color:var(--text-dim)">Ninguém deu ciência ainda.</p>'}
+        <h4 style="margin:1.25rem 0 0.5rem">Exceções</h4>
+        <div id="doc-excecoes">
+            ${excecoes.length ? `<table class="data-table"><thead><tr><th>Escopo</th><th>Motivo</th><th>Vence em</th><th>Situação</th><th>Aprovação</th><th></th></tr></thead><tbody>
+                ${excecoes.map((x) => {
+                    const ativa = x.status === 'ativa';
+                    return `<tr><td>${escapeHTML(x.escopo)}</td><td>${escapeHTML(x.motivo)}</td><td>${escapeHTML(dataBr(x.vence_em))}</td>
+                    <td>${escapeHTML(SITUACAO_EXCECAO[x.situacao] || x.situacao)}</td>
+                    <td>${x.aprovacao ? `${escapeHTML(x.aprovacao.por)} (${escapeHTML(PAPEL_APROVADOR[x.aprovacao.papel] || x.aprovacao.papel)})` : '—'}</td>
+                    <td style="text-align:right;white-space:nowrap">
+                        ${ativa && podePedir() ? `<button class="btn btn-ghost btn-sm" data-action="pedirAprovacaoExcecao" data-args='${args(projectId, x.id)}'>Pedir aprovação</button>` : ''}
+                        ${ativa && editar ? `<button class="btn btn-ghost btn-sm" data-action="revogarExcecaoDocumento" data-args='${args(projectId, id, x.id)}'>Revogar</button>` : ''}
+                    </td></tr>`;
+                }).join('')}
+            </tbody></table>` : '<p style="color:var(--text-dim)">Nenhuma exceção registrada.</p>'}
+            ${editar ? `<div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.75rem">
+                <div class="form-group" style="flex:2; margin:0"><label class="form-label">A quem ou ao quê vale</label><input class="form-input" id="doc-exc-escopo" maxlength="2000"></div>
+                <div class="form-group" style="flex:3; margin:0"><label class="form-label">Motivo</label><input class="form-input" id="doc-exc-motivo" maxlength="4000"></div>
+                <div class="form-group" style="flex:1; margin:0"><label class="form-label">Vence em</label><input class="form-input" id="doc-exc-vence" type="date"></div>
+                <button class="btn btn-sm" data-action="criarExcecaoDocumento" data-args='${args(projectId, id)}'>Registrar exceção</button>
+            </div>` : ''}
+        </div>
     `, 'modal-large');
 };
 
@@ -248,6 +273,22 @@ window.marcarDocumentoRevisado = (projectId, id) => acao(projectId, id,
 
 window.mudarStatusDocumento = (projectId, id, status) => acao(projectId, id,
     () => api('PUT', `/api/v1/projects/${projectId}/documentos/${id}`, { status }), 'Não foi possível mudar a situação do documento');
+
+window.criarExcecaoDocumento = async function (projectId, id) {
+    const escopo = el('doc-exc-escopo').value.trim();
+    const motivo = el('doc-exc-motivo').value.trim();
+    const venceEm = el('doc-exc-vence').value;
+    if (!escopo || !motivo || !venceEm) { showToast('Informe a quem vale, o motivo e o prazo', 'error'); return; }
+    await acao(projectId, id, () => api('POST', `/api/v1/projects/${projectId}/documentos/${id}/excecoes`, { escopo, motivo, vence_em: venceEm }),
+        'Não foi possível registrar a exceção', 'Exceção registrada. Peça a aprovação para ela valer.');
+};
+
+window.revogarExcecaoDocumento = (projectId, id, excecaoId) => acao(projectId, id,
+    () => api('POST', `/api/v1/projects/${projectId}/documentos/${id}/excecoes/${excecaoId}/revogar`), 'Não foi possível revogar a exceção', 'Exceção revogada.');
+
+window.pedirAprovacaoExcecao = function (projectId, excecaoId) {
+    window.abrirPedidoAprovacao(projectId, 'excecao', excecaoId);
+};
 
 window.pedirAprovacaoDocumento = function (projectId, id) {
     window.abrirPedidoAprovacao(projectId, 'documento', id);
