@@ -8,10 +8,11 @@
 
 import { genId, escapeHtml, enviarEmail } from '../helpers';
 import { appUrl } from '../config/url';
+import { vencerEvidencias } from './evidencia-validade';
 import { log } from '../observability';
 import type { Bindings } from '../index';
 
-export type Fonte = 'capa' | 'checklist' | 'auditoria' | 'certificado' | 'link_auditor' | 'politica' | 'documento' | 'excecao' | 'avaliacao_terceiro' | 'titular_pedido' | 'incidente';
+export type Fonte = 'capa' | 'checklist' | 'auditoria' | 'certificado' | 'link_auditor' | 'politica' | 'documento' | 'excecao' | 'avaliacao_terceiro' | 'titular_pedido' | 'incidente' | 'evidencia';
 
 export type ItemPrazo = {
   fonte: Fonte;
@@ -75,6 +76,8 @@ export function marcoDoDia(vence: string, hoje: string): string | null {
  * Pedido do titular (fatia 7): `prazo_em` de pedido ainda não respondido, negado ou arquivado; sem parâmetro cadastrado o prazo é nulo e
  * o pedido não entra. Incidente: um item por comunicação pendente (`<id>:anpd` e `<id>:titular`), só enquanto não encerrado, não comunicado
  * e com risco diferente de `sem_risco`. Responsável = a parte responsável do registro.
+ * Evidência (fatia 8): `valido_ate` da evidência que tem validade; renovar a data (reavaliar com validade nova) tira o item. Sem responsável: vai
+ * aos consultores. A rotina `vencerEvidencias` devolve a avaliação a `pending` antes de avisar.
  * ponytail: '-3 hours' é o fuso de São Paulo fixo (sem horário de verão desde 2019); se voltar, troca
  * por conversão no TypeScript.
  */
@@ -125,6 +128,8 @@ const FONTES: Record<Fonte, string> = {
       COALESCE(NULLIF(trim(pa.email), ''), pa.nome)
     FROM incidentes i JOIN projects p ON p.id = i.project_id LEFT JOIN partes pa ON pa.id = i.responsavel_parte_id AND pa.project_id = i.project_id
     WHERE i.status <> 'encerrado' AND i.prazo_titular_em IS NOT NULL AND i.comunicacao_titular_em IS NULL AND COALESCE(i.risco_titular, '') <> 'sem_risco'`,
+  evidencia: `SELECT e.id AS item_id, e.project_id, date(substr(e.valido_ate, 1, 10)) AS vence_em, 'Evidência ' || e.file_name AS titulo, NULL AS responsavel
+    FROM evidence e JOIN projects p ON p.id = e.project_id WHERE e.valido_ate IS NOT NULL`,
 };
 
 /** Os itens que têm marco hoje. Uma fonte que falha vai para `falhas` e as outras seguem. */
@@ -195,12 +200,12 @@ export type ResultadoAvisos = { avisos_criados: number; emails_enviados: number;
 
 const ROTULO: Record<Fonte, string> = {
   capa: 'CAPA', checklist: 'Item do checklist', auditoria: 'Auditoria', certificado: 'Certificado',
-  link_auditor: 'Link do auditor', politica: 'Política', documento: 'Documento', excecao: 'Exceção', avaliacao_terceiro: 'Avaliação de terceiro', titular_pedido: 'Pedido do titular', incidente: 'Incidente',
+  link_auditor: 'Link do auditor', politica: 'Política', documento: 'Documento', excecao: 'Exceção', avaliacao_terceiro: 'Avaliação de terceiro', titular_pedido: 'Pedido do titular', incidente: 'Incidente', evidencia: 'Evidência',
 };
 
 /** Tela de cada fonte no clique do sino (frontend/src/globals.js, handleNotificationClick). */
 const TELA: Record<Fonte, string> = {
-  capa: '/capa', checklist: '', auditoria: '/audits', certificado: '/certification', link_auditor: '/audits', politica: '/policies', documento: '/documentos', excecao: '/documentos', avaliacao_terceiro: '/terceiros', titular_pedido: '/titular', incidente: '/titular',
+  capa: '/capa', checklist: '', auditoria: '/audits', certificado: '/certification', link_auditor: '/audits', politica: '/policies', documento: '/documentos', excecao: '/documentos', avaliacao_terceiro: '/terceiros', titular_pedido: '/titular', incidente: '/titular', evidencia: '/evidence',
 };
 
 const dataBr = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}`;
@@ -211,7 +216,7 @@ export function tituloDoAviso(item: Pick<ItemDoDia, 'fonte' | 'marco' | 'titulo'
   const d7 = item.marco === 'D-7';
   if (item.fonte === 'politica') return `Política ${item.titulo.split(' ')[0]} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
   if (item.fonte === 'documento') return `Documento ${item.titulo} precisa de revisão${d7 ? ' em 7 dias' : ''}`;
-  if (item.fonte === 'excecao' || item.fonte === 'avaliacao_terceiro' || item.fonte === 'titular_pedido' || item.fonte === 'incidente') return `${item.titulo} ${quando(item.marco)}`;
+  if (item.fonte === 'excecao' || item.fonte === 'avaliacao_terceiro' || item.fonte === 'titular_pedido' || item.fonte === 'incidente' || item.fonte === 'evidencia') return `${item.titulo} ${quando(item.marco)}`;
   if (item.fonte === 'auditoria') return `Auditoria ${d7 ? 'em 7 dias' : 'hoje'}`;
   return `${ROTULO[item.fonte]} ${quando(item.marco)}`;
 }
@@ -230,6 +235,8 @@ export async function avisosDePrazo(env: EnvAvisos, hoje: string): Promise<Resul
   const primeira = !(await db.prepare('SELECT 1 FROM avisos_prazo LIMIT 1').first());
   const { itens, falhas } = await itensDoDia(db, hoje);
   const r: ResultadoAvisos = { avisos_criados: 0, emails_enviados: 0, sem_destinatario: 0, falhas };
+  // Antes de avisar: a evidência vencida volta a `pending` (fatia 8). Falha aqui não impede os avisos.
+  try { await vencerEvidencias(db, hoje); } catch (e) { falhas.push(`evidencia_vencida: ${mensagem(e)}`); }
   const pessoasPorProjeto = new Map<string, Pessoa[]>();
   const atrasoNovo = new Map<string, { project_id: string; user_id: string; n: number }>();
 

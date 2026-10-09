@@ -398,7 +398,8 @@ CREATE TABLE IF NOT EXISTS evidence (
     ceo_approved_ip TEXT,
     ceo_approved_ua TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    valido_ate TEXT
 );
 
 -- ═══════════════════════════════════════════════
@@ -1589,3 +1590,15 @@ CREATE TABLE IF NOT EXISTS consentimentos (
 );
 CREATE INDEX IF NOT EXISTS idx_consentimentos_ropa ON consentimentos(ropa_id);
 CREATE INDEX IF NOT EXISTS idx_consentimentos_projeto ON consentimentos(project_id, revogado_em);
+
+-- Evidência com validade e requisito (fatia 8, migration 0059)
+CREATE TABLE IF NOT EXISTS evidencia_requisitos (
+    evidencia_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+    requisito_id TEXT NOT NULL REFERENCES requisitos(id),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (evidencia_id, requisito_id)
+);
+CREATE INDEX IF NOT EXISTS idx_evid_requisitos_requisito ON evidencia_requisitos(requisito_id);
+CREATE INDEX IF NOT EXISTS idx_evid_requisitos_projeto ON evidencia_requisitos(project_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_validade ON evidence(valido_ate);

@@ -122,6 +122,7 @@ import {
   tratamentoItensSchema, tratamentoDepartamentosSchema, tratamentoTransferenciaSchema, ropaImportarSchema, liaSalvarSchema,
   terceiroTipoSchema, avaliacaoTerceiroSchema, terceiroDocumentoSchema,
   parametroLegalSchema, titularPedidoCriarSchema, titularPedidoAtualizarSchema, incidenteCriarSchema, incidenteRiscoSchema, incidenteComunicacaoSchema, consentimentoCriarSchema,
+  evidenciaValidadeSchema,
 } from './schemas';
 
 /**
@@ -252,6 +253,8 @@ export const ROTAS_COM_SCHEMA: Entrada[] = [
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos/:id/versoes', schema: versaoSalvarSchema, nome: 'versaoSalvarSchema' },
   { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/documentos/:id', schema: documentoAtualizarSchema, nome: 'documentoAtualizarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/documentos', schema: documentoCriarSchema, nome: 'documentoCriarSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/evidence/:evidenceId/requisitos', schema: documentoRequisitosSchema, nome: 'documentoRequisitosSchema' },
+  { metodo: 'PUT', caminho: '/api/v1/projects/:projectId/evidence/:evidenceId/validade', schema: evidenciaValidadeSchema, nome: 'evidenciaValidadeSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-document', schema: documentoGerarSchema, nome: 'documentoGerarSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/generate-policies-bulk', schema: politicasLoteSchema, nome: 'politicasLoteSchema' },
   { metodo: 'POST', caminho: '/api/v1/projects/:projectId/incidentes/:id/comunicacoes', schema: incidenteComunicacaoSchema, nome: 'incidenteComunicacaoSchema' },

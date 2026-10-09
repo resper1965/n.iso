@@ -33,3 +33,8 @@ export type Mapeamento = z.infer<typeof mapeamentoSchema>;
 export const documentoRequisitosSchema = z.object({
   requisitos: z.array(id).max(100),
 }).strict();
+
+/** Validade da evidência (fatia 8): data AAAA-MM-DD, ou null para tirar a validade. */
+export const evidenciaValidadeSchema = z.object({
+  valido_ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD').nullable(),
+}).strict();
