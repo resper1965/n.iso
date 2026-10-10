@@ -1135,8 +1135,11 @@ window.loadAssessments = async function loadAssessments() { try { S.assessments 
 window.loadProjects = async function loadProjects() {
     try {
         // Só os projetos que têm o produto deste domínio (n.iso ou n.privacy). O servidor trava de qualquer jeito.
-        S.projects = projetosDoProduto(await api('GET', '/api/v1/projects'));
-        if (S.activeProject && !S.projects.some((p) => p.id === S.activeProject.id)) { S.activeProject = null; S.currentProject = null; try { localStorage.removeItem('niso_activeProject'); } catch (e) {} }
+        const todos = await api('GET', '/api/v1/projects');
+        S.projects = projetosDoProduto(todos);
+        // O projeto ativo guardado sai só se ele existe e é de OUTRO produto (lista vazia ou com falha não apaga a escolha).
+        const ativo = S.activeProject && Array.isArray(todos) ? todos.find((p) => p.id === S.activeProject.id) : null;
+        if (ativo && !S.projects.some((p) => p.id === ativo.id)) { S.activeProject = null; S.currentProject = null; try { localStorage.removeItem('niso_activeProject'); } catch (e) {} }
         if (typeof updateSidebarProjectSelector === 'function') { updateSidebarProjectSelector(); }
     } catch(e) { S.projects = []; }
 }
