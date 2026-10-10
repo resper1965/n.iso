@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { semearCatalogo } from '../src/services/requisitos';
 import { criarDocumento, publicarVersao } from '../src/services/documentos';
 
@@ -42,6 +42,7 @@ beforeAll(async () => {
       ('c53', ?1, 'ISO 27001:2022', 'A.5.3 — x', 'Implemented', ?4), ('c54', ?1, 'ISO 27001:2022', 'A.5.4 — x', 'Not Applicable', ?5),
       ('c55', ?1, 'ISO 27001:2022', 'A.5.5 — x', 'Implemented', ?6)`).bind(P, A51, A52, A53, A54, A55),
   ]);
+  await habilitarPrivacy(P, OUTRO);
   admin = await sessionFor({ id: 'u-adm', email: 'adm@ness.lat', role: 'platform_admin' });
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: P });

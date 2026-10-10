@@ -130,7 +130,7 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
     `marked.min.js`, `favicon.svg`. Não precisa de entrada no Vite.
 - **Schema**: `schema.sql` — **82 tabelas** (2026-10-09: `grep -oE '^\s*CREATE TABLE( IF NOT EXISTS)? +[a-z_0-9]+' schema.sql | awk '{print $NF}' | sort -u | wc -l`;
   em 2026-10-05 o mesmo 58 (antes da 0046) saiu do `schema.sql` aplicado num SQLite em memoria). Migrations
-  numeradas em `migrations/`, ultima a **0059** (`ls migrations/*.sql | tail -1`). Procedimento
+  numeradas em `migrations/`, ultima a **0060** (`ls migrations/*.sql | tail -1`). Procedimento
   de migration nova e o que ha de particular (0011 neutralizada, buraco 0031–0033) em
   `migrations/README.md` — leia antes de tocar em migration.
 - **Inventario (ativos)**: vive em `itens` (nucleo fino) + `item_seguranca` (bloco do n.iso, 1:1), antes `assets`
@@ -219,6 +219,21 @@ Vanilla JS, sem framework, bundle via Vite. Deploy por `wrangler deploy`.
   lista "o que fazer" priorizada; funciona com tudo vazio. Menu: grupo `n.privacy` (marca com o ponto em destaque) com Encarregado, ROPA, DPIA /
   RIPD, Requisitos, Terceiros e Titular e incidentes. A casca visual propria (identidade, pagina de entrada) e o bloqueio por modulo no
   frontend NAO foram feitos: dependem de decisao de design do dono.
+- **n.iso e n.privacy sao PRODUTOS separados sobre o mesmo cadastro (decisao de 09/10/2026, migration 0060).** Um Worker, um
+  banco, um deploy; dois dominios (`niso.ness.com.br`, `nprivacy.ness.com.br`, ambos em `routes` do `wrangler.jsonc`). O cliente pode
+  ter um, o outro ou os dois. **A trava e do servidor:** `src/modulos.ts` poe cada rota de projeto numa FAIXA (`FAIXA_DO_SEGMENTO` e
+  `SUBROTAS_PRIVACY`): `nucleo` (o cadastro compartilhado: partes, itens, documentos, evidencia, RoPA, DPIA, pedidos, governanca),
+  `iso` (controles, SoA, riscos, auditorias, jornada…) ou `privacy` (requisitos por projeto, terceiros, titular, incidentes,
+  consentimentos, encarregado, ligacoes/LIA/importacao do RoPA). O `projectAccessMiddleware` e o `requireResourceAccess` (pela
+  `FAIXA_DA_TABELA`) devolvem 403 se o projeto nao tem o produto, inclusive para o `platform_admin`. Projeto sem nenhum modulo e
+  inexistente (passa, e a rota da o 404 dela). **Rota nova de projeto precisa de faixa:** `test/modulos-produto.test.ts` reprova.
+  O gatilho `projeto_modulos_do_contrato` (0060) da ao projeto novo o que a organizacao contratou (`modulos_contratados`, padrao
+  `["iso"]`); `POST /projects` aceita `modulos` dentro do contrato e projeto sem `iso` nasce sem a trilha de fases. Os projetos que
+  ja existiam ficaram so com `iso`: o n.privacy e habilitado por projeto (`PUT /projects/:id/modulos/privacy`, cartao Produtos na
+  lista de projetos), depois de a organizacao contratar. Desligar nao apaga dado. **Frontend:** `frontend/src/produto.js` le o host
+  (`?produto=` so em localhost), aplica marca, titulo e menu (`SO_ISO`, `SO_PRIVACY`), filtra os projetos pelo produto e mostra "sem
+  acesso" quando nao ha nenhum; o n.privacy abre em Encarregado. Login e por dominio (dois logins). Testes de backend que usam rota do
+  n.privacy chamam `habilitarPrivacy(...)` de `test/helpers/d1.ts`.
 - **Bindings** (`grep '"binding"' wrangler.jsonc`): DB (D1), SESSIONS e OAUTH_KV (KV),
   STORAGE e TRILHA (R2), AI, ANALYTICS (Analytics Engine), CF_VERSION_METADATA, ASSETS.
 - **Rotinas agendadas** (`grep -A2 '"triggers"' wrangler.jsonc`): `10 4 * * *` roda a manutencao
@@ -289,7 +304,7 @@ Ao mexer nestas areas, voce esta em terreno que ja falhou antes:
   precisa de permissao (o `-a` importa: `fechar-venda.ts` tem byte NUL e o
   `git grep` sem ele conta menos). `test/any-catraca.test.ts` reprova se o numero subir — e
   tambem se descer sem baixar o `TETO` la.
-- **Nenhum dos 225 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
+- **Nenhum dos 226 arquivos de teste do backend mocka o D1 inteiro** (2026-10-09;
   `ls test/*.test.ts | wc -l`). Todos os que tocam banco usam o D1 real do
   `cloudflare:test`. Sobram dubles PONTUAIS de proposito: falha injetada
   (`helpers.test.ts`, `evidencia-upload-controle.test.ts`), linha legada que o schema atual

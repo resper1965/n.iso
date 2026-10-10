@@ -1262,9 +1262,14 @@ CREATE TABLE IF NOT EXISTS projeto_modulos (
     habilitado_por TEXT NOT NULL DEFAULT 'sistema',
     PRIMARY KEY (project_id, modulo)
 );
-CREATE TRIGGER IF NOT EXISTS projeto_modulo_iso_padrao AFTER INSERT ON projects
+-- Módulo inicial do projeto novo = o contrato da organização (0060; antes, sempre `iso`).
+CREATE TRIGGER IF NOT EXISTS projeto_modulos_do_contrato AFTER INSERT ON projects
 BEGIN
-    INSERT OR IGNORE INTO projeto_modulos (project_id, modulo, habilitado_por) VALUES (NEW.id, 'iso', 'sistema');
+    INSERT OR IGNORE INTO projeto_modulos (project_id, modulo, habilitado_por)
+        SELECT NEW.id, j.value, 'sistema' FROM organizations o, json_each(CASE WHEN json_valid(o.modulos_contratados) THEN o.modulos_contratados ELSE '[]' END) j
+         WHERE o.id = NEW.org_id AND j.value IN ('iso', 'privacy');
+    INSERT OR IGNORE INTO projeto_modulos (project_id, modulo, habilitado_por)
+        SELECT NEW.id, 'iso', 'sistema' WHERE NOT EXISTS (SELECT 1 FROM projeto_modulos WHERE project_id = NEW.id);
 END;
 
 CREATE TABLE IF NOT EXISTS departamentos (

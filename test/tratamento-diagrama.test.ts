@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { montarDiagrama, rotuloMermaid } from '../src/services/tratamentos';
 
 /** Fatia 4.2: o Mermaid sai das ligações, nunca é guardado, e nome do cadastro não vira sintaxe nem HTML. */
@@ -76,6 +76,7 @@ describe('rota do diagrama', () => {
       env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose, data_subjects) VALUES ('rd1', ?1, 'Folha de pagamento', 'Colaboradores'), ('rd-o', ?2, 'Do outro', NULL)`).bind(P, OUTRO),
       env.DB.prepare(`INSERT INTO tratamento_itens (ropa_id, item_id, project_id) VALUES ('rd1', 'it1', ?1), ('rd-o', 'it-o', ?2)`).bind(P, OUTRO),
     ]);
+    await habilitarPrivacy(P, OUTRO);
     consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   });
 

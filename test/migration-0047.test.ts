@@ -21,7 +21,8 @@ describe('migration 0047 — módulos, partes, vínculos e departamentos', () =>
     expect(await colunas('departamentos')).toEqual(['id', 'project_id', 'nome', 'status', 'created_at', 'updated_at']);
     expect(await colunas('projeto_modulos')).toEqual(['project_id', 'modulo', 'habilitado_em', 'habilitado_por']);
     expect(await colunas('organizations')).toContain('modulos_contratados');
-    expect(await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='projeto_modulo_iso_padrao'").first()).toBeTruthy();
+    // O gatilho da 0047 (sempre `iso`) foi trocado na 0060 pelo que lê o contrato da organização.
+    expect(await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='projeto_modulos_do_contrato'").first()).toBeTruthy();
     expect(await env.DB.prepare("SELECT modulos_contratados m FROM organizations WHERE id = 'org_ness'").first()).toEqual({ m: '["iso"]' });
   });
 
@@ -54,7 +55,7 @@ describe('migration 0047 — módulos, partes, vínculos e departamentos', () =>
 
   it('aplicada sobre o banco ANTERIOR, a migration dá iso aos projetos que já existiam', async () => {
     await applySchema();
-    await execSql(`DROP TRIGGER IF EXISTS projeto_modulo_iso_padrao;
+    await execSql(`DROP TRIGGER IF EXISTS projeto_modulo_iso_padrao; DROP TRIGGER IF EXISTS projeto_modulos_do_contrato;
       DROP TABLE IF EXISTS parte_vinculos; DROP TABLE IF EXISTS partes; DROP TABLE IF EXISTS departamentos; DROP TABLE IF EXISTS projeto_modulos;
       ALTER TABLE organizations DROP COLUMN modulos_contratados;`);
     expect(await colunas('partes')).toEqual([]);

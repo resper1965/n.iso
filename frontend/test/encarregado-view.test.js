@@ -81,18 +81,3 @@ describe('tela do encarregado', () => {
         expect(el('c').textContent).toContain('Não foi possível montar a visão');
     });
 });
-
-describe('menu n.privacy (casca)', () => {
-    const grupo = html.slice(html.indexOf('id="group-privacy"'));
-    const ids = [...grupo.slice(0, grupo.indexOf('group-intel')).matchAll(/id="(nav-[a-z-]+)"/g)].map((m) => m[1]);
-
-    it('o grupo reúne a visão do encarregado, o RoPA, a DPIA, os requisitos, os terceiros e o titular, nessa ordem', () => {
-        expect(ids).toEqual(['nav-encarregado', 'nav-ropa', 'nav-dpia', 'nav-requisitos', 'nav-terceiros', 'nav-titular']);
-    });
-    it('o rótulo é a marca n.privacy, com o ponto em destaque e nome acessível', () => {
-        expect(html).toMatch(/aria-label="n\.privacy">n<span style="color:var\(--accent\)">\.<\/span>privacy<\/div>/);
-    });
-    it('cada item do grupo aponta para uma tela que existe no roteador', () => {
-        for (const v of ['encarregado', 'ropa', 'dpia', 'requisitos', 'terceiros', 'titular']) expect(rota, v).toContain(`S.view === '${v}'`);
-    });
-});

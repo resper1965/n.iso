@@ -63,7 +63,7 @@ import { avisosDePrazo, hojeEmSaoPaulo } from './services/avisos-prazo';
 import { oauthAutorizacao } from './routes/oauth-autorizacao';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { handlerMcp } from './mcp/servidor';
-import { appUrl, APP_URL_PADRAO, HOSTS_LEGADOS } from './config/url';
+import { appUrl, APP_URL_PADRAO, HOSTS_LEGADOS, NPRIVACY_URL } from './config/url';
 
 export type Bindings = {
   DB: D1Database;
@@ -251,7 +251,7 @@ const CORS_LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.use('*', cors({
   origin: (origin, c) => {
     if (!origin) return origin; // requisições same-origin/sem Origin (curl, server-to-server)
-    if (origin === appUrl(c.env) || CORS_LOOPBACK.test(origin)) return origin;
+    if (origin === appUrl(c.env) || origin === NPRIVACY_URL || CORS_LOOPBACK.test(origin)) return origin;
     return ''; // origem não permitida: sem Access-Control-Allow-Origin
   },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

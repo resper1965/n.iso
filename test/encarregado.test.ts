@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, resetData, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 
 /** Fatia 8: a visão do encarregado é só consulta. Funciona com tudo vazio e não mistura projetos. */
 const db = () => env.DB;
@@ -31,6 +31,7 @@ beforeEach(async () => {
     db().prepare(`INSERT INTO users (id, email, password_hash, name, role, client_project_id, org_id) VALUES ('u-cons', 'cons@ness.lat', 'x', 'Cons', 'consultor', NULL, 'org_ness'), ('u-cli', 'cli@cliente.com', 'x', 'Cli', 'org_user', 'e1', 'org_ness')`),
     db().prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES ('ge1', 'e1', 'Cons', 'cons@ness.lat', 'consultor', 'Consultor')`),
   ]);
+  await habilitarPrivacy('e1', 'e2');
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: 'e1' });
 });

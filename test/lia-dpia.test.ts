@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { ehLegitimoInteresse } from '../src/services/lia';
 
 /** Fatia 5: LIA por tratamento (exigida quando a base é legítimo interesse) e DPIA criada a partir do tratamento. */
@@ -46,6 +46,7 @@ beforeAll(async () => {
     env.DB.prepare(`INSERT INTO requisito_fontes (id, nome) VALUES ('lgpd', 'LGPD')`),
     env.DB.prepare(`INSERT INTO requisitos (id, fonte_id, referencia, titulo, pai_id) VALUES ('lgpd:art7', 'lgpd', 'art. 7', 'Bases', NULL), ('lgpd:art7:ix', 'lgpd', 'art. 7, IX', 'Legítimo interesse', 'lgpd:art7'), ('lgpd:art7:i', 'lgpd', 'art. 7, I', 'Consentimento', 'lgpd:art7')`),
   ]);
+  await habilitarPrivacy(P, OUTRO);
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: P });
 });

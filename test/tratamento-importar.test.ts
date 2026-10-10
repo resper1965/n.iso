@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { lerCsv, MAX_LINHAS } from '../src/services/tratamentos-importar';
 
 /** Fatia 4.4: importação do RoPA por planilha. Cria Draft, recusa linha a linha, não duplica ao reimportar. */
@@ -42,6 +42,7 @@ describe('POST /ropa/importar', () => {
       env.DB.prepare(`INSERT INTO project_governance (id, project_id, name, email, role_category, job_title) VALUES ('g-ti', ?, 'Cons', 'cons@ness.lat', 'consultor', 'Consultor')`).bind(P),
       env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES ('ti-ja', ?, 'Folha de Pagamento'), ('ti-outro', ?, 'Cadastro de clientes')`).bind(P, OUTRO),
     ]);
+    await habilitarPrivacy(P, OUTRO);
     consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
     cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: P });
   });

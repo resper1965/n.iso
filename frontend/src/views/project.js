@@ -35,12 +35,12 @@ const ISO_GUIDELINES = {
 };
 
     async function renderProjects(c, h, a) {
-        h.textContent = 'Gestão de Projetos ISO';
+        h.textContent = window.produtoAtual() === 'privacy' ? 'Projetos' : 'Gestão de Projetos ISO';
         a.innerHTML = '';
         c.innerHTML = '<div class="loading"></div>';
         try {
             const projects = await api('GET', '/api/v1/projects').catch(() => []);
-            const projs = Array.isArray(projects) ? projects : [];
+            const projs = window.projetosDoProduto(projects); // só os projetos do produto deste domínio
             
             const totalProjects = projs.length;
             const activeProjects = projs.filter(p => p.status === 'active' || !p.status).length;
@@ -59,7 +59,7 @@ const ISO_GUIDELINES = {
                     escapeHTML(p.sector || 'Geral'),
                     window.renderStatusBadge(p.status || 'active', p.status === 'completed' ? 'success' : 'info'),
                     escapeHTML(p.standard || 'ISO 27001:2022'),
-                    `<button class="btn btn-primary btn-sm" data-action="openProjectDetail" data-args='["${p.id}"]'>Gerenciar Jornada &rarr;</button>`
+                    `${(p.modulos || ['iso']).includes('iso') && window.produtoAtual() === 'iso' ? `<button class="btn btn-primary btn-sm" data-action="openProjectDetail" data-args='["${p.id}"]'>Gerenciar Jornada &rarr;</button> ` : ''}<button class="btn btn-ghost btn-sm" data-action="abrirProdutosDoProjeto" data-args='["${p.id}"]'>Produtos (${escapeHTML((p.modulos || ['iso']).map((m) => 'n.' + m).join(', '))})</button>`
                 ]),
                 { emptyState: 'Nenhum projeto de implementação ativo no momento.' }
             );

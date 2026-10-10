@@ -1,3 +1,4 @@
+import { produtoAtual, projetosDoProduto, semAcesso, atualizarLinkCruzado } from './produto.js';
 import { S } from './state.js';
 import { api, API_BASE } from './api.js';
 import { render, navigate } from './router.js';
@@ -557,6 +558,7 @@ window.updateActiveProjectWidget = function updateActiveProjectWidget() {
         if (typeof updateSidebarProjectSelector === 'function') {
             updateSidebarProjectSelector();
         }
+        atualizarLinkCruzado();
     }
 
 window.updateSidebarProjectSelector = function updateSidebarProjectSelector() {
@@ -590,7 +592,8 @@ window.updateTenantFace = function updateTenantFace() {
         const p = S.activeProject;
         const name = p ? (p.project_name || p.client_name || 'Projeto') : 'Selecione um projeto';
         nameEl.textContent = name;
-        if (normEl) normEl.textContent = p ? (p.standard || p.standards || 'ISO 27001:2022') : '';
+        // No n.privacy a norma ISO do projeto não diz nada: mostra o produto.
+        if (normEl) normEl.textContent = !p ? '' : produtoAtual() === 'privacy' ? 'n.privacy' : (p.standard || p.standards || 'ISO 27001:2022');
         if (initialsEl) initialsEl.textContent = p ? name.slice(0, 2).toUpperCase() : '—';
     }
 
@@ -1129,7 +1132,14 @@ window.loadLeads = async function loadLeads() { if (!window.ehComercial()) { S.l
 
 window.loadAssessments = async function loadAssessments() { try { S.assessments = await api('GET', '/api/v1/assessments'); } catch(e) { S.assessments = []; } }
 
-window.loadProjects = async function loadProjects() { try { S.projects = await api('GET', '/api/v1/projects'); if (typeof updateSidebarProjectSelector === 'function') { updateSidebarProjectSelector(); } } catch(e) { S.projects = []; } }
+window.loadProjects = async function loadProjects() {
+    try {
+        // Só os projetos que têm o produto deste domínio (n.iso ou n.privacy). O servidor trava de qualquer jeito.
+        S.projects = projetosDoProduto(await api('GET', '/api/v1/projects'));
+        if (S.activeProject && !S.projects.some((p) => p.id === S.activeProject.id)) { S.activeProject = null; S.currentProject = null; try { localStorage.removeItem('niso_activeProject'); } catch (e) {} }
+        if (typeof updateSidebarProjectSelector === 'function') { updateSidebarProjectSelector(); }
+    } catch(e) { S.projects = []; }
+}
 
 window.loadControls = async function loadControls() { try { S.controls = await api('GET', '/api/v1/controls'); } catch(e) { S.controls = []; } }
 
@@ -1367,8 +1377,16 @@ window.initApp = async function initApp() {
         updateHeaderUser();
         updateActiveProjectWidget();
 
+        const produto = produtoAtual();
         if (ehStakeholder) {
             navigate('meus-pedidos');
+        } else if (produto === 'privacy' && !(S.projects || []).length) {
+            // Nenhum projeto com o produto deste domínio: diz isso, em vez de abrir uma tela vazia ou de outro produto.
+            S.view = 'sem-acesso-produto';
+            semAcesso(document.getElementById('content'));
+        } else if (produto === 'privacy') {
+            if (!S.activeProject) { S.activeProject = S.projects[0]; S.currentProject = S.projects[0]; updateActiveProjectWidget(); }
+            navigate('encarregado');
         } else if (isClient && S.user.client_project_id) {
             navigate('project-detail');
         } else {

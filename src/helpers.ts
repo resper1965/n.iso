@@ -1,3 +1,4 @@
+import { FAIXA_DA_TABELA, modulosDoProjeto, recusaDeModulo } from './modulos';
 import { log, requestId, resumoErro } from './observability';
 import { orgDoUsuario } from './services/organizacao';
 
@@ -284,9 +285,15 @@ export async function requireResourceAccess(db: D1Database, table: string, resou
   if (!ALLOWED_TABLES.includes(table)) {
     throw new Error('Invalid table');
   }
-  if (user.role === 'platform_admin') return true;
-
   const row = await db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).bind(resourceId).first<{ project_id: string | null }>();
+  // Produto (n.iso / n.privacy): o recurso só é alcançável se o projeto dele tem o produto da faixa. Vale para qualquer papel.
+  if (row?.project_id) {
+    // Falha fechada: sem conseguir ler os produtos do projeto, nega.
+    const modulos = await modulosDoProjeto(db, row.project_id).catch(() => { throw new ForbiddenError('Forbidden: No access to this resource'); });
+    const recusa = recusaDeModulo(FAIXA_DA_TABELA[table] ?? 'nucleo', modulos);
+    if (recusa) throw new ForbiddenError(recusa);
+  }
+  if (user.role === 'platform_admin') return true;
   // Equipe: o projeto do recurso tem de ser um que ela alcança (designação ou administração, sempre
   // na própria organização). Recurso inexistente ou sem projeto nega (antes passava direto).
   if (ehEquipeDeProjeto(user)) {
@@ -581,6 +588,8 @@ export function semRastroDeAssinatura(row: Record<string, unknown>): Record<stri
 export function redactProject<T extends Record<string, any> | null | undefined>(p: T): T {
   if (!p) return p;
   const { repository_token, ...rest } = p as Record<string, any>;
+  // `modulos` (n.iso / n.privacy) chega como texto separado por vírgula do group_concat das consultas de projeto.
+  if (typeof rest.modulos === 'string' || rest.modulos === null) rest.modulos = rest.modulos ? String(rest.modulos).split(',').sort() : [];
   return { ...rest, repository_token_set: !!repository_token } as unknown as T;
 }
 

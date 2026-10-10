@@ -13,5 +13,8 @@ export function appUrl(env?: { APP_URL?: string }): string {
   return url.slice(0, fim);
 }
 
+/** Endereço do n.privacy: mesmo Worker, outra casca (frontend/src/produto.js). Entra na lista de origens do CORS. */
+export const NPRIVACY_URL = 'https://nprivacy.ness.com.br';
+
 /** Hosts antigos que o Worker ainda recebe só para redirecionar (308) ao `appUrl` (src/index.ts). */
 export const HOSTS_LEGADOS = ['n-iso.ness.com.br', 'niso.ness.workers.dev'];
