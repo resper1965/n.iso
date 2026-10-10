@@ -19,6 +19,9 @@
 	"workers_dev": true,
 	"routes": [
 		{ "pattern": "niso.ness.com.br", "custom_domain": true },
+		// n.privacy: o MESMO Worker e o mesmo banco (decisão de 09/10/2026); o frontend escolhe a casca pelo host
+		// (frontend/src/produto.js) e o servidor trava por produto do projeto (src/modulos.ts).
+		{ "pattern": "nprivacy.ness.com.br", "custom_domain": true },
 		{ "pattern": "n-iso.ness.com.br", "custom_domain": true }
 	],
 	"assets": {

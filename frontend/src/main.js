@@ -4,6 +4,7 @@ import { api } from './api.js';
 import './ui.js';
 import { navigate } from './router.js';
 import { initDelegation } from './delegation.js';
+import { aplicarCasca } from './produto.js';
 import './data/wizards.js';
 import './data/assessment.js';
 
@@ -42,3 +43,6 @@ import './globals.js';
 // S2: delegação de eventos (substitui onclick inline, view a view). Um listener
 // no document cobre todo conteúdo renderizado.
 initDelegation();
+
+// n.iso ou n.privacy, pelo domínio: marca, título e menu antes do primeiro desenho.
+aplicarCasca();

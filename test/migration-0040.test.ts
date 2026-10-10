@@ -12,6 +12,7 @@ describe('migration 0040 — multiconsultoria', () => {
     // Reconstrói o estado de produção SEM recriar as tabelas (gatilhos e FKs as citam): tira as
     // colunas da 0040 e semeia linhas, que o DEFAULT da migration tem de preencher.
     await execSql(`
+      DROP TRIGGER IF EXISTS projeto_modulos_do_contrato; -- 0060: cita projects.org_id, que este teste tira (é posterior à 0040)
       DROP INDEX IF EXISTS idx_users_org;
       DROP INDEX IF EXISTS idx_projects_org;
       DROP INDEX IF EXISTS idx_organizations_prefixo;

@@ -22,6 +22,8 @@ export const projetoCriarSchema = z.object({
   scope: txt(50_000),
   standards: txt(200),
   org_role: txt(200),
+  /** Produtos do projeto (n.iso, n.privacy), dentro do que a organização contratou. Ausente = tudo o que foi contratado. */
+  modulos: z.array(z.enum(['iso', 'privacy'])).min(1).max(2).optional(),
 });
 
 export const projetoAtualizarSchema = z.object({

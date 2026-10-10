@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
 import { hashPassword } from '../src/helpers';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 
 /**
  * Fatia 4.3: aprovação do tratamento por pedido (`tipo = 'tratamento'`, ref_id = o registro do RoPA). O conteúdo congelado é o
@@ -52,6 +52,7 @@ beforeAll(async () => {
     env.DB.prepare(`INSERT INTO departamentos (id, project_id, nome) VALUES ('ta-d1', ?, 'RH')`).bind(P),
     env.DB.prepare(`INSERT INTO partes (id, project_id, tipo, nome) VALUES ('ta-pa1', ?, 'organizacao', 'Operadora Exemplo')`).bind(P),
   ]);
+  await habilitarPrivacy(P);
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   ciso = await sessionFor({ id: 'u-ciso', email: 'ciso@cliente.com', role: 'org_user', client_project_id: P });
 }, 60_000);

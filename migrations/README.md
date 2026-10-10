@@ -6,7 +6,7 @@ arquivado em [`docs/arquivo/reconciliacao-migrations-2026-08.md`](../docs/arquiv
 
 ## Estado
 
-- Última migration no repositório: **0059** (`ls migrations/*.sql | tail -1`). São 57 arquivos
+- Última migration no repositório: **0060** (`ls migrations/*.sql | tail -1`). São 58 arquivos
   `.sql` (`ls migrations/*.sql | wc -l`): não existe 0001, há três 0002 de antes da numeração
   estável, e **não existem 0031 a 0033** (eram da camada MSP, que entrou por engano no #204 e
   saiu no #206).
@@ -377,3 +377,10 @@ Acrescenta `evidence.valido_ate` (anulável) e cria `evidencia_requisitos` (`IF 
 existente: toda evidência de hoje fica sem validade, então a rotina diária não muda nenhuma. O `ALTER ... ADD COLUMN` não é idempotente.
 Conferência: `PRAGMA table_info(evidence)` (coluna `valido_ate`), `PRAGMA table_info(evidencia_requisitos)`, `SELECT count(*)` da tabela nova (0)
 e `SELECT count(*) FROM evidence WHERE valido_ate IS NOT NULL` (0). Depende da 0053 (`requisitos`). **Esta RODA em produção, aditiva, sem janela.**
+
+## 0060 — módulo inicial pelo contrato da organização (2026-10)
+
+Troca o gatilho `projeto_modulo_iso_padrao` (0047, sempre `iso`) por `projeto_modulos_do_contrato`: o projeto NOVO nasce com o que a
+organização contratou (`organizations.modulos_contratados`); contrato vazio ou JSON inválido cai em `iso`. Nenhum projeto existente
+muda. Conferência: `SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'projeto_modulo%'` (só o novo) e a contagem de
+`projeto_modulos` por módulo igual à de antes. **Esta RODA em produção, sem janela.** Depende da 0047.

@@ -1,6 +1,7 @@
 import { S } from '../state.js';
 import { api } from '../api.js';
 import { escapeHTML } from '../ui.js';
+import { projetosDoProduto } from '../produto.js';
 
 // Espelho de `ehComercial` (src/helpers.ts): o funil de leads é do comercial.
 // Local, e não `window.ehComercial`, para a view não depender da ordem de carga.
@@ -77,7 +78,7 @@ const ehComercial = () => !!(S.user && ['platform_admin', 'comercial', 'consulto
                 api('GET', '/api/v1/projects').catch(() => []),
                 api('GET', '/api/v1/controls').catch(() => [])
             ]);
-            const activeProjectsList = Array.isArray(projects) ? projects : [];
+            const activeProjectsList = projetosDoProduto(projects); // só os projetos do produto deste domínio
             const leadsCount = Array.isArray(leads) ? leads.length : 0;
             const assessmentsCount = Array.isArray(assessments) ? assessments.length : 0;
             const projectsCount = activeProjectsList.length;

@@ -1526,3 +1526,6 @@ textarea:focus-visible {
 .fn-erro:empty { display: none; }
 .fn-tabelas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .fn-sub { margin: 0 0 8px; font: 600 13px var(--font-head); color: var(--text-2); }
+
+/* n.iso / n.privacy: item ou grupo que não é do produto deste domínio (frontend/src/produto.js). */
+[data-fora-do-produto="1"] { display: none !important; }

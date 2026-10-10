@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { somarPrazo } from '../src/services/parametros-legais';
 import { situacaoDoPrazo } from '../src/services/titular-pedidos';
 import { situacaoDaComunicacao } from '../src/services/incidentes';
@@ -66,6 +66,7 @@ beforeAll(async () => {
     env.DB.prepare(`INSERT INTO partes (id, project_id, tipo, nome) VALUES ('tr-pa', ?1, 'pessoa', 'Ana'), ('tr-pa-o', ?2, 'pessoa', 'Alheia')`).bind(P, OUTRO),
     env.DB.prepare(`INSERT INTO ropa_records (id, project_id, processing_purpose) VALUES ('tr-r1', ?1, 'Marketing'), ('tr-r-o', ?2, 'Do outro')`).bind(P, OUTRO),
   ]);
+  await habilitarPrivacy(P, OUTRO);
   admin = await sessionFor({ id: 'u-adm', email: 'adm@ness.lat', role: 'platform_admin' });
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: P });

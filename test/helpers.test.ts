@@ -71,7 +71,9 @@ describe('helpers', () => {
     });
 
     it('resolves for allowed tables if user is platform_admin', async () => {
-      await expect(requireResourceAccess({} as any, 'vendors', 'id', { role: 'platform_admin' })).resolves.toBe(true);
+      // Lê o projeto do recurso e os produtos dele (trava n.iso / n.privacy) antes do atalho do platform_admin.
+      const db = { prepare: () => ({ bind: () => ({ first: async () => ({ project_id: 'p1' }), all: async () => ({ results: [{ modulo: 'iso' }] }) }) }) } as any;
+      await expect(requireResourceAccess(db, 'vendors', 'id', { role: 'platform_admin' })).resolves.toBe(true);
     });
 
     // D5: consultor deixou de passar direto; a cobertura com banco real está em consultor-escopo.test.ts.

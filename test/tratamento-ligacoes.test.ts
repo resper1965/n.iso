@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 
 /** Fatia 4.1: o registro do RoPA (o tratamento) aponta para itens, departamentos, partes, transferências e a base legal. */
 const P = 'tl-proj';
@@ -44,6 +44,7 @@ beforeAll(async () => {
     env.DB.prepare(`INSERT INTO requisito_fontes (id, nome) VALUES ('lgpd', 'LGPD')`),
     env.DB.prepare(`INSERT INTO requisitos (id, fonte_id, referencia, titulo) VALUES ('lgpd:art7:i', 'lgpd', 'art. 7, I', 'Base de teste')`),
   ]);
+  await habilitarPrivacy(P, OUTRO);
   consultor = await sessionFor({ id: 'u-cons', email: 'cons@ness.lat', role: 'consultor' });
   cliente = await sessionFor({ id: 'u-cli', email: 'cli@cliente.com', role: 'org_user', client_project_id: P });
 });

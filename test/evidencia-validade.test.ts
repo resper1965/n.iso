@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import app from '../src/index';
-import { applySchema, resetData, sessionFor, workerEnv } from './helpers/d1';
+import { applySchema, resetData, sessionFor, workerEnv, habilitarPrivacy } from './helpers/d1';
 import { vencerEvidencias } from '../src/services/evidencia-validade';
 import { avisosDePrazo, itensDoDia, tituloDoAviso } from '../src/services/avisos-prazo';
 
@@ -29,6 +29,7 @@ beforeEach(async () => {
   await db().batch([
     db().prepare(`INSERT INTO projects (id, client_name, standards, org_role, status, org_id) VALUES ('p1', 'Cliente p1', 'ISO 27001:2022', 'Controller', 'Active', 'org_ness'), ('p2', 'Cliente p2', 'ISO 27001:2022', 'Controller', 'Active', 'org_ness')`),
   ]);
+  await habilitarPrivacy('p1', 'p2');
 });
 
 describe('vencerEvidencias', () => {

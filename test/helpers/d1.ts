@@ -148,3 +148,11 @@ export async function inserirAtivo(a: { id: string; project_id: string; name: st
 
 /** O ativo como a API o devolve (inclui removido), ou null. */
 export const lerAtivo = (id: string) => lerAtivoDoBanco(env.DB, id);
+
+/**
+ * Habilita o n.privacy nos projetos do teste. O gatilho da 0060 dá ao projeto o que a organização contratou, e a `org_ness` dos
+ * testes contratou só o n.iso: sem isto, as rotas do n.privacy respondem 403 (a trava por produto).
+ */
+export async function habilitarPrivacy(...ids: string[]): Promise<void> {
+  await env.DB.batch(ids.map((id) => env.DB.prepare(`INSERT OR IGNORE INTO projeto_modulos (project_id, modulo, habilitado_por) VALUES (?, 'privacy', 'teste')`).bind(id)));
+}
